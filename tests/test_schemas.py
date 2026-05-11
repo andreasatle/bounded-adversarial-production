@@ -9,6 +9,9 @@ from baps.schemas import (
     Decision,
     Finding,
     GameContract,
+    GameRecord,
+    GameRound,
+    GameState,
     Move,
     Target,
 )
@@ -91,6 +94,44 @@ def test_artifact_adapter_result_constructs_successfully() -> None:
     assert result.message == "ok"
 
 
+def test_game_record_constructs_successfully() -> None:
+    record = GameRecord(
+        game_id="game-1",
+        contract=GameContract(
+            id="gc-1",
+            subject="auth",
+            goal="find flaws",
+            target=Target(kind="repo"),
+            active_roles=["red-team"],
+        ),
+        status="pending",
+        created_at="2026-05-11T10:00:00Z",
+        updated_at="2026-05-11T10:00:00Z",
+        metadata={"owner": "qa"},
+    )
+    assert record.status == "pending"
+
+
+def test_game_round_constructs_successfully() -> None:
+    round_ = GameRound(
+        round_number=1,
+        moves=[Move(game_id="game-1", role="red", summary="s")],
+        findings=[Finding(game_id="game-1", severity="high", confidence="high", claim="c")],
+        decision=Decision(game_id="game-1", decision="integrate", rationale="r"),
+    )
+    assert round_.round_number == 1
+
+
+def test_game_state_constructs_successfully() -> None:
+    state = GameState(
+        game_id="game-1",
+        current_round=1,
+        rounds=[GameRound(round_number=1)],
+        final_decision=Decision(game_id="game-1", decision="integrate", rationale="r"),
+    )
+    assert state.game_id == "game-1"
+
+
 @pytest.mark.parametrize(
     ("model_cls", "field_name", "base_payload"),
     [
@@ -154,6 +195,75 @@ def test_artifact_adapter_result_constructs_successfully() -> None:
         (Decision, "game_id", {"game_id": "gc-1", "decision": "integrate", "rationale": "r"}),
         (Decision, "decision", {"game_id": "gc-1", "decision": "integrate", "rationale": "r"}),
         (Decision, "rationale", {"game_id": "gc-1", "decision": "integrate", "rationale": "r"}),
+        (
+            GameRecord,
+            "game_id",
+            {
+                "game_id": "game-1",
+                "contract": {
+                    "id": "gc-1",
+                    "subject": "auth",
+                    "goal": "find flaws",
+                    "target": {"kind": "repo"},
+                    "active_roles": ["red-team"],
+                },
+                "status": "pending",
+                "created_at": "2026-05-11T10:00:00Z",
+                "updated_at": "2026-05-11T10:00:00Z",
+            },
+        ),
+        (
+            GameRecord,
+            "status",
+            {
+                "game_id": "game-1",
+                "contract": {
+                    "id": "gc-1",
+                    "subject": "auth",
+                    "goal": "find flaws",
+                    "target": {"kind": "repo"},
+                    "active_roles": ["red-team"],
+                },
+                "status": "pending",
+                "created_at": "2026-05-11T10:00:00Z",
+                "updated_at": "2026-05-11T10:00:00Z",
+            },
+        ),
+        (
+            GameRecord,
+            "created_at",
+            {
+                "game_id": "game-1",
+                "contract": {
+                    "id": "gc-1",
+                    "subject": "auth",
+                    "goal": "find flaws",
+                    "target": {"kind": "repo"},
+                    "active_roles": ["red-team"],
+                },
+                "status": "pending",
+                "created_at": "2026-05-11T10:00:00Z",
+                "updated_at": "2026-05-11T10:00:00Z",
+            },
+        ),
+        (
+            GameRecord,
+            "updated_at",
+            {
+                "game_id": "game-1",
+                "contract": {
+                    "id": "gc-1",
+                    "subject": "auth",
+                    "goal": "find flaws",
+                    "target": {"kind": "repo"},
+                    "active_roles": ["red-team"],
+                },
+                "status": "pending",
+                "created_at": "2026-05-11T10:00:00Z",
+                "updated_at": "2026-05-11T10:00:00Z",
+            },
+        ),
+        (GameState, "game_id", {"game_id": "game-1"}),
         (Artifact, "id", {"id": "art-1", "type": "report"}),
         (Artifact, "type", {"id": "art-1", "type": "report"}),
         (
@@ -253,6 +363,33 @@ def test_game_contract_max_rounds_must_be_at_least_one() -> None:
         )
 
 
+def test_game_record_status_must_be_allowed() -> None:
+    with pytest.raises(ValidationError):
+        GameRecord(
+            game_id="game-1",
+            contract=GameContract(
+                id="gc-1",
+                subject="auth",
+                goal="find flaws",
+                target=Target(kind="repo"),
+                active_roles=["red-team"],
+            ),
+            status="paused",
+            created_at="2026-05-11T10:00:00Z",
+            updated_at="2026-05-11T10:00:00Z",
+        )
+
+
+def test_game_round_round_number_must_be_at_least_one() -> None:
+    with pytest.raises(ValidationError):
+        GameRound(round_number=0)
+
+
+def test_game_state_current_round_must_be_at_least_one() -> None:
+    with pytest.raises(ValidationError):
+        GameState(game_id="game-1", current_round=0)
+
+
 def test_mutable_defaults_are_not_shared() -> None:
     game_a = GameContract(
         id="gc-1",
@@ -305,3 +442,44 @@ def test_mutable_defaults_are_not_shared() -> None:
     )
     artifact_change_a.metadata["k"] = "v"
     assert artifact_change_b.metadata == {}
+
+    record_a = GameRecord(
+        game_id="game-1",
+        contract=GameContract(
+            id="gc-1",
+            subject="auth",
+            goal="find flaws",
+            target=Target(kind="repo"),
+            active_roles=["red-team"],
+        ),
+        status="pending",
+        created_at="2026-05-11T10:00:00Z",
+        updated_at="2026-05-11T10:00:00Z",
+    )
+    record_b = GameRecord(
+        game_id="game-2",
+        contract=GameContract(
+            id="gc-2",
+            subject="payments",
+            goal="find flaws",
+            target=Target(kind="repo"),
+            active_roles=["red-team"],
+        ),
+        status="running",
+        created_at="2026-05-11T10:00:00Z",
+        updated_at="2026-05-11T10:00:00Z",
+    )
+    record_a.metadata["k"] = "v"
+    assert record_b.metadata == {}
+
+    round_a = GameRound(round_number=1)
+    round_b = GameRound(round_number=2)
+    round_a.moves.append(Move(game_id="game-1", role="red-team", summary="s"))
+    round_a.findings.append(Finding(game_id="game-1", severity="high", confidence="high", claim="c"))
+    assert round_b.moves == []
+    assert round_b.findings == []
+
+    state_a = GameState(game_id="game-1")
+    state_b = GameState(game_id="game-2")
+    state_a.rounds.append(GameRound(round_number=1))
+    assert state_b.rounds == []

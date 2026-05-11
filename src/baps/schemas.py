@@ -80,6 +80,57 @@ class Decision(BaseModel):
     _validate_rationale = field_validator("rationale")(_require_non_empty)
 
 
+class GameRecord(BaseModel):
+    game_id: str
+    contract: GameContract
+    status: str
+    created_at: str
+    updated_at: str
+    metadata: dict = Field(default_factory=dict)
+
+    _validate_game_id = field_validator("game_id")(_require_non_empty)
+    _validate_created_at = field_validator("created_at")(_require_non_empty)
+    _validate_updated_at = field_validator("updated_at")(_require_non_empty)
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        value = _require_non_empty(value)
+        if value not in {"pending", "running", "completed", "failed"}:
+            raise ValueError("status must be one of: pending, running, completed, failed")
+        return value
+
+
+class GameRound(BaseModel):
+    round_number: int
+    moves: list[Move] = Field(default_factory=list)
+    findings: list[Finding] = Field(default_factory=list)
+    decision: Decision | None = None
+
+    @field_validator("round_number")
+    @classmethod
+    def validate_round_number(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("round_number must be >= 1")
+        return value
+
+
+class GameState(BaseModel):
+    game_id: str
+    current_round: int = 1
+    rounds: list[GameRound] = Field(default_factory=list)
+    final_decision: Decision | None = None
+
+    _validate_game_id = field_validator("game_id")(_require_non_empty)
+
+    @field_validator("current_round")
+    @classmethod
+    def validate_current_round(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("current_round must be >= 1")
+        return value
+
+
 class Artifact(BaseModel):
     id: str
     type: str
