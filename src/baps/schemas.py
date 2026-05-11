@@ -88,3 +88,12 @@ class Artifact(BaseModel):
 
     _validate_id = field_validator("id")(_require_non_empty)
     _validate_type = field_validator("type")(_require_non_empty)
+
+
+class Event(BaseModel):
+    id: str
+    type: str
+    payload: dict = Field(default_factory=dict)
+
+    _validate_id = field_validator("id")(_require_non_empty)
+    _validate_type = field_validator("type")(_require_non_empty)
