@@ -1,7 +1,17 @@
 import pytest
 from pydantic import ValidationError
 
-from baps.schemas import Artifact, Decision, Finding, GameContract, Move, Target
+from baps.schemas import (
+    Artifact,
+    ArtifactAdapterResult,
+    ArtifactChange,
+    ArtifactVersion,
+    Decision,
+    Finding,
+    GameContract,
+    Move,
+    Target,
+)
 
 
 def test_target_constructs_successfully() -> None:
@@ -47,6 +57,38 @@ def test_decision_constructs_successfully() -> None:
 def test_artifact_constructs_successfully() -> None:
     artifact = Artifact(id="art-1", type="report", current_version="v1", metadata={"k": "v"})
     assert artifact.metadata == {"k": "v"}
+
+
+def test_artifact_version_constructs_successfully() -> None:
+    version = ArtifactVersion(
+        artifact_id="art-1",
+        version_id="v1",
+        path="artifacts/report.md",
+        metadata={"author": "a"},
+    )
+    assert version.path == "artifacts/report.md"
+
+
+def test_artifact_change_constructs_successfully() -> None:
+    change = ArtifactChange(
+        artifact_id="art-1",
+        change_id="chg-1",
+        base_version="v1",
+        description="clarify section",
+        diff="@@ -1 +1 @@",
+        metadata={"source": "review"},
+    )
+    assert change.change_id == "chg-1"
+
+
+def test_artifact_adapter_result_constructs_successfully() -> None:
+    result = ArtifactAdapterResult(
+        artifact_id="art-1",
+        version_id="v2",
+        change_id="chg-1",
+        message="ok",
+    )
+    assert result.message == "ok"
 
 
 @pytest.mark.parametrize(
@@ -114,6 +156,71 @@ def test_artifact_constructs_successfully() -> None:
         (Decision, "rationale", {"game_id": "gc-1", "decision": "integrate", "rationale": "r"}),
         (Artifact, "id", {"id": "art-1", "type": "report"}),
         (Artifact, "type", {"id": "art-1", "type": "report"}),
+        (
+            ArtifactVersion,
+            "artifact_id",
+            {"artifact_id": "art-1", "version_id": "v1", "path": "artifacts/report.md"},
+        ),
+        (
+            ArtifactVersion,
+            "version_id",
+            {"artifact_id": "art-1", "version_id": "v1", "path": "artifacts/report.md"},
+        ),
+        (
+            ArtifactVersion,
+            "path",
+            {"artifact_id": "art-1", "version_id": "v1", "path": "artifacts/report.md"},
+        ),
+        (
+            ArtifactChange,
+            "artifact_id",
+            {
+                "artifact_id": "art-1",
+                "change_id": "chg-1",
+                "base_version": "v1",
+                "description": "desc",
+            },
+        ),
+        (
+            ArtifactChange,
+            "change_id",
+            {
+                "artifact_id": "art-1",
+                "change_id": "chg-1",
+                "base_version": "v1",
+                "description": "desc",
+            },
+        ),
+        (
+            ArtifactChange,
+            "base_version",
+            {
+                "artifact_id": "art-1",
+                "change_id": "chg-1",
+                "base_version": "v1",
+                "description": "desc",
+            },
+        ),
+        (
+            ArtifactChange,
+            "description",
+            {
+                "artifact_id": "art-1",
+                "change_id": "chg-1",
+                "base_version": "v1",
+                "description": "desc",
+            },
+        ),
+        (
+            ArtifactAdapterResult,
+            "artifact_id",
+            {"artifact_id": "art-1", "message": "ok"},
+        ),
+        (
+            ArtifactAdapterResult,
+            "message",
+            {"artifact_id": "art-1", "message": "ok"},
+        ),
     ],
 )
 def test_empty_required_strings_fail(model_cls, field_name, base_payload) -> None:
@@ -178,3 +285,23 @@ def test_mutable_defaults_are_not_shared() -> None:
     artifact_b = Artifact(id="a2", type="report")
     artifact_a.metadata["k"] = "v"
     assert artifact_b.metadata == {}
+
+    artifact_version_a = ArtifactVersion(artifact_id="art-1", version_id="v1", path="p1")
+    artifact_version_b = ArtifactVersion(artifact_id="art-2", version_id="v2", path="p2")
+    artifact_version_a.metadata["k"] = "v"
+    assert artifact_version_b.metadata == {}
+
+    artifact_change_a = ArtifactChange(
+        artifact_id="art-1",
+        change_id="chg-1",
+        base_version="v1",
+        description="d1",
+    )
+    artifact_change_b = ArtifactChange(
+        artifact_id="art-2",
+        change_id="chg-2",
+        base_version="v2",
+        description="d2",
+    )
+    artifact_change_a.metadata["k"] = "v"
+    assert artifact_change_b.metadata == {}

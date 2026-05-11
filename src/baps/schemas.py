@@ -90,6 +90,41 @@ class Artifact(BaseModel):
     _validate_type = field_validator("type")(_require_non_empty)
 
 
+class ArtifactVersion(BaseModel):
+    artifact_id: str
+    version_id: str
+    path: str
+    metadata: dict = Field(default_factory=dict)
+
+    _validate_artifact_id = field_validator("artifact_id")(_require_non_empty)
+    _validate_version_id = field_validator("version_id")(_require_non_empty)
+    _validate_path = field_validator("path")(_require_non_empty)
+
+
+class ArtifactChange(BaseModel):
+    artifact_id: str
+    change_id: str
+    base_version: str
+    description: str
+    diff: str | None = None
+    metadata: dict = Field(default_factory=dict)
+
+    _validate_artifact_id = field_validator("artifact_id")(_require_non_empty)
+    _validate_change_id = field_validator("change_id")(_require_non_empty)
+    _validate_base_version = field_validator("base_version")(_require_non_empty)
+    _validate_description = field_validator("description")(_require_non_empty)
+
+
+class ArtifactAdapterResult(BaseModel):
+    artifact_id: str
+    version_id: str | None = None
+    change_id: str | None = None
+    message: str
+
+    _validate_artifact_id = field_validator("artifact_id")(_require_non_empty)
+    _validate_message = field_validator("message")(_require_non_empty)
+
+
 class Event(BaseModel):
     id: str
     type: str
