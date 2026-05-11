@@ -15,6 +15,23 @@ class ArtifactAdapter:
         raise NotImplementedError
 
 
+class ArtifactHandler:
+    def __init__(self, adapters: dict[str, ArtifactAdapter]):
+        self.adapters = adapters
+
+    def create(self, artifact: Artifact) -> ArtifactAdapterResult:
+        adapter = self.adapters.get(artifact.type)
+        if adapter is None:
+            raise ValueError(f"no adapter registered for artifact type: {artifact.type}")
+        return adapter.create(artifact)
+
+    def snapshot(self, artifact: Artifact) -> ArtifactVersion:
+        adapter = self.adapters.get(artifact.type)
+        if adapter is None:
+            raise ValueError(f"no adapter registered for artifact type: {artifact.type}")
+        return adapter.snapshot(artifact)
+
+
 class DocumentArtifactAdapter(ArtifactAdapter):
     def __init__(self, root: Path):
         self.root = root

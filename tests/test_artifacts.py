@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from baps.artifacts import DocumentArtifactAdapter
+from baps.artifacts import ArtifactHandler, DocumentArtifactAdapter
 from baps.schemas import Artifact
 
 
@@ -88,3 +88,41 @@ def test_snapshot_rejects_missing_artifact_or_current_directory(tmp_path: Path) 
 
     with pytest.raises(FileNotFoundError):
         adapter.snapshot(artifact)
+
+
+def test_handler_delegates_create_to_document_adapter(tmp_path: Path) -> None:
+    handler = ArtifactHandler(adapters={"document": DocumentArtifactAdapter(tmp_path)})
+    artifact = Artifact(id="doc-1", type="document")
+
+    result = handler.create(artifact)
+
+    assert result.artifact_id == "doc-1"
+    assert (tmp_path / "doc-1" / "metadata.json").exists()
+
+
+def test_handler_delegates_snapshot_to_document_adapter(tmp_path: Path) -> None:
+    handler = ArtifactHandler(adapters={"document": DocumentArtifactAdapter(tmp_path)})
+    artifact = Artifact(id="doc-1", type="document")
+    handler.create(artifact)
+    (tmp_path / "doc-1" / "current" / "note.txt").write_text("hello", encoding="utf-8")
+
+    version = handler.snapshot(artifact)
+
+    assert version.version_id == "v001"
+    assert (tmp_path / "doc-1" / "versions" / "v001" / "note.txt").read_text(encoding="utf-8") == "hello"
+
+
+def test_handler_rejects_unknown_artifact_type_on_create(tmp_path: Path) -> None:
+    handler = ArtifactHandler(adapters={"document": DocumentArtifactAdapter(tmp_path)})
+    artifact = Artifact(id="doc-1", type="unknown")
+
+    with pytest.raises(ValueError):
+        handler.create(artifact)
+
+
+def test_handler_rejects_unknown_artifact_type_on_snapshot(tmp_path: Path) -> None:
+    handler = ArtifactHandler(adapters={"document": DocumentArtifactAdapter(tmp_path)})
+    artifact = Artifact(id="doc-1", type="unknown")
+
+    with pytest.raises(ValueError):
+        handler.snapshot(artifact)
