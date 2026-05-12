@@ -3,16 +3,18 @@ from pathlib import Path
 import pytest
 
 from baps.blackboard import Blackboard
-from baps.play_game import build_parser, main, run_play_game
+from baps.play_game import build_parser, load_context_files, main, run_play_game
 
 
 class FakeOllamaClient:
     last_model = None
     last_base_url = None
+    prompts = []
 
     def __init__(self, model: str, base_url: str):
         FakeOllamaClient.last_model = model
         FakeOllamaClient.last_base_url = base_url
+        FakeOllamaClient.prompts = []
         self._responses = [
             "Candidate answer",
             "Concrete critique of candidate",
@@ -23,6 +25,7 @@ class FakeOllamaClient:
     def generate(self, prompt: str) -> str:
         if self._index >= len(self._responses):
             raise RuntimeError("no more fake responses")
+        FakeOllamaClient.prompts.append(prompt)
         value = self._responses[self._index]
         self._index += 1
         return value
@@ -67,6 +70,44 @@ def test_build_parser_explicit_args_override_env(monkeypatch) -> None:
     assert args.base_url == "http://cli-url:11434"
 
 
+def test_build_parser_repeated_context_file_args(monkeypatch) -> None:
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--subject",
+            "s",
+            "--goal",
+            "g",
+            "--target-kind",
+            "repo",
+            "--context-file",
+            "a.txt",
+            "--context-file",
+            "b.txt",
+        ]
+    )
+    assert args.context_file == ["a.txt", "b.txt"]
+
+
+def test_load_context_files_concatenates_with_separators(tmp_path: Path) -> None:
+    first = tmp_path / "a.txt"
+    second = tmp_path / "b.txt"
+    first.write_text("alpha", encoding="utf-8")
+    second.write_text("beta", encoding="utf-8")
+
+    context = load_context_files([str(first), str(second)])
+    assert f"===== FILE: {first} =====" in context
+    assert "alpha" in context
+    assert f"===== FILE: {second} =====" in context
+    assert "beta" in context
+
+
+def test_load_context_files_missing_file_raises(tmp_path: Path) -> None:
+    missing = tmp_path / "missing.txt"
+    with pytest.raises(FileNotFoundError):
+        load_context_files([str(missing)])
+
+
 def test_run_play_game_records_expected_event_sequence(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
     path = tmp_path / "play-events.jsonl"
@@ -90,6 +131,26 @@ def test_run_play_game_records_expected_event_sequence(tmp_path: Path, monkeypat
         "referee_decision_recorded",
         "game_completed",
     ]
+
+
+def test_run_play_game_injects_shared_context_into_prompts(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
+    path = tmp_path / "play-events.jsonl"
+    shared = "Repository context snippet"
+
+    run_play_game(
+        subject="subject",
+        goal="goal",
+        target_kind="repo",
+        target_ref="main",
+        model="model-x",
+        base_url="http://url-x",
+        blackboard_path=path,
+        shared_context=shared,
+    )
+
+    assert len(FakeOllamaClient.prompts) == 3
+    assert all(shared in prompt for prompt in FakeOllamaClient.prompts)
 
 
 def test_main_prints_expected_fields_and_uses_fake_client(monkeypatch, capsys, tmp_path: Path) -> None:

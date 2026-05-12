@@ -11,6 +11,17 @@ from baps.runtime import RuntimeEngine
 from baps.schemas import GameContract, GameState, Target
 
 
+def load_context_files(paths: list[str]) -> str:
+    parts: list[str] = []
+    for raw_path in paths:
+        path = Path(raw_path)
+        if not path.exists():
+            raise FileNotFoundError(f"context file not found: {raw_path}")
+        text = path.read_text(encoding="utf-8")
+        parts.append(f"===== FILE: {raw_path} =====\n{text}")
+    return "\n\n".join(parts)
+
+
 def run_play_game(
     *,
     subject: str,
@@ -20,11 +31,38 @@ def run_play_game(
     model: str,
     base_url: str,
     blackboard_path: Path,
+    shared_context: str = "",
 ) -> GameState:
     model_client = OllamaClient(model=model, base_url=base_url)
-    blue_role = make_prompt_blue_role(model_client)
-    red_role = make_prompt_red_role(model_client)
-    referee_role = make_prompt_referee_role(model_client)
+    blue_role = make_prompt_blue_role(
+        model_client,
+        template=(
+            "Using shared context, provide one concise candidate answer for goal `{goal}`. "
+            "Shared context:\n{shared_context}"
+        ),
+        extra_context={"shared_context": shared_context},
+    )
+    red_role = make_prompt_red_role(
+        model_client,
+        template=(
+            "Critique only this Blue move/change from the current game: `{blue_summary}`. "
+            "Do not perform a general audit. "
+            "Use shared context only as supporting evidence.\n"
+            "Shared context:\n{shared_context}"
+        ),
+        extra_context={"shared_context": shared_context},
+    )
+    referee_role = make_prompt_referee_role(
+        model_client,
+        template=(
+            "Structured decision is already fixed to `{decision}`. "
+            "Provide one concise rationale supporting that fixed decision. "
+            "Do not contradict or reselect the decision. "
+            "Blue move: `{blue_summary}`. Red finding: `{red_claim}`.\n"
+            "Shared context:\n{shared_context}"
+        ),
+        extra_context={"shared_context": shared_context},
+    )
 
     contract = GameContract(
         id="play-game-001",
@@ -47,6 +85,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", default=os.getenv("BAPS_OLLAMA_MODEL", "gemma3"))
     parser.add_argument("--base-url", default=os.getenv("BAPS_OLLAMA_BASE_URL", "http://localhost:11434"))
     parser.add_argument("--blackboard-path", default="blackboard/play-game-events.jsonl")
+    parser.add_argument("--context-file", action="append", default=[])
     return parser
 
 
@@ -54,6 +93,7 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     blackboard_path = Path(args.blackboard_path)
+    shared_context = load_context_files(args.context_file)
     state = run_play_game(
         subject=args.subject,
         goal=args.goal,
@@ -62,6 +102,7 @@ def main() -> None:
         model=args.model,
         base_url=args.base_url,
         blackboard_path=blackboard_path,
+        shared_context=shared_context,
     )
 
     round_1 = state.rounds[0]
