@@ -212,10 +212,11 @@ def test_prompt_driven_referee_rejects_when_block_integration_true() -> None:
     decision = role(contract, blue, red)
     assert decision.decision == "reject"
     assert "decision is already fixed to `reject`" in model.prompts[0]
+    assert "reject = blocking issue, revise = useful non-blocking criticism, accept = no material issue" in model.prompts[0]
     assert "Do not choose a different decision and do not contradict it." in model.prompts[0]
 
 
-def test_prompt_driven_referee_accepts_when_block_integration_false() -> None:
+def test_prompt_driven_referee_revises_when_block_integration_false() -> None:
     contract = _contract()
     blue = Move(game_id=contract.id, role="blue", summary="draft", payload={})
     red = Finding(
@@ -230,8 +231,9 @@ def test_prompt_driven_referee_accepts_when_block_integration_false() -> None:
     role = make_prompt_referee_role(model)
 
     decision = role(contract, blue, red)
-    assert decision.decision == "accept"
-    assert "decision is already fixed to `accept`" in model.prompts[0]
+    assert decision.decision == "revise"
+    assert "decision is already fixed to `revise`" in model.prompts[0]
+    assert "reject = blocking issue, revise = useful non-blocking criticism, accept = no material issue" in model.prompts[0]
     assert "Do not choose a different decision and do not contradict it." in model.prompts[0]
 
 

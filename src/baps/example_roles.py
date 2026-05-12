@@ -99,6 +99,8 @@ def make_prompt_referee_role(
     model_client: ModelClient,
     template: str = (
         "Referee for game {game_id}. Structured decision is already fixed to `{decision}`. "
+        "Decision policy: reject = blocking issue, revise = useful non-blocking criticism, "
+        "accept = no material issue. "
         "{decision_rationale_goal} "
         "Blue move: `{blue_summary}`. "
         "Red finding: `{red_claim}` (severity={red_severity}, confidence={red_confidence}, "
@@ -110,7 +112,7 @@ def make_prompt_referee_role(
     context_overrides = dict(extra_context) if extra_context is not None else {}
 
     def _role(contract: GameContract, blue_move: Move, red_finding: Finding) -> Decision:
-        decision = "reject" if red_finding.block_integration else "accept"
+        decision = "reject" if red_finding.block_integration else "revise"
         context = {
             "game_id": contract.id,
             "subject": contract.subject,

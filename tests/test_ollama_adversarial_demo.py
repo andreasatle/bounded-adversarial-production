@@ -77,6 +77,6 @@ def test_ollama_demo_main_prints_expected_fields(monkeypatch, capsys, tmp_path: 
     assert "blue_summary=" in output
     assert "red_claim=" in output
     assert "red_block_integration=False" in output
-    assert "referee_decision=accept" in output
+    assert "referee_decision=revise" in output
     assert "referee_rationale=" in output
     assert "blackboard_path=blackboard/ollama-adversarial-events.jsonl" in output
