@@ -1,5 +1,9 @@
+import pytest
+
 from baps.example_roles import blue_role, red_role, referee_role
+from baps.models import FakeModelClient
 from baps.schemas import Finding, GameContract, Move, Target
+from baps.example_roles import make_prompt_blue_role
 
 
 def _contract() -> GameContract:
@@ -58,3 +62,43 @@ def test_example_roles_are_deterministic_for_same_input() -> None:
     decision1 = referee_role(contract, move1, finding1)
     decision2 = referee_role(contract, move1, finding1)
     assert decision1.model_dump(mode="json") == decision2.model_dump(mode="json")
+
+
+def test_prompt_driven_blue_role_renders_and_calls_model_client() -> None:
+    contract = _contract()
+    model = FakeModelClient(responses=["generated summary"])
+    role = make_prompt_blue_role(model, template="Game {game_id} goal {goal}")
+
+    move = role(contract)
+
+    assert move.summary == "generated summary"
+    assert model.prompts == [f"Game {contract.id} goal {contract.goal}"]
+
+
+def test_prompt_driven_blue_role_is_deterministic_with_fake_model() -> None:
+    contract = _contract()
+    model = FakeModelClient(responses=["same summary", "same summary"])
+    role = make_prompt_blue_role(model, template="Static prompt for {game_id}")
+
+    move1 = role(contract)
+    move2 = role(contract)
+
+    assert move1.model_dump(mode="json") == move2.model_dump(mode="json")
+
+
+def test_prompt_driven_blue_role_missing_template_variable_fails_clearly() -> None:
+    contract = _contract()
+    model = FakeModelClient(responses=["unused"])
+    role = make_prompt_blue_role(model, template="Missing {unknown_key}")
+
+    with pytest.raises(KeyError):
+        role(contract)
+
+
+def test_prompt_driven_blue_role_rejects_whitespace_rendered_prompt() -> None:
+    contract = _contract()
+    model = FakeModelClient(responses=["unused"])
+    role = make_prompt_blue_role(model, template="{blank}", extra_context={"blank": "   "})
+
+    with pytest.raises(ValueError):
+        role(contract)
