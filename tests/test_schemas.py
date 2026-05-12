@@ -125,6 +125,7 @@ def test_game_round_constructs_successfully() -> None:
 def test_game_state_constructs_successfully() -> None:
     state = GameState(
         game_id="game-1",
+        run_id="run-0001",
         current_round=1,
         rounds=[GameRound(round_number=1)],
         final_decision=Decision(game_id="game-1", decision="integrate", rationale="r"),
@@ -263,7 +264,8 @@ def test_game_state_constructs_successfully() -> None:
                 "updated_at": "2026-05-11T10:00:00Z",
             },
         ),
-        (GameState, "game_id", {"game_id": "game-1"}),
+        (GameState, "game_id", {"game_id": "game-1", "run_id": "run-0001"}),
+        (GameState, "run_id", {"game_id": "game-1", "run_id": "run-0001"}),
         (Artifact, "id", {"id": "art-1", "type": "report"}),
         (Artifact, "type", {"id": "art-1", "type": "report"}),
         (
@@ -387,7 +389,7 @@ def test_game_round_round_number_must_be_at_least_one() -> None:
 
 def test_game_state_current_round_must_be_at_least_one() -> None:
     with pytest.raises(ValidationError):
-        GameState(game_id="game-1", current_round=0)
+        GameState(game_id="game-1", run_id="run-0001", current_round=0)
 
 
 def test_mutable_defaults_are_not_shared() -> None:
@@ -479,7 +481,7 @@ def test_mutable_defaults_are_not_shared() -> None:
     assert round_b.moves == []
     assert round_b.findings == []
 
-    state_a = GameState(game_id="game-1")
-    state_b = GameState(game_id="game-2")
+    state_a = GameState(game_id="game-1", run_id="run-0001")
+    state_b = GameState(game_id="game-2", run_id="run-0002")
     state_a.rounds.append(GameRound(round_number=1))
     assert state_b.rounds == []

@@ -35,6 +35,7 @@ def test_run_game_returns_expected_game_state_and_events(tmp_path: Path) -> None
     state = engine.run_game(contract, blue_role, red_role, referee_role)
 
     assert state.game_id == "game-1"
+    assert state.run_id == "run-0001"
     assert state.current_round == 1
     assert len(state.rounds) == 1
     assert state.rounds[0].round_number == 1
@@ -52,6 +53,29 @@ def test_run_game_returns_expected_game_state_and_events(tmp_path: Path) -> None
     ]
     for event in events:
         assert event.payload["game_id"] == "game-1"
+        assert event.payload["run_id"] == "run-0001"
+        assert event.id.startswith("game-1:run-0001:")
+
+
+def test_repeated_runs_produce_different_run_ids(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "events.jsonl")
+    engine = RuntimeEngine(board)
+    contract = _contract()
+
+    def blue_role(_contract: GameContract):
+        return {"game_id": "game-1", "role": "blue", "summary": "proposed change"}
+
+    def red_role(_contract: GameContract, _blue_move):
+        return {"game_id": "game-1", "severity": "high", "confidence": "high", "claim": "risk found"}
+
+    def referee_role(_contract: GameContract, _blue_move, _red_finding):
+        return {"game_id": "game-1", "decision": "integrate", "rationale": "acceptable risk"}
+
+    first = engine.run_game(contract, blue_role, red_role, referee_role)
+    second = engine.run_game(contract, blue_role, red_role, referee_role)
+    assert first.run_id == "run-0001"
+    assert second.run_id == "run-0002"
+    assert first.run_id != second.run_id
 
 
 def test_invalid_blue_role_output_fails(tmp_path: Path) -> None:

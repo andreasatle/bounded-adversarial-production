@@ -27,5 +27,6 @@ def main() -> None:
     state = run_demo(blackboard_path)
     final_decision = state.final_decision.decision if state.final_decision is not None else "none"
     print(f"game_id={state.game_id}")
+    print(f"run_id={state.run_id}")
     print(f"final_decision={final_decision}")
     print(f"blackboard_path={blackboard_path}")

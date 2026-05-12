@@ -117,11 +117,13 @@ class GameRound(BaseModel):
 
 class GameState(BaseModel):
     game_id: str
+    run_id: str
     current_round: int = 1
     rounds: list[GameRound] = Field(default_factory=list)
     final_decision: Decision | None = None
 
     _validate_game_id = field_validator("game_id")(_require_non_empty)
+    _validate_run_id = field_validator("run_id")(_require_non_empty)
 
     @field_validator("current_round")
     @classmethod
