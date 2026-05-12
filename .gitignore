@@ -8,5 +8,9 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Generated runtime/workspace state
 blackboard/
-blackboard/
+.runs/
+.state/
+.workspace/
