@@ -60,3 +60,70 @@ def make_prompt_blue_role(
         )
 
     return _role
+
+
+def make_prompt_red_role(
+    model_client: ModelClient,
+    template: str = "Red role for game {game_id}: critique blue move `{blue_summary}` for goal `{goal}`",
+    extra_context: dict | None = None,
+):
+    renderer = PromptRenderer(template)
+    context_overrides = dict(extra_context) if extra_context is not None else {}
+
+    def _role(contract: GameContract, blue_move: Move) -> Finding:
+        context = {
+            "game_id": contract.id,
+            "subject": contract.subject,
+            "goal": contract.goal,
+            "target_kind": contract.target.kind,
+            "target_ref": contract.target.ref,
+            "blue_summary": blue_move.summary,
+            "blue_payload": blue_move.payload,
+        }
+        context.update(context_overrides)
+        prompt = renderer.render(context)
+        claim = model_client.generate(prompt)
+        return Finding(
+            game_id=contract.id,
+            severity="medium",
+            confidence="medium",
+            claim=claim,
+            evidence=[f"Blue summary: {blue_move.summary}"],
+            block_integration=False,
+        )
+
+    return _role
+
+
+def make_prompt_referee_role(
+    model_client: ModelClient,
+    template: str = "Referee for game {game_id}: evaluate finding `{red_claim}` against move `{blue_summary}`",
+    extra_context: dict | None = None,
+):
+    renderer = PromptRenderer(template)
+    context_overrides = dict(extra_context) if extra_context is not None else {}
+
+    def _role(contract: GameContract, blue_move: Move, red_finding: Finding) -> Decision:
+        context = {
+            "game_id": contract.id,
+            "subject": contract.subject,
+            "goal": contract.goal,
+            "target_kind": contract.target.kind,
+            "target_ref": contract.target.ref,
+            "blue_summary": blue_move.summary,
+            "red_claim": red_finding.claim,
+            "red_severity": red_finding.severity,
+            "red_confidence": red_finding.confidence,
+            "red_block_integration": red_finding.block_integration,
+        }
+        context.update(context_overrides)
+        prompt = renderer.render(context)
+        rationale = model_client.generate(prompt)
+        decision = "reject" if red_finding.block_integration else "accept"
+        return Decision(
+            game_id=contract.id,
+            decision=decision,
+            rationale=rationale,
+        )
+
+    return _role
