@@ -97,13 +97,20 @@ def make_prompt_red_role(
 
 def make_prompt_referee_role(
     model_client: ModelClient,
-    template: str = "Referee for game {game_id}: evaluate finding `{red_claim}` against move `{blue_summary}`",
+    template: str = (
+        "Referee for game {game_id}. Structured decision is already fixed to `{decision}`. "
+        "{decision_rationale_goal} "
+        "Blue move: `{blue_summary}`. "
+        "Red finding: `{red_claim}` (severity={red_severity}, confidence={red_confidence}, "
+        "block_integration={red_block_integration})."
+    ),
     extra_context: dict | None = None,
 ):
     renderer = PromptRenderer(template)
     context_overrides = dict(extra_context) if extra_context is not None else {}
 
     def _role(contract: GameContract, blue_move: Move, red_finding: Finding) -> Decision:
+        decision = "reject" if red_finding.block_integration else "accept"
         context = {
             "game_id": contract.id,
             "subject": contract.subject,
@@ -115,11 +122,15 @@ def make_prompt_referee_role(
             "red_severity": red_finding.severity,
             "red_confidence": red_finding.confidence,
             "red_block_integration": red_finding.block_integration,
+            "decision": decision,
+            "decision_rationale_goal": (
+                "Provide one concise rationale that supports this fixed decision. "
+                "Do not choose a different decision and do not contradict it."
+            ),
         }
         context.update(context_overrides)
         prompt = renderer.render(context)
         rationale = model_client.generate(prompt)
-        decision = "reject" if red_finding.block_integration else "accept"
         return Decision(
             game_id=contract.id,
             decision=decision,
