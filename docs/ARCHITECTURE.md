@@ -580,6 +580,9 @@ Architecture intentionally isolates orchestration boundaries before introducing 
 8. **Mutable default fields are isolated**  
    Models with list/dict defaults use `default_factory` and are tested for non-sharing.
 
+9. **Red scope is constrained to Blue's proposed delta**  
+   Prompt-driven Red role guidance explicitly scopes critique to the current game's Blue move/change; broader system context is treated as supporting evidence, not expanded review authority.
+
 ---
 
 ## 12. Current Architectural Direction

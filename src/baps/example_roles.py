@@ -64,7 +64,12 @@ def make_prompt_blue_role(
 
 def make_prompt_red_role(
     model_client: ModelClient,
-    template: str = "Red role for game {game_id}: critique blue move `{blue_summary}` for goal `{goal}`",
+    template: str = (
+        "Red role for game {game_id}: critique only this Blue move/change from the current game: "
+        "`{blue_summary}`. "
+        "Do not perform a general audit of the whole system. "
+        "Use surrounding context only as supporting evidence for the critique."
+    ),
     extra_context: dict | None = None,
 ):
     renderer = PromptRenderer(template)

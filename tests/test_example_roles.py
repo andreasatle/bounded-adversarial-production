@@ -135,6 +135,9 @@ def test_prompt_driven_red_generated_text_becomes_claim() -> None:
     assert finding.confidence == "medium"
     assert finding.block_integration is False
     assert blue.summary in finding.evidence[0]
+    assert blue.summary in model.prompts[0]
+    assert "critique only this Blue move/change from the current game" in model.prompts[0]
+    assert "Do not perform a general audit of the whole system." in model.prompts[0]
 
 
 def test_prompt_driven_red_missing_template_variable_raises_key_error() -> None:
