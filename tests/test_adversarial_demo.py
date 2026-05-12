@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from baps.adversarial_demo import run_adversarial_demo
@@ -12,8 +13,9 @@ def test_adversarial_demo_runs_deterministically(tmp_path: Path) -> None:
 
     assert first.game_id == "adversarial-demo-001"
     assert second.game_id == "adversarial-demo-001"
-    assert first.run_id == "run-0001"
-    assert second.run_id == "run-0001"
+    assert re.fullmatch(r"run-\d{8}-\d{6}-[0-9a-f]{8}", first.run_id)
+    assert re.fullmatch(r"run-\d{8}-\d{6}-[0-9a-f]{8}", second.run_id)
+    assert first.run_id != second.run_id
     assert first.rounds[0].moves[0].summary == second.rounds[0].moves[0].summary
     assert first.rounds[0].findings[0].claim == second.rounds[0].findings[0].claim
     assert first.final_decision is not None

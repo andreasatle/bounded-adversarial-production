@@ -1,19 +1,26 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from uuid import uuid4
+
 from baps.blackboard import Blackboard
 from baps.roles import RoleInvocationGuard
 from baps.schemas import Decision, Event, Finding, GameContract, GameRound, GameState, Move
+
+
+def generate_run_id() -> str:
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    short_uuid = uuid4().hex[:8]
+    return f"run-{timestamp}-{short_uuid}"
 
 
 class RuntimeEngine:
     def __init__(self, blackboard: Blackboard, guard: RoleInvocationGuard | None = None):
         self.blackboard = blackboard
         self.guard = guard if guard is not None else RoleInvocationGuard()
-        self._run_counter = 0
 
     def run_game(self, contract: GameContract, blue_role, red_role, referee_role) -> GameState:
-        self._run_counter += 1
-        run_id = f"run-{self._run_counter:04d}"
+        run_id = generate_run_id()
         self.blackboard.append(
             Event(
                 id=f"{contract.id}:{run_id}:game_started",

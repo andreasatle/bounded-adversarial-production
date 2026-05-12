@@ -1,10 +1,11 @@
+import re
 from pathlib import Path
 
 import pytest
 
 from baps.blackboard import Blackboard
 from baps.roles import RoleInvocationError, RoleInvocationGuard
-from baps.runtime import RuntimeEngine
+from baps.runtime import RuntimeEngine, generate_run_id
 from baps.schemas import GameContract, Target
 
 
@@ -35,7 +36,7 @@ def test_run_game_returns_expected_game_state_and_events(tmp_path: Path) -> None
     state = engine.run_game(contract, blue_role, red_role, referee_role)
 
     assert state.game_id == "game-1"
-    assert state.run_id == "run-0001"
+    assert re.fullmatch(r"run-\d{8}-\d{6}-[0-9a-f]{8}", state.run_id)
     assert state.current_round == 1
     assert len(state.rounds) == 1
     assert state.rounds[0].round_number == 1
@@ -53,8 +54,8 @@ def test_run_game_returns_expected_game_state_and_events(tmp_path: Path) -> None
     ]
     for event in events:
         assert event.payload["game_id"] == "game-1"
-        assert event.payload["run_id"] == "run-0001"
-        assert event.id.startswith("game-1:run-0001:")
+        assert event.payload["run_id"] == state.run_id
+        assert event.id.startswith(f"game-1:{state.run_id}:")
 
 
 def test_repeated_runs_produce_different_run_ids(tmp_path: Path) -> None:
@@ -73,9 +74,35 @@ def test_repeated_runs_produce_different_run_ids(tmp_path: Path) -> None:
 
     first = engine.run_game(contract, blue_role, red_role, referee_role)
     second = engine.run_game(contract, blue_role, red_role, referee_role)
-    assert first.run_id == "run-0001"
-    assert second.run_id == "run-0002"
+    assert re.fullmatch(r"run-\d{8}-\d{6}-[0-9a-f]{8}", first.run_id)
+    assert re.fullmatch(r"run-\d{8}-\d{6}-[0-9a-f]{8}", second.run_id)
     assert first.run_id != second.run_id
+
+
+def test_two_runtime_instances_produce_different_run_ids(tmp_path: Path) -> None:
+    board_one = Blackboard(tmp_path / "events-one.jsonl")
+    board_two = Blackboard(tmp_path / "events-two.jsonl")
+    engine_one = RuntimeEngine(board_one)
+    engine_two = RuntimeEngine(board_two)
+    contract = _contract()
+
+    def blue_role(_contract: GameContract):
+        return {"game_id": "game-1", "role": "blue", "summary": "proposed change"}
+
+    def red_role(_contract: GameContract, _blue_move):
+        return {"game_id": "game-1", "severity": "high", "confidence": "high", "claim": "risk found"}
+
+    def referee_role(_contract: GameContract, _blue_move, _red_finding):
+        return {"game_id": "game-1", "decision": "integrate", "rationale": "acceptable risk"}
+
+    first = engine_one.run_game(contract, blue_role, red_role, referee_role)
+    second = engine_two.run_game(contract, blue_role, red_role, referee_role)
+    assert first.run_id != second.run_id
+
+
+def test_generate_run_id_format() -> None:
+    run_id = generate_run_id()
+    assert re.fullmatch(r"run-\d{8}-\d{6}-[0-9a-f]{8}", run_id)
 
 
 def test_invalid_blue_role_output_fails(tmp_path: Path) -> None:

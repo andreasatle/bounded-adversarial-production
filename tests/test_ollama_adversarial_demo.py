@@ -73,7 +73,7 @@ def test_ollama_demo_main_prints_expected_fields(monkeypatch, capsys, tmp_path: 
 
     output = capsys.readouterr().out
     assert "game_id=ollama-adversarial-demo-001" in output
-    assert "run_id=run-0001" in output
+    assert "run_id=run-" in output
     assert "blue_summary=" in output
     assert "red_claim=" in output
     assert "red_block_integration=False" in output
