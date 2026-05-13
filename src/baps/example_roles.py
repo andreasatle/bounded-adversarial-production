@@ -5,6 +5,27 @@ from baps.prompts import PromptRenderer
 from baps.schemas import Decision, Finding, GameContract, Move
 
 
+def _parse_red_output(generated_text: str, default_material: bool) -> tuple[bool, str]:
+    material = default_material
+    claim: str | None = None
+
+    for raw_line in generated_text.splitlines():
+        line = raw_line.strip()
+        upper = line.upper()
+        if upper.startswith("MATERIAL:"):
+            value = line.split(":", 1)[1].strip().lower()
+            if value == "yes":
+                material = True
+            elif value == "no":
+                material = False
+        elif upper.startswith("CLAIM:"):
+            claim = line.split(":", 1)[1].strip()
+
+    if claim is None or not claim:
+        claim = generated_text
+    return material, claim
+
+
 def blue_role(contract: GameContract) -> Move:
     return Move(
         game_id=contract.id,
@@ -80,7 +101,8 @@ def make_prompt_red_role(
         "Do not perform a general audit of the whole system. "
         "Use surrounding context only as supporting evidence for the critique. "
         "Classify materiality: material finding = actionable issue that should cause revision; "
-        "non-material finding = minor note, praise, or no required change."
+        "non-material finding = minor note, praise, or no required change. "
+        "Output format:\nMATERIAL: yes|no\nCLAIM: concise critique/assessment"
     ),
     extra_context: dict | None = None,
     default_block_integration: bool = False,
@@ -101,7 +123,8 @@ def make_prompt_red_role(
         }
         context.update(context_overrides)
         prompt = renderer.render(context)
-        claim = model_client.generate(prompt)
+        generated = model_client.generate(prompt)
+        parsed_material, claim = _parse_red_output(generated, default_material=default_material)
         return Finding(
             game_id=contract.id,
             severity="medium",
@@ -109,7 +132,7 @@ def make_prompt_red_role(
             claim=claim,
             evidence=[f"Blue summary: {blue_move.summary}"],
             block_integration=default_block_integration,
-            payload={"material": default_material},
+            payload={"material": parsed_material},
         )
 
     return _role

@@ -300,6 +300,63 @@ def test_prompt_driven_red_material_defaults_can_be_configured() -> None:
     assert finding.payload["material"] is False
 
 
+def test_prompt_driven_red_parses_material_yes() -> None:
+    contract = _contract()
+    blue = Move(game_id=contract.id, role="blue", summary="draft", payload={})
+    model = FakeModelClient(responses=["MATERIAL: yes\nCLAIM: actionable issue"])
+    role = make_prompt_red_role(model, default_material=False)
+
+    finding = role(contract, blue)
+    assert finding.payload["material"] is True
+    assert finding.claim == "actionable issue"
+
+
+def test_prompt_driven_red_parses_material_no() -> None:
+    contract = _contract()
+    blue = Move(game_id=contract.id, role="blue", summary="draft", payload={})
+    model = FakeModelClient(responses=["MATERIAL: no\nCLAIM: no changes needed"])
+    role = make_prompt_red_role(model, default_material=True)
+
+    finding = role(contract, blue)
+    assert finding.payload["material"] is False
+    assert finding.claim == "no changes needed"
+
+
+def test_prompt_driven_red_material_fallback_to_default_when_missing() -> None:
+    contract = _contract()
+    blue = Move(game_id=contract.id, role="blue", summary="draft", payload={})
+    model = FakeModelClient(responses=["CLAIM: assessment without explicit material flag"])
+    role = make_prompt_red_role(model, default_material=False)
+
+    finding = role(contract, blue)
+    assert finding.payload["material"] is False
+    assert finding.claim == "assessment without explicit material flag"
+
+
+def test_prompt_driven_red_claim_falls_back_to_full_output_when_missing() -> None:
+    contract = _contract()
+    blue = Move(game_id=contract.id, role="blue", summary="draft", payload={})
+    generated = "MATERIAL: no\nNo claim label, just plain assessment text."
+    model = FakeModelClient(responses=[generated])
+    role = make_prompt_red_role(model)
+
+    finding = role(contract, blue)
+    assert finding.claim == generated
+
+
+def test_prompt_driven_referee_accepts_with_non_material_generated_red_finding() -> None:
+    contract = _contract()
+    blue = Move(game_id=contract.id, role="blue", summary="draft", payload={})
+    red_model = FakeModelClient(responses=["MATERIAL: no\nCLAIM: looks good overall"])
+    red_role_generated = make_prompt_red_role(red_model, default_material=True)
+    red_finding = red_role_generated(contract, blue)
+
+    referee_model = FakeModelClient(responses=["rationale"])
+    ref_role = make_prompt_referee_role(referee_model)
+    decision = ref_role(contract, blue, red_finding)
+    assert decision.decision == "accept"
+
+
 def test_prompt_driven_referee_missing_template_variable_raises_key_error() -> None:
     contract = _contract()
     blue = Move(game_id=contract.id, role="blue", summary="draft", payload={})
