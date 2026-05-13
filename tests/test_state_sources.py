@@ -8,6 +8,7 @@ from baps.state_sources import (
     StateManifest,
     StateSourceDeclaration,
     load_state_manifest,
+    resolve_state_context,
 )
 
 
@@ -139,3 +140,85 @@ def test_load_checked_in_state_manifest_and_read_sources() -> None:
         if source.kind == "markdown_doc":
             loaded = adapter.load_text(source)
             assert loaded.strip()
+
+
+def test_resolve_state_context_empty_source_ids_returns_empty_string() -> None:
+    manifest = StateManifest(
+        project_id="baps",
+        sources=[StateSourceDeclaration(id="readme", kind="markdown_doc", ref="README.md")],
+    )
+    adapter = MarkdownFileStateSourceAdapter()
+    assert resolve_state_context(manifest, [], adapter) == ""
+
+
+def test_resolve_state_context_resolves_one_source(tmp_path: Path) -> None:
+    file_path = tmp_path / "one.md"
+    file_path.write_text("one-content", encoding="utf-8")
+    manifest = StateManifest(
+        project_id="baps",
+        sources=[StateSourceDeclaration(id="one", kind="markdown_doc", ref=str(file_path), authority="context")],
+    )
+    adapter = MarkdownFileStateSourceAdapter()
+
+    context = resolve_state_context(manifest, ["one"], adapter)
+    assert "===== STATE SOURCE: one (markdown_doc, authority=context) =====" in context
+    assert "one-content" in context
+
+
+def test_resolve_state_context_resolves_multiple_sources_in_requested_order(tmp_path: Path) -> None:
+    first = tmp_path / "first.md"
+    second = tmp_path / "second.md"
+    first.write_text("first-content", encoding="utf-8")
+    second.write_text("second-content", encoding="utf-8")
+
+    manifest = StateManifest(
+        project_id="baps",
+        sources=[
+            StateSourceDeclaration(id="first", kind="markdown_doc", ref=str(first), authority="context"),
+            StateSourceDeclaration(id="second", kind="markdown_doc", ref=str(second), authority="descriptive"),
+        ],
+    )
+    adapter = MarkdownFileStateSourceAdapter()
+
+    context = resolve_state_context(manifest, ["second", "first"], adapter)
+    idx_second = context.find("STATE SOURCE: second")
+    idx_first = context.find("STATE SOURCE: first")
+    assert idx_second != -1
+    assert idx_first != -1
+    assert idx_second < idx_first
+
+
+def test_resolve_state_context_missing_source_id_raises_value_error(tmp_path: Path) -> None:
+    file_path = tmp_path / "one.md"
+    file_path.write_text("one-content", encoding="utf-8")
+    manifest = StateManifest(
+        project_id="baps",
+        sources=[StateSourceDeclaration(id="one", kind="markdown_doc", ref=str(file_path))],
+    )
+    adapter = MarkdownFileStateSourceAdapter()
+
+    with pytest.raises(ValueError, match="state source id not found in manifest: missing"):
+        resolve_state_context(manifest, ["missing"], adapter)
+
+
+def test_resolve_state_context_missing_file_error_propagates(tmp_path: Path) -> None:
+    missing = tmp_path / "missing.md"
+    manifest = StateManifest(
+        project_id="baps",
+        sources=[StateSourceDeclaration(id="missing", kind="markdown_doc", ref=str(missing))],
+    )
+    adapter = MarkdownFileStateSourceAdapter()
+
+    with pytest.raises(FileNotFoundError):
+        resolve_state_context(manifest, ["missing"], adapter)
+
+
+def test_resolve_state_context_checked_in_manifest_architecture_and_future_direction() -> None:
+    manifest = load_state_manifest(Path("examples/state_manifests/baps_project_state.json"))
+    adapter = MarkdownFileStateSourceAdapter()
+
+    context = resolve_state_context(manifest, ["architecture", "future_direction"], adapter)
+    assert "STATE SOURCE: architecture" in context
+    assert "STATE SOURCE: future_direction" in context
+    assert "authority=descriptive" in context
+    assert "authority=directional" in context

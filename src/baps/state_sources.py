@@ -69,3 +69,24 @@ class MarkdownFileStateSourceAdapter(StateSourceAdapter):
         if not path.exists():
             raise FileNotFoundError(f"state source file not found: {declaration.ref}")
         return path.read_text(encoding="utf-8")
+
+
+def resolve_state_context(
+    manifest: StateManifest,
+    source_ids: list[str],
+    adapter: StateSourceAdapter,
+) -> str:
+    if not source_ids:
+        return ""
+
+    by_id = {source.id: source for source in manifest.sources}
+    parts: list[str] = []
+    for source_id in source_ids:
+        source = by_id.get(source_id)
+        if source is None:
+            raise ValueError(f"state source id not found in manifest: {source_id}")
+        content = adapter.load_text(source)
+        parts.append(
+            f"===== STATE SOURCE: {source.id} ({source.kind}, authority={source.authority}) =====\n{content}"
+        )
+    return "\n\n".join(parts)
