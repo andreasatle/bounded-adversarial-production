@@ -50,6 +50,7 @@ def test_build_parser_uses_env_defaults(monkeypatch) -> None:
     args = parser.parse_args(["--subject", "s", "--goal", "g", "--target-kind", "repo"])
     assert args.model == "env-model"
     assert args.base_url == "http://env-url:11434"
+    assert args.game_type == "documentation-refinement"
     assert args.max_rounds == 1
 
 
@@ -74,6 +75,23 @@ def test_build_parser_explicit_args_override_env(monkeypatch) -> None:
     )
     assert args.model == "cli-model"
     assert args.base_url == "http://cli-url:11434"
+
+
+def test_build_parser_explicit_game_type_override() -> None:
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--subject",
+            "s",
+            "--goal",
+            "g",
+            "--target-kind",
+            "repo",
+            "--game-type",
+            "documentation-refinement",
+        ]
+    )
+    assert args.game_type == "documentation-refinement"
 
 
 def test_build_parser_explicit_max_rounds_overrides_default() -> None:
@@ -242,6 +260,24 @@ def test_run_play_game_uses_default_documentation_refinement_definition(tmp_path
     assert any("Referee converges toward correctness and clarity." in prompt for prompt in FakeOllamaClient.prompts)
 
 
+def test_run_play_game_resolves_builtin_game_type(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
+    path = tmp_path / "play-events.jsonl"
+
+    run_play_game(
+        subject="subject",
+        goal="goal",
+        target_kind="repo",
+        target_ref="main",
+        model="model-x",
+        base_url="http://url-x",
+        blackboard_path=path,
+        game_type="documentation-refinement",
+    )
+
+    assert any("Game type is documentation refinement." in prompt for prompt in FakeOllamaClient.prompts)
+
+
 def test_run_play_game_supports_custom_game_definition_prompt_sections(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
     path = tmp_path / "play-events.jsonl"
@@ -300,6 +336,7 @@ def test_main_prints_expected_fields_and_uses_fake_client(monkeypatch, capsys, t
     assert "goal=Explain run command" in output
     assert "target_kind=document" in output
     assert "target_ref=README.md" in output
+    assert "game_type=documentation-refinement" in output
     assert "rounds_played=1" in output
     assert "max_rounds=1" in output
     assert "terminal_reason=round_budget_exhausted" in output

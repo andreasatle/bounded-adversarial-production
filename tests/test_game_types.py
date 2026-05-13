@@ -2,6 +2,7 @@ import pytest
 
 from baps.game_types import (
     GameDefinition,
+    get_builtin_game_definition,
     make_documentation_refinement_game_definition,
     make_documentation_refinement_game_type,
 )
@@ -81,3 +82,13 @@ def test_game_definition_prompt_sections_are_isolated() -> None:
     b = make_documentation_refinement_game_definition()
     a.prompt_sections.red_sections.append(PromptSection(name="Extra", content="extra"))
     assert len(a.prompt_sections.red_sections) == len(b.prompt_sections.red_sections) + 1
+
+
+def test_get_builtin_game_definition_returns_documentation_refinement() -> None:
+    definition = get_builtin_game_definition("documentation-refinement")
+    assert definition.id == "documentation-refinement"
+
+
+def test_get_builtin_game_definition_rejects_unknown_type() -> None:
+    with pytest.raises(ValueError, match="unknown game type: unknown-type"):
+        get_builtin_game_definition("unknown-type")

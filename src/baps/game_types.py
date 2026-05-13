@@ -79,3 +79,11 @@ def make_documentation_refinement_game_definition() -> GameDefinition:
 
 def make_documentation_refinement_game_type() -> GameTypePromptSections:
     return make_documentation_refinement_game_definition().prompt_sections
+
+
+def get_builtin_game_definition(game_type: str) -> GameDefinition:
+    if game_type == "documentation-refinement":
+        return make_documentation_refinement_game_definition()
+    raise ValueError(
+        f"unknown game type: {game_type}. supported game types: documentation-refinement"
+    )

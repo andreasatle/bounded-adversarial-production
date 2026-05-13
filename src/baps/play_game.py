@@ -6,7 +6,7 @@ from pathlib import Path
 
 from baps.blackboard import Blackboard
 from baps.example_roles import make_prompt_blue_role, make_prompt_red_role, make_prompt_referee_role
-from baps.game_types import GameDefinition, make_documentation_refinement_game_definition
+from baps.game_types import GameDefinition, get_builtin_game_definition
 from baps.models import OllamaClient
 from baps.prompt_assembly import PromptSection, PromptSpec, assemble_prompt
 from baps.runtime import RuntimeEngine, build_game_result
@@ -50,11 +50,12 @@ def run_play_game(
     max_rounds: int = 1,
     red_material: bool = True,
     game_definition: GameDefinition | None = None,
+    game_type: str = "documentation-refinement",
 ) -> GameState:
     resolved_game_definition = (
         game_definition
         if game_definition is not None
-        else make_documentation_refinement_game_definition()
+        else get_builtin_game_definition(game_type)
     )
     model_client = OllamaClient(model=model, base_url=base_url)
     prompt_sections = resolved_game_definition.prompt_sections
@@ -163,6 +164,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-url", default=os.getenv("BAPS_OLLAMA_BASE_URL", "http://localhost:11434"))
     parser.add_argument("--blackboard-path", default="blackboard/play-game-events.jsonl")
     parser.add_argument("--context-file", action="append", default=[])
+    parser.add_argument("--game-type", default="documentation-refinement")
     parser.add_argument("--max-rounds", type=_max_rounds_type, default=1)
     parser.add_argument("--red-material", action="store_true", default=True)
     parser.add_argument("--red-non-material", action="store_false", dest="red_material")
@@ -185,6 +187,7 @@ def main() -> None:
         shared_context=shared_context,
         max_rounds=args.max_rounds,
         red_material=args.red_material,
+        game_type=args.game_type,
     )
     contract = GameContract(
         id="play-game-001",
@@ -206,6 +209,7 @@ def main() -> None:
     print(f"goal={args.goal}")
     print(f"target_kind={args.target_kind}")
     print(f"target_ref={args.target_ref}")
+    print(f"game_type={args.game_type}")
     print(f"rounds_played={result.rounds_played}")
     print(f"max_rounds={result.max_rounds}")
     print(f"terminal_reason={result.terminal_reason}")
