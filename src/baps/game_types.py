@@ -43,7 +43,12 @@ def make_documentation_refinement_game_type() -> GameTypePromptSections:
                 name="Game Type Convergence",
                 content=(
                     "Referee converges toward correctness and clarity. "
-                    "Accept when no material discrepancy remains."
+                    "Accept when Red reports no material issue. "
+                    "Accept when Red provides praise, confirmation, minor wording preference, or optional polish. "
+                    "Revise only when Red identifies a material discrepancy that another round is expected to reduce. "
+                    "Reject only for blocking or invalid candidates. "
+                    "Do not recommend another revision merely because the candidate could be marginally polished. "
+                    "The rationale must support the already-fixed structured decision."
                 ),
             ),
         ],
