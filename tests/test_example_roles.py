@@ -357,6 +357,28 @@ def test_prompt_driven_referee_accepts_with_non_material_generated_red_finding()
     assert decision.decision == "accept"
 
 
+def test_default_assembled_role_prompts_include_expected_guidance() -> None:
+    contract = _contract()
+    blue = Move(game_id=contract.id, role="blue", summary="draft", payload={})
+    model_blue = FakeModelClient(responses=["blue summary"])
+    model_red = FakeModelClient(responses=["MATERIAL: yes\nCLAIM: red claim"])
+    model_ref = FakeModelClient(responses=["rationale"])
+
+    blue_role_prompted = make_prompt_blue_role(model_blue)
+    red_role_prompted = make_prompt_red_role(model_red)
+    ref_role_prompted = make_prompt_referee_role(model_ref)
+
+    blue_move = blue_role_prompted(contract)
+    red_finding = red_role_prompted(contract, blue)
+    ref_role_prompted(contract, blue_move, red_finding)
+
+    assert "critique only this Blue move/change from the current game" in model_red.prompts[0]
+    assert "Classify materiality" in model_red.prompts[0]
+    assert "## Output Format" in model_red.prompts[0]
+    assert "Structured decision is already fixed to" in model_ref.prompts[0]
+    assert "Decision policy:" in model_ref.prompts[0]
+
+
 def test_prompt_driven_referee_missing_template_variable_raises_key_error() -> None:
     contract = _contract()
     blue = Move(game_id=contract.id, role="blue", summary="draft", payload={})

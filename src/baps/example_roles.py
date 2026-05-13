@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from baps.models import ModelClient
+from baps.prompt_assembly import PromptSection, PromptSpec, assemble_prompt
 from baps.prompts import PromptRenderer
 from baps.schemas import Decision, Finding, GameContract, Move
 
@@ -54,15 +55,88 @@ def referee_role(contract: GameContract, blue_move: Move, red_finding: Finding) 
     )
 
 
+_DEFAULT_BLUE_TEMPLATE = assemble_prompt(
+    PromptSpec(
+        sections=[
+            PromptSection(
+                name="Role",
+                content=(
+                    "Blue role for game {game_id}: {goal}. "
+                    "If revision context is present, use it to improve the proposed change."
+                ),
+            ),
+            PromptSection(
+                name="Revision Context",
+                content=(
+                    "Previous blue summary: {previous_blue_summary}. "
+                    "Previous red claim: {previous_red_claim}. "
+                    "Previous referee rationale: {previous_referee_rationale}."
+                ),
+            ),
+        ]
+    )
+)
+
+
+_DEFAULT_RED_TEMPLATE = assemble_prompt(
+    PromptSpec(
+        sections=[
+            PromptSection(
+                name="Scope",
+                content=(
+                    "Red role for game {game_id}: critique only this Blue move/change from the current game: "
+                    "`{blue_summary}`. "
+                    "Do not perform a general audit of the whole system. "
+                    "Use surrounding context only as supporting evidence for the critique."
+                ),
+            ),
+            PromptSection(
+                name="Materiality",
+                content=(
+                    "Classify materiality: material finding = actionable issue that should cause revision; "
+                    "non-material finding = minor note, praise, or no required change."
+                ),
+            ),
+            PromptSection(
+                name="Output Format",
+                content="MATERIAL: yes|no\nCLAIM: concise critique/assessment",
+            ),
+        ]
+    )
+)
+
+
+_DEFAULT_REFEREE_TEMPLATE = assemble_prompt(
+    PromptSpec(
+        sections=[
+            PromptSection(
+                name="Decision",
+                content=(
+                    "Referee for game {game_id}. Structured decision is already fixed to `{decision}`. "
+                    "Decision policy: reject = blocking issue, revise = useful non-blocking criticism, "
+                    "accept = no material issue."
+                ),
+            ),
+            PromptSection(
+                name="Rationale Rule",
+                content="{decision_rationale_goal}",
+            ),
+            PromptSection(
+                name="Inputs",
+                content=(
+                    "Blue move: `{blue_summary}`. "
+                    "Red finding: `{red_claim}` (severity={red_severity}, confidence={red_confidence}, "
+                    "block_integration={red_block_integration})."
+                ),
+            ),
+        ]
+    )
+)
+
+
 def make_prompt_blue_role(
     model_client: ModelClient,
-    template: str = (
-        "Blue role for game {game_id}: {goal}. "
-        "If revision context is present, use it to improve the proposed change. "
-        "Previous blue summary: {previous_blue_summary}. "
-        "Previous red claim: {previous_red_claim}. "
-        "Previous referee rationale: {previous_referee_rationale}."
-    ),
+    template: str = _DEFAULT_BLUE_TEMPLATE,
     extra_context: dict | None = None,
 ):
     renderer = PromptRenderer(template)
@@ -95,15 +169,7 @@ def make_prompt_blue_role(
 
 def make_prompt_red_role(
     model_client: ModelClient,
-    template: str = (
-        "Red role for game {game_id}: critique only this Blue move/change from the current game: "
-        "`{blue_summary}`. "
-        "Do not perform a general audit of the whole system. "
-        "Use surrounding context only as supporting evidence for the critique. "
-        "Classify materiality: material finding = actionable issue that should cause revision; "
-        "non-material finding = minor note, praise, or no required change. "
-        "Output format:\nMATERIAL: yes|no\nCLAIM: concise critique/assessment"
-    ),
+    template: str = _DEFAULT_RED_TEMPLATE,
     extra_context: dict | None = None,
     default_block_integration: bool = False,
     default_material: bool = True,
@@ -140,15 +206,7 @@ def make_prompt_red_role(
 
 def make_prompt_referee_role(
     model_client: ModelClient,
-    template: str = (
-        "Referee for game {game_id}. Structured decision is already fixed to `{decision}`. "
-        "Decision policy: reject = blocking issue, revise = useful non-blocking criticism, "
-        "accept = no material issue. "
-        "{decision_rationale_goal} "
-        "Blue move: `{blue_summary}`. "
-        "Red finding: `{red_claim}` (severity={red_severity}, confidence={red_confidence}, "
-        "block_integration={red_block_integration})."
-    ),
+    template: str = _DEFAULT_REFEREE_TEMPLATE,
     extra_context: dict | None = None,
 ):
     renderer = PromptRenderer(template)
