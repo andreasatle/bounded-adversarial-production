@@ -4,7 +4,9 @@ from pathlib import Path
 import pytest
 
 from baps.game_types import (
+    GameRequest,
     GameDefinition,
+    build_game_definition,
     get_builtin_game_definition,
     load_game_definition,
     make_documentation_refinement_game_definition,
@@ -150,3 +152,76 @@ def test_load_checked_in_example_game_definition() -> None:
     assert len(definition.prompt_sections.blue_sections) >= 1
     assert len(definition.prompt_sections.red_sections) >= 1
     assert len(definition.prompt_sections.referee_sections) >= 1
+
+
+def test_game_request_validation_and_empty_target_ref_allowed() -> None:
+    request = GameRequest(
+        game_type="documentation-refinement",
+        subject="README",
+        goal="Improve quickstart clarity",
+        target_kind="documentation",
+        target_ref="",
+    )
+    assert request.target_ref == ""
+
+    with pytest.raises(ValueError):
+        GameRequest(
+            game_type=" ",
+            subject="README",
+            goal="Improve quickstart clarity",
+            target_kind="documentation",
+            target_ref="README.md",
+        )
+    with pytest.raises(ValueError):
+        GameRequest(
+            game_type="documentation-refinement",
+            subject=" ",
+            goal="Improve quickstart clarity",
+            target_kind="documentation",
+            target_ref="README.md",
+        )
+    with pytest.raises(ValueError):
+        GameRequest(
+            game_type="documentation-refinement",
+            subject="README",
+            goal=" ",
+            target_kind="documentation",
+            target_ref="README.md",
+        )
+    with pytest.raises(ValueError):
+        GameRequest(
+            game_type="documentation-refinement",
+            subject="README",
+            goal="Improve quickstart clarity",
+            target_kind=" ",
+            target_ref="README.md",
+        )
+
+
+def test_build_game_definition_success_path() -> None:
+    request = GameRequest(
+        game_type="documentation-refinement",
+        subject="README",
+        goal="Improve quickstart clarity",
+        target_kind="documentation",
+        target_ref="README.md",
+    )
+    definition = build_game_definition(request)
+    assert definition.id == "documentation-refinement"
+    assert definition.name == "Documentation Refinement"
+    assert definition.description.strip()
+    assert len(definition.prompt_sections.blue_sections) >= 1
+    assert len(definition.prompt_sections.red_sections) >= 1
+    assert len(definition.prompt_sections.referee_sections) >= 1
+
+
+def test_build_game_definition_unsupported_game_type_fails() -> None:
+    request = GameRequest(
+        game_type="unsupported-type",
+        subject="README",
+        goal="Improve quickstart clarity",
+        target_kind="documentation",
+        target_ref="README.md",
+    )
+    with pytest.raises(ValueError, match="unsupported game type in request: unsupported-type"):
+        build_game_definition(request)

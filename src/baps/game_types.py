@@ -30,6 +30,21 @@ class GameDefinition(BaseModel):
         return value
 
 
+class GameRequest(BaseModel):
+    game_type: str
+    subject: str
+    goal: str
+    target_kind: str
+    target_ref: str = ""
+
+    @field_validator("game_type", "subject", "goal", "target_kind")
+    @classmethod
+    def _non_empty_required_string(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must be a non-empty string")
+        return value
+
+
 def make_documentation_refinement_game_definition() -> GameDefinition:
     return GameDefinition(
         id="documentation-refinement",
@@ -90,6 +105,14 @@ def get_builtin_game_definition(game_type: str) -> GameDefinition:
         return make_documentation_refinement_game_definition()
     raise ValueError(
         f"unknown game type: {game_type}. supported game types: documentation-refinement"
+    )
+
+
+def build_game_definition(request: GameRequest) -> GameDefinition:
+    if request.game_type == "documentation-refinement":
+        return make_documentation_refinement_game_definition()
+    raise ValueError(
+        f"unsupported game type in request: {request.game_type}. supported game types: documentation-refinement"
     )
 
 
