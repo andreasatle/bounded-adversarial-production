@@ -133,6 +133,38 @@ class GameState(BaseModel):
         return value
 
 
+class GameResult(BaseModel):
+    game_id: str
+    run_id: str
+    rounds_played: int
+    max_rounds: int
+    final_decision: Decision
+    terminal_reason: str
+    final_blue_summary: str
+    final_red_claim: str
+    trace_event_ids: list[str] = Field(default_factory=list)
+
+    _validate_game_id = field_validator("game_id")(_require_non_empty)
+    _validate_run_id = field_validator("run_id")(_require_non_empty)
+    _validate_terminal_reason = field_validator("terminal_reason")(_require_non_empty)
+    _validate_final_blue_summary = field_validator("final_blue_summary")(_require_non_empty)
+    _validate_final_red_claim = field_validator("final_red_claim")(_require_non_empty)
+
+    @field_validator("rounds_played")
+    @classmethod
+    def validate_rounds_played(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("rounds_played must be >= 1")
+        return value
+
+    @field_validator("max_rounds")
+    @classmethod
+    def validate_max_rounds(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("max_rounds must be >= 1")
+        return value
+
+
 class Artifact(BaseModel):
     id: str
     type: str

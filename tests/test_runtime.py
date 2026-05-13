@@ -5,8 +5,8 @@ import pytest
 
 from baps.blackboard import Blackboard
 from baps.roles import RoleInvocationError, RoleInvocationGuard
-from baps.runtime import RuntimeEngine, generate_run_id
-from baps.schemas import GameContract, Target
+from baps.runtime import RuntimeEngine, build_game_result, generate_run_id
+from baps.schemas import Decision, GameContract, GameRound, GameState, Target
 
 
 def _contract() -> GameContract:
@@ -103,6 +103,98 @@ def test_two_runtime_instances_produce_different_run_ids(tmp_path: Path) -> None
 def test_generate_run_id_format() -> None:
     run_id = generate_run_id()
     assert re.fullmatch(r"run-\d{8}-\d{6}-[0-9a-f]{8}", run_id)
+
+
+def test_build_game_result_accept_terminal_reason() -> None:
+    contract = GameContract(
+        id="game-1",
+        subject="auth",
+        goal="find flaws",
+        target=Target(kind="repo"),
+        active_roles=["blue", "red", "referee"],
+        max_rounds=3,
+    )
+    state = GameState(
+        game_id="game-1",
+        run_id="run-20260513-100000-deadbeef",
+        current_round=1,
+        rounds=[
+            GameRound(
+                round_number=1,
+                moves=[{"game_id": "game-1", "role": "blue", "summary": "blue1"}],
+                findings=[{"game_id": "game-1", "severity": "low", "confidence": "high", "claim": "red1"}],
+                decision={"game_id": "game-1", "decision": "accept", "rationale": "ok"},
+            )
+        ],
+        final_decision=Decision(game_id="game-1", decision="accept", rationale="ok"),
+    )
+    result = build_game_result(state, contract, trace_event_ids=["a", "b"])
+    assert result.terminal_reason == "accepted"
+    assert result.final_blue_summary == "blue1"
+    assert result.final_red_claim == "red1"
+    assert result.trace_event_ids == ["a", "b"]
+
+
+def test_build_game_result_reject_terminal_reason() -> None:
+    contract = GameContract(
+        id="game-1",
+        subject="auth",
+        goal="find flaws",
+        target=Target(kind="repo"),
+        active_roles=["blue", "red", "referee"],
+        max_rounds=3,
+    )
+    state = GameState(
+        game_id="game-1",
+        run_id="run-20260513-100000-deadbeef",
+        current_round=1,
+        rounds=[
+            GameRound(
+                round_number=1,
+                moves=[{"game_id": "game-1", "role": "blue", "summary": "blue1"}],
+                findings=[{"game_id": "game-1", "severity": "high", "confidence": "high", "claim": "red1"}],
+                decision={"game_id": "game-1", "decision": "reject", "rationale": "no"},
+            )
+        ],
+        final_decision=Decision(game_id="game-1", decision="reject", rationale="no"),
+    )
+    result = build_game_result(state, contract)
+    assert result.terminal_reason == "rejected"
+
+
+def test_build_game_result_revise_budget_exhausted_terminal_reason() -> None:
+    contract = GameContract(
+        id="game-1",
+        subject="auth",
+        goal="find flaws",
+        target=Target(kind="repo"),
+        active_roles=["blue", "red", "referee"],
+        max_rounds=2,
+    )
+    state = GameState(
+        game_id="game-1",
+        run_id="run-20260513-100000-deadbeef",
+        current_round=2,
+        rounds=[
+            GameRound(
+                round_number=1,
+                moves=[{"game_id": "game-1", "role": "blue", "summary": "blue1"}],
+                findings=[{"game_id": "game-1", "severity": "medium", "confidence": "high", "claim": "red1"}],
+                decision={"game_id": "game-1", "decision": "revise", "rationale": "r1"},
+            ),
+            GameRound(
+                round_number=2,
+                moves=[{"game_id": "game-1", "role": "blue", "summary": "blue2"}],
+                findings=[{"game_id": "game-1", "severity": "medium", "confidence": "high", "claim": "red2"}],
+                decision={"game_id": "game-1", "decision": "revise", "rationale": "r2"},
+            ),
+        ],
+        final_decision=Decision(game_id="game-1", decision="revise", rationale="r2"),
+    )
+    result = build_game_result(state, contract)
+    assert result.terminal_reason == "round_budget_exhausted"
+    assert result.final_blue_summary == "blue2"
+    assert result.final_red_claim == "red2"
 
 
 def test_invalid_blue_role_output_fails(tmp_path: Path) -> None:

@@ -10,6 +10,7 @@ from baps.schemas import (
     Finding,
     GameContract,
     GameRecord,
+    GameResult,
     GameRound,
     GameState,
     Move,
@@ -131,6 +132,21 @@ def test_game_state_constructs_successfully() -> None:
         final_decision=Decision(game_id="game-1", decision="integrate", rationale="r"),
     )
     assert state.game_id == "game-1"
+
+
+def test_game_result_constructs_successfully() -> None:
+    result = GameResult(
+        game_id="game-1",
+        run_id="run-20260513-100000-deadbeef",
+        rounds_played=1,
+        max_rounds=2,
+        final_decision=Decision(game_id="game-1", decision="accept", rationale="ok"),
+        terminal_reason="accepted",
+        final_blue_summary="blue summary",
+        final_red_claim="red claim",
+        trace_event_ids=["e1"],
+    )
+    assert result.terminal_reason == "accepted"
 
 
 @pytest.mark.parametrize(
@@ -266,6 +282,76 @@ def test_game_state_constructs_successfully() -> None:
         ),
         (GameState, "game_id", {"game_id": "game-1", "run_id": "run-0001"}),
         (GameState, "run_id", {"game_id": "game-1", "run_id": "run-0001"}),
+        (
+            GameResult,
+            "game_id",
+            {
+                "game_id": "game-1",
+                "run_id": "run-20260513-100000-deadbeef",
+                "rounds_played": 1,
+                "max_rounds": 2,
+                "final_decision": {"game_id": "game-1", "decision": "accept", "rationale": "ok"},
+                "terminal_reason": "accepted",
+                "final_blue_summary": "blue summary",
+                "final_red_claim": "red claim",
+            },
+        ),
+        (
+            GameResult,
+            "run_id",
+            {
+                "game_id": "game-1",
+                "run_id": "run-20260513-100000-deadbeef",
+                "rounds_played": 1,
+                "max_rounds": 2,
+                "final_decision": {"game_id": "game-1", "decision": "accept", "rationale": "ok"},
+                "terminal_reason": "accepted",
+                "final_blue_summary": "blue summary",
+                "final_red_claim": "red claim",
+            },
+        ),
+        (
+            GameResult,
+            "terminal_reason",
+            {
+                "game_id": "game-1",
+                "run_id": "run-20260513-100000-deadbeef",
+                "rounds_played": 1,
+                "max_rounds": 2,
+                "final_decision": {"game_id": "game-1", "decision": "accept", "rationale": "ok"},
+                "terminal_reason": "accepted",
+                "final_blue_summary": "blue summary",
+                "final_red_claim": "red claim",
+            },
+        ),
+        (
+            GameResult,
+            "final_blue_summary",
+            {
+                "game_id": "game-1",
+                "run_id": "run-20260513-100000-deadbeef",
+                "rounds_played": 1,
+                "max_rounds": 2,
+                "final_decision": {"game_id": "game-1", "decision": "accept", "rationale": "ok"},
+                "terminal_reason": "accepted",
+                "final_blue_summary": "blue summary",
+                "final_red_claim": "red claim",
+            },
+        ),
+        (
+            GameResult,
+            "final_red_claim",
+            {
+                "game_id": "game-1",
+                "run_id": "run-20260513-100000-deadbeef",
+                "rounds_played": 1,
+                "max_rounds": 2,
+                "final_decision": {"game_id": "game-1", "decision": "accept", "rationale": "ok"},
+                "terminal_reason": "accepted",
+                "final_blue_summary": "blue summary",
+                "final_red_claim": "red claim",
+            },
+        ),
         (Artifact, "id", {"id": "art-1", "type": "report"}),
         (Artifact, "type", {"id": "art-1", "type": "report"}),
         (
@@ -392,6 +478,31 @@ def test_game_state_current_round_must_be_at_least_one() -> None:
         GameState(game_id="game-1", run_id="run-0001", current_round=0)
 
 
+def test_game_result_round_and_max_round_constraints() -> None:
+    with pytest.raises(ValidationError):
+        GameResult(
+            game_id="game-1",
+            run_id="run-20260513-100000-deadbeef",
+            rounds_played=0,
+            max_rounds=2,
+            final_decision=Decision(game_id="game-1", decision="accept", rationale="ok"),
+            terminal_reason="accepted",
+            final_blue_summary="blue summary",
+            final_red_claim="red claim",
+        )
+    with pytest.raises(ValidationError):
+        GameResult(
+            game_id="game-1",
+            run_id="run-20260513-100000-deadbeef",
+            rounds_played=1,
+            max_rounds=0,
+            final_decision=Decision(game_id="game-1", decision="accept", rationale="ok"),
+            terminal_reason="accepted",
+            final_blue_summary="blue summary",
+            final_red_claim="red claim",
+        )
+
+
 def test_mutable_defaults_are_not_shared() -> None:
     game_a = GameContract(
         id="gc-1",
@@ -485,3 +596,26 @@ def test_mutable_defaults_are_not_shared() -> None:
     state_b = GameState(game_id="game-2", run_id="run-0002")
     state_a.rounds.append(GameRound(round_number=1))
     assert state_b.rounds == []
+
+    result_a = GameResult(
+        game_id="game-1",
+        run_id="run-20260513-100000-deadbeef",
+        rounds_played=1,
+        max_rounds=1,
+        final_decision=Decision(game_id="game-1", decision="accept", rationale="ok"),
+        terminal_reason="accepted",
+        final_blue_summary="blue summary",
+        final_red_claim="red claim",
+    )
+    result_b = GameResult(
+        game_id="game-2",
+        run_id="run-20260513-100001-feedbeef",
+        rounds_played=1,
+        max_rounds=1,
+        final_decision=Decision(game_id="game-2", decision="reject", rationale="no"),
+        terminal_reason="rejected",
+        final_blue_summary="blue summary 2",
+        final_red_claim="red claim 2",
+    )
+    result_a.trace_event_ids.append("e1")
+    assert result_b.trace_event_ids == []

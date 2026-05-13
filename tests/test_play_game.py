@@ -219,6 +219,9 @@ def test_main_prints_expected_fields_and_uses_fake_client(monkeypatch, capsys, t
     assert "goal=Explain run command" in output
     assert "target_kind=document" in output
     assert "target_ref=README.md" in output
+    assert "rounds_played=1" in output
+    assert "max_rounds=1" in output
+    assert "terminal_reason=round_budget_exhausted" in output
     assert "blue_summary=Candidate answer" in output
     assert "red_claim=Concrete critique of candidate" in output
     assert "red_block_integration=False" in output

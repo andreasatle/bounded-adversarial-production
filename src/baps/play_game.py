@@ -7,7 +7,7 @@ from pathlib import Path
 from baps.blackboard import Blackboard
 from baps.example_roles import make_prompt_blue_role, make_prompt_red_role, make_prompt_referee_role
 from baps.models import OllamaClient
-from baps.runtime import RuntimeEngine
+from baps.runtime import RuntimeEngine, build_game_result
 from baps.schemas import GameContract, GameState, Target
 
 
@@ -114,6 +114,15 @@ def main() -> None:
         shared_context=shared_context,
         max_rounds=args.max_rounds,
     )
+    contract = GameContract(
+        id="play-game-001",
+        subject=args.subject,
+        goal=args.goal,
+        target=Target(kind=args.target_kind, ref=args.target_ref),
+        active_roles=["blue", "red", "referee"],
+        max_rounds=args.max_rounds,
+    )
+    result = build_game_result(state, contract)
 
     round_1 = state.rounds[0]
     blue = round_1.moves[0]
@@ -125,6 +134,9 @@ def main() -> None:
     print(f"goal={args.goal}")
     print(f"target_kind={args.target_kind}")
     print(f"target_ref={args.target_ref}")
+    print(f"rounds_played={result.rounds_played}")
+    print(f"max_rounds={result.max_rounds}")
+    print(f"terminal_reason={result.terminal_reason}")
     print(f"blue_summary={blue.summary}")
     print(f"red_claim={red.claim}")
     print(f"red_block_integration={red.block_integration}")

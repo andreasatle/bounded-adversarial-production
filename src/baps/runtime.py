@@ -6,13 +6,52 @@ from uuid import uuid4
 
 from baps.blackboard import Blackboard
 from baps.roles import RoleInvocationGuard
-from baps.schemas import Decision, Event, Finding, GameContract, GameRound, GameState, Move
+from baps.schemas import Decision, Event, Finding, GameContract, GameResult, GameRound, GameState, Move
 
 
 def generate_run_id() -> str:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     short_uuid = uuid4().hex[:8]
     return f"run-{timestamp}-{short_uuid}"
+
+
+def build_game_result(
+    state: GameState,
+    contract: GameContract,
+    trace_event_ids: list[str] | None = None,
+) -> GameResult:
+    if state.final_decision is None:
+        raise ValueError("state.final_decision must be present")
+    if not state.rounds:
+        raise ValueError("state.rounds must be non-empty")
+    last_round = state.rounds[-1]
+    if not last_round.moves:
+        raise ValueError("last round must contain at least one move")
+    if not last_round.findings:
+        raise ValueError("last round must contain at least one finding")
+
+    rounds_played = len(state.rounds)
+    decision_value = state.final_decision.decision
+    if decision_value == "accept":
+        terminal_reason = "accepted"
+    elif decision_value == "reject":
+        terminal_reason = "rejected"
+    elif decision_value == "revise" and rounds_played >= contract.max_rounds:
+        terminal_reason = "round_budget_exhausted"
+    else:
+        terminal_reason = "completed"
+
+    return GameResult(
+        game_id=state.game_id,
+        run_id=state.run_id,
+        rounds_played=rounds_played,
+        max_rounds=contract.max_rounds,
+        final_decision=state.final_decision,
+        terminal_reason=terminal_reason,
+        final_blue_summary=last_round.moves[-1].summary,
+        final_red_claim=last_round.findings[-1].claim,
+        trace_event_ids=list(trace_event_ids) if trace_event_ids is not None else [],
+    )
 
 
 class RuntimeEngine:
