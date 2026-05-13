@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import subprocess
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
@@ -97,6 +98,44 @@ class DirectoryStateSourceAdapter(StateSourceAdapter):
             kind = "directory" if child.is_dir() else "file"
             lines.append(f"- {child.name} [{kind}]")
         return "\n".join(lines)
+
+
+class GitRepoStateSourceAdapter(StateSourceAdapter):
+    def load_text(self, declaration: StateSourceDeclaration) -> str:
+        if declaration.kind != "git_repo":
+            raise ValueError("unsupported state source kind for git repo adapter")
+        path = Path(declaration.ref)
+        if not path.exists():
+            raise FileNotFoundError(f"state source path not found: {declaration.ref}")
+        if not path.is_dir():
+            raise ValueError(f"state source path is not a directory: {declaration.ref}")
+
+        def _run_git(args: list[str]) -> str:
+            proc = subprocess.run(
+                ["git", *args],
+                cwd=str(path),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if proc.returncode != 0:
+                error = (proc.stderr or proc.stdout).strip()
+                raise ValueError(f"git command failed ({' '.join(args)}): {error}")
+            return proc.stdout
+
+        branch = _run_git(["branch", "--show-current"]).strip()
+        status = _run_git(["status", "--short"]).rstrip("\n")
+        commits = _run_git(["log", "--oneline", "-n", "10"]).rstrip("\n")
+
+        return (
+            f"GIT REPOSITORY: {declaration.ref}\n"
+            "BRANCH:\n"
+            f"{branch}\n\n"
+            "STATUS:\n"
+            f"{status}\n\n"
+            "RECENT COMMITS:\n"
+            f"{commits}"
+        )
 
 
 def resolve_state_context(

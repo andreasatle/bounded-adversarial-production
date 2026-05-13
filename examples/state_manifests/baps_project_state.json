@@ -35,6 +35,13 @@
       "ref": "examples/game_definitions",
       "authority": "configuration",
       "metadata": {}
+    },
+    {
+      "id": "repo",
+      "kind": "git_repo",
+      "ref": ".",
+      "authority": "source",
+      "metadata": {}
     }
   ]
 }
