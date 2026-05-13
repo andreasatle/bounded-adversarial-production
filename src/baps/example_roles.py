@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from baps.game_types import make_documentation_refinement_game_type
+from baps.game_types import make_documentation_refinement_game_definition
 from baps.models import ModelClient
 from baps.prompt_assembly import PromptSection, PromptSpec, assemble_prompt
 from baps.prompts import PromptRenderer
@@ -76,7 +76,7 @@ _DEFAULT_BLUE_TEMPLATE = assemble_prompt(
                     ),
                 ),
             ]
-            + make_documentation_refinement_game_type().blue_sections
+            + make_documentation_refinement_game_definition().prompt_sections.blue_sections
         )
     )
 )
@@ -107,7 +107,7 @@ _DEFAULT_RED_TEMPLATE = assemble_prompt(
                     content="MATERIAL: yes|no\nCLAIM: concise critique/assessment",
                 ),
             ]
-            + make_documentation_refinement_game_type().red_sections
+            + make_documentation_refinement_game_definition().prompt_sections.red_sections
         )
     )
 )
@@ -138,7 +138,7 @@ _DEFAULT_REFEREE_TEMPLATE = assemble_prompt(
                     ),
                 ),
             ]
-            + make_documentation_refinement_game_type().referee_sections
+            + make_documentation_refinement_game_definition().prompt_sections.referee_sections
         )
     )
 )

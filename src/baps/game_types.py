@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
+from pydantic import field_validator
 
 from baps.prompt_assembly import PromptSection
 
@@ -11,8 +12,28 @@ class GameTypePromptSections(BaseModel):
     referee_sections: list[PromptSection] = Field(default_factory=list)
 
 
-def make_documentation_refinement_game_type() -> GameTypePromptSections:
-    return GameTypePromptSections(
+class GameDefinition(BaseModel):
+    id: str
+    name: str
+    description: str
+    prompt_sections: GameTypePromptSections
+
+    @field_validator("id", "name", "description")
+    @classmethod
+    def _non_empty_string(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must be a non-empty string")
+        return value
+
+
+def make_documentation_refinement_game_definition() -> GameDefinition:
+    return GameDefinition(
+        id="documentation-refinement",
+        name="Documentation Refinement",
+        description=(
+            "Refine documentation deltas for clarity and correctness with bounded adversarial critique."
+        ),
+        prompt_sections=GameTypePromptSections(
         blue_sections=[
             PromptSection(
                 name="Game Type",
@@ -52,4 +73,9 @@ def make_documentation_refinement_game_type() -> GameTypePromptSections:
                 ),
             ),
         ],
+        ),
     )
+
+
+def make_documentation_refinement_game_type() -> GameTypePromptSections:
+    return make_documentation_refinement_game_definition().prompt_sections
