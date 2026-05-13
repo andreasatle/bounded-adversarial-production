@@ -15,6 +15,11 @@ from baps.models import OllamaClient
 from baps.prompt_assembly import PromptSection, PromptSpec, assemble_prompt
 from baps.runtime import RuntimeEngine, build_game_response
 from baps.schemas import GameContract, GameState, Target
+from baps.state_sources import (
+    MarkdownFileStateSourceAdapter,
+    load_state_manifest,
+    resolve_state_context,
+)
 
 
 def _truncate_for_output(value: str, limit: int = 200) -> str:
@@ -168,6 +173,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-url", default=os.getenv("BAPS_OLLAMA_BASE_URL", "http://localhost:11434"))
     parser.add_argument("--blackboard-path", default="blackboard/play-game-events.jsonl")
     parser.add_argument("--context-file", action="append", default=[])
+    parser.add_argument("--state-manifest")
+    parser.add_argument("--state-source", action="append", default=[])
     parser.add_argument("--game-type", default="documentation-refinement")
     parser.add_argument("--game-definition-file")
     parser.add_argument("--max-rounds", type=_max_rounds_type, default=1)
@@ -180,7 +187,26 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     blackboard_path = Path(args.blackboard_path)
-    shared_context = load_context_files(args.context_file)
+    if args.state_source and not args.state_manifest:
+        parser.error("--state-source requires --state-manifest")
+    if args.state_manifest and not args.state_source:
+        parser.error("--state-manifest requires at least one --state-source")
+
+    context_parts: list[str] = []
+    manual_context = load_context_files(args.context_file)
+    if manual_context:
+        context_parts.append(manual_context)
+    if args.state_manifest:
+        manifest = load_state_manifest(Path(args.state_manifest))
+        state_context = resolve_state_context(
+            manifest=manifest,
+            source_ids=args.state_source,
+            adapter=MarkdownFileStateSourceAdapter(),
+        )
+        if state_context:
+            context_parts.append(state_context)
+    shared_context = "\n\n".join(context_parts)
+
     resolved_game_definition = (
         load_game_definition(Path(args.game_definition_file))
         if args.game_definition_file

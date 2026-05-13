@@ -158,6 +158,28 @@ def test_build_parser_repeated_context_file_args(monkeypatch) -> None:
     assert args.context_file == ["a.txt", "b.txt"]
 
 
+def test_build_parser_accepts_state_manifest_and_repeated_state_source_args() -> None:
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--subject",
+            "s",
+            "--goal",
+            "g",
+            "--target-kind",
+            "repo",
+            "--state-manifest",
+            "manifest.json",
+            "--state-source",
+            "architecture",
+            "--state-source",
+            "future_direction",
+        ]
+    )
+    assert args.state_manifest == "manifest.json"
+    assert args.state_source == ["architecture", "future_direction"]
+
+
 def test_load_context_files_concatenates_with_separators(tmp_path: Path) -> None:
     first = tmp_path / "a.txt"
     second = tmp_path / "b.txt"
@@ -419,6 +441,88 @@ def test_main_prints_multiple_round_summaries_for_revise_loop(monkeypatch, capsy
     assert "round_1_decision=revise" in output
     assert "round_2_decision=revise" in output
     assert "round_2_blue_summary=Candidate answer revised" in output
+
+
+def test_main_rejects_state_source_without_manifest(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-play-game",
+            "--subject",
+            "README demo",
+            "--goal",
+            "Explain run command",
+            "--target-kind",
+            "document",
+            "--state-source",
+            "architecture",
+            "--blackboard-path",
+            str(tmp_path / "events.jsonl"),
+        ],
+    )
+    with pytest.raises(SystemExit):
+        main()
+
+
+def test_main_rejects_manifest_without_state_source(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-play-game",
+            "--subject",
+            "README demo",
+            "--goal",
+            "Explain run command",
+            "--target-kind",
+            "document",
+            "--state-manifest",
+            "examples/state_manifests/baps_project_state.json",
+            "--blackboard-path",
+            str(tmp_path / "events.jsonl"),
+        ],
+    )
+    with pytest.raises(SystemExit):
+        main()
+
+
+def test_main_injects_manual_and_manifest_context_into_prompts(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
+    context_file = tmp_path / "extra_context.txt"
+    context_file.write_text("manual-context-fragment", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-play-game",
+            "--subject",
+            "README demo",
+            "--goal",
+            "Explain run command",
+            "--target-kind",
+            "document",
+            "--target-ref",
+            "README.md",
+            "--context-file",
+            str(context_file),
+            "--state-manifest",
+            "examples/state_manifests/baps_project_state.json",
+            "--state-source",
+            "architecture",
+            "--state-source",
+            "future_direction",
+            "--blackboard-path",
+            str(tmp_path / "events.jsonl"),
+        ],
+    )
+
+    main()
+    assert len(FakeOllamaClient.prompts) >= 1
+    prompt = FakeOllamaClient.prompts[0]
+    assert "manual-context-fragment" in prompt
+    assert "===== STATE SOURCE: architecture (markdown_doc, authority=descriptive) =====" in prompt
+    assert "===== STATE SOURCE: future_direction (markdown_doc, authority=directional) =====" in prompt
 
 
 def test_main_game_definition_file_overrides_game_type(monkeypatch, capsys, tmp_path: Path) -> None:
