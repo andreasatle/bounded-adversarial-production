@@ -379,6 +379,37 @@ def test_default_assembled_role_prompts_include_expected_guidance() -> None:
     assert "Decision policy:" in model_ref.prompts[0]
 
 
+def test_default_prompts_include_game_type_sections_in_order() -> None:
+    contract = _contract()
+    model_blue = FakeModelClient(responses=["blue summary"])
+    model_red = FakeModelClient(responses=["MATERIAL: yes\nCLAIM: red claim"])
+    model_ref = FakeModelClient(responses=["rationale"])
+
+    blue_role_prompted = make_prompt_blue_role(model_blue)
+    red_role_prompted = make_prompt_red_role(model_red)
+    ref_role_prompted = make_prompt_referee_role(model_ref)
+
+    blue_move = blue_role_prompted(contract)
+    red_finding = red_role_prompted(contract, Move(game_id=contract.id, role="blue", summary="draft", payload={}))
+    ref_role_prompted(contract, blue_move, red_finding)
+
+    blue_prompt = model_blue.prompts[0]
+    red_prompt = model_red.prompts[0]
+    ref_prompt = model_ref.prompts[0]
+
+    assert "## Role" in blue_prompt
+    assert "## Game Type" in blue_prompt
+    assert blue_prompt.index("## Role") < blue_prompt.index("## Game Type")
+
+    assert "## Scope" in red_prompt
+    assert "## Game Type Scope" in red_prompt
+    assert red_prompt.index("## Scope") < red_prompt.index("## Game Type Scope")
+
+    assert "## Decision" in ref_prompt
+    assert "## Game Type Convergence" in ref_prompt
+    assert ref_prompt.index("## Decision") < ref_prompt.index("## Game Type Convergence")
+
+
 def test_prompt_driven_referee_missing_template_variable_raises_key_error() -> None:
     contract = _contract()
     blue = Move(game_id=contract.id, role="blue", summary="draft", payload={})
