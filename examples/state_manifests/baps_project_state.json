@@ -28,6 +28,13 @@
       "ref": "docs/TODO-v1.md",
       "authority": "directional",
       "metadata": {}
+    },
+    {
+      "id": "game_definitions",
+      "kind": "directory",
+      "ref": "examples/game_definitions",
+      "authority": "configuration",
+      "metadata": {}
     }
   ]
 }

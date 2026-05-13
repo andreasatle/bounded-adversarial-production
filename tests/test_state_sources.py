@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from baps.state_sources import (
+    DirectoryStateSourceAdapter,
     JsonlEventLogStateSourceAdapter,
     MarkdownFileStateSourceAdapter,
     StateManifest,
@@ -281,3 +282,88 @@ def test_resolve_state_context_with_jsonl_event_log_adapter(tmp_path: Path) -> N
     context = resolve_state_context(manifest, ["game_traces"], adapter)
     assert "===== STATE SOURCE: game_traces (jsonl_event_log, authority=evidence) =====" in context
     assert raw_content in context
+
+
+def test_directory_state_source_adapter_successful_listing(tmp_path: Path) -> None:
+    adapter = DirectoryStateSourceAdapter()
+    root = tmp_path / "state_dir"
+    root.mkdir()
+    (root / "b_file.txt").write_text("b", encoding="utf-8")
+    (root / "a_file.txt").write_text("a", encoding="utf-8")
+    (root / "nested").mkdir()
+    declaration = StateSourceDeclaration(id="dir", kind="directory", ref=str(root))
+
+    listing = adapter.load_text(declaration)
+    assert listing.startswith(f"DIRECTORY: {root}")
+    assert "- a_file.txt [file]" in listing
+    assert "- b_file.txt [file]" in listing
+    assert "- nested [directory]" in listing
+
+
+def test_directory_state_source_adapter_deterministic_alphabetical_order(tmp_path: Path) -> None:
+    adapter = DirectoryStateSourceAdapter()
+    root = tmp_path / "state_dir"
+    root.mkdir()
+    (root / "zeta.txt").write_text("z", encoding="utf-8")
+    (root / "alpha.txt").write_text("a", encoding="utf-8")
+    (root / "middle").mkdir()
+    declaration = StateSourceDeclaration(id="dir", kind="directory", ref=str(root))
+
+    listing = adapter.load_text(declaration).splitlines()
+    entries = listing[1:]
+    assert entries == [
+        "- alpha.txt [file]",
+        "- middle [directory]",
+        "- zeta.txt [file]",
+    ]
+
+
+def test_directory_state_source_adapter_unsupported_kind_fails(tmp_path: Path) -> None:
+    adapter = DirectoryStateSourceAdapter()
+    root = tmp_path / "state_dir"
+    root.mkdir()
+    declaration = StateSourceDeclaration(id="dir", kind="markdown_doc", ref=str(root))
+
+    with pytest.raises(ValueError, match="unsupported state source kind for directory adapter"):
+        adapter.load_text(declaration)
+
+
+def test_directory_state_source_adapter_missing_directory_fails(tmp_path: Path) -> None:
+    adapter = DirectoryStateSourceAdapter()
+    declaration = StateSourceDeclaration(id="dir", kind="directory", ref=str(tmp_path / "missing_dir"))
+
+    with pytest.raises(FileNotFoundError):
+        adapter.load_text(declaration)
+
+
+def test_directory_state_source_adapter_path_exists_but_not_directory_fails(tmp_path: Path) -> None:
+    adapter = DirectoryStateSourceAdapter()
+    file_path = tmp_path / "not_dir.txt"
+    file_path.write_text("x", encoding="utf-8")
+    declaration = StateSourceDeclaration(id="dir", kind="directory", ref=str(file_path))
+
+    with pytest.raises(ValueError, match="state source path is not a directory"):
+        adapter.load_text(declaration)
+
+
+def test_resolve_state_context_with_directory_adapter(tmp_path: Path) -> None:
+    root = tmp_path / "state_dir"
+    root.mkdir()
+    (root / "a.md").write_text("a", encoding="utf-8")
+    manifest = StateManifest(
+        project_id="baps",
+        sources=[
+            StateSourceDeclaration(
+                id="game_definitions",
+                kind="directory",
+                ref=str(root),
+                authority="configuration",
+            )
+        ],
+    )
+    adapter = DirectoryStateSourceAdapter()
+
+    context = resolve_state_context(manifest, ["game_definitions"], adapter)
+    assert "===== STATE SOURCE: game_definitions (directory, authority=configuration) =====" in context
+    assert f"DIRECTORY: {root}" in context
+    assert "- a.md [file]" in context

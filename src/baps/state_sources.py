@@ -81,6 +81,24 @@ class JsonlEventLogStateSourceAdapter(StateSourceAdapter):
         return path.read_text(encoding="utf-8")
 
 
+class DirectoryStateSourceAdapter(StateSourceAdapter):
+    def load_text(self, declaration: StateSourceDeclaration) -> str:
+        if declaration.kind != "directory":
+            raise ValueError("unsupported state source kind for directory adapter")
+        path = Path(declaration.ref)
+        if not path.exists():
+            raise FileNotFoundError(f"state source directory not found: {declaration.ref}")
+        if not path.is_dir():
+            raise ValueError(f"state source path is not a directory: {declaration.ref}")
+
+        lines = [f"DIRECTORY: {declaration.ref}"]
+        children = sorted(path.iterdir(), key=lambda child: child.name)
+        for child in children:
+            kind = "directory" if child.is_dir() else "file"
+            lines.append(f"- {child.name} [{kind}]")
+        return "\n".join(lines)
+
+
 def resolve_state_context(
     manifest: StateManifest,
     source_ids: list[str],
