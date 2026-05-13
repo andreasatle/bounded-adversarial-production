@@ -64,12 +64,25 @@ class RunSpecState(BaseModel):
         return value
 
 
+class RunSpecContextEntry(BaseModel):
+    id: str
+    role: str
+    ref: str
+    authority: str = "context"
+
+    @field_validator("id", "role", "ref", "authority")
+    @classmethod
+    def _validate_non_empty_strings(cls, value: str) -> str:
+        return _require_non_empty(value)
+
+
 class RunSpec(BaseModel):
     name: str = ""
     description: str = ""
     model: RunSpecModel = Field(default_factory=RunSpecModel)
     game: RunSpecGame
     context_files: list[str] = Field(default_factory=list)
+    context: list[RunSpecContextEntry] = Field(default_factory=list)
     state: RunSpecState | None = None
     game_definition_file: str = ""
 

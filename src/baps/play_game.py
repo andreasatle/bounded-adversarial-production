@@ -91,6 +91,7 @@ def _resolve_with_run_spec(
     )
 
     run_spec_context_files = run_spec.context_files if run_spec is not None else []
+    run_spec_typed_context = run_spec.context if run_spec is not None else []
     context_files = [*run_spec_context_files, *args.context_file]
 
     run_spec_state_manifest = state_cfg.manifest if state_cfg is not None else None
@@ -110,6 +111,7 @@ def _resolve_with_run_spec(
         "red_material": red_material,
         "game_definition_file": game_definition_file,
         "context_files": context_files,
+        "typed_context_entries": run_spec_typed_context,
         "state_manifest": state_manifest,
         "state_source": state_source,
     }
@@ -123,6 +125,19 @@ def load_context_files(paths: list[str]) -> str:
             raise FileNotFoundError(f"context file not found: {raw_path}")
         text = path.read_text(encoding="utf-8")
         parts.append(f"===== FILE: {raw_path} =====\n{text}")
+    return "\n\n".join(parts)
+
+
+def load_typed_context_entries(entries) -> str:
+    parts: list[str] = []
+    for entry in entries:
+        path = Path(entry.ref)
+        if not path.exists():
+            raise FileNotFoundError(f"context file not found: {entry.ref}")
+        text = path.read_text(encoding="utf-8")
+        parts.append(
+            f"===== CONTEXT: {entry.id} (role={entry.role}, authority={entry.authority}) =====\n{text}"
+        )
     return "\n\n".join(parts)
 
 
@@ -275,7 +290,14 @@ def main() -> None:
     if resolved["state_manifest"] and not resolved["state_source"]:
         parser.error("--state-manifest requires at least one --state-source")
 
-    shared_context = load_context_files(resolved["context_files"])
+    context_parts: list[str] = []
+    context_files_text = load_context_files(resolved["context_files"])
+    if context_files_text:
+        context_parts.append(context_files_text)
+    typed_context_text = load_typed_context_entries(resolved["typed_context_entries"])
+    if typed_context_text:
+        context_parts.append(typed_context_text)
+    shared_context = "\n\n".join(context_parts)
     state_manifest = (
         load_state_manifest(Path(resolved["state_manifest"]))
         if resolved["state_manifest"]

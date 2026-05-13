@@ -717,6 +717,103 @@ def test_main_context_files_append_run_spec_context_files(monkeypatch, tmp_path:
     assert "cli-context" in prompt
 
 
+def test_main_injects_typed_context_entries_with_labels(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
+    goals = tmp_path / "goals.md"
+    state = tmp_path / "state.md"
+    goals.write_text("goals-content", encoding="utf-8")
+    state.write_text("state-content", encoding="utf-8")
+    run_spec = tmp_path / "run.yaml"
+    run_spec.write_text(
+        "\n".join(
+            [
+                "model:",
+                "  provider: ollama",
+                "  name: spec-model",
+                "game:",
+                "  type: documentation-refinement",
+                "  subject: Spec Subject",
+                "  goal: Spec Goal",
+                "  target_kind: documentation",
+                "context:",
+                "  - id: goals_doc",
+                "    role: goals",
+                f"    ref: {goals}",
+                "    authority: context",
+                "  - id: current_state_doc",
+                "    role: current_state",
+                f"    ref: {state}",
+                "    authority: evidence",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-play-game",
+            "--run-spec",
+            str(run_spec),
+            "--blackboard-path",
+            str(tmp_path / "events.jsonl"),
+        ],
+    )
+    main()
+    prompt = FakeOllamaClient.prompts[0]
+    assert "===== CONTEXT: goals_doc (role=goals, authority=context) =====" in prompt
+    assert "goals-content" in prompt
+    assert "===== CONTEXT: current_state_doc (role=current_state, authority=evidence) =====" in prompt
+    assert "state-content" in prompt
+
+
+def test_main_context_files_appear_before_typed_context(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
+    ctx_file = tmp_path / "ctx.md"
+    typed_file = tmp_path / "typed.md"
+    ctx_file.write_text("context-file-content", encoding="utf-8")
+    typed_file.write_text("typed-context-content", encoding="utf-8")
+    run_spec = tmp_path / "run.yaml"
+    run_spec.write_text(
+        "\n".join(
+            [
+                "model:",
+                "  provider: ollama",
+                "  name: spec-model",
+                "game:",
+                "  type: documentation-refinement",
+                "  subject: Spec Subject",
+                "  goal: Spec Goal",
+                "  target_kind: documentation",
+                "context_files:",
+                f"  - {ctx_file}",
+                "context:",
+                "  - id: typed_doc",
+                "    role: current_state",
+                f"    ref: {typed_file}",
+                "    authority: context",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-play-game",
+            "--run-spec",
+            str(run_spec),
+            "--blackboard-path",
+            str(tmp_path / "events.jsonl"),
+        ],
+    )
+    main()
+    prompt = FakeOllamaClient.prompts[0]
+    assert "===== FILE: " in prompt
+    assert "===== CONTEXT: typed_doc (role=current_state, authority=context) =====" in prompt
+    assert prompt.index("===== FILE: ") < prompt.index(
+        "===== CONTEXT: typed_doc (role=current_state, authority=context) ====="
+    )
+
+
 def test_main_state_sources_append_run_spec_state_sources(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
     run_spec = tmp_path / "run.yaml"

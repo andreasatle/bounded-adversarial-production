@@ -11,6 +11,12 @@ game:
   target_ref: docs/FAKE-CURRENT-STATE.md
   max_rounds: 3
   red_material: true
-context_files:
-  - docs/FAKE-GOALS.md
-  - docs/FAKE-CURRENT-STATE.md
+context:
+  - id: goals_doc
+    role: goals
+    ref: docs/FAKE-GOALS.md
+    authority: context
+  - id: current_state_doc
+    role: current_state
+    ref: docs/FAKE-CURRENT-STATE.md
+    authority: context
