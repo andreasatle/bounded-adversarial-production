@@ -11,7 +11,7 @@ from baps.schemas import (
     Event,
     Finding,
     GameContract,
-    GameResult,
+    GameResponse,
     GameRound,
     GameState,
     Move,
@@ -25,11 +25,11 @@ def generate_run_id() -> str:
     return f"run-{timestamp}-{short_uuid}"
 
 
-def build_game_result(
+def build_game_response(
     state: GameState,
     contract: GameContract,
     trace_event_ids: list[str] | None = None,
-) -> GameResult:
+) -> GameResponse:
     if state.final_decision is None:
         raise ValueError("state.final_decision must be present")
     if not state.rounds:
@@ -69,7 +69,7 @@ def build_game_result(
             )
         )
 
-    return GameResult(
+    return GameResponse(
         game_id=state.game_id,
         run_id=state.run_id,
         rounds_played=rounds_played,

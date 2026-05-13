@@ -10,7 +10,7 @@ from baps.schemas import (
     Finding,
     GameContract,
     GameRecord,
-    GameResult,
+    GameResponse,
     GameRound,
     RoundSummary,
     GameState,
@@ -136,7 +136,7 @@ def test_game_state_constructs_successfully() -> None:
 
 
 def test_game_result_constructs_successfully() -> None:
-    result = GameResult(
+    result = GameResponse(
         game_id="game-1",
         run_id="run-20260513-100000-deadbeef",
         rounds_played=1,
@@ -295,7 +295,7 @@ def test_round_summary_constructs_successfully() -> None:
         (GameState, "game_id", {"game_id": "game-1", "run_id": "run-0001"}),
         (GameState, "run_id", {"game_id": "game-1", "run_id": "run-0001"}),
         (
-            GameResult,
+            GameResponse,
             "game_id",
             {
                 "game_id": "game-1",
@@ -309,7 +309,7 @@ def test_round_summary_constructs_successfully() -> None:
             },
         ),
         (
-            GameResult,
+            GameResponse,
             "run_id",
             {
                 "game_id": "game-1",
@@ -323,7 +323,7 @@ def test_round_summary_constructs_successfully() -> None:
             },
         ),
         (
-            GameResult,
+            GameResponse,
             "terminal_reason",
             {
                 "game_id": "game-1",
@@ -337,7 +337,7 @@ def test_round_summary_constructs_successfully() -> None:
             },
         ),
         (
-            GameResult,
+            GameResponse,
             "final_blue_summary",
             {
                 "game_id": "game-1",
@@ -351,7 +351,7 @@ def test_round_summary_constructs_successfully() -> None:
             },
         ),
         (
-            GameResult,
+            GameResponse,
             "final_red_claim",
             {
                 "game_id": "game-1",
@@ -536,7 +536,7 @@ def test_game_state_current_round_must_be_at_least_one() -> None:
 
 def test_game_result_round_and_max_round_constraints() -> None:
     with pytest.raises(ValidationError):
-        GameResult(
+        GameResponse(
             game_id="game-1",
             run_id="run-20260513-100000-deadbeef",
             rounds_played=0,
@@ -555,7 +555,7 @@ def test_game_result_round_and_max_round_constraints() -> None:
             referee_rationale="rationale",
         )
     with pytest.raises(ValidationError):
-        GameResult(
+        GameResponse(
             game_id="game-1",
             run_id="run-20260513-100000-deadbeef",
             rounds_played=1,
@@ -661,7 +661,7 @@ def test_mutable_defaults_are_not_shared() -> None:
     state_a.rounds.append(GameRound(round_number=1))
     assert state_b.rounds == []
 
-    result_a = GameResult(
+    result_a = GameResponse(
         game_id="game-1",
         run_id="run-20260513-100000-deadbeef",
         rounds_played=1,
@@ -671,7 +671,7 @@ def test_mutable_defaults_are_not_shared() -> None:
         final_blue_summary="blue summary",
         final_red_claim="red claim",
     )
-    result_b = GameResult(
+    result_b = GameResponse(
         game_id="game-2",
         run_id="run-20260513-100001-feedbeef",
         rounds_played=1,

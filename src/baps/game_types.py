@@ -3,11 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from pydantic import BaseModel, Field
-from pydantic import field_validator
+from pydantic import BaseModel, Field, field_validator
 from pydantic import ValidationError
 
 from baps.prompt_assembly import PromptSection
+from baps.schemas import GameRequest
 
 
 class GameTypePromptSections(BaseModel):
@@ -25,21 +25,6 @@ class GameDefinition(BaseModel):
     @field_validator("id", "name", "description")
     @classmethod
     def _non_empty_string(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("must be a non-empty string")
-        return value
-
-
-class GameRequest(BaseModel):
-    game_type: str
-    subject: str
-    goal: str
-    target_kind: str
-    target_ref: str = ""
-
-    @field_validator("game_type", "subject", "goal", "target_kind")
-    @classmethod
-    def _non_empty_required_string(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("must be a non-empty string")
         return value

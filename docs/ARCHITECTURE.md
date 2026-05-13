@@ -56,7 +56,7 @@ Purpose:
 Important classes/functions:
 - Core: `Target`, `GameContract`, `Move`, `Finding`, `Decision`.
 - Runtime state: `GameRound`, `GameState`, `GameRecord`.
-- Reporting: `RoundSummary`, `GameResult`.
+- Reporting: `RoundSummary`, `GameResponse`.
 - Artifacts: `Artifact`, `ArtifactVersion`, `ArtifactChange`, `ArtifactAdapterResult`.
 - Trace: `Event`.
 
@@ -111,7 +111,7 @@ Purpose:
 Important classes/functions:
 - `RuntimeEngine.run_game(...)`
 - `generate_run_id()`
-- `build_game_result(...)`
+- `build_game_response(...)`
 
 Current limitations:
 - Single Blue/Red/Referee sequence per round; no parallel branches.
@@ -332,7 +332,7 @@ Artifact interaction:
 - Invariants: round >= 1, required strings non-empty.
 - Why: compact reporting projection for CLI/higher-level summaries.
 
-### `GameResult`
+### `GameResponse`
 - Fields: `game_id`, `run_id`, `rounds_played`, `max_rounds`, `final_decision`, `terminal_reason`, `final_blue_summary`, `final_red_claim`, `trace_event_ids`, `round_summaries`.
 - Invariants:
   - required strings non-empty.
@@ -579,7 +579,7 @@ Conceptual/future direction (inferred from boundaries, not implemented):
 2. Introduce stricter structured role output parsing (without changing runtime interface), especially for Red materiality/claim.
 3. Add optional runtime hook to project each completed round into a normalized artifact/change record.
 4. Add event filtering helpers for per-run replay and compact trace views.
-5. Add explicit referee convergence metrics in `GameResult` (e.g., materiality trend across rounds).
+5. Add explicit referee convergence metrics in `GameResponse` (e.g., materiality trend across rounds).
 6. Add controlled tool-request boundary as role-callable helper (still injected, not runtime-owned).
 
 ## 15. Developer Workflow
@@ -621,7 +621,7 @@ Expected contribution style:
 - Finding: Red output model (`claim`, severity/confidence, evidence, materiality/block flags).
 - Decision: referee output model (`decision`, `rationale`).
 - GameState: complete runtime output including all rounds and final decision.
-- GameResult: compact summary projection from `GameState` + contract.
+- GameResponse: compact summary projection from `GameState` + contract.
 - Blackboard: append-only JSONL event store for runtime traces.
 - Event: one typed trace record with identifier and payload.
 - Artifact: typed object managed by artifact adapters.

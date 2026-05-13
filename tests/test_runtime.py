@@ -5,7 +5,7 @@ import pytest
 
 from baps.blackboard import Blackboard
 from baps.roles import RoleInvocationError, RoleInvocationGuard
-from baps.runtime import RuntimeEngine, build_game_result, generate_run_id
+from baps.runtime import RuntimeEngine, build_game_response, generate_run_id
 from baps.schemas import Decision, GameContract, GameRound, GameState, Target
 
 
@@ -105,7 +105,7 @@ def test_generate_run_id_format() -> None:
     assert re.fullmatch(r"run-\d{8}-\d{6}-[0-9a-f]{8}", run_id)
 
 
-def test_build_game_result_accept_terminal_reason() -> None:
+def test_build_game_response_accept_terminal_reason() -> None:
     contract = GameContract(
         id="game-1",
         subject="auth",
@@ -128,14 +128,14 @@ def test_build_game_result_accept_terminal_reason() -> None:
         ],
         final_decision=Decision(game_id="game-1", decision="accept", rationale="ok"),
     )
-    result = build_game_result(state, contract, trace_event_ids=["a", "b"])
+    result = build_game_response(state, contract, trace_event_ids=["a", "b"])
     assert result.terminal_reason == "accepted"
     assert result.final_blue_summary == "blue1"
     assert result.final_red_claim == "red1"
     assert result.trace_event_ids == ["a", "b"]
 
 
-def test_build_game_result_reject_terminal_reason() -> None:
+def test_build_game_response_reject_terminal_reason() -> None:
     contract = GameContract(
         id="game-1",
         subject="auth",
@@ -158,11 +158,11 @@ def test_build_game_result_reject_terminal_reason() -> None:
         ],
         final_decision=Decision(game_id="game-1", decision="reject", rationale="no"),
     )
-    result = build_game_result(state, contract)
+    result = build_game_response(state, contract)
     assert result.terminal_reason == "rejected"
 
 
-def test_build_game_result_revise_budget_exhausted_terminal_reason() -> None:
+def test_build_game_response_revise_budget_exhausted_terminal_reason() -> None:
     contract = GameContract(
         id="game-1",
         subject="auth",
@@ -191,7 +191,7 @@ def test_build_game_result_revise_budget_exhausted_terminal_reason() -> None:
         ],
         final_decision=Decision(game_id="game-1", decision="revise", rationale="r2"),
     )
-    result = build_game_result(state, contract)
+    result = build_game_response(state, contract)
     assert result.terminal_reason == "round_budget_exhausted"
     assert result.final_blue_summary == "blue2"
     assert result.final_red_claim == "red2"

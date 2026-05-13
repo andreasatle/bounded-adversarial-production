@@ -16,6 +16,21 @@ class Target(BaseModel):
     _validate_kind = field_validator("kind")(_require_non_empty)
 
 
+class GameRequest(BaseModel):
+    game_type: str
+    subject: str
+    goal: str
+    target_kind: str
+    target_ref: str = ""
+
+    @field_validator("game_type", "subject", "goal", "target_kind")
+    @classmethod
+    def _non_empty_required_string(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must be a non-empty string")
+        return value
+
+
 class GameContract(BaseModel):
     id: str
     subject: str
@@ -134,7 +149,7 @@ class GameState(BaseModel):
         return value
 
 
-class GameResult(BaseModel):
+class GameResponse(BaseModel):
     game_id: str
     run_id: str
     rounds_played: int

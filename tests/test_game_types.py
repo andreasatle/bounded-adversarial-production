@@ -4,7 +4,6 @@ from pathlib import Path
 import pytest
 
 from baps.game_types import (
-    GameRequest,
     GameDefinition,
     build_game_definition,
     get_builtin_game_definition,
@@ -13,6 +12,7 @@ from baps.game_types import (
     make_documentation_refinement_game_type,
 )
 from baps.prompt_assembly import PromptSection
+from baps.schemas import GameRequest
 
 
 def test_documentation_refinement_game_type_contains_expected_sections() -> None:

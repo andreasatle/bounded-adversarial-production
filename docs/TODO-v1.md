@@ -58,7 +58,7 @@ A game consists of:
 
 The referee is internal to the game engine and is not a top-level authority.
 
-The game engine produces a `GameResult` that is returned to the higher-level framework.
+The game engine produces a `GameResponse` that is returned to the higher-level framework.
 
 ---
 
@@ -137,7 +137,7 @@ The integrator is a top-level framework component.
 
 Responsibilities:
 
-- consume `GameResult`
+- consume `GameResponse`
 - compare competing outputs
 - decide whether outputs become durable project state
 - coordinate broader project evolution

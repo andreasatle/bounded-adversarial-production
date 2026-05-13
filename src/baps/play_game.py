@@ -13,7 +13,7 @@ from baps.game_types import (
 )
 from baps.models import OllamaClient
 from baps.prompt_assembly import PromptSection, PromptSpec, assemble_prompt
-from baps.runtime import RuntimeEngine, build_game_result
+from baps.runtime import RuntimeEngine, build_game_response
 from baps.schemas import GameContract, GameState, Target
 
 
@@ -207,7 +207,7 @@ def main() -> None:
         active_roles=["blue", "red", "referee"],
         max_rounds=args.max_rounds,
     )
-    result = build_game_result(state, contract)
+    result = build_game_response(state, contract)
 
     round_1 = state.rounds[0]
     blue = round_1.moves[0]
