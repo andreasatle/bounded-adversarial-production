@@ -123,3 +123,19 @@ def test_state_source_metadata_default_isolated() -> None:
     b = StateSourceDeclaration(id="b", kind="markdown_doc", ref="b.md")
     a.metadata["x"] = 1
     assert "x" not in b.metadata
+
+
+def test_load_checked_in_state_manifest_and_read_sources() -> None:
+    manifest_path = Path("examples/state_manifests/baps_project_state.json")
+    manifest = load_state_manifest(manifest_path)
+
+    assert manifest.project_id.strip()
+    source_ids = {source.id for source in manifest.sources}
+    assert "architecture" in source_ids
+    assert "future_direction" in source_ids
+
+    adapter = MarkdownFileStateSourceAdapter()
+    for source in manifest.sources:
+        if source.kind == "markdown_doc":
+            loaded = adapter.load_text(source)
+            assert loaded.strip()

@@ -1,0 +1,33 @@
+{
+  "project_id": "bounded-adversarial-production",
+  "sources": [
+    {
+      "id": "architecture",
+      "kind": "markdown_doc",
+      "ref": "docs/ARCHITECTURE.md",
+      "authority": "descriptive",
+      "metadata": {}
+    },
+    {
+      "id": "future_direction",
+      "kind": "markdown_doc",
+      "ref": "docs/TODO-v3.md",
+      "authority": "directional",
+      "metadata": {}
+    },
+    {
+      "id": "todo_v2",
+      "kind": "markdown_doc",
+      "ref": "docs/TODO-v2.md",
+      "authority": "directional",
+      "metadata": {}
+    },
+    {
+      "id": "todo_v1",
+      "kind": "markdown_doc",
+      "ref": "docs/TODO-v1.md",
+      "authority": "directional",
+      "metadata": {}
+    }
+  ]
+}
