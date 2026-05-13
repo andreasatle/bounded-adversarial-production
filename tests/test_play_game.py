@@ -39,8 +39,10 @@ class FakeOllamaClient:
 
 def test_build_parser_requires_subject_goal_and_target_kind() -> None:
     parser = build_parser()
-    with pytest.raises(SystemExit):
-        parser.parse_args([])
+    args = parser.parse_args([])
+    assert args.subject is None
+    assert args.goal is None
+    assert args.target_kind is None
 
 
 def test_build_parser_uses_env_defaults(monkeypatch) -> None:
@@ -49,10 +51,10 @@ def test_build_parser_uses_env_defaults(monkeypatch) -> None:
     parser = build_parser()
 
     args = parser.parse_args(["--subject", "s", "--goal", "g", "--target-kind", "repo"])
-    assert args.model == "env-model"
-    assert args.base_url == "http://env-url:11434"
-    assert args.game_type == "documentation-refinement"
-    assert args.max_rounds == 1
+    assert args.model is None
+    assert args.base_url is None
+    assert args.game_type is None
+    assert args.max_rounds is None
 
 
 def test_build_parser_explicit_args_override_env(monkeypatch) -> None:
@@ -131,7 +133,7 @@ def test_build_parser_rejects_max_rounds_less_than_one() -> None:
 def test_build_parser_red_material_defaults_true_and_can_be_disabled() -> None:
     parser = build_parser()
     args_default = parser.parse_args(["--subject", "s", "--goal", "g", "--target-kind", "repo"])
-    assert args_default.red_material is True
+    assert args_default.red_material is None
 
     args_non_material = parser.parse_args(
         ["--subject", "s", "--goal", "g", "--target-kind", "repo", "--red-non-material"]
@@ -414,6 +416,12 @@ def test_main_prints_expected_fields_and_uses_fake_client(monkeypatch, capsys, t
     assert "blackboard_path=" in output
 
 
+def test_main_without_run_spec_preserves_required_argument_behavior(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("sys.argv", ["baps-play-game", "--subject", "only-subject"])
+    with pytest.raises(SystemExit):
+        main()
+
+
 def test_main_prints_multiple_round_summaries_for_revise_loop(monkeypatch, capsys, tmp_path: Path) -> None:
     monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
     monkeypatch.setattr(
@@ -577,6 +585,176 @@ def test_main_routes_state_source_ids_through_game_request(monkeypatch, tmp_path
 
     main()
     assert captured["state_source_ids"] == ["architecture", "future_direction"]
+
+
+def test_main_with_run_spec_allows_omitting_subject_goal_target_kind(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
+    run_spec = tmp_path / "run.yaml"
+    run_spec.write_text(
+        "\n".join(
+            [
+                "model:",
+                "  provider: ollama",
+                "  name: spec-model",
+                "  base_url: http://spec-url:11434",
+                "game:",
+                "  type: documentation-refinement",
+                "  subject: Spec Subject",
+                "  goal: Spec Goal",
+                "  target_kind: documentation",
+                "  target_ref: README.md",
+                "  max_rounds: 1",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-play-game",
+            "--run-spec",
+            str(run_spec),
+            "--blackboard-path",
+            str(tmp_path / "events.jsonl"),
+        ],
+    )
+    main()
+    assert FakeOllamaClient.last_model == "spec-model"
+    assert FakeOllamaClient.last_base_url == "http://spec-url:11434"
+
+
+def test_main_cli_overrides_run_spec_scalars(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
+    run_spec = tmp_path / "run.yaml"
+    run_spec.write_text(
+        "\n".join(
+            [
+                "model:",
+                "  provider: ollama",
+                "  name: spec-model",
+                "  base_url: http://spec-url:11434",
+                "game:",
+                "  type: documentation-refinement",
+                "  subject: Spec Subject",
+                "  goal: Spec Goal",
+                "  target_kind: documentation",
+                "  target_ref: README.md",
+                "  max_rounds: 1",
+                "  red_material: true",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-play-game",
+            "--run-spec",
+            str(run_spec),
+            "--model",
+            "cli-model",
+            "--base-url",
+            "http://cli-url:11434",
+            "--subject",
+            "CLI Subject",
+            "--goal",
+            "CLI Goal",
+            "--target-kind",
+            "repo",
+            "--target-ref",
+            "main",
+            "--max-rounds",
+            "2",
+            "--red-non-material",
+            "--blackboard-path",
+            str(tmp_path / "events.jsonl"),
+        ],
+    )
+    main()
+    assert FakeOllamaClient.last_model == "cli-model"
+    assert FakeOllamaClient.last_base_url == "http://cli-url:11434"
+
+
+def test_main_context_files_append_run_spec_context_files(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
+    spec_ctx = tmp_path / "spec_ctx.md"
+    cli_ctx = tmp_path / "cli_ctx.md"
+    spec_ctx.write_text("spec-context", encoding="utf-8")
+    cli_ctx.write_text("cli-context", encoding="utf-8")
+    run_spec = tmp_path / "run.yaml"
+    run_spec.write_text(
+        "\n".join(
+            [
+                "model:",
+                "  provider: ollama",
+                "  name: spec-model",
+                "game:",
+                "  type: documentation-refinement",
+                "  subject: Spec Subject",
+                "  goal: Spec Goal",
+                "  target_kind: documentation",
+                "context_files:",
+                f"  - {spec_ctx}",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-play-game",
+            "--run-spec",
+            str(run_spec),
+            "--context-file",
+            str(cli_ctx),
+            "--blackboard-path",
+            str(tmp_path / "events.jsonl"),
+        ],
+    )
+    main()
+    prompt = FakeOllamaClient.prompts[0]
+    assert "spec-context" in prompt
+    assert "cli-context" in prompt
+
+
+def test_main_state_sources_append_run_spec_state_sources(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
+    run_spec = tmp_path / "run.yaml"
+    run_spec.write_text(
+        "\n".join(
+            [
+                "model:",
+                "  provider: ollama",
+                "  name: spec-model",
+                "game:",
+                "  type: documentation-refinement",
+                "  subject: Spec Subject",
+                "  goal: Spec Goal",
+                "  target_kind: documentation",
+                "state:",
+                "  manifest: examples/state_manifests/baps_project_state.json",
+                "  sources:",
+                "    - architecture",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-play-game",
+            "--run-spec",
+            str(run_spec),
+            "--state-source",
+            "future_direction",
+            "--blackboard-path",
+            str(tmp_path / "events.jsonl"),
+        ],
+    )
+    main()
+    prompt = FakeOllamaClient.prompts[0]
+    assert "STATE SOURCE: architecture" in prompt
+    assert "STATE SOURCE: future_direction" in prompt
 
 
 def test_main_resolves_mixed_state_source_kinds_into_prompts(monkeypatch, tmp_path: Path) -> None:

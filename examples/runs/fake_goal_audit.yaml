@@ -1,0 +1,16 @@
+name: fake-goal-audit
+description: Compare fake goals against fake current state
+model:
+  provider: ollama
+  name: gemma4:e4b
+game:
+  type: documentation-refinement
+  subject: Compare fake goals against fake current state
+  goal: compare goal document against current state and identify complete/partial/missing/inconsistent goals
+  target_kind: project-state-audit
+  target_ref: docs/FAKE-CURRENT-STATE.md
+  max_rounds: 3
+  red_material: true
+context_files:
+  - docs/FAKE-GOALS.md
+  - docs/FAKE-CURRENT-STATE.md
