@@ -164,6 +164,7 @@ def test_prompt_driven_red_generated_text_becomes_claim() -> None:
     assert finding.severity == "medium"
     assert finding.confidence == "medium"
     assert finding.block_integration is False
+    assert finding.payload["material"] is True
     assert blue.summary in finding.evidence[0]
     assert blue.summary in model.prompts[0]
     assert "critique only this Blue move/change from the current game" in model.prompts[0]
@@ -268,6 +269,35 @@ def test_prompt_driven_referee_revises_when_block_integration_false() -> None:
     assert "decision is already fixed to `revise`" in model.prompts[0]
     assert "reject = blocking issue, revise = useful non-blocking criticism, accept = no material issue" in model.prompts[0]
     assert "Do not choose a different decision and do not contradict it." in model.prompts[0]
+
+
+def test_prompt_driven_referee_accepts_for_non_material_non_blocking_finding() -> None:
+    contract = _contract()
+    blue = Move(game_id=contract.id, role="blue", summary="draft", payload={})
+    red = Finding(
+        game_id=contract.id,
+        severity="low",
+        confidence="high",
+        claim="minor note",
+        evidence=["e1"],
+        block_integration=False,
+        payload={"material": False},
+    )
+    model = FakeModelClient(responses=["rationale"])
+    role = make_prompt_referee_role(model)
+
+    decision = role(contract, blue, red)
+    assert decision.decision == "accept"
+
+
+def test_prompt_driven_red_material_defaults_can_be_configured() -> None:
+    contract = _contract()
+    blue = Move(game_id=contract.id, role="blue", summary="draft", payload={})
+    model = FakeModelClient(responses=["generated red claim"])
+    role = make_prompt_red_role(model, default_material=False)
+
+    finding = role(contract, blue)
+    assert finding.payload["material"] is False
 
 
 def test_prompt_driven_referee_missing_template_variable_raises_key_error() -> None:

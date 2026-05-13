@@ -62,6 +62,7 @@ class Finding(BaseModel):
     confidence: str
     claim: str
     evidence: list[str] = Field(default_factory=list)
+    payload: dict = Field(default_factory=dict)
     block_integration: bool = False
 
     _validate_game_id = field_validator("game_id")(_require_non_empty)

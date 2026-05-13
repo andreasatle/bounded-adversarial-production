@@ -78,9 +78,13 @@ def make_prompt_red_role(
         "Red role for game {game_id}: critique only this Blue move/change from the current game: "
         "`{blue_summary}`. "
         "Do not perform a general audit of the whole system. "
-        "Use surrounding context only as supporting evidence for the critique."
+        "Use surrounding context only as supporting evidence for the critique. "
+        "Classify materiality: material finding = actionable issue that should cause revision; "
+        "non-material finding = minor note, praise, or no required change."
     ),
     extra_context: dict | None = None,
+    default_block_integration: bool = False,
+    default_material: bool = True,
 ):
     renderer = PromptRenderer(template)
     context_overrides = dict(extra_context) if extra_context is not None else {}
@@ -104,7 +108,8 @@ def make_prompt_red_role(
             confidence="medium",
             claim=claim,
             evidence=[f"Blue summary: {blue_move.summary}"],
-            block_integration=False,
+            block_integration=default_block_integration,
+            payload={"material": default_material},
         )
 
     return _role
@@ -127,7 +132,13 @@ def make_prompt_referee_role(
     context_overrides = dict(extra_context) if extra_context is not None else {}
 
     def _role(contract: GameContract, blue_move: Move, red_finding: Finding) -> Decision:
-        decision = "reject" if red_finding.block_integration else "revise"
+        is_material = bool(red_finding.payload.get("material", True))
+        if red_finding.block_integration:
+            decision = "reject"
+        elif is_material:
+            decision = "revise"
+        else:
+            decision = "accept"
         context = {
             "game_id": contract.id,
             "subject": contract.subject,
@@ -139,6 +150,7 @@ def make_prompt_referee_role(
             "red_severity": red_finding.severity,
             "red_confidence": red_finding.confidence,
             "red_block_integration": red_finding.block_integration,
+            "red_material": is_material,
             "decision": decision,
             "decision_rationale_goal": (
                 "Provide one concise rationale that supports this fixed decision. "

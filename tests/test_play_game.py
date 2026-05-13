@@ -90,6 +90,17 @@ def test_build_parser_rejects_max_rounds_less_than_one() -> None:
         )
 
 
+def test_build_parser_red_material_defaults_true_and_can_be_disabled() -> None:
+    parser = build_parser()
+    args_default = parser.parse_args(["--subject", "s", "--goal", "g", "--target-kind", "repo"])
+    assert args_default.red_material is True
+
+    args_non_material = parser.parse_args(
+        ["--subject", "s", "--goal", "g", "--target-kind", "repo", "--red-non-material"]
+    )
+    assert args_non_material.red_material is False
+
+
 def test_build_parser_repeated_context_file_args(monkeypatch) -> None:
     parser = build_parser()
     args = parser.parse_args(
@@ -169,6 +180,24 @@ def test_run_play_game_respects_max_rounds_override(tmp_path: Path, monkeypatch)
     )
 
     assert len(state.rounds) == 2
+
+
+def test_run_play_game_red_non_material_can_lead_to_accept(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
+    path = tmp_path / "play-events.jsonl"
+
+    state = run_play_game(
+        subject="subject",
+        goal="goal",
+        target_kind="repo",
+        target_ref="main",
+        model="model-x",
+        base_url="http://url-x",
+        blackboard_path=path,
+        red_material=False,
+    )
+    assert state.final_decision is not None
+    assert state.final_decision.decision == "accept"
 
 
 def test_run_play_game_injects_shared_context_into_prompts(tmp_path: Path, monkeypatch) -> None:

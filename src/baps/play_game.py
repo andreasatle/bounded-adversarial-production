@@ -40,6 +40,7 @@ def run_play_game(
     blackboard_path: Path,
     shared_context: str = "",
     max_rounds: int = 1,
+    red_material: bool = True,
 ) -> GameState:
     model_client = OllamaClient(model=model, base_url=base_url)
     blue_role = make_prompt_blue_role(
@@ -59,6 +60,7 @@ def run_play_game(
             "Shared context:\n{shared_context}"
         ),
         extra_context={"shared_context": shared_context},
+        default_material=red_material,
     )
     referee_role = make_prompt_referee_role(
         model_client,
@@ -95,6 +97,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--blackboard-path", default="blackboard/play-game-events.jsonl")
     parser.add_argument("--context-file", action="append", default=[])
     parser.add_argument("--max-rounds", type=_max_rounds_type, default=1)
+    parser.add_argument("--red-material", action="store_true", default=True)
+    parser.add_argument("--red-non-material", action="store_false", dest="red_material")
     return parser
 
 
@@ -113,6 +117,7 @@ def main() -> None:
         blackboard_path=blackboard_path,
         shared_context=shared_context,
         max_rounds=args.max_rounds,
+        red_material=args.red_material,
     )
     contract = GameContract(
         id="play-game-001",
