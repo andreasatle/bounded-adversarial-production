@@ -3,7 +3,9 @@ from pathlib import Path
 import pytest
 
 from baps.blackboard import Blackboard
+from baps.game_types import GameDefinition, GameTypePromptSections
 from baps.play_game import build_parser, load_context_files, main, run_play_game
+from baps.prompt_assembly import PromptSection
 
 
 class FakeOllamaClient:
@@ -218,6 +220,56 @@ def test_run_play_game_injects_shared_context_into_prompts(tmp_path: Path, monke
 
     assert len(FakeOllamaClient.prompts) == 3
     assert all(shared in prompt for prompt in FakeOllamaClient.prompts)
+
+
+def test_run_play_game_uses_default_documentation_refinement_definition(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
+    path = tmp_path / "play-events.jsonl"
+
+    run_play_game(
+        subject="subject",
+        goal="goal",
+        target_kind="repo",
+        target_ref="main",
+        model="model-x",
+        base_url="http://url-x",
+        blackboard_path=path,
+    )
+
+    # Default documentation-refinement prompt sections should be present.
+    assert any("Game type is documentation refinement." in prompt for prompt in FakeOllamaClient.prompts)
+    assert any("Red critiques only the current Blue-produced delta from this game." in prompt for prompt in FakeOllamaClient.prompts)
+    assert any("Referee converges toward correctness and clarity." in prompt for prompt in FakeOllamaClient.prompts)
+
+
+def test_run_play_game_supports_custom_game_definition_prompt_sections(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
+    path = tmp_path / "play-events.jsonl"
+    custom_definition = GameDefinition(
+        id="custom-game",
+        name="Custom Game",
+        description="custom",
+        prompt_sections=GameTypePromptSections(
+            blue_sections=[PromptSection(name="Blue Custom", content="Blue custom guidance.")],
+            red_sections=[PromptSection(name="Red Custom", content="Red custom guidance.")],
+            referee_sections=[PromptSection(name="Ref Custom", content="Ref custom guidance.")],
+        ),
+    )
+
+    run_play_game(
+        subject="subject",
+        goal="goal",
+        target_kind="repo",
+        target_ref="main",
+        model="model-x",
+        base_url="http://url-x",
+        blackboard_path=path,
+        game_definition=custom_definition,
+    )
+
+    assert any("Blue custom guidance." in prompt for prompt in FakeOllamaClient.prompts)
+    assert any("Red custom guidance." in prompt for prompt in FakeOllamaClient.prompts)
+    assert any("Ref custom guidance." in prompt for prompt in FakeOllamaClient.prompts)
 
 
 def test_main_prints_expected_fields_and_uses_fake_client(monkeypatch, capsys, tmp_path: Path) -> None:

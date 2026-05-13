@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from baps.game_types import make_documentation_refinement_game_definition
+from baps.game_types import (
+    GameTypePromptSections,
+    make_documentation_refinement_game_definition,
+)
 from baps.models import ModelClient
 from baps.prompt_assembly import PromptSection, PromptSpec, assemble_prompt
 from baps.prompts import PromptRenderer
@@ -56,100 +59,116 @@ def referee_role(contract: GameContract, blue_move: Move, red_finding: Finding) 
     )
 
 
-_DEFAULT_BLUE_TEMPLATE = assemble_prompt(
-    PromptSpec(
-        sections=(
-            [
-                PromptSection(
-                    name="Role",
-                    content=(
-                        "Blue role for game {game_id}: {goal}. "
-                        "If revision context is present, use it to improve the proposed change."
+def _resolve_prompt_sections(
+    game_type_prompt_sections: GameTypePromptSections | None,
+) -> GameTypePromptSections:
+    if game_type_prompt_sections is not None:
+        return game_type_prompt_sections
+    return make_documentation_refinement_game_definition().prompt_sections
+
+
+def _default_blue_template(game_type_prompt_sections: GameTypePromptSections | None) -> str:
+    sections = _resolve_prompt_sections(game_type_prompt_sections)
+    return assemble_prompt(
+        PromptSpec(
+            sections=(
+                [
+                    PromptSection(
+                        name="Role",
+                        content=(
+                            "Blue role for game {game_id}: {goal}. "
+                            "If revision context is present, use it to improve the proposed change."
+                        ),
                     ),
-                ),
-                PromptSection(
-                    name="Revision Context",
-                    content=(
-                        "Previous blue summary: {previous_blue_summary}. "
-                        "Previous red claim: {previous_red_claim}. "
-                        "Previous referee rationale: {previous_referee_rationale}."
+                    PromptSection(
+                        name="Revision Context",
+                        content=(
+                            "Previous blue summary: {previous_blue_summary}. "
+                            "Previous red claim: {previous_red_claim}. "
+                            "Previous referee rationale: {previous_referee_rationale}."
+                        ),
                     ),
-                ),
-            ]
-            + make_documentation_refinement_game_definition().prompt_sections.blue_sections
+                ]
+                + sections.blue_sections
+            )
         )
     )
-)
 
 
-_DEFAULT_RED_TEMPLATE = assemble_prompt(
-    PromptSpec(
-        sections=(
-            [
-                PromptSection(
-                    name="Scope",
-                    content=(
-                        "Red role for game {game_id}: critique only this Blue move/change from the current game: "
-                        "`{blue_summary}`. "
-                        "Do not perform a general audit of the whole system. "
-                        "Use surrounding context only as supporting evidence for the critique."
+def _default_red_template(game_type_prompt_sections: GameTypePromptSections | None) -> str:
+    sections = _resolve_prompt_sections(game_type_prompt_sections)
+    return assemble_prompt(
+        PromptSpec(
+            sections=(
+                [
+                    PromptSection(
+                        name="Scope",
+                        content=(
+                            "Red role for game {game_id}: critique only this Blue move/change from the current game: "
+                            "`{blue_summary}`. "
+                            "Do not perform a general audit of the whole system. "
+                            "Use surrounding context only as supporting evidence for the critique."
+                        ),
                     ),
-                ),
-                PromptSection(
-                    name="Materiality",
-                    content=(
-                        "Classify materiality: material finding = actionable issue that should cause revision; "
-                        "non-material finding = minor note, praise, or no required change."
+                    PromptSection(
+                        name="Materiality",
+                        content=(
+                            "Classify materiality: material finding = actionable issue that should cause revision; "
+                            "non-material finding = minor note, praise, or no required change."
+                        ),
                     ),
-                ),
-                PromptSection(
-                    name="Output Format",
-                    content="MATERIAL: yes|no\nCLAIM: concise critique/assessment",
-                ),
-            ]
-            + make_documentation_refinement_game_definition().prompt_sections.red_sections
+                    PromptSection(
+                        name="Output Format",
+                        content="MATERIAL: yes|no\nCLAIM: concise critique/assessment",
+                    ),
+                ]
+                + sections.red_sections
+            )
         )
     )
-)
 
 
-_DEFAULT_REFEREE_TEMPLATE = assemble_prompt(
-    PromptSpec(
-        sections=(
-            [
-                PromptSection(
-                    name="Decision",
-                    content=(
-                        "Referee for game {game_id}. Structured decision is already fixed to `{decision}`. "
-                        "Decision policy: reject = blocking issue, revise = useful non-blocking criticism, "
-                        "accept = no material issue."
+def _default_referee_template(game_type_prompt_sections: GameTypePromptSections | None) -> str:
+    sections = _resolve_prompt_sections(game_type_prompt_sections)
+    return assemble_prompt(
+        PromptSpec(
+            sections=(
+                [
+                    PromptSection(
+                        name="Decision",
+                        content=(
+                            "Referee for game {game_id}. Structured decision is already fixed to `{decision}`. "
+                            "Decision policy: reject = blocking issue, revise = useful non-blocking criticism, "
+                            "accept = no material issue."
+                        ),
                     ),
-                ),
-                PromptSection(
-                    name="Rationale Rule",
-                    content="{decision_rationale_goal}",
-                ),
-                PromptSection(
-                    name="Inputs",
-                    content=(
-                        "Blue move: `{blue_summary}`. "
-                        "Red finding: `{red_claim}` (severity={red_severity}, confidence={red_confidence}, "
-                        "block_integration={red_block_integration})."
+                    PromptSection(
+                        name="Rationale Rule",
+                        content="{decision_rationale_goal}",
                     ),
-                ),
-            ]
-            + make_documentation_refinement_game_definition().prompt_sections.referee_sections
+                    PromptSection(
+                        name="Inputs",
+                        content=(
+                            "Blue move: `{blue_summary}`. "
+                            "Red finding: `{red_claim}` (severity={red_severity}, confidence={red_confidence}, "
+                            "block_integration={red_block_integration})."
+                        ),
+                    ),
+                ]
+                + sections.referee_sections
+            )
         )
     )
-)
 
 
 def make_prompt_blue_role(
     model_client: ModelClient,
-    template: str = _DEFAULT_BLUE_TEMPLATE,
+    template: str | None = None,
     extra_context: dict | None = None,
+    game_type_prompt_sections: GameTypePromptSections | None = None,
 ):
-    renderer = PromptRenderer(template)
+    resolved_template = template if template is not None else _default_blue_template(game_type_prompt_sections)
+    renderer = PromptRenderer(resolved_template)
     context_overrides = dict(extra_context) if extra_context is not None else {}
 
     def _role(contract: GameContract, revision_context: dict | None = None) -> Move:
@@ -179,12 +198,14 @@ def make_prompt_blue_role(
 
 def make_prompt_red_role(
     model_client: ModelClient,
-    template: str = _DEFAULT_RED_TEMPLATE,
+    template: str | None = None,
     extra_context: dict | None = None,
     default_block_integration: bool = False,
     default_material: bool = True,
+    game_type_prompt_sections: GameTypePromptSections | None = None,
 ):
-    renderer = PromptRenderer(template)
+    resolved_template = template if template is not None else _default_red_template(game_type_prompt_sections)
+    renderer = PromptRenderer(resolved_template)
     context_overrides = dict(extra_context) if extra_context is not None else {}
 
     def _role(contract: GameContract, blue_move: Move) -> Finding:
@@ -216,10 +237,14 @@ def make_prompt_red_role(
 
 def make_prompt_referee_role(
     model_client: ModelClient,
-    template: str = _DEFAULT_REFEREE_TEMPLATE,
+    template: str | None = None,
     extra_context: dict | None = None,
+    game_type_prompt_sections: GameTypePromptSections | None = None,
 ):
-    renderer = PromptRenderer(template)
+    resolved_template = template if template is not None else _default_referee_template(
+        game_type_prompt_sections
+    )
+    renderer = PromptRenderer(resolved_template)
     context_overrides = dict(extra_context) if extra_context is not None else {}
 
     def _role(contract: GameContract, blue_move: Move, red_finding: Finding) -> Decision:

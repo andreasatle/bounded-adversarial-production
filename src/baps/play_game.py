@@ -6,7 +6,9 @@ from pathlib import Path
 
 from baps.blackboard import Blackboard
 from baps.example_roles import make_prompt_blue_role, make_prompt_red_role, make_prompt_referee_role
+from baps.game_types import GameDefinition, make_documentation_refinement_game_definition
 from baps.models import OllamaClient
+from baps.prompt_assembly import PromptSection, PromptSpec, assemble_prompt
 from baps.runtime import RuntimeEngine, build_game_result
 from baps.schemas import GameContract, GameState, Target
 
@@ -47,36 +49,95 @@ def run_play_game(
     shared_context: str = "",
     max_rounds: int = 1,
     red_material: bool = True,
+    game_definition: GameDefinition | None = None,
 ) -> GameState:
+    resolved_game_definition = (
+        game_definition
+        if game_definition is not None
+        else make_documentation_refinement_game_definition()
+    )
     model_client = OllamaClient(model=model, base_url=base_url)
+    prompt_sections = resolved_game_definition.prompt_sections
+
+    blue_template = assemble_prompt(
+        PromptSpec(
+            sections=[
+                PromptSection(
+                    name="Role",
+                    content=(
+                        "Using shared context, provide one concise candidate answer for goal `{goal}`."
+                    ),
+                ),
+                PromptSection(
+                    name="Shared Context",
+                    content="Shared context:\n{shared_context}",
+                ),
+                *prompt_sections.blue_sections,
+            ]
+        )
+    )
+
+    red_template = assemble_prompt(
+        PromptSpec(
+            sections=[
+                PromptSection(
+                    name="Scope",
+                    content=(
+                        "Critique only this Blue move/change from the current game: `{blue_summary}`. "
+                        "Do not perform a general audit. Use shared context only as supporting evidence."
+                    ),
+                ),
+                PromptSection(
+                    name="Shared Context",
+                    content="Shared context:\n{shared_context}",
+                ),
+                PromptSection(
+                    name="Output Format",
+                    content="MATERIAL: yes|no\nCLAIM: concise critique/assessment",
+                ),
+                *prompt_sections.red_sections,
+            ]
+        )
+    )
+
+    referee_template = assemble_prompt(
+        PromptSpec(
+            sections=[
+                PromptSection(
+                    name="Decision",
+                    content=(
+                        "Structured decision is already fixed to `{decision}`. "
+                        "Provide one concise rationale supporting that fixed decision. "
+                        "Do not contradict or reselect the decision."
+                    ),
+                ),
+                PromptSection(
+                    name="Inputs",
+                    content="Blue move: `{blue_summary}`. Red finding: `{red_claim}`.",
+                ),
+                PromptSection(
+                    name="Shared Context",
+                    content="Shared context:\n{shared_context}",
+                ),
+                *prompt_sections.referee_sections,
+            ]
+        )
+    )
+
     blue_role = make_prompt_blue_role(
         model_client,
-        template=(
-            "Using shared context, provide one concise candidate answer for goal `{goal}`. "
-            "Shared context:\n{shared_context}"
-        ),
+        template=blue_template,
         extra_context={"shared_context": shared_context},
     )
     red_role = make_prompt_red_role(
         model_client,
-        template=(
-            "Critique only this Blue move/change from the current game: `{blue_summary}`. "
-            "Do not perform a general audit. "
-            "Use shared context only as supporting evidence.\n"
-            "Shared context:\n{shared_context}"
-        ),
+        template=red_template,
         extra_context={"shared_context": shared_context},
         default_material=red_material,
     )
     referee_role = make_prompt_referee_role(
         model_client,
-        template=(
-            "Structured decision is already fixed to `{decision}`. "
-            "Provide one concise rationale supporting that fixed decision. "
-            "Do not contradict or reselect the decision. "
-            "Blue move: `{blue_summary}`. Red finding: `{red_claim}`.\n"
-            "Shared context:\n{shared_context}"
-        ),
+        template=referee_template,
         extra_context={"shared_context": shared_context},
     )
 
