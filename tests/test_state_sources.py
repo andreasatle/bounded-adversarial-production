@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from baps.state_sources import (
+    JsonlEventLogStateSourceAdapter,
     MarkdownFileStateSourceAdapter,
     StateManifest,
     StateSourceDeclaration,
@@ -222,3 +223,61 @@ def test_resolve_state_context_checked_in_manifest_architecture_and_future_direc
     assert "STATE SOURCE: future_direction" in context
     assert "authority=descriptive" in context
     assert "authority=directional" in context
+
+
+def test_jsonl_event_log_state_source_adapter_reads_jsonl_exactly(tmp_path: Path) -> None:
+    adapter = JsonlEventLogStateSourceAdapter()
+    file_path = tmp_path / "events.jsonl"
+    raw_content = (
+        '{"id":"g:run:r0001:game_started","type":"game_started","payload":{"game_id":"g","run_id":"run"}}\n'
+        '{"id":"g:run:game_completed","type":"game_completed","payload":{"game_id":"g","run_id":"run"}}\n'
+    )
+    file_path.write_text(raw_content, encoding="utf-8")
+    declaration = StateSourceDeclaration(id="traces", kind="jsonl_event_log", ref=str(file_path))
+
+    loaded = adapter.load_text(declaration)
+    assert loaded == raw_content
+
+
+def test_jsonl_event_log_state_source_adapter_unsupported_kind_fails(tmp_path: Path) -> None:
+    adapter = JsonlEventLogStateSourceAdapter()
+    file_path = tmp_path / "events.jsonl"
+    file_path.write_text("{}", encoding="utf-8")
+    declaration = StateSourceDeclaration(id="traces", kind="markdown_doc", ref=str(file_path))
+
+    with pytest.raises(ValueError, match="unsupported state source kind for jsonl event log adapter"):
+        adapter.load_text(declaration)
+
+
+def test_jsonl_event_log_state_source_adapter_missing_file_fails(tmp_path: Path) -> None:
+    adapter = JsonlEventLogStateSourceAdapter()
+    declaration = StateSourceDeclaration(
+        id="traces",
+        kind="jsonl_event_log",
+        ref=str(tmp_path / "missing.jsonl"),
+    )
+
+    with pytest.raises(FileNotFoundError):
+        adapter.load_text(declaration)
+
+
+def test_resolve_state_context_with_jsonl_event_log_adapter(tmp_path: Path) -> None:
+    file_path = tmp_path / "events.jsonl"
+    raw_content = '{"id":"e1","type":"x","payload":{}}\n'
+    file_path.write_text(raw_content, encoding="utf-8")
+    manifest = StateManifest(
+        project_id="baps",
+        sources=[
+            StateSourceDeclaration(
+                id="game_traces",
+                kind="jsonl_event_log",
+                ref=str(file_path),
+                authority="evidence",
+            )
+        ],
+    )
+    adapter = JsonlEventLogStateSourceAdapter()
+
+    context = resolve_state_context(manifest, ["game_traces"], adapter)
+    assert "===== STATE SOURCE: game_traces (jsonl_event_log, authority=evidence) =====" in context
+    assert raw_content in context

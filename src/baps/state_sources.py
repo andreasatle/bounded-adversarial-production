@@ -71,6 +71,16 @@ class MarkdownFileStateSourceAdapter(StateSourceAdapter):
         return path.read_text(encoding="utf-8")
 
 
+class JsonlEventLogStateSourceAdapter(StateSourceAdapter):
+    def load_text(self, declaration: StateSourceDeclaration) -> str:
+        if declaration.kind != "jsonl_event_log":
+            raise ValueError("unsupported state source kind for jsonl event log adapter")
+        path = Path(declaration.ref)
+        if not path.exists():
+            raise FileNotFoundError(f"state source file not found: {declaration.ref}")
+        return path.read_text(encoding="utf-8")
+
+
 def resolve_state_context(
     manifest: StateManifest,
     source_ids: list[str],
