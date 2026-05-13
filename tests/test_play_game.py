@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -92,6 +93,23 @@ def test_build_parser_explicit_game_type_override() -> None:
         ]
     )
     assert args.game_type == "documentation-refinement"
+
+
+def test_build_parser_accepts_game_definition_file() -> None:
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--subject",
+            "s",
+            "--goal",
+            "g",
+            "--target-kind",
+            "repo",
+            "--game-definition-file",
+            "game.json",
+        ]
+    )
+    assert args.game_definition_file == "game.json"
 
 
 def test_build_parser_explicit_max_rounds_overrides_default() -> None:
@@ -337,6 +355,8 @@ def test_main_prints_expected_fields_and_uses_fake_client(monkeypatch, capsys, t
     assert "target_kind=document" in output
     assert "target_ref=README.md" in output
     assert "game_type=documentation-refinement" in output
+    assert "game_definition_id=documentation-refinement" in output
+    assert "game_definition_name=Documentation Refinement" in output
     assert "rounds_played=1" in output
     assert "max_rounds=1" in output
     assert "terminal_reason=round_budget_exhausted" in output
@@ -379,3 +399,52 @@ def test_main_prints_multiple_round_summaries_for_revise_loop(monkeypatch, capsy
     assert "round_1_decision=revise" in output
     assert "round_2_decision=revise" in output
     assert "round_2_blue_summary=Candidate answer revised" in output
+
+
+def test_main_game_definition_file_overrides_game_type(monkeypatch, capsys, tmp_path: Path) -> None:
+    monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
+    definition_path = tmp_path / "custom-game-definition.json"
+    definition_path.write_text(
+        json.dumps(
+            {
+                "id": "json-custom",
+                "name": "JSON Custom Game",
+                "description": "from file",
+                "prompt_sections": {
+                    "blue_sections": [{"name": "Blue", "content": "blue file guidance"}],
+                    "red_sections": [{"name": "Red", "content": "red file guidance"}],
+                    "referee_sections": [{"name": "Ref", "content": "ref file guidance"}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-play-game",
+            "--subject",
+            "README demo",
+            "--goal",
+            "Explain run command",
+            "--target-kind",
+            "document",
+            "--target-ref",
+            "README.md",
+            "--game-type",
+            "unknown-type",
+            "--game-definition-file",
+            str(definition_path),
+            "--blackboard-path",
+            str(tmp_path / "events.jsonl"),
+        ],
+    )
+
+    main()
+
+    output = capsys.readouterr().out
+    assert "game_definition_id=json-custom" in output
+    assert "game_definition_name=JSON Custom Game" in output
+    assert any("blue file guidance" in prompt for prompt in FakeOllamaClient.prompts)
+    assert any("red file guidance" in prompt for prompt in FakeOllamaClient.prompts)
+    assert any("ref file guidance" in prompt for prompt in FakeOllamaClient.prompts)

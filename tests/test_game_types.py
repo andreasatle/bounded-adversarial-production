@@ -1,8 +1,12 @@
+import json
+from pathlib import Path
+
 import pytest
 
 from baps.game_types import (
     GameDefinition,
     get_builtin_game_definition,
+    load_game_definition,
     make_documentation_refinement_game_definition,
     make_documentation_refinement_game_type,
 )
@@ -92,3 +96,46 @@ def test_get_builtin_game_definition_returns_documentation_refinement() -> None:
 def test_get_builtin_game_definition_rejects_unknown_type() -> None:
     with pytest.raises(ValueError, match="unknown game type: unknown-type"):
         get_builtin_game_definition("unknown-type")
+
+
+def test_load_game_definition_valid_json(tmp_path: Path) -> None:
+    path = tmp_path / "game-definition.json"
+    path.write_text(
+        json.dumps(
+            {
+                "id": "custom-doc-refine",
+                "name": "Custom Doc Refine",
+                "description": "Custom definition",
+                "prompt_sections": {
+                    "blue_sections": [{"name": "Blue", "content": "blue guidance"}],
+                    "red_sections": [{"name": "Red", "content": "red guidance"}],
+                    "referee_sections": [{"name": "Ref", "content": "ref guidance"}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    definition = load_game_definition(path)
+    assert definition.id == "custom-doc-refine"
+    assert definition.name == "Custom Doc Refine"
+
+
+def test_load_game_definition_missing_file_fails(tmp_path: Path) -> None:
+    path = tmp_path / "missing.json"
+    with pytest.raises(FileNotFoundError):
+        load_game_definition(path)
+
+
+def test_load_game_definition_invalid_json_fails(tmp_path: Path) -> None:
+    path = tmp_path / "bad.json"
+    path.write_text("{not-json", encoding="utf-8")
+    with pytest.raises(ValueError, match="invalid JSON"):
+        load_game_definition(path)
+
+
+def test_load_game_definition_invalid_schema_fails(tmp_path: Path) -> None:
+    path = tmp_path / "invalid-schema.json"
+    path.write_text(json.dumps({"id": "x"}), encoding="utf-8")
+    with pytest.raises(ValueError, match="invalid GameDefinition schema"):
+        load_game_definition(path)

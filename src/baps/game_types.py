@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from pydantic import BaseModel, Field
 from pydantic import field_validator
+from pydantic import ValidationError
 
 from baps.prompt_assembly import PromptSection
 
@@ -87,3 +91,17 @@ def get_builtin_game_definition(game_type: str) -> GameDefinition:
     raise ValueError(
         f"unknown game type: {game_type}. supported game types: documentation-refinement"
     )
+
+
+def load_game_definition(path: Path) -> GameDefinition:
+    if not path.exists():
+        raise FileNotFoundError(f"game definition file not found: {path}")
+    try:
+        raw = path.read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid JSON in game definition file: {path}") from exc
+    try:
+        return GameDefinition.model_validate(data)
+    except ValidationError as exc:
+        raise ValueError(f"invalid GameDefinition schema in file: {path}") from exc
