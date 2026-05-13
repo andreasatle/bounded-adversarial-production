@@ -256,4 +256,37 @@ def test_main_prints_expected_fields_and_uses_fake_client(monkeypatch, capsys, t
     assert "red_block_integration=False" in output
     assert "referee_decision=revise" in output
     assert "referee_rationale=Concise rationale for fixed decision" in output
+    assert "round_1_decision=revise" in output
+    assert "round_1_blue_summary=Candidate answer" in output
+    assert "round_1_red_claim=Concrete critique of candidate" in output
+    assert "round_1_referee_rationale=Concise rationale for fixed decision" in output
     assert "blackboard_path=" in output
+
+
+def test_main_prints_multiple_round_summaries_for_revise_loop(monkeypatch, capsys, tmp_path: Path) -> None:
+    monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-play-game",
+            "--subject",
+            "README demo",
+            "--goal",
+            "Explain run command",
+            "--target-kind",
+            "document",
+            "--target-ref",
+            "README.md",
+            "--max-rounds",
+            "2",
+            "--blackboard-path",
+            str(tmp_path / "events.jsonl"),
+        ],
+    )
+
+    main()
+
+    output = capsys.readouterr().out
+    assert "round_1_decision=revise" in output
+    assert "round_2_decision=revise" in output
+    assert "round_2_blue_summary=Candidate answer revised" in output

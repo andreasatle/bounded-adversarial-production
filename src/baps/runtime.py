@@ -6,7 +6,17 @@ from uuid import uuid4
 
 from baps.blackboard import Blackboard
 from baps.roles import RoleInvocationGuard
-from baps.schemas import Decision, Event, Finding, GameContract, GameResult, GameRound, GameState, Move
+from baps.schemas import (
+    Decision,
+    Event,
+    Finding,
+    GameContract,
+    GameResult,
+    GameRound,
+    GameState,
+    Move,
+    RoundSummary,
+)
 
 
 def generate_run_id() -> str:
@@ -41,6 +51,24 @@ def build_game_result(
     else:
         terminal_reason = "completed"
 
+    round_summaries: list[RoundSummary] = []
+    for round_ in state.rounds:
+        if round_.decision is None:
+            raise ValueError("each round must contain a decision")
+        if not round_.moves:
+            raise ValueError("each round must contain at least one move")
+        if not round_.findings:
+            raise ValueError("each round must contain at least one finding")
+        round_summaries.append(
+            RoundSummary(
+                round_number=round_.round_number,
+                blue_summary=round_.moves[-1].summary,
+                red_claim=round_.findings[-1].claim,
+                referee_decision=round_.decision.decision,
+                referee_rationale=round_.decision.rationale,
+            )
+        )
+
     return GameResult(
         game_id=state.game_id,
         run_id=state.run_id,
@@ -51,6 +79,7 @@ def build_game_result(
         final_blue_summary=last_round.moves[-1].summary,
         final_red_claim=last_round.findings[-1].claim,
         trace_event_ids=list(trace_event_ids) if trace_event_ids is not None else [],
+        round_summaries=round_summaries,
     )
 
 

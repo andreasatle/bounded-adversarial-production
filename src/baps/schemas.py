@@ -144,6 +144,7 @@ class GameResult(BaseModel):
     final_blue_summary: str
     final_red_claim: str
     trace_event_ids: list[str] = Field(default_factory=list)
+    round_summaries: list["RoundSummary"] = Field(default_factory=list)
 
     _validate_game_id = field_validator("game_id")(_require_non_empty)
     _validate_run_id = field_validator("run_id")(_require_non_empty)
@@ -163,6 +164,26 @@ class GameResult(BaseModel):
     def validate_max_rounds(cls, value: int) -> int:
         if value < 1:
             raise ValueError("max_rounds must be >= 1")
+        return value
+
+
+class RoundSummary(BaseModel):
+    round_number: int
+    blue_summary: str
+    red_claim: str
+    referee_decision: str
+    referee_rationale: str
+
+    _validate_blue_summary = field_validator("blue_summary")(_require_non_empty)
+    _validate_red_claim = field_validator("red_claim")(_require_non_empty)
+    _validate_referee_decision = field_validator("referee_decision")(_require_non_empty)
+    _validate_referee_rationale = field_validator("referee_rationale")(_require_non_empty)
+
+    @field_validator("round_number")
+    @classmethod
+    def validate_round_number(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("round_number must be >= 1")
         return value
 
 

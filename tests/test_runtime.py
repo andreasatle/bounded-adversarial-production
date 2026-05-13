@@ -195,6 +195,13 @@ def test_build_game_result_revise_budget_exhausted_terminal_reason() -> None:
     assert result.terminal_reason == "round_budget_exhausted"
     assert result.final_blue_summary == "blue2"
     assert result.final_red_claim == "red2"
+    assert len(result.round_summaries) == 2
+    assert result.round_summaries[0].round_number == 1
+    assert result.round_summaries[0].blue_summary == "blue1"
+    assert result.round_summaries[1].round_number == 2
+    assert result.round_summaries[1].blue_summary == "blue2"
+    assert result.round_summaries[-1].blue_summary == result.final_blue_summary
+    assert result.round_summaries[-1].red_claim == result.final_red_claim
 
 
 def test_invalid_blue_role_output_fails(tmp_path: Path) -> None:

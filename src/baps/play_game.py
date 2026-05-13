@@ -11,6 +11,12 @@ from baps.runtime import RuntimeEngine, build_game_result
 from baps.schemas import GameContract, GameState, Target
 
 
+def _truncate_for_output(value: str, limit: int = 200) -> str:
+    if len(value) <= limit:
+        return value
+    return value[: limit - 3] + "..."
+
+
 def _max_rounds_type(value: str) -> int:
     parsed = int(value)
     if parsed < 1:
@@ -147,4 +153,12 @@ def main() -> None:
     print(f"red_block_integration={red.block_integration}")
     print(f"referee_decision={referee.decision if referee is not None else 'none'}")
     print(f"referee_rationale={referee.rationale if referee is not None else 'none'}")
+    for summary in result.round_summaries:
+        print(f"round_{summary.round_number}_decision={summary.referee_decision}")
+        print(f"round_{summary.round_number}_blue_summary={_truncate_for_output(summary.blue_summary)}")
+        print(f"round_{summary.round_number}_red_claim={_truncate_for_output(summary.red_claim)}")
+        print(
+            f"round_{summary.round_number}_referee_rationale="
+            f"{_truncate_for_output(summary.referee_rationale)}"
+        )
     print(f"blackboard_path={blackboard_path}")

@@ -12,6 +12,7 @@ from baps.schemas import (
     GameRecord,
     GameResult,
     GameRound,
+    RoundSummary,
     GameState,
     Move,
     Target,
@@ -147,6 +148,17 @@ def test_game_result_constructs_successfully() -> None:
         trace_event_ids=["e1"],
     )
     assert result.terminal_reason == "accepted"
+
+
+def test_round_summary_constructs_successfully() -> None:
+    summary = RoundSummary(
+        round_number=1,
+        blue_summary="blue",
+        red_claim="red",
+        referee_decision="revise",
+        referee_rationale="rationale",
+    )
+    assert summary.round_number == 1
 
 
 @pytest.mark.parametrize(
@@ -352,6 +364,50 @@ def test_game_result_constructs_successfully() -> None:
                 "final_red_claim": "red claim",
             },
         ),
+        (
+            RoundSummary,
+            "blue_summary",
+            {
+                "round_number": 1,
+                "blue_summary": "blue",
+                "red_claim": "red",
+                "referee_decision": "revise",
+                "referee_rationale": "rationale",
+            },
+        ),
+        (
+            RoundSummary,
+            "red_claim",
+            {
+                "round_number": 1,
+                "blue_summary": "blue",
+                "red_claim": "red",
+                "referee_decision": "revise",
+                "referee_rationale": "rationale",
+            },
+        ),
+        (
+            RoundSummary,
+            "referee_decision",
+            {
+                "round_number": 1,
+                "blue_summary": "blue",
+                "red_claim": "red",
+                "referee_decision": "revise",
+                "referee_rationale": "rationale",
+            },
+        ),
+        (
+            RoundSummary,
+            "referee_rationale",
+            {
+                "round_number": 1,
+                "blue_summary": "blue",
+                "red_claim": "red",
+                "referee_decision": "revise",
+                "referee_rationale": "rationale",
+            },
+        ),
         (Artifact, "id", {"id": "art-1", "type": "report"}),
         (Artifact, "type", {"id": "art-1", "type": "report"}),
         (
@@ -491,6 +547,14 @@ def test_game_result_round_and_max_round_constraints() -> None:
             final_red_claim="red claim",
         )
     with pytest.raises(ValidationError):
+        RoundSummary(
+            round_number=0,
+            blue_summary="blue",
+            red_claim="red",
+            referee_decision="revise",
+            referee_rationale="rationale",
+        )
+    with pytest.raises(ValidationError):
         GameResult(
             game_id="game-1",
             run_id="run-20260513-100000-deadbeef",
@@ -619,3 +683,13 @@ def test_mutable_defaults_are_not_shared() -> None:
     )
     result_a.trace_event_ids.append("e1")
     assert result_b.trace_event_ids == []
+    result_a.round_summaries.append(
+        RoundSummary(
+            round_number=1,
+            blue_summary="blue",
+            red_claim="red",
+            referee_decision="revise",
+            referee_rationale="rationale",
+        )
+    )
+    assert result_b.round_summaries == []
