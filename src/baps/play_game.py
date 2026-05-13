@@ -11,6 +11,13 @@ from baps.runtime import RuntimeEngine
 from baps.schemas import GameContract, GameState, Target
 
 
+def _max_rounds_type(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("--max-rounds must be >= 1")
+    return parsed
+
+
 def load_context_files(paths: list[str]) -> str:
     parts: list[str] = []
     for raw_path in paths:
@@ -32,6 +39,7 @@ def run_play_game(
     base_url: str,
     blackboard_path: Path,
     shared_context: str = "",
+    max_rounds: int = 1,
 ) -> GameState:
     model_client = OllamaClient(model=model, base_url=base_url)
     blue_role = make_prompt_blue_role(
@@ -70,7 +78,7 @@ def run_play_game(
         goal=goal,
         target=Target(kind=target_kind, ref=target_ref),
         active_roles=["blue", "red", "referee"],
-        max_rounds=1,
+        max_rounds=max_rounds,
     )
     engine = RuntimeEngine(Blackboard(blackboard_path))
     return engine.run_game(contract, blue_role, red_role, referee_role)
@@ -86,6 +94,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-url", default=os.getenv("BAPS_OLLAMA_BASE_URL", "http://localhost:11434"))
     parser.add_argument("--blackboard-path", default="blackboard/play-game-events.jsonl")
     parser.add_argument("--context-file", action="append", default=[])
+    parser.add_argument("--max-rounds", type=_max_rounds_type, default=1)
     return parser
 
 
@@ -103,6 +112,7 @@ def main() -> None:
         base_url=args.base_url,
         blackboard_path=blackboard_path,
         shared_context=shared_context,
+        max_rounds=args.max_rounds,
     )
 
     round_1 = state.rounds[0]

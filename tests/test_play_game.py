@@ -19,6 +19,9 @@ class FakeOllamaClient:
             "Candidate answer",
             "Concrete critique of candidate",
             "Concise rationale for fixed decision",
+            "Candidate answer revised",
+            "Concrete critique of revised candidate",
+            "Concise rationale for fixed decision round 2",
         ]
         self._index = 0
 
@@ -45,6 +48,7 @@ def test_build_parser_uses_env_defaults(monkeypatch) -> None:
     args = parser.parse_args(["--subject", "s", "--goal", "g", "--target-kind", "repo"])
     assert args.model == "env-model"
     assert args.base_url == "http://env-url:11434"
+    assert args.max_rounds == 1
 
 
 def test_build_parser_explicit_args_override_env(monkeypatch) -> None:
@@ -68,6 +72,22 @@ def test_build_parser_explicit_args_override_env(monkeypatch) -> None:
     )
     assert args.model == "cli-model"
     assert args.base_url == "http://cli-url:11434"
+
+
+def test_build_parser_explicit_max_rounds_overrides_default() -> None:
+    parser = build_parser()
+    args = parser.parse_args(
+        ["--subject", "s", "--goal", "g", "--target-kind", "repo", "--max-rounds", "3"]
+    )
+    assert args.max_rounds == 3
+
+
+def test_build_parser_rejects_max_rounds_less_than_one() -> None:
+    parser = build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            ["--subject", "s", "--goal", "g", "--target-kind", "repo", "--max-rounds", "0"]
+        )
 
 
 def test_build_parser_repeated_context_file_args(monkeypatch) -> None:
@@ -131,6 +151,24 @@ def test_run_play_game_records_expected_event_sequence(tmp_path: Path, monkeypat
         "referee_decision_recorded",
         "game_completed",
     ]
+
+
+def test_run_play_game_respects_max_rounds_override(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
+    path = tmp_path / "play-events.jsonl"
+
+    state = run_play_game(
+        subject="subject",
+        goal="goal",
+        target_kind="repo",
+        target_ref="main",
+        model="model-x",
+        base_url="http://url-x",
+        blackboard_path=path,
+        max_rounds=2,
+    )
+
+    assert len(state.rounds) == 2
 
 
 def test_run_play_game_injects_shared_context_into_prompts(tmp_path: Path, monkeypatch) -> None:
