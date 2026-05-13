@@ -22,12 +22,21 @@ class GameRequest(BaseModel):
     goal: str
     target_kind: str
     target_ref: str = ""
+    state_source_ids: list[str] = Field(default_factory=list)
 
     @field_validator("game_type", "subject", "goal", "target_kind")
     @classmethod
     def _non_empty_required_string(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("must be a non-empty string")
+        return value
+
+    @field_validator("state_source_ids")
+    @classmethod
+    def _validate_state_source_ids(cls, value: list[str]) -> list[str]:
+        for source_id in value:
+            if not source_id.strip():
+                raise ValueError("state_source_ids must contain non-empty strings")
         return value
 
 

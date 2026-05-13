@@ -13,10 +13,40 @@ from baps.schemas import (
     GameResponse,
     GameRound,
     RoundSummary,
+    GameRequest,
     GameState,
     Move,
     Target,
 )
+
+
+def test_game_request_state_source_ids_default_and_isolated() -> None:
+    a = GameRequest(
+        game_type="documentation-refinement",
+        subject="s",
+        goal="g",
+        target_kind="documentation",
+    )
+    b = GameRequest(
+        game_type="documentation-refinement",
+        subject="s",
+        goal="g",
+        target_kind="documentation",
+    )
+    assert a.state_source_ids == []
+    a.state_source_ids.append("architecture")
+    assert b.state_source_ids == []
+
+
+def test_game_request_rejects_blank_state_source_ids() -> None:
+    with pytest.raises(ValidationError):
+        GameRequest(
+            game_type="documentation-refinement",
+            subject="s",
+            goal="g",
+            target_kind="documentation",
+            state_source_ids=["architecture", " "],
+        )
 
 
 def test_target_constructs_successfully() -> None:

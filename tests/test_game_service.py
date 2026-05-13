@@ -8,6 +8,7 @@ from baps.game_types import GameDefinition, GameTypePromptSections, make_documen
 from baps.models import FakeModelClient
 from baps.prompt_assembly import PromptSection
 from baps.schemas import GameRequest, GameResponse
+from baps.state_sources import MarkdownFileStateSourceAdapter, StateManifest, StateSourceDeclaration
 
 
 def _request() -> GameRequest:
@@ -164,3 +165,136 @@ def test_game_service_rejects_max_rounds_less_than_one(tmp_path: Path) -> None:
             blackboard=Blackboard(tmp_path / "events.jsonl"),
             max_rounds=0,
         )
+
+
+def test_game_service_resolves_request_state_source_ids_with_manifest_and_adapter(tmp_path: Path) -> None:
+    model = FakeModelClient(
+        responses=[
+            "candidate answer",
+            "MATERIAL: yes\nCLAIM: concrete issue",
+            "rationale",
+        ]
+    )
+    state_file = tmp_path / "state.md"
+    state_file.write_text("state-fragment", encoding="utf-8")
+    manifest = StateManifest(
+        project_id="baps",
+        sources=[
+            StateSourceDeclaration(
+                id="architecture",
+                kind="markdown_doc",
+                ref=str(state_file),
+                authority="descriptive",
+            )
+        ],
+    )
+    service = GameService(
+        model_client=model,
+        blackboard=Blackboard(tmp_path / "events.jsonl"),
+        state_manifest=manifest,
+        state_adapter=MarkdownFileStateSourceAdapter(),
+    )
+    request = GameRequest(
+        game_type="documentation-refinement",
+        subject="README quickstart",
+        goal="Improve clarity and remove redundancy",
+        target_kind="documentation",
+        target_ref="README.md",
+        state_source_ids=["architecture"],
+    )
+
+    service.play(request)
+    assert any("STATE SOURCE: architecture" in prompt for prompt in model.prompts)
+    assert any("state-fragment" in prompt for prompt in model.prompts)
+
+
+def test_game_service_appends_request_state_context_after_constructor_context(tmp_path: Path) -> None:
+    model = FakeModelClient(
+        responses=[
+            "candidate answer",
+            "MATERIAL: yes\nCLAIM: concrete issue",
+            "rationale",
+        ]
+    )
+    state_file = tmp_path / "state.md"
+    state_file.write_text("state-fragment", encoding="utf-8")
+    manifest = StateManifest(
+        project_id="baps",
+        sources=[
+            StateSourceDeclaration(
+                id="architecture",
+                kind="markdown_doc",
+                ref=str(state_file),
+                authority="descriptive",
+            )
+        ],
+    )
+    service = GameService(
+        model_client=model,
+        blackboard=Blackboard(tmp_path / "events.jsonl"),
+        shared_context="base-context",
+        state_manifest=manifest,
+        state_adapter=MarkdownFileStateSourceAdapter(),
+    )
+    request = GameRequest(
+        game_type="documentation-refinement",
+        subject="README quickstart",
+        goal="Improve clarity and remove redundancy",
+        target_kind="documentation",
+        target_ref="README.md",
+        state_source_ids=["architecture"],
+    )
+
+    service.play(request)
+    prompt = model.prompts[0]
+    assert "base-context" in prompt
+    assert "STATE SOURCE: architecture" in prompt
+    assert prompt.index("base-context") < prompt.index("STATE SOURCE: architecture")
+
+
+def test_game_service_raises_when_request_state_sources_missing_manifest_or_adapter(tmp_path: Path) -> None:
+    request = GameRequest(
+        game_type="documentation-refinement",
+        subject="README quickstart",
+        goal="Improve clarity and remove redundancy",
+        target_kind="documentation",
+        target_ref="README.md",
+        state_source_ids=["architecture"],
+    )
+    model = FakeModelClient(
+        responses=[
+            "candidate answer",
+            "MATERIAL: yes\nCLAIM: concrete issue",
+            "rationale",
+        ]
+    )
+
+    service_no_manifest = GameService(
+        model_client=model,
+        blackboard=Blackboard(tmp_path / "events-1.jsonl"),
+        state_adapter=MarkdownFileStateSourceAdapter(),
+    )
+    with pytest.raises(
+        ValueError, match="request.state_source_ids requires both state_manifest and state_adapter"
+    ):
+        service_no_manifest.play(request)
+
+    service_no_adapter = GameService(
+        model_client=model,
+        blackboard=Blackboard(tmp_path / "events-2.jsonl"),
+        state_manifest=StateManifest(
+            project_id="baps",
+            sources=[
+                StateSourceDeclaration(
+                    id="architecture",
+                    kind="markdown_doc",
+                    ref=str(tmp_path / "state.md"),
+                    authority="descriptive",
+                )
+            ],
+        ),
+    )
+    with pytest.raises(
+        ValueError, match="request.state_source_ids requires both state_manifest and state_adapter"
+    ):
+        service_no_adapter.play(request)

@@ -7,6 +7,7 @@ from baps.models import ModelClient
 from baps.prompt_assembly import PromptSection, PromptSpec, assemble_prompt
 from baps.runtime import RuntimeEngine, build_game_response
 from baps.schemas import GameContract, GameRequest, GameResponse, Target
+from baps.state_sources import StateManifest, StateSourceAdapter, resolve_state_context
 
 
 class GameService:
@@ -19,6 +20,8 @@ class GameService:
         max_rounds: int = 1,
         shared_context: str = "",
         red_material: bool = True,
+        state_manifest: StateManifest | None = None,
+        state_adapter: StateSourceAdapter | None = None,
     ):
         if max_rounds < 1:
             raise ValueError("max_rounds must be >= 1")
@@ -28,6 +31,8 @@ class GameService:
         self.max_rounds = max_rounds
         self.shared_context = shared_context
         self.red_material = red_material
+        self.state_manifest = state_manifest
+        self.state_adapter = state_adapter
 
     def play(self, request: GameRequest) -> GameResponse:
         resolved_game_definition = (
@@ -100,7 +105,24 @@ class GameService:
             )
         )
 
-        extra_context = {"shared_context": self.shared_context}
+        resolved_shared_context = self.shared_context
+        if request.state_source_ids:
+            if self.state_manifest is None or self.state_adapter is None:
+                raise ValueError(
+                    "request.state_source_ids requires both state_manifest and state_adapter"
+                )
+            state_context = resolve_state_context(
+                manifest=self.state_manifest,
+                source_ids=request.state_source_ids,
+                adapter=self.state_adapter,
+            )
+            resolved_shared_context = (
+                f"{resolved_shared_context}\n\n{state_context}"
+                if resolved_shared_context
+                else state_context
+            )
+
+        extra_context = {"shared_context": resolved_shared_context}
         blue_role = make_prompt_blue_role(
             self.model_client,
             template=blue_template,
