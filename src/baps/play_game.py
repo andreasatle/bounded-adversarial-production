@@ -17,7 +17,11 @@ from baps.prompt_assembly import PromptSection, PromptSpec, assemble_prompt
 from baps.runtime import RuntimeEngine, build_game_response
 from baps.schemas import GameContract, GameRequest, GameState, Target
 from baps.state_sources import (
+    DirectoryStateSourceAdapter,
+    GitRepoStateSourceAdapter,
+    JsonlEventLogStateSourceAdapter,
     MarkdownFileStateSourceAdapter,
+    RoutingStateSourceAdapter,
     load_state_manifest,
 )
 
@@ -208,7 +212,18 @@ def main() -> None:
         shared_context=shared_context,
         red_material=args.red_material,
         state_manifest=state_manifest,
-        state_adapter=MarkdownFileStateSourceAdapter() if state_manifest is not None else None,
+        state_adapter=(
+            RoutingStateSourceAdapter(
+                [
+                    MarkdownFileStateSourceAdapter(),
+                    JsonlEventLogStateSourceAdapter(),
+                    DirectoryStateSourceAdapter(),
+                    GitRepoStateSourceAdapter(),
+                ]
+            )
+            if state_manifest is not None
+            else None
+        ),
     )
     request = GameRequest(
         game_type=args.game_type,

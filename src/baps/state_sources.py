@@ -58,13 +58,19 @@ def load_state_manifest(path: Path) -> StateManifest:
 
 
 class StateSourceAdapter:
+    def supports(self, kind: str) -> bool:
+        raise NotImplementedError
+
     def load_text(self, declaration: StateSourceDeclaration) -> str:
         raise NotImplementedError
 
 
 class MarkdownFileStateSourceAdapter(StateSourceAdapter):
+    def supports(self, kind: str) -> bool:
+        return kind == "markdown_doc"
+
     def load_text(self, declaration: StateSourceDeclaration) -> str:
-        if declaration.kind != "markdown_doc":
+        if not self.supports(declaration.kind):
             raise ValueError("unsupported state source kind for markdown adapter")
         path = Path(declaration.ref)
         if not path.exists():
@@ -73,8 +79,11 @@ class MarkdownFileStateSourceAdapter(StateSourceAdapter):
 
 
 class JsonlEventLogStateSourceAdapter(StateSourceAdapter):
+    def supports(self, kind: str) -> bool:
+        return kind == "jsonl_event_log"
+
     def load_text(self, declaration: StateSourceDeclaration) -> str:
-        if declaration.kind != "jsonl_event_log":
+        if not self.supports(declaration.kind):
             raise ValueError("unsupported state source kind for jsonl event log adapter")
         path = Path(declaration.ref)
         if not path.exists():
@@ -83,8 +92,11 @@ class JsonlEventLogStateSourceAdapter(StateSourceAdapter):
 
 
 class DirectoryStateSourceAdapter(StateSourceAdapter):
+    def supports(self, kind: str) -> bool:
+        return kind == "directory"
+
     def load_text(self, declaration: StateSourceDeclaration) -> str:
-        if declaration.kind != "directory":
+        if not self.supports(declaration.kind):
             raise ValueError("unsupported state source kind for directory adapter")
         path = Path(declaration.ref)
         if not path.exists():
@@ -101,8 +113,11 @@ class DirectoryStateSourceAdapter(StateSourceAdapter):
 
 
 class GitRepoStateSourceAdapter(StateSourceAdapter):
+    def supports(self, kind: str) -> bool:
+        return kind == "git_repo"
+
     def load_text(self, declaration: StateSourceDeclaration) -> str:
-        if declaration.kind != "git_repo":
+        if not self.supports(declaration.kind):
             raise ValueError("unsupported state source kind for git repo adapter")
         path = Path(declaration.ref)
         if not path.exists():
@@ -136,6 +151,20 @@ class GitRepoStateSourceAdapter(StateSourceAdapter):
             "RECENT COMMITS:\n"
             f"{commits}"
         )
+
+
+class RoutingStateSourceAdapter(StateSourceAdapter):
+    def __init__(self, adapters: list[StateSourceAdapter]):
+        self.adapters = adapters
+
+    def supports(self, kind: str) -> bool:
+        return any(adapter.supports(kind) for adapter in self.adapters)
+
+    def load_text(self, declaration: StateSourceDeclaration) -> str:
+        for adapter in self.adapters:
+            if adapter.supports(declaration.kind):
+                return adapter.load_text(declaration)
+        raise ValueError(f"unsupported state source kind: {declaration.kind}")
 
 
 def resolve_state_context(

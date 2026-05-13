@@ -9,6 +9,7 @@ from baps.state_sources import (
     GitRepoStateSourceAdapter,
     JsonlEventLogStateSourceAdapter,
     MarkdownFileStateSourceAdapter,
+    RoutingStateSourceAdapter,
     StateManifest,
     StateSourceDeclaration,
     load_state_manifest,
@@ -478,3 +479,74 @@ def test_resolve_state_context_with_git_repo_adapter(tmp_path: Path) -> None:
     assert "===== STATE SOURCE: repo (git_repo, authority=source) =====" in context
     assert "BRANCH:" in context
     assert "RECENT COMMITS:" in context
+
+
+def test_state_source_adapter_supports_matrix() -> None:
+    markdown = MarkdownFileStateSourceAdapter()
+    jsonl = JsonlEventLogStateSourceAdapter()
+    directory = DirectoryStateSourceAdapter()
+    git_repo = GitRepoStateSourceAdapter()
+
+    assert markdown.supports("markdown_doc") is True
+    assert markdown.supports("directory") is False
+
+    assert jsonl.supports("jsonl_event_log") is True
+    assert jsonl.supports("markdown_doc") is False
+
+    assert directory.supports("directory") is True
+    assert directory.supports("git_repo") is False
+
+    assert git_repo.supports("git_repo") is True
+    assert git_repo.supports("jsonl_event_log") is False
+
+
+def test_routing_state_source_adapter_routes_markdown_doc(tmp_path: Path) -> None:
+    file_path = tmp_path / "doc.md"
+    file_path.write_text("md", encoding="utf-8")
+    declaration = StateSourceDeclaration(id="doc", kind="markdown_doc", ref=str(file_path))
+    router = RoutingStateSourceAdapter([MarkdownFileStateSourceAdapter(), DirectoryStateSourceAdapter()])
+
+    assert router.load_text(declaration) == "md"
+
+
+def test_routing_state_source_adapter_routes_directory(tmp_path: Path) -> None:
+    root = tmp_path / "dir"
+    root.mkdir()
+    (root / "a.txt").write_text("a", encoding="utf-8")
+    declaration = StateSourceDeclaration(id="d", kind="directory", ref=str(root))
+    router = RoutingStateSourceAdapter([MarkdownFileStateSourceAdapter(), DirectoryStateSourceAdapter()])
+
+    output = router.load_text(declaration)
+    assert output.startswith(f"DIRECTORY: {root}")
+
+
+def test_routing_state_source_adapter_routes_jsonl_event_log(tmp_path: Path) -> None:
+    file_path = tmp_path / "events.jsonl"
+    raw = '{"id":"e1","type":"x","payload":{}}\n'
+    file_path.write_text(raw, encoding="utf-8")
+    declaration = StateSourceDeclaration(id="e", kind="jsonl_event_log", ref=str(file_path))
+    router = RoutingStateSourceAdapter([MarkdownFileStateSourceAdapter(), JsonlEventLogStateSourceAdapter()])
+
+    assert router.load_text(declaration) == raw
+
+
+def test_routing_state_source_adapter_routes_git_repo(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_git_repo_with_commit(repo)
+    declaration = StateSourceDeclaration(id="repo", kind="git_repo", ref=str(repo))
+    router = RoutingStateSourceAdapter([MarkdownFileStateSourceAdapter(), GitRepoStateSourceAdapter()])
+
+    output = router.load_text(declaration)
+    assert "BRANCH:" in output
+    assert "RECENT COMMITS:" in output
+
+
+def test_routing_state_source_adapter_raises_for_unknown_kind(tmp_path: Path) -> None:
+    file_path = tmp_path / "x.txt"
+    file_path.write_text("x", encoding="utf-8")
+    declaration = StateSourceDeclaration(id="x", kind="unknown_kind", ref=str(file_path))
+    router = RoutingStateSourceAdapter([MarkdownFileStateSourceAdapter(), DirectoryStateSourceAdapter()])
+
+    with pytest.raises(ValueError, match="unsupported state source kind: unknown_kind"):
+        router.load_text(declaration)

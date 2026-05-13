@@ -579,6 +579,77 @@ def test_main_routes_state_source_ids_through_game_request(monkeypatch, tmp_path
     assert captured["state_source_ids"] == ["architecture", "future_direction"]
 
 
+def test_main_resolves_mixed_state_source_kinds_into_prompts(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
+    markdown_file = tmp_path / "doc.md"
+    markdown_file.write_text("markdown-content", encoding="utf-8")
+    directory_root = tmp_path / "definitions"
+    directory_root.mkdir()
+    (directory_root / "a.json").write_text("{}", encoding="utf-8")
+    jsonl_file = tmp_path / "events.jsonl"
+    jsonl_file.write_text('{"id":"e1","type":"x","payload":{}}\n', encoding="utf-8")
+    manifest_file = tmp_path / "manifest.json"
+    manifest_file.write_text(
+        json.dumps(
+            {
+                "project_id": "baps",
+                "sources": [
+                    {
+                        "id": "md",
+                        "kind": "markdown_doc",
+                        "ref": str(markdown_file),
+                        "authority": "descriptive",
+                    },
+                    {
+                        "id": "dir",
+                        "kind": "directory",
+                        "ref": str(directory_root),
+                        "authority": "configuration",
+                    },
+                    {
+                        "id": "events",
+                        "kind": "jsonl_event_log",
+                        "ref": str(jsonl_file),
+                        "authority": "evidence",
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-play-game",
+            "--subject",
+            "README demo",
+            "--goal",
+            "Explain run command",
+            "--target-kind",
+            "document",
+            "--state-manifest",
+            str(manifest_file),
+            "--state-source",
+            "md",
+            "--state-source",
+            "dir",
+            "--state-source",
+            "events",
+            "--blackboard-path",
+            str(tmp_path / "play-events.jsonl"),
+        ],
+    )
+
+    main()
+    prompt = FakeOllamaClient.prompts[0]
+    assert "STATE SOURCE: md (markdown_doc, authority=descriptive)" in prompt
+    assert "markdown-content" in prompt
+    assert "STATE SOURCE: dir (directory, authority=configuration)" in prompt
+    assert f"DIRECTORY: {directory_root}" in prompt
+    assert "STATE SOURCE: events (jsonl_event_log, authority=evidence)" in prompt
+
+
 def test_main_game_definition_file_overrides_game_type(monkeypatch, capsys, tmp_path: Path) -> None:
     monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
     definition_path = tmp_path / "custom-game-definition.json"
