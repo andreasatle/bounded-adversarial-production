@@ -35,19 +35,29 @@ def referee_role(contract: GameContract, blue_move: Move, red_finding: Finding) 
 
 def make_prompt_blue_role(
     model_client: ModelClient,
-    template: str = "Blue role for game {game_id}: {goal}",
+    template: str = (
+        "Blue role for game {game_id}: {goal}. "
+        "If revision context is present, use it to improve the proposed change. "
+        "Previous blue summary: {previous_blue_summary}. "
+        "Previous red claim: {previous_red_claim}. "
+        "Previous referee rationale: {previous_referee_rationale}."
+    ),
     extra_context: dict | None = None,
 ):
     renderer = PromptRenderer(template)
     context_overrides = dict(extra_context) if extra_context is not None else {}
 
-    def _role(contract: GameContract) -> Move:
+    def _role(contract: GameContract, revision_context: dict | None = None) -> Move:
+        revision = revision_context if revision_context is not None else {}
         context = {
             "game_id": contract.id,
             "subject": contract.subject,
             "goal": contract.goal,
             "target_kind": contract.target.kind,
             "target_ref": contract.target.ref,
+            "previous_blue_summary": revision.get("previous_blue_summary", ""),
+            "previous_red_claim": revision.get("previous_red_claim", ""),
+            "previous_referee_rationale": revision.get("previous_referee_rationale", ""),
         }
         context.update(context_overrides)
         prompt = renderer.render(context)

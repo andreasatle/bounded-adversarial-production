@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import inspect
 from uuid import uuid4
 
 from baps.blackboard import Blackboard
@@ -23,7 +24,7 @@ class RuntimeEngine:
         run_id = generate_run_id()
         self.blackboard.append(
             Event(
-                id=f"{contract.id}:{run_id}:game_started",
+                id=f"{contract.id}:{run_id}:r0001:game_started",
                 type="game_started",
                 payload={"game_id": contract.id, "run_id": run_id},
             )
@@ -35,80 +36,114 @@ class RuntimeEngine:
             if move.role != "blue":
                 raise ValueError("blue move role must be 'blue'")
 
-        blue_move = self.guard.invoke(
-            role_callable=blue_role,
-            args=(contract,),
-            output_model=Move,
-            semantic_validator=validate_blue_semantics,
-        )
-        self.blackboard.append(
-            Event(
-                id=f"{contract.id}:{run_id}:blue_move_recorded",
-                type="blue_move_recorded",
-                payload={
-                    "game_id": contract.id,
-                    "run_id": run_id,
-                    "move": blue_move.model_dump(mode="json"),
-                },
-            )
-        )
-
         def validate_red_semantics(finding: Finding) -> None:
             if finding.game_id != contract.id:
                 raise ValueError("red finding game_id does not match contract.id")
-
-        red_finding = self.guard.invoke(
-            role_callable=red_role,
-            args=(contract, blue_move),
-            output_model=Finding,
-            semantic_validator=validate_red_semantics,
-        )
-        self.blackboard.append(
-            Event(
-                id=f"{contract.id}:{run_id}:red_finding_recorded",
-                type="red_finding_recorded",
-                payload={
-                    "game_id": contract.id,
-                    "run_id": run_id,
-                    "finding": red_finding.model_dump(mode="json"),
-                },
-            )
-        )
 
         def validate_referee_semantics(decision: Decision) -> None:
             if decision.game_id != contract.id:
                 raise ValueError("referee decision game_id does not match contract.id")
 
-        referee_decision = self.guard.invoke(
-            role_callable=referee_role,
-            args=(contract, blue_move, red_finding),
-            output_model=Decision,
-            semantic_validator=validate_referee_semantics,
-        )
-        self.blackboard.append(
-            Event(
-                id=f"{contract.id}:{run_id}:referee_decision_recorded",
-                type="referee_decision_recorded",
-                payload={
-                    "game_id": contract.id,
-                    "run_id": run_id,
-                    "decision": referee_decision.model_dump(mode="json"),
-                },
-            )
-        )
+        rounds: list[GameRound] = []
+        final_decision: Decision | None = None
+        previous_context: dict | None = None
+        current_round = 1
 
-        round_1 = GameRound(
-            round_number=1,
-            moves=[blue_move],
-            findings=[red_finding],
-            decision=referee_decision,
-        )
+        while current_round <= contract.max_rounds:
+            if current_round == 1 or previous_context is None:
+                blue_args = (contract,)
+            else:
+                blue_args = (
+                    (contract, previous_context)
+                    if _supports_revision_context(blue_role)
+                    else (contract,)
+                )
+
+            blue_move = self.guard.invoke(
+                role_callable=blue_role,
+                args=blue_args,
+                output_model=Move,
+                semantic_validator=validate_blue_semantics,
+            )
+            self.blackboard.append(
+                Event(
+                    id=f"{contract.id}:{run_id}:r{current_round:04d}:blue_move_recorded",
+                    type="blue_move_recorded",
+                    payload={
+                        "game_id": contract.id,
+                        "run_id": run_id,
+                        "round_number": current_round,
+                        "move": blue_move.model_dump(mode="json"),
+                    },
+                )
+            )
+
+            red_finding = self.guard.invoke(
+                role_callable=red_role,
+                args=(contract, blue_move),
+                output_model=Finding,
+                semantic_validator=validate_red_semantics,
+            )
+            self.blackboard.append(
+                Event(
+                    id=f"{contract.id}:{run_id}:r{current_round:04d}:red_finding_recorded",
+                    type="red_finding_recorded",
+                    payload={
+                        "game_id": contract.id,
+                        "run_id": run_id,
+                        "round_number": current_round,
+                        "finding": red_finding.model_dump(mode="json"),
+                    },
+                )
+            )
+
+            referee_decision = self.guard.invoke(
+                role_callable=referee_role,
+                args=(contract, blue_move, red_finding),
+                output_model=Decision,
+                semantic_validator=validate_referee_semantics,
+            )
+            self.blackboard.append(
+                Event(
+                    id=f"{contract.id}:{run_id}:r{current_round:04d}:referee_decision_recorded",
+                    type="referee_decision_recorded",
+                    payload={
+                        "game_id": contract.id,
+                        "run_id": run_id,
+                        "round_number": current_round,
+                        "decision": referee_decision.model_dump(mode="json"),
+                    },
+                )
+            )
+
+            rounds.append(
+                GameRound(
+                    round_number=current_round,
+                    moves=[blue_move],
+                    findings=[red_finding],
+                    decision=referee_decision,
+                )
+            )
+            final_decision = referee_decision
+            previous_context = {
+                "previous_blue_summary": blue_move.summary,
+                "previous_red_claim": red_finding.claim,
+                "previous_referee_rationale": referee_decision.rationale,
+            }
+
+            if referee_decision.decision in {"accept", "reject"}:
+                break
+            if referee_decision.decision == "revise" and current_round < contract.max_rounds:
+                current_round += 1
+                continue
+            break
+
         state = GameState(
             game_id=contract.id,
             run_id=run_id,
-            current_round=1,
-            rounds=[round_1],
-            final_decision=referee_decision,
+            current_round=current_round,
+            rounds=rounds,
+            final_decision=final_decision,
         )
         self.blackboard.append(
             Event(
@@ -118,3 +153,16 @@ class RuntimeEngine:
             )
         )
         return state
+
+
+def _supports_revision_context(role_callable) -> bool:
+    signature = inspect.signature(role_callable)
+    params = list(signature.parameters.values())
+    if any(param.kind == inspect.Parameter.VAR_POSITIONAL for param in params):
+        return True
+    positional = [
+        param
+        for param in params
+        if param.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    ]
+    return len(positional) >= 2

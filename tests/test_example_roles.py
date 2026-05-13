@@ -110,6 +110,36 @@ def test_prompt_driven_blue_role_rejects_whitespace_rendered_prompt() -> None:
         role(contract)
 
 
+def test_prompt_driven_blue_role_accepts_revision_context() -> None:
+    contract = _contract()
+    model = FakeModelClient(responses=["revised summary"])
+    role = make_prompt_blue_role(model)
+
+    move = role(
+        contract,
+        revision_context={
+            "previous_blue_summary": "old blue",
+            "previous_red_claim": "old red",
+            "previous_referee_rationale": "old referee rationale",
+        },
+    )
+
+    assert move.summary == "revised summary"
+    prompt = model.prompts[0]
+    assert "Previous blue summary: old blue." in prompt
+    assert "Previous red claim: old red." in prompt
+    assert "Previous referee rationale: old referee rationale." in prompt
+
+
+def test_prompt_driven_blue_role_no_revision_path_still_works() -> None:
+    contract = _contract()
+    model = FakeModelClient(responses=["first round summary"])
+    role = make_prompt_blue_role(model)
+
+    move = role(contract)
+    assert move.summary == "first round summary"
+
+
 def test_prompt_driven_red_role_renders_and_calls_model_client() -> None:
     contract = _contract()
     blue = Move(game_id=contract.id, role="blue", summary="draft", payload={"k": "v"})

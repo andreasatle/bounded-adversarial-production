@@ -234,3 +234,136 @@ def test_runtime_failure_after_retries_raises_role_invocation_error(tmp_path: Pa
 
     with pytest.raises(RoleInvocationError):
         engine.run_game(contract, blue_role, red_role, referee_role)
+
+
+def test_accept_stops_after_one_round(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "events.jsonl")
+    engine = RuntimeEngine(board)
+    contract = _contract()
+
+    def blue_role(_contract: GameContract):
+        return {"game_id": "game-1", "role": "blue", "summary": "s1"}
+
+    def red_role(_contract: GameContract, _blue_move):
+        return {"game_id": "game-1", "severity": "low", "confidence": "high", "claim": "minor"}
+
+    def referee_role(_contract: GameContract, _blue_move, _red_finding):
+        return {"game_id": "game-1", "decision": "accept", "rationale": "ok"}
+
+    state = engine.run_game(contract, blue_role, red_role, referee_role)
+    assert len(state.rounds) == 1
+    assert state.final_decision is not None
+    assert state.final_decision.decision == "accept"
+
+
+def test_reject_stops_after_one_round(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "events.jsonl")
+    engine = RuntimeEngine(board)
+    contract = _contract()
+
+    def blue_role(_contract: GameContract):
+        return {"game_id": "game-1", "role": "blue", "summary": "s1"}
+
+    def red_role(_contract: GameContract, _blue_move):
+        return {"game_id": "game-1", "severity": "high", "confidence": "high", "claim": "major"}
+
+    def referee_role(_contract: GameContract, _blue_move, _red_finding):
+        return {"game_id": "game-1", "decision": "reject", "rationale": "block"}
+
+    state = engine.run_game(contract, blue_role, red_role, referee_role)
+    assert len(state.rounds) == 1
+    assert state.final_decision is not None
+    assert state.final_decision.decision == "reject"
+
+
+def test_revise_continues_when_max_rounds_allows(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "events.jsonl")
+    engine = RuntimeEngine(board)
+    contract = GameContract(
+        id="game-1",
+        subject="auth",
+        goal="find flaws",
+        target=Target(kind="repo"),
+        active_roles=["blue", "red", "referee"],
+        max_rounds=3,
+    )
+    calls = {"blue": 0, "context_seen": False}
+
+    def blue_role(_contract: GameContract, revision_context=None):
+        calls["blue"] += 1
+        if revision_context is not None:
+            calls["context_seen"] = True
+        return {"game_id": "game-1", "role": "blue", "summary": f"s{calls['blue']}"}
+
+    def red_role(_contract: GameContract, blue_move):
+        return {"game_id": "game-1", "severity": "medium", "confidence": "high", "claim": f"c-{blue_move.summary}"}
+
+    def referee_role(_contract: GameContract, _blue_move, _red_finding):
+        decision = "revise" if calls["blue"] == 1 else "accept"
+        return {"game_id": "game-1", "decision": decision, "rationale": f"r{calls['blue']}"}
+
+    state = engine.run_game(contract, blue_role, red_role, referee_role)
+    assert len(state.rounds) == 2
+    assert calls["context_seen"] is True
+    assert state.final_decision is not None
+    assert state.final_decision.decision == "accept"
+    assert state.current_round == 2
+
+
+def test_revise_stops_at_max_rounds(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "events.jsonl")
+    engine = RuntimeEngine(board)
+    contract = GameContract(
+        id="game-1",
+        subject="auth",
+        goal="find flaws",
+        target=Target(kind="repo"),
+        active_roles=["blue", "red", "referee"],
+        max_rounds=2,
+    )
+    calls = {"blue": 0}
+
+    def blue_role(_contract: GameContract, revision_context=None):
+        calls["blue"] += 1
+        return {"game_id": "game-1", "role": "blue", "summary": f"s{calls['blue']}"}
+
+    def red_role(_contract: GameContract, blue_move):
+        return {"game_id": "game-1", "severity": "medium", "confidence": "high", "claim": f"c-{blue_move.summary}"}
+
+    def referee_role(_contract: GameContract, _blue_move, _red_finding):
+        return {"game_id": "game-1", "decision": "revise", "rationale": "keep revising"}
+
+    state = engine.run_game(contract, blue_role, red_role, referee_role)
+    assert len(state.rounds) == 2
+    assert state.current_round == 2
+    assert state.final_decision is not None
+    assert state.final_decision.decision == "revise"
+
+
+def test_event_ids_do_not_collide_across_rounds(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "events.jsonl")
+    engine = RuntimeEngine(board)
+    contract = GameContract(
+        id="game-1",
+        subject="auth",
+        goal="find flaws",
+        target=Target(kind="repo"),
+        active_roles=["blue", "red", "referee"],
+        max_rounds=2,
+    )
+    calls = {"blue": 0}
+
+    def blue_role(_contract: GameContract, revision_context=None):
+        calls["blue"] += 1
+        return {"game_id": "game-1", "role": "blue", "summary": f"s{calls['blue']}"}
+
+    def red_role(_contract: GameContract, _blue_move):
+        return {"game_id": "game-1", "severity": "medium", "confidence": "high", "claim": "c"}
+
+    def referee_role(_contract: GameContract, _blue_move, _red_finding):
+        return {"game_id": "game-1", "decision": "revise", "rationale": "r"}
+
+    engine.run_game(contract, blue_role, red_role, referee_role)
+    events = board.read_all()
+    ids = [event.id for event in events]
+    assert len(ids) == len(set(ids))
