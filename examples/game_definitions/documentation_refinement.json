@@ -1,0 +1,29 @@
+{
+  "id": "documentation-refinement",
+  "name": "Documentation Refinement",
+  "description": "Refine documentation deltas for clarity and correctness with bounded adversarial critique.",
+  "prompt_sections": {
+    "blue_sections": [
+      {
+        "name": "Game Type",
+        "content": "Game type is documentation refinement. Improve clarity, correctness, minimality, and non-redundancy while preserving intent."
+      }
+    ],
+    "red_sections": [
+      {
+        "name": "Game Type Scope",
+        "content": "Red critiques only the current Blue-produced delta from this game. External context is supporting evidence, not expanded audit scope."
+      },
+      {
+        "name": "Materiality Rule",
+        "content": "Material findings are actionable issues requiring revision. Non-material findings are minor notes, praise, or no required change."
+      }
+    ],
+    "referee_sections": [
+      {
+        "name": "Game Type Convergence",
+        "content": "Referee converges toward correctness and clarity. Accept when Red reports no material issue. Accept when Red provides praise, confirmation, minor wording preference, or optional polish. Revise only when Red identifies a material discrepancy that another round is expected to reduce. Reject only for blocking or invalid candidates. Do not recommend another revision merely because the candidate could be marginally polished. The rationale must support the already-fixed structured decision."
+      }
+    ]
+  }
+}

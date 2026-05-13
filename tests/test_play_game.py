@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from baps.blackboard import Blackboard
-from baps.game_types import GameDefinition, GameTypePromptSections
+from baps.game_types import GameDefinition, GameTypePromptSections, load_game_definition
 from baps.play_game import build_parser, load_context_files, main, run_play_game
 from baps.prompt_assembly import PromptSection
 
@@ -324,6 +324,26 @@ def test_run_play_game_supports_custom_game_definition_prompt_sections(tmp_path:
     assert any("Blue custom guidance." in prompt for prompt in FakeOllamaClient.prompts)
     assert any("Red custom guidance." in prompt for prompt in FakeOllamaClient.prompts)
     assert any("Ref custom guidance." in prompt for prompt in FakeOllamaClient.prompts)
+
+
+def test_run_play_game_accepts_loaded_example_game_definition(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
+    path = tmp_path / "play-events.jsonl"
+    definition = load_game_definition(Path("examples/game_definitions/documentation_refinement.json"))
+
+    state = run_play_game(
+        subject="subject",
+        goal="goal",
+        target_kind="repo",
+        target_ref="main",
+        model="model-x",
+        base_url="http://url-x",
+        blackboard_path=path,
+        game_definition=definition,
+    )
+
+    assert state.game_id == "play-game-001"
+    assert len(FakeOllamaClient.prompts) == 3
 
 
 def test_main_prints_expected_fields_and_uses_fake_client(monkeypatch, capsys, tmp_path: Path) -> None:

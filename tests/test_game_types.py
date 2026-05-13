@@ -139,3 +139,14 @@ def test_load_game_definition_invalid_schema_fails(tmp_path: Path) -> None:
     path.write_text(json.dumps({"id": "x"}), encoding="utf-8")
     with pytest.raises(ValueError, match="invalid GameDefinition schema"):
         load_game_definition(path)
+
+
+def test_load_checked_in_example_game_definition() -> None:
+    path = Path("examples/game_definitions/documentation_refinement.json")
+    definition = load_game_definition(path)
+    assert definition.id.strip()
+    assert definition.name.strip()
+    assert definition.description.strip()
+    assert len(definition.prompt_sections.blue_sections) >= 1
+    assert len(definition.prompt_sections.red_sections) >= 1
+    assert len(definition.prompt_sections.referee_sections) >= 1
