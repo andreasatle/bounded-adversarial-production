@@ -6,6 +6,7 @@ from pathlib import Path
 
 from baps.blackboard import Blackboard
 from baps.example_roles import make_prompt_blue_role, make_prompt_red_role, make_prompt_referee_role
+from baps.game_service import GameService
 from baps.game_types import (
     GameDefinition,
     get_builtin_game_definition,
@@ -14,11 +15,10 @@ from baps.game_types import (
 from baps.models import OllamaClient
 from baps.prompt_assembly import PromptSection, PromptSpec, assemble_prompt
 from baps.runtime import RuntimeEngine, build_game_response
-from baps.schemas import GameContract, GameState, Target
+from baps.schemas import GameContract, GameRequest, GameState, Target
 from baps.state_sources import (
     MarkdownFileStateSourceAdapter,
     load_state_manifest,
-    resolve_state_context,
 )
 
 
@@ -192,55 +192,36 @@ def main() -> None:
     if args.state_manifest and not args.state_source:
         parser.error("--state-manifest requires at least one --state-source")
 
-    context_parts: list[str] = []
-    manual_context = load_context_files(args.context_file)
-    if manual_context:
-        context_parts.append(manual_context)
-    if args.state_manifest:
-        manifest = load_state_manifest(Path(args.state_manifest))
-        state_context = resolve_state_context(
-            manifest=manifest,
-            source_ids=args.state_source,
-            adapter=MarkdownFileStateSourceAdapter(),
-        )
-        if state_context:
-            context_parts.append(state_context)
-    shared_context = "\n\n".join(context_parts)
+    shared_context = load_context_files(args.context_file)
+    state_manifest = load_state_manifest(Path(args.state_manifest)) if args.state_manifest else None
 
     resolved_game_definition = (
         load_game_definition(Path(args.game_definition_file))
         if args.game_definition_file
         else get_builtin_game_definition(args.game_type)
     )
-    state = run_play_game(
+    service = GameService(
+        model_client=OllamaClient(model=args.model, base_url=args.base_url),
+        blackboard=Blackboard(blackboard_path),
+        game_definition=resolved_game_definition,
+        max_rounds=args.max_rounds,
+        shared_context=shared_context,
+        red_material=args.red_material,
+        state_manifest=state_manifest,
+        state_adapter=MarkdownFileStateSourceAdapter() if state_manifest is not None else None,
+    )
+    request = GameRequest(
+        game_type=args.game_type,
         subject=args.subject,
         goal=args.goal,
         target_kind=args.target_kind,
-        target_ref=args.target_ref,
-        model=args.model,
-        base_url=args.base_url,
-        blackboard_path=blackboard_path,
-        shared_context=shared_context,
-        max_rounds=args.max_rounds,
-        red_material=args.red_material,
-        game_definition=resolved_game_definition,
+        target_ref=args.target_ref or "",
+        state_source_ids=args.state_source,
     )
-    contract = GameContract(
-        id="play-game-001",
-        subject=args.subject,
-        goal=args.goal,
-        target=Target(kind=args.target_kind, ref=args.target_ref),
-        active_roles=["blue", "red", "referee"],
-        max_rounds=args.max_rounds,
-    )
-    result = build_game_response(state, contract)
+    result = service.play(request)
 
-    round_1 = state.rounds[0]
-    blue = round_1.moves[0]
-    red = round_1.findings[0]
-    referee = state.final_decision
-    print(f"game_id={state.game_id}")
-    print(f"run_id={state.run_id}")
+    print(f"game_id={result.game_id}")
+    print(f"run_id={result.run_id}")
     print(f"subject={args.subject}")
     print(f"goal={args.goal}")
     print(f"target_kind={args.target_kind}")
@@ -251,11 +232,11 @@ def main() -> None:
     print(f"rounds_played={result.rounds_played}")
     print(f"max_rounds={result.max_rounds}")
     print(f"terminal_reason={result.terminal_reason}")
-    print(f"blue_summary={blue.summary}")
-    print(f"red_claim={red.claim}")
-    print(f"red_block_integration={red.block_integration}")
-    print(f"referee_decision={referee.decision if referee is not None else 'none'}")
-    print(f"referee_rationale={referee.rationale if referee is not None else 'none'}")
+    print(f"blue_summary={result.final_blue_summary}")
+    print(f"red_claim={result.final_red_claim}")
+    print(f"red_block_integration={result.final_decision.decision == 'reject'}")
+    print(f"referee_decision={result.final_decision.decision}")
+    print(f"referee_rationale={result.final_decision.rationale}")
     for summary in result.round_summaries:
         print(f"round_{summary.round_number}_decision={summary.referee_decision}")
         print(f"round_{summary.round_number}_blue_summary={_truncate_for_output(summary.blue_summary)}")

@@ -525,6 +525,60 @@ def test_main_injects_manual_and_manifest_context_into_prompts(monkeypatch, tmp_
     assert "===== STATE SOURCE: future_direction (markdown_doc, authority=directional) =====" in prompt
 
 
+def test_main_routes_state_source_ids_through_game_request(monkeypatch, tmp_path: Path) -> None:
+    captured = {"state_source_ids": None}
+
+    class _StubService:
+        def __init__(self, **_kwargs):
+            pass
+
+        def play(self, request):
+            captured["state_source_ids"] = list(request.state_source_ids)
+
+            class _Result:
+                game_id = "play-game-001"
+                run_id = "run-20260513-100000-deadbeef"
+                rounds_played = 1
+                max_rounds = 1
+                terminal_reason = "accepted"
+                final_blue_summary = "blue"
+                final_red_claim = "red"
+
+                class _Decision:
+                    decision = "accept"
+                    rationale = "rationale"
+
+                final_decision = _Decision()
+                round_summaries = []
+
+            return _Result()
+
+    monkeypatch.setattr("baps.play_game.GameService", _StubService)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-play-game",
+            "--subject",
+            "README demo",
+            "--goal",
+            "Explain run command",
+            "--target-kind",
+            "document",
+            "--state-manifest",
+            "examples/state_manifests/baps_project_state.json",
+            "--state-source",
+            "architecture",
+            "--state-source",
+            "future_direction",
+            "--blackboard-path",
+            str(tmp_path / "events.jsonl"),
+        ],
+    )
+
+    main()
+    assert captured["state_source_ids"] == ["architecture", "future_direction"]
+
+
 def test_main_game_definition_file_overrides_game_type(monkeypatch, capsys, tmp_path: Path) -> None:
     monkeypatch.setattr("baps.play_game.OllamaClient", FakeOllamaClient)
     definition_path = tmp_path / "custom-game-definition.json"
