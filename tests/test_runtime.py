@@ -565,6 +565,51 @@ def test_revise_stops_at_max_rounds(tmp_path: Path) -> None:
     assert state.current_round == 2
     assert state.final_decision is not None
     assert state.final_decision.decision == "revise"
+    assert len(state.rounds) <= contract.max_rounds
+
+
+def test_multi_round_event_order_invariant_for_completed_run(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "events.jsonl")
+    engine = RuntimeEngine(board)
+    contract = GameContract(
+        id="game-1",
+        subject="auth",
+        goal="find flaws",
+        target=Target(kind="repo"),
+        active_roles=["blue", "red", "referee"],
+        max_rounds=3,
+    )
+    calls = {"blue": 0}
+
+    def blue_role(_contract: GameContract, revision_context=None):
+        calls["blue"] += 1
+        return {"game_id": "game-1", "role": "blue", "summary": f"s{calls['blue']}"}
+
+    def red_role(_contract: GameContract, blue_move):
+        return {"game_id": "game-1", "severity": "medium", "confidence": "high", "claim": f"c-{blue_move.summary}"}
+
+    def referee_role(_contract: GameContract, _blue_move, _red_finding):
+        decision = "revise" if calls["blue"] < 3 else "accept"
+        return {"game_id": "game-1", "decision": decision, "rationale": f"r{calls['blue']}"}
+
+    state = engine.run_game(contract, blue_role, red_role, referee_role)
+    events = board.read_all()
+    event_types = [event.type for event in events]
+
+    expected_types = ["game_started"]
+    for _ in range(len(state.rounds)):
+        expected_types.extend(
+            [
+                "blue_move_recorded",
+                "red_finding_recorded",
+                "referee_decision_recorded",
+            ]
+        )
+    expected_types.append("game_completed")
+
+    assert event_types == expected_types
+    assert len(state.rounds) == 3
+    assert len(state.rounds) <= contract.max_rounds
 
 
 def test_event_ids_do_not_collide_across_rounds(tmp_path: Path) -> None:
