@@ -180,6 +180,10 @@ IntegrationTargetKind = Literal[
     "discrepancy",
 ]
 
+CritiqueLevel = Literal["low", "medium", "high"]
+
+AgentRoleKind = Literal["blue", "red", "referee", "sponsor", "integrator", "worker"]
+
 DiscrepancyKind = Literal[
     "missing_capability",
     "architecture_drift",
@@ -340,6 +344,19 @@ class IntegrationDecision(BaseModel):
     _validate_run_id = field_validator("run_id")(_require_non_empty)
     _validate_summary = field_validator("summary")(_require_non_empty)
     _validate_rationale = field_validator("rationale")(_require_non_empty)
+
+
+class AgentProfile(BaseModel):
+    id: str
+    role: AgentRoleKind
+    name: str
+    critique_level: CritiqueLevel
+    instructions: str
+    metadata: dict = Field(default_factory=dict)
+
+    _validate_id = field_validator("id")(_require_non_empty)
+    _validate_name = field_validator("name")(_require_non_empty)
+    _validate_instructions = field_validator("instructions")(_require_non_empty)
 
 
 class DiscrepancyResolution(BaseModel):

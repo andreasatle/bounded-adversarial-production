@@ -6,6 +6,7 @@ from baps.schemas import (
     AcceptedArchitectureItem,
     AcceptedCapability,
     ActiveGameSummary,
+    AgentProfile,
     Artifact,
     ArtifactAdapterResult,
     ArtifactChange,
@@ -355,6 +356,69 @@ def test_discrepancy_supersession_constructs_successfully() -> None:
     )
     assert supersession.id == "sup-1"
     assert supersession.superseded_discrepancy_id == "run-1"
+
+
+def test_agent_profile_constructs_successfully() -> None:
+    profile = AgentProfile(
+        id="agent-blue-1",
+        role="blue",
+        name="Blue Planner",
+        critique_level="medium",
+        instructions="Propose concise, scoped updates.",
+        metadata={"team": "blue"},
+    )
+    assert profile.id == "agent-blue-1"
+    assert profile.role == "blue"
+    assert profile.critique_level == "medium"
+
+
+def test_agent_profile_rejects_invalid_role() -> None:
+    with pytest.raises(ValidationError):
+        AgentProfile(
+            id="agent-1",
+            role="observer",
+            name="Observer",
+            critique_level="medium",
+            instructions="Observe only.",
+        )
+
+
+def test_agent_profile_rejects_invalid_critique_level() -> None:
+    with pytest.raises(ValidationError):
+        AgentProfile(
+            id="agent-1",
+            role="red",
+            name="Red Critic",
+            critique_level="extreme",
+            instructions="Critique everything.",
+        )
+
+
+def test_agent_profile_requires_non_empty_strings() -> None:
+    with pytest.raises(ValidationError):
+        AgentProfile(
+            id=" ",
+            role="blue",
+            name="Blue",
+            critique_level="low",
+            instructions="Some instruction.",
+        )
+    with pytest.raises(ValidationError):
+        AgentProfile(
+            id="agent-1",
+            role="blue",
+            name=" ",
+            critique_level="low",
+            instructions="Some instruction.",
+        )
+    with pytest.raises(ValidationError):
+        AgentProfile(
+            id="agent-1",
+            role="blue",
+            name="Blue",
+            critique_level="low",
+            instructions=" ",
+        )
 
 
 def test_integration_decision_rejects_invalid_outcome() -> None:
@@ -1056,3 +1120,20 @@ def test_mutable_defaults_are_not_shared() -> None:
     )
     integration_decision_a.metadata["k"] = "v"
     assert integration_decision_b.metadata == {}
+
+    agent_profile_a = AgentProfile(
+        id="agent-a",
+        role="red",
+        name="Red Agent A",
+        critique_level="high",
+        instructions="Find material issues.",
+    )
+    agent_profile_b = AgentProfile(
+        id="agent-b",
+        role="blue",
+        name="Blue Agent B",
+        critique_level="medium",
+        instructions="Propose bounded updates.",
+    )
+    agent_profile_a.metadata["k"] = "v"
+    assert agent_profile_b.metadata == {}
