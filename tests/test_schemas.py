@@ -14,6 +14,7 @@ from baps.schemas import (
     Finding,
     GameContract,
     GameRecord,
+    IntegrationDecision,
     GameResponse,
     GameRound,
     ProjectedState,
@@ -260,6 +261,84 @@ def test_projected_state_models_reject_non_empty_string_fields() -> None:
         UnresolvedDiscrepancy(id="disc-1", summary=" ", source_event_id="event-1")
     with pytest.raises(ValidationError):
         ActiveGameSummary(id="game-1", title="title", source_run_id=" ")
+
+
+def test_integration_decision_constructs_successfully() -> None:
+    decision = IntegrationDecision(
+        id="int-1",
+        run_id="run-1",
+        outcome="accepted",
+        target_kind="accomplishment",
+        summary="Accept accomplishment from run",
+        rationale="Meets integration criteria",
+        metadata={"reviewer": "integrator"},
+    )
+    assert decision.id == "int-1"
+    assert decision.outcome == "accepted"
+    assert decision.target_kind == "accomplishment"
+
+
+def test_integration_decision_rejects_invalid_outcome() -> None:
+    with pytest.raises(ValidationError):
+        IntegrationDecision(
+            id="int-1",
+            run_id="run-1",
+            outcome="maybe",
+            target_kind="accomplishment",
+            summary="s",
+            rationale="r",
+        )
+
+
+def test_integration_decision_rejects_invalid_target_kind() -> None:
+    with pytest.raises(ValidationError):
+        IntegrationDecision(
+            id="int-1",
+            run_id="run-1",
+            outcome="accepted",
+            target_kind="unknown",
+            summary="s",
+            rationale="r",
+        )
+
+
+def test_integration_decision_requires_non_empty_strings() -> None:
+    with pytest.raises(ValidationError):
+        IntegrationDecision(
+            id=" ",
+            run_id="run-1",
+            outcome="accepted",
+            target_kind="accomplishment",
+            summary="s",
+            rationale="r",
+        )
+    with pytest.raises(ValidationError):
+        IntegrationDecision(
+            id="int-1",
+            run_id=" ",
+            outcome="accepted",
+            target_kind="accomplishment",
+            summary="s",
+            rationale="r",
+        )
+    with pytest.raises(ValidationError):
+        IntegrationDecision(
+            id="int-1",
+            run_id="run-1",
+            outcome="accepted",
+            target_kind="accomplishment",
+            summary=" ",
+            rationale="r",
+        )
+    with pytest.raises(ValidationError):
+        IntegrationDecision(
+            id="int-1",
+            run_id="run-1",
+            outcome="accepted",
+            target_kind="accomplishment",
+            summary="s",
+            rationale=" ",
+        )
 
 
 @pytest.mark.parametrize(
@@ -870,3 +949,22 @@ def test_mutable_defaults_are_not_shared() -> None:
     assert projected_b.accepted_capabilities == []
     assert projected_b.unresolved_discrepancies == []
     assert projected_b.active_games == []
+
+    integration_decision_a = IntegrationDecision(
+        id="int-1",
+        run_id="run-1",
+        outcome="accepted",
+        target_kind="accomplishment",
+        summary="s1",
+        rationale="r1",
+    )
+    integration_decision_b = IntegrationDecision(
+        id="int-2",
+        run_id="run-2",
+        outcome="deferred",
+        target_kind="discrepancy",
+        summary="s2",
+        rationale="r2",
+    )
+    integration_decision_a.metadata["k"] = "v"
+    assert integration_decision_b.metadata == {}

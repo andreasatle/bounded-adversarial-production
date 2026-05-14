@@ -171,6 +171,15 @@ IntegrationRecommendation = Literal[
     "do_not_integrate",
 ]
 
+IntegrationOutcome = Literal["accepted", "rejected", "deferred"]
+
+IntegrationTargetKind = Literal[
+    "accomplishment",
+    "architecture",
+    "capability",
+    "discrepancy",
+]
+
 
 class GameResponse(BaseModel):
     game_id: str
@@ -292,6 +301,21 @@ class ProjectedState(BaseModel):
     accepted_capabilities: list[AcceptedCapability] = Field(default_factory=list)
     unresolved_discrepancies: list[UnresolvedDiscrepancy] = Field(default_factory=list)
     active_games: list[ActiveGameSummary] = Field(default_factory=list)
+
+
+class IntegrationDecision(BaseModel):
+    id: str
+    run_id: str
+    outcome: IntegrationOutcome
+    target_kind: IntegrationTargetKind
+    summary: str
+    rationale: str
+    metadata: dict = Field(default_factory=dict)
+
+    _validate_id = field_validator("id")(_require_non_empty)
+    _validate_run_id = field_validator("run_id")(_require_non_empty)
+    _validate_summary = field_validator("summary")(_require_non_empty)
+    _validate_rationale = field_validator("rationale")(_require_non_empty)
 
 
 class Artifact(BaseModel):
