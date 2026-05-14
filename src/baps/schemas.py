@@ -164,13 +164,11 @@ TerminalOutcome = Literal[
     "accepted_locally",
     "rejected_locally",
     "revision_budget_exhausted",
-    "completed_without_terminal_resolution",
 ]
 
 IntegrationRecommendation = Literal[
     "integration_recommended",
     "do_not_integrate",
-    "manual_review_required",
 ]
 
 

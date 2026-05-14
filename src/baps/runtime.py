@@ -14,8 +14,10 @@ from baps.schemas import (
     GameResponse,
     GameRound,
     GameState,
+    IntegrationRecommendation,
     Move,
     RoundSummary,
+    TerminalOutcome,
 )
 
 
@@ -41,23 +43,15 @@ def build_game_response(
         raise ValueError("last round must contain at least one finding")
 
     rounds_played = len(state.rounds)
-    decision_value = state.final_decision.decision
-    if decision_value == "accept":
-        terminal_reason = "accepted"
-        terminal_outcome = "accepted_locally"
-        integration_recommendation = "integration_recommended"
-    elif decision_value == "reject":
-        terminal_reason = "rejected"
-        terminal_outcome = "rejected_locally"
-        integration_recommendation = "do_not_integrate"
-    elif decision_value == "revise" and rounds_played >= contract.max_rounds:
-        terminal_reason = "round_budget_exhausted"
-        terminal_outcome = "revision_budget_exhausted"
-        integration_recommendation = "do_not_integrate"
-    else:
-        terminal_reason = "completed"
-        terminal_outcome = "completed_without_terminal_resolution"
-        integration_recommendation = "manual_review_required"
+    (
+        terminal_reason,
+        terminal_outcome,
+        integration_recommendation,
+    ) = _derive_terminal_semantics(
+        decision=state.final_decision,
+        rounds_played=rounds_played,
+        max_rounds=contract.max_rounds,
+    )
 
     round_summaries: list[RoundSummary] = []
     for round_ in state.rounds:
@@ -91,6 +85,25 @@ def build_game_response(
         trace_event_ids=list(trace_event_ids) if trace_event_ids is not None else [],
         round_summaries=round_summaries,
     )
+
+
+def _derive_terminal_semantics(
+    *,
+    decision: Decision,
+    rounds_played: int,
+    max_rounds: int,
+) -> tuple[str, TerminalOutcome, IntegrationRecommendation]:
+    if decision.decision == "accept":
+        return ("accepted", "accepted_locally", "integration_recommended")
+    if decision.decision == "reject":
+        return ("rejected", "rejected_locally", "do_not_integrate")
+    if decision.decision == "revise":
+        if rounds_played >= max_rounds:
+            return ("round_budget_exhausted", "revision_budget_exhausted", "do_not_integrate")
+        raise ValueError(
+            "cannot build completed game response for revise decision before round budget exhaustion"
+        )
+    raise ValueError(f"unsupported final decision for game response: {decision.decision}")
 
 
 class RuntimeEngine:

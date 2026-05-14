@@ -210,6 +210,34 @@ def test_build_game_response_revise_budget_exhausted_terminal_reason() -> None:
     assert result.round_summaries[-1].red_claim == result.final_red_claim
 
 
+def test_build_game_response_revise_before_budget_exhaustion_raises() -> None:
+    contract = GameContract(
+        id="game-1",
+        subject="auth",
+        goal="find flaws",
+        target=Target(kind="repo"),
+        active_roles=["blue", "red", "referee"],
+        max_rounds=3,
+    )
+    state = GameState(
+        game_id="game-1",
+        run_id="run-20260513-100000-deadbeef",
+        current_round=1,
+        rounds=[
+            GameRound(
+                round_number=1,
+                moves=[{"game_id": "game-1", "role": "blue", "summary": "blue1"}],
+                findings=[{"game_id": "game-1", "severity": "medium", "confidence": "high", "claim": "red1"}],
+                decision={"game_id": "game-1", "decision": "revise", "rationale": "r1"},
+            )
+        ],
+        final_decision=Decision(game_id="game-1", decision="revise", rationale="r1"),
+    )
+
+    with pytest.raises(ValueError, match="before round budget exhaustion"):
+        build_game_response(state, contract)
+
+
 def test_invalid_blue_role_output_fails(tmp_path: Path) -> None:
     board = Blackboard(tmp_path / "events.jsonl")
     engine = RuntimeEngine(board)
