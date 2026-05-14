@@ -8,6 +8,7 @@ from baps.schemas import (
     ActiveGameSummary,
     DiscrepancySeverity,
     Event,
+    IntegrationDecision,
     ProjectedState,
     UnresolvedDiscrepancy,
 )
@@ -364,6 +365,23 @@ def current_open_discrepancies_by_severity(
         for item in state.unresolved_discrepancies
         if item.status == "open" and item.severity == severity
     ]
+
+
+def deferred_integration_decisions(events: list[Event]) -> list[IntegrationDecision]:
+    deferred: list[IntegrationDecision] = []
+    for event in events:
+        if event.type != "integration_decision_recorded":
+            continue
+        integration_decision = event.payload.get("integration_decision")
+        if not isinstance(integration_decision, dict):
+            continue
+        try:
+            decision = IntegrationDecision.model_validate(integration_decision)
+        except Exception:
+            continue
+        if decision.outcome == "deferred":
+            deferred.append(decision)
+    return deferred
 
 
 def _derive_discrepancy_summary(payload: dict) -> str:

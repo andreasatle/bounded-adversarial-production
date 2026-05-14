@@ -9,13 +9,14 @@ from baps.projections import (
     build_projected_state_from_blackboard,
     current_open_discrepancies,
     current_open_discrepancies_by_severity,
+    deferred_integration_decisions,
     discrepancies_by_severity,
     discrepancy_supersession_chain,
     current_accepted_accomplishments,
     current_accepted_architecture,
     current_accepted_capabilities,
 )
-from baps.schemas import Event, ProjectedState, UnresolvedDiscrepancy
+from baps.schemas import Event, IntegrationDecision, ProjectedState, UnresolvedDiscrepancy
 
 
 def test_build_projected_state_empty_events_returns_empty_state() -> None:
@@ -2104,3 +2105,133 @@ def test_discrepancy_severity_helpers_do_not_mutate_input_state() -> None:
     _ = current_open_discrepancies_by_severity(state, "low")
     assert state.unresolved_discrepancies[0].status == before_status
     assert state.unresolved_discrepancies[0].metadata == before_metadata
+
+
+def test_deferred_integration_decisions_returns_only_deferred_in_order() -> None:
+    events = [
+        Event(
+            id="e1",
+            type="integration_decision_recorded",
+            payload={
+                "integration_decision": {
+                    "id": "int-1",
+                    "run_id": "run-1",
+                    "outcome": "deferred",
+                    "target_kind": "accomplishment",
+                    "summary": "deferred one",
+                    "rationale": "deferred rationale",
+                    "metadata": {"deferred_reason": "reason-1"},
+                }
+            },
+        ),
+        Event(
+            id="e2",
+            type="integration_decision_recorded",
+            payload={
+                "integration_decision": {
+                    "id": "int-2",
+                    "run_id": "run-2",
+                    "outcome": "accepted",
+                    "target_kind": "accomplishment",
+                    "summary": "accepted one",
+                    "rationale": "accepted rationale",
+                }
+            },
+        ),
+        Event(
+            id="e3",
+            type="integration_decision_recorded",
+            payload={
+                "integration_decision": {
+                    "id": "int-3",
+                    "run_id": "run-3",
+                    "outcome": "rejected",
+                    "target_kind": "accomplishment",
+                    "summary": "rejected one",
+                    "rationale": "rejected rationale",
+                }
+            },
+        ),
+        Event(
+            id="e4",
+            type="integration_decision_recorded",
+            payload={
+                "integration_decision": {
+                    "id": "int-4",
+                    "run_id": "run-4",
+                    "outcome": "deferred",
+                    "target_kind": "accomplishment",
+                    "summary": "deferred two",
+                    "rationale": "deferred rationale two",
+                    "metadata": {
+                        "deferred_reason": "competing_candidate_already_accepted",
+                        "accepted_competitor_run_id": "run-1",
+                    },
+                }
+            },
+        ),
+    ]
+
+    decisions = deferred_integration_decisions(events)
+    assert [decision.id for decision in decisions] == ["int-1", "int-4"]
+
+
+def test_deferred_integration_decisions_ignores_malformed_and_unrelated_events() -> None:
+    events = [
+        Event(
+            id="e1",
+            type="game_started",
+            payload={"game_id": "g1", "run_id": "run-1"},
+        ),
+        Event(
+            id="e2",
+            type="integration_decision_recorded",
+            payload={"integration_decision": "not-a-dict"},
+        ),
+        Event(
+            id="e3",
+            type="integration_decision_recorded",
+            payload={
+                "integration_decision": {
+                    "id": "",
+                    "run_id": "run-2",
+                    "outcome": "deferred",
+                    "target_kind": "accomplishment",
+                    "summary": "bad decision",
+                    "rationale": "bad",
+                }
+            },
+        ),
+    ]
+
+    decisions = deferred_integration_decisions(events)
+    assert decisions == []
+
+
+def test_deferred_integration_decisions_preserve_conflict_metadata() -> None:
+    events = [
+        Event(
+            id="e1",
+            type="integration_decision_recorded",
+            payload={
+                "integration_decision": {
+                    "id": "int-1",
+                    "run_id": "run-2",
+                    "outcome": "deferred",
+                    "target_kind": "accomplishment",
+                    "summary": "deferred due to conflict",
+                    "rationale": "deferred",
+                    "metadata": {
+                        "deferred_reason": "competing_candidate_already_accepted",
+                        "accepted_competitor_run_id": "run-1",
+                    },
+                }
+            },
+        ),
+    ]
+
+    decisions = deferred_integration_decisions(events)
+    assert len(decisions) == 1
+    assert isinstance(decisions[0], IntegrationDecision)
+    assert decisions[0].metadata["deferred_reason"] == "competing_candidate_already_accepted"
+    assert decisions[0].metadata["accepted_competitor_run_id"] == "run-1"
