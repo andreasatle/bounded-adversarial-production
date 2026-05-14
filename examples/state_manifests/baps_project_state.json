@@ -9,23 +9,9 @@
       "metadata": {}
     },
     {
-      "id": "future_direction",
+      "id": "roadmap",
       "kind": "markdown_doc",
-      "ref": "docs/TODO-v3.md",
-      "authority": "directional",
-      "metadata": {}
-    },
-    {
-      "id": "todo_v2",
-      "kind": "markdown_doc",
-      "ref": "docs/TODO-v2.md",
-      "authority": "directional",
-      "metadata": {}
-    },
-    {
-      "id": "todo_v1",
-      "kind": "markdown_doc",
-      "ref": "docs/TODO-v1.md",
+      "ref": "docs/ROADMAP.md",
       "authority": "directional",
       "metadata": {}
     },

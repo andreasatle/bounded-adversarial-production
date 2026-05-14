@@ -175,11 +175,11 @@ def test_build_parser_accepts_state_manifest_and_repeated_state_source_args() ->
             "--state-source",
             "architecture",
             "--state-source",
-            "future_direction",
+            "roadmap",
         ]
     )
     assert args.state_manifest == "manifest.json"
-    assert args.state_source == ["architecture", "future_direction"]
+    assert args.state_source == ["architecture", "roadmap"]
 
 
 def test_load_context_files_concatenates_with_separators(tmp_path: Path) -> None:
@@ -519,7 +519,7 @@ def test_main_injects_manual_and_manifest_context_into_prompts(monkeypatch, tmp_
             "--state-source",
             "architecture",
             "--state-source",
-            "future_direction",
+            "roadmap",
             "--blackboard-path",
             str(tmp_path / "events.jsonl"),
         ],
@@ -530,7 +530,7 @@ def test_main_injects_manual_and_manifest_context_into_prompts(monkeypatch, tmp_
     prompt = FakeOllamaClient.prompts[0]
     assert "manual-context-fragment" in prompt
     assert "===== STATE SOURCE: architecture (markdown_doc, authority=descriptive) =====" in prompt
-    assert "===== STATE SOURCE: future_direction (markdown_doc, authority=directional) =====" in prompt
+    assert "===== STATE SOURCE: roadmap (markdown_doc, authority=directional) =====" in prompt
 
 
 def test_main_routes_state_source_ids_through_game_request(monkeypatch, tmp_path: Path) -> None:
@@ -577,14 +577,14 @@ def test_main_routes_state_source_ids_through_game_request(monkeypatch, tmp_path
             "--state-source",
             "architecture",
             "--state-source",
-            "future_direction",
+            "roadmap",
             "--blackboard-path",
             str(tmp_path / "events.jsonl"),
         ],
     )
 
     main()
-    assert captured["state_source_ids"] == ["architecture", "future_direction"]
+    assert captured["state_source_ids"] == ["architecture", "roadmap"]
 
 
 def test_main_with_run_spec_allows_omitting_subject_goal_target_kind(monkeypatch, tmp_path: Path) -> None:
@@ -843,7 +843,7 @@ def test_main_state_sources_append_run_spec_state_sources(monkeypatch, tmp_path:
             "--run-spec",
             str(run_spec),
             "--state-source",
-            "future_direction",
+            "roadmap",
             "--blackboard-path",
             str(tmp_path / "events.jsonl"),
         ],
@@ -851,7 +851,7 @@ def test_main_state_sources_append_run_spec_state_sources(monkeypatch, tmp_path:
     main()
     prompt = FakeOllamaClient.prompts[0]
     assert "STATE SOURCE: architecture" in prompt
-    assert "STATE SOURCE: future_direction" in prompt
+    assert "STATE SOURCE: roadmap" in prompt
 
 
 def test_main_resolves_mixed_state_source_kinds_into_prompts(monkeypatch, tmp_path: Path) -> None:

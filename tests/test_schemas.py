@@ -173,6 +173,8 @@ def test_game_result_constructs_successfully() -> None:
         max_rounds=2,
         final_decision=Decision(game_id="game-1", decision="accept", rationale="ok"),
         terminal_reason="accepted",
+        terminal_outcome="accepted_locally",
+        integration_recommendation="integration_recommended",
         final_blue_summary="blue summary",
         final_red_claim="red claim",
         trace_event_ids=["e1"],
@@ -573,6 +575,8 @@ def test_game_result_round_and_max_round_constraints() -> None:
             max_rounds=2,
             final_decision=Decision(game_id="game-1", decision="accept", rationale="ok"),
             terminal_reason="accepted",
+            terminal_outcome="accepted_locally",
+            integration_recommendation="integration_recommended",
             final_blue_summary="blue summary",
             final_red_claim="red claim",
         )
@@ -592,6 +596,8 @@ def test_game_result_round_and_max_round_constraints() -> None:
             max_rounds=0,
             final_decision=Decision(game_id="game-1", decision="accept", rationale="ok"),
             terminal_reason="accepted",
+            terminal_outcome="accepted_locally",
+            integration_recommendation="integration_recommended",
             final_blue_summary="blue summary",
             final_red_claim="red claim",
         )
@@ -698,6 +704,8 @@ def test_mutable_defaults_are_not_shared() -> None:
         max_rounds=1,
         final_decision=Decision(game_id="game-1", decision="accept", rationale="ok"),
         terminal_reason="accepted",
+        terminal_outcome="accepted_locally",
+        integration_recommendation="integration_recommended",
         final_blue_summary="blue summary",
         final_red_claim="red claim",
     )
@@ -708,6 +716,8 @@ def test_mutable_defaults_are_not_shared() -> None:
         max_rounds=1,
         final_decision=Decision(game_id="game-2", decision="reject", rationale="no"),
         terminal_reason="rejected",
+        terminal_outcome="rejected_locally",
+        integration_recommendation="do_not_integrate",
         final_blue_summary="blue summary 2",
         final_red_claim="red claim 2",
     )

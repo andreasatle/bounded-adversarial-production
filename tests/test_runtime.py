@@ -130,6 +130,8 @@ def test_build_game_response_accept_terminal_reason() -> None:
     )
     result = build_game_response(state, contract, trace_event_ids=["a", "b"])
     assert result.terminal_reason == "accepted"
+    assert result.terminal_outcome == "accepted_locally"
+    assert result.integration_recommendation == "integration_recommended"
     assert result.final_blue_summary == "blue1"
     assert result.final_red_claim == "red1"
     assert result.trace_event_ids == ["a", "b"]
@@ -160,6 +162,8 @@ def test_build_game_response_reject_terminal_reason() -> None:
     )
     result = build_game_response(state, contract)
     assert result.terminal_reason == "rejected"
+    assert result.terminal_outcome == "rejected_locally"
+    assert result.integration_recommendation == "do_not_integrate"
 
 
 def test_build_game_response_revise_budget_exhausted_terminal_reason() -> None:
@@ -193,6 +197,8 @@ def test_build_game_response_revise_budget_exhausted_terminal_reason() -> None:
     )
     result = build_game_response(state, contract)
     assert result.terminal_reason == "round_budget_exhausted"
+    assert result.terminal_outcome == "revision_budget_exhausted"
+    assert result.integration_recommendation == "do_not_integrate"
     assert result.final_blue_summary == "blue2"
     assert result.final_red_claim == "red2"
     assert len(result.round_summaries) == 2

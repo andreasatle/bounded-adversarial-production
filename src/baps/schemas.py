@@ -165,6 +165,8 @@ class GameResponse(BaseModel):
     max_rounds: int
     final_decision: Decision
     terminal_reason: str
+    terminal_outcome: str
+    integration_recommendation: str
     final_blue_summary: str
     final_red_claim: str
     trace_event_ids: list[str] = Field(default_factory=list)
@@ -173,6 +175,10 @@ class GameResponse(BaseModel):
     _validate_game_id = field_validator("game_id")(_require_non_empty)
     _validate_run_id = field_validator("run_id")(_require_non_empty)
     _validate_terminal_reason = field_validator("terminal_reason")(_require_non_empty)
+    _validate_terminal_outcome = field_validator("terminal_outcome")(_require_non_empty)
+    _validate_integration_recommendation = field_validator("integration_recommendation")(
+        _require_non_empty
+    )
     _validate_final_blue_summary = field_validator("final_blue_summary")(_require_non_empty)
     _validate_final_red_claim = field_validator("final_red_claim")(_require_non_empty)
 

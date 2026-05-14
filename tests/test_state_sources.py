@@ -138,7 +138,7 @@ def test_load_checked_in_state_manifest_and_read_sources() -> None:
     assert manifest.project_id.strip()
     source_ids = {source.id for source in manifest.sources}
     assert "architecture" in source_ids
-    assert "future_direction" in source_ids
+    assert "roadmap" in source_ids
 
     adapter = MarkdownFileStateSourceAdapter()
     for source in manifest.sources:
@@ -218,13 +218,13 @@ def test_resolve_state_context_missing_file_error_propagates(tmp_path: Path) -> 
         resolve_state_context(manifest, ["missing"], adapter)
 
 
-def test_resolve_state_context_checked_in_manifest_architecture_and_future_direction() -> None:
+def test_resolve_state_context_checked_in_manifest_architecture_and_roadmap() -> None:
     manifest = load_state_manifest(Path("examples/state_manifests/baps_project_state.json"))
     adapter = MarkdownFileStateSourceAdapter()
 
-    context = resolve_state_context(manifest, ["architecture", "future_direction"], adapter)
+    context = resolve_state_context(manifest, ["architecture", "roadmap"], adapter)
     assert "STATE SOURCE: architecture" in context
-    assert "STATE SOURCE: future_direction" in context
+    assert "STATE SOURCE: roadmap" in context
     assert "authority=descriptive" in context
     assert "authority=directional" in context
 

@@ -44,12 +44,20 @@ def build_game_response(
     decision_value = state.final_decision.decision
     if decision_value == "accept":
         terminal_reason = "accepted"
+        terminal_outcome = "accepted_locally"
+        integration_recommendation = "integration_recommended"
     elif decision_value == "reject":
         terminal_reason = "rejected"
+        terminal_outcome = "rejected_locally"
+        integration_recommendation = "do_not_integrate"
     elif decision_value == "revise" and rounds_played >= contract.max_rounds:
         terminal_reason = "round_budget_exhausted"
+        terminal_outcome = "revision_budget_exhausted"
+        integration_recommendation = "do_not_integrate"
     else:
         terminal_reason = "completed"
+        terminal_outcome = "completed_without_terminal_resolution"
+        integration_recommendation = "manual_review_required"
 
     round_summaries: list[RoundSummary] = []
     for round_ in state.rounds:
@@ -76,6 +84,8 @@ def build_game_response(
         max_rounds=contract.max_rounds,
         final_decision=state.final_decision,
         terminal_reason=terminal_reason,
+        terminal_outcome=terminal_outcome,
+        integration_recommendation=integration_recommendation,
         final_blue_summary=last_round.moves[-1].summary,
         final_red_claim=last_round.findings[-1].claim,
         trace_event_ids=list(trace_event_ids) if trace_event_ids is not None else [],
