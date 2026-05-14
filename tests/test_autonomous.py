@@ -4,7 +4,7 @@ import pytest
 
 from baps.autonomous import run_autonomous_steps, run_one_autonomous_step
 from baps.blackboard import Blackboard
-from baps.schemas import Decision, GameRequest, GameResponse, ProjectedState
+from baps.schemas import Decision, GameRequest, GameResponse, ProjectedState, UnresolvedDiscrepancy
 
 
 def _response() -> GameResponse:
@@ -247,3 +247,188 @@ def test_run_autonomous_steps_rejects_invalid_inputs(tmp_path: Path) -> None:
             game_service=StubGameService(),
             max_steps=0,
         )
+
+
+def test_run_autonomous_steps_stops_early_when_no_open_discrepancies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    board = Blackboard(tmp_path / "events.jsonl")
+    build_calls = {"count": 0}
+
+    def _state_with_open() -> ProjectedState:
+        return ProjectedState(
+            unresolved_discrepancies=[
+                UnresolvedDiscrepancy(
+                    id="d1",
+                    summary="s1",
+                    kind="unresolved_finding",
+                    severity="high",
+                    status="open",
+                    source_event_id="e1",
+                )
+            ]
+        )
+
+    def _state_without_open() -> ProjectedState:
+        return ProjectedState(
+            unresolved_discrepancies=[
+                UnresolvedDiscrepancy(
+                    id="d1",
+                    summary="s1",
+                    kind="unresolved_finding",
+                    severity="high",
+                    status="resolved",
+                    source_event_id="e1",
+                )
+            ]
+        )
+
+    # First pre-step check sees open discrepancy and executes one step.
+    # Second pre-step check sees no open discrepancy and stops.
+    sequence = [_state_with_open(), _state_with_open(), _state_without_open()]
+
+    def _stub_build_projected_state_from_blackboard(received_blackboard: Blackboard) -> ProjectedState:
+        assert received_blackboard is board
+        build_calls["count"] += 1
+        return sequence.pop(0)
+
+    class StubPlanner:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def plan_next_game(self, projected_state: ProjectedState, north_star: str) -> GameRequest:
+            self.calls += 1
+            return _request()
+
+    class StubGameService:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def play(self, request: GameRequest) -> GameResponse:
+            self.calls += 1
+            return _response()
+
+    monkeypatch.setattr(
+        "baps.autonomous.build_projected_state_from_blackboard",
+        _stub_build_projected_state_from_blackboard,
+    )
+
+    planner = StubPlanner()
+    service = StubGameService()
+    responses = run_autonomous_steps(
+        north_star="Protect project identity",
+        blackboard=board,
+        planner=planner,
+        game_service=service,
+        max_steps=5,
+        stop_when_no_open_discrepancies=True,
+    )
+
+    assert len(responses) == 1
+    assert planner.calls == 1
+    assert service.calls == 1
+    assert build_calls["count"] == 3
+
+
+def test_run_autonomous_steps_continues_when_open_discrepancies_exist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    board = Blackboard(tmp_path / "events.jsonl")
+    build_calls = {"count": 0}
+
+    def _open_state() -> ProjectedState:
+        return ProjectedState(
+            unresolved_discrepancies=[
+                UnresolvedDiscrepancy(
+                    id="d1",
+                    summary="s1",
+                    kind="unresolved_finding",
+                    severity="medium",
+                    status="open",
+                    source_event_id="e1",
+                )
+            ]
+        )
+
+    def _stub_build_projected_state_from_blackboard(received_blackboard: Blackboard) -> ProjectedState:
+        assert received_blackboard is board
+        build_calls["count"] += 1
+        return _open_state()
+
+    class StubPlanner:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def plan_next_game(self, projected_state: ProjectedState, north_star: str) -> GameRequest:
+            self.calls += 1
+            return _request()
+
+    class StubGameService:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def play(self, request: GameRequest) -> GameResponse:
+            self.calls += 1
+            response = _response()
+            response.run_id = f"run-{self.calls}"
+            return response
+
+    monkeypatch.setattr(
+        "baps.autonomous.build_projected_state_from_blackboard",
+        _stub_build_projected_state_from_blackboard,
+    )
+
+    planner = StubPlanner()
+    service = StubGameService()
+    responses = run_autonomous_steps(
+        north_star="Protect project identity",
+        blackboard=board,
+        planner=planner,
+        game_service=service,
+        max_steps=3,
+        stop_when_no_open_discrepancies=True,
+    )
+
+    assert len(responses) == 3
+    assert [response.run_id for response in responses] == ["run-1", "run-2", "run-3"]
+    assert planner.calls == 3
+    assert service.calls == 3
+    assert build_calls["count"] == 6
+
+
+def test_run_autonomous_steps_stop_flag_false_preserves_default_behavior(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    board = Blackboard(tmp_path / "events.jsonl")
+    call_index = {"value": 0}
+
+    def _stub_run_one_autonomous_step(
+        north_star: str,
+        blackboard: Blackboard,
+        planner: object,
+        game_service: object,
+    ) -> GameResponse:
+        assert north_star == "Protect project identity"
+        assert blackboard is board
+        call_index["value"] += 1
+        idx = call_index["value"]
+        response = _response()
+        response.run_id = f"run-{idx}"
+        return response
+
+    monkeypatch.setattr(
+        "baps.autonomous.run_one_autonomous_step",
+        _stub_run_one_autonomous_step,
+    )
+
+    responses = run_autonomous_steps(
+        north_star="Protect project identity",
+        blackboard=board,
+        planner=object(),
+        game_service=object(),
+        max_steps=3,
+        stop_when_no_open_discrepancies=False,
+    )
+
+    assert len(responses) == 3
+    assert [response.run_id for response in responses] == ["run-1", "run-2", "run-3"]
