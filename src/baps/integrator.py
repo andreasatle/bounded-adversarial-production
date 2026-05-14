@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from baps.blackboard import Blackboard
 from baps.schemas import GameResponse, IntegrationDecision
 
 
@@ -33,3 +34,14 @@ class Integrator:
                 "final_decision": response.final_decision.decision,
             },
         )
+
+
+def integrate_response(
+    response: GameResponse,
+    blackboard: Blackboard,
+    integrator: Integrator | None = None,
+) -> IntegrationDecision:
+    active_integrator = integrator if integrator is not None else Integrator()
+    decision = active_integrator.integrate(response)
+    blackboard.append_integration_decision(decision)
+    return decision
