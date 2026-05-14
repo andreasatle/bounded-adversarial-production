@@ -140,6 +140,63 @@ def test_prompt_driven_blue_role_no_revision_path_still_works() -> None:
     assert move.summary == "first round summary"
 
 
+def test_prompt_driven_blue_role_parses_valid_json_output_summary() -> None:
+    contract = _contract()
+    model = FakeModelClient(responses=['{"summary":"json summary"}'])
+    role = make_prompt_blue_role(model)
+
+    move = role(contract)
+    assert move.summary == "json summary"
+
+
+def test_prompt_driven_blue_role_parses_valid_json_output_payload() -> None:
+    contract = _contract()
+    model = FakeModelClient(responses=['{"summary":"json summary","payload":{"k":"v","n":1}}'])
+    role = make_prompt_blue_role(model)
+
+    move = role(contract)
+    assert move.summary == "json summary"
+    assert move.payload["goal"] == contract.goal
+    assert move.payload["k"] == "v"
+    assert move.payload["n"] == 1
+
+
+def test_prompt_driven_blue_role_malformed_json_falls_back_to_plain_text_summary() -> None:
+    contract = _contract()
+    generated = '{"summary":"broken"'
+    model = FakeModelClient(responses=[generated])
+    role = make_prompt_blue_role(model)
+
+    move = role(contract)
+    assert move.summary == generated
+
+
+def test_prompt_driven_blue_role_non_object_json_falls_back() -> None:
+    contract = _contract()
+    generated = '["not","an","object"]'
+    model = FakeModelClient(responses=[generated])
+    role = make_prompt_blue_role(model)
+
+    move = role(contract)
+    assert move.summary == generated
+
+
+def test_prompt_driven_blue_role_json_missing_or_empty_summary_falls_back() -> None:
+    contract = _contract()
+    model = FakeModelClient(
+        responses=[
+            '{"payload":{"k":"v"}}',
+            '{"summary":"   ","payload":{"k":"v"}}',
+        ]
+    )
+    role = make_prompt_blue_role(model)
+
+    move_missing = role(contract)
+    move_empty = role(contract)
+    assert move_missing.summary == '{"payload":{"k":"v"}}'
+    assert move_empty.summary == '{"summary":"   ","payload":{"k":"v"}}'
+
+
 def test_prompt_driven_red_role_renders_and_calls_model_client() -> None:
     contract = _contract()
     blue = Move(game_id=contract.id, role="blue", summary="draft", payload={"k": "v"})

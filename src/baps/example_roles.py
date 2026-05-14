@@ -54,6 +54,24 @@ def _parse_referee_output(generated_text: str) -> str:
     return rationale or generated_text
 
 
+def _parse_blue_output(generated_text: str) -> tuple[str, dict]:
+    try:
+        parsed = json.loads(generated_text)
+    except json.JSONDecodeError:
+        return generated_text, {}
+    if not isinstance(parsed, dict):
+        return generated_text, {}
+
+    summary = str(parsed.get("summary", "")).strip()
+    if not summary:
+        return generated_text, {}
+
+    payload = parsed.get("payload", {})
+    if not isinstance(payload, dict):
+        payload = {}
+    return summary, payload
+
+
 def blue_role(contract: GameContract) -> Move:
     return Move(
         game_id=contract.id,
@@ -208,12 +226,15 @@ def make_prompt_blue_role(
         }
         context.update(context_overrides)
         prompt = renderer.render(context)
-        summary = model_client.generate(prompt)
+        generated = model_client.generate(prompt)
+        summary, parsed_payload = _parse_blue_output(generated)
+        payload = {"goal": contract.goal}
+        payload.update(parsed_payload)
         return Move(
             game_id=contract.id,
             role="blue",
             summary=summary,
-            payload={"goal": contract.goal},
+            payload=payload,
         )
 
     return _role
