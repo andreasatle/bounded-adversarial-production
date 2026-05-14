@@ -12,6 +12,7 @@ from baps.projections import (
     deferred_integration_decisions,
     discrepancies_by_severity,
     discrepancy_supersession_chain,
+    integration_review_queue,
     current_accepted_accomplishments,
     current_accepted_architecture,
     current_accepted_capabilities,
@@ -2235,3 +2236,97 @@ def test_deferred_integration_decisions_preserve_conflict_metadata() -> None:
     assert isinstance(decisions[0], IntegrationDecision)
     assert decisions[0].metadata["deferred_reason"] == "competing_candidate_already_accepted"
     assert decisions[0].metadata["accepted_competitor_run_id"] == "run-1"
+
+
+def test_integration_review_queue_contains_deferred_only_in_order() -> None:
+    events = [
+        Event(
+            id="e1",
+            type="integration_decision_recorded",
+            payload={
+                "integration_decision": {
+                    "id": "int-1",
+                    "run_id": "run-1",
+                    "outcome": "deferred",
+                    "target_kind": "accomplishment",
+                    "summary": "queue-1",
+                    "rationale": "r1",
+                }
+            },
+        ),
+        Event(
+            id="e2",
+            type="integration_decision_recorded",
+            payload={
+                "integration_decision": {
+                    "id": "int-2",
+                    "run_id": "run-2",
+                    "outcome": "accepted",
+                    "target_kind": "accomplishment",
+                    "summary": "accepted",
+                    "rationale": "r2",
+                }
+            },
+        ),
+        Event(
+            id="e3",
+            type="integration_decision_recorded",
+            payload={
+                "integration_decision": {
+                    "id": "int-3",
+                    "run_id": "run-3",
+                    "outcome": "rejected",
+                    "target_kind": "accomplishment",
+                    "summary": "rejected",
+                    "rationale": "r3",
+                }
+            },
+        ),
+        Event(
+            id="e4",
+            type="integration_decision_recorded",
+            payload={
+                "integration_decision": {
+                    "id": "int-4",
+                    "run_id": "run-4",
+                    "outcome": "deferred",
+                    "target_kind": "accomplishment",
+                    "summary": "queue-2",
+                    "rationale": "r4",
+                    "metadata": {
+                        "deferred_reason": "competing_candidate_already_accepted",
+                        "accepted_competitor_run_id": "run-1",
+                    },
+                }
+            },
+        ),
+    ]
+
+    queue = integration_review_queue(events)
+    assert [decision.id for decision in queue] == ["int-1", "int-4"]
+    assert queue[1].metadata["deferred_reason"] == "competing_candidate_already_accepted"
+    assert queue[1].metadata["accepted_competitor_run_id"] == "run-1"
+
+
+def test_integration_review_queue_reuses_deferred_integration_decisions_behavior() -> None:
+    events = [
+        Event(
+            id="e1",
+            type="integration_decision_recorded",
+            payload={
+                "integration_decision": {
+                    "id": "int-1",
+                    "run_id": "run-1",
+                    "outcome": "deferred",
+                    "target_kind": "accomplishment",
+                    "summary": "queue-1",
+                    "rationale": "r1",
+                }
+            },
+        ),
+        Event(id="e2", type="integration_decision_recorded", payload={"integration_decision": "invalid"}),
+    ]
+
+    assert [d.model_dump(mode="json") for d in integration_review_queue(events)] == [
+        d.model_dump(mode="json") for d in deferred_integration_decisions(events)
+    ]

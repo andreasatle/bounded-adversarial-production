@@ -384,6 +384,10 @@ def deferred_integration_decisions(events: list[Event]) -> list[IntegrationDecis
     return deferred
 
 
+def integration_review_queue(events: list[Event]) -> list[IntegrationDecision]:
+    return deferred_integration_decisions(events)
+
+
 def _derive_discrepancy_summary(payload: dict) -> str:
     state = payload.get("state")
     if isinstance(state, dict):
