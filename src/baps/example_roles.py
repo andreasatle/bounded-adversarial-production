@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from baps.game_types import (
     GameTypePromptSections,
     make_documentation_refinement_game_definition,
@@ -29,6 +31,16 @@ def _parse_red_output(generated_text: str, default_material: bool) -> tuple[bool
     if claim is None or not claim:
         claim = generated_text
     return material, claim
+
+
+def _parse_red_output_json(generated_text: str) -> dict | None:
+    try:
+        parsed = json.loads(generated_text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    return parsed
 
 
 def blue_role(contract: GameContract) -> Move:
@@ -221,14 +233,27 @@ def make_prompt_red_role(
         context.update(context_overrides)
         prompt = renderer.render(context)
         generated = model_client.generate(prompt)
-        parsed_material, claim = _parse_red_output(generated, default_material=default_material)
+        parsed_json = _parse_red_output_json(generated)
+        if parsed_json is not None:
+            parsed_material = bool(parsed_json.get("material", default_material))
+            claim = str(parsed_json.get("claim", generated)).strip() or generated
+            severity = str(parsed_json.get("severity", "medium")).strip() or "medium"
+            confidence = str(parsed_json.get("confidence", "medium")).strip() or "medium"
+            block_integration = bool(
+                parsed_json.get("block_integration", default_block_integration)
+            )
+        else:
+            parsed_material, claim = _parse_red_output(generated, default_material=default_material)
+            severity = "medium"
+            confidence = "medium"
+            block_integration = default_block_integration
         return Finding(
             game_id=contract.id,
-            severity="medium",
-            confidence="medium",
+            severity=severity,
+            confidence=confidence,
             claim=claim,
             evidence=[f"Blue summary: {blue_move.summary}"],
-            block_integration=default_block_integration,
+            block_integration=block_integration,
             payload={"material": parsed_material},
         )
 

@@ -344,6 +344,52 @@ def test_prompt_driven_red_claim_falls_back_to_full_output_when_missing() -> Non
     assert finding.claim == generated
 
 
+def test_prompt_driven_red_parses_valid_json_output() -> None:
+    contract = _contract()
+    blue = Move(game_id=contract.id, role="blue", summary="draft", payload={})
+    model = FakeModelClient(
+        responses=[
+            '{"claim":"json claim","material":false,"block_integration":true,"severity":"high","confidence":"low"}'
+        ]
+    )
+    role = make_prompt_red_role(model, default_material=True)
+
+    finding = role(contract, blue)
+    assert finding.claim == "json claim"
+    assert finding.payload["material"] is False
+    assert finding.block_integration is True
+    assert finding.severity == "high"
+    assert finding.confidence == "low"
+
+
+def test_prompt_driven_red_malformed_json_falls_back_safely() -> None:
+    contract = _contract()
+    blue = Move(game_id=contract.id, role="blue", summary="draft", payload={})
+    generated = '{"claim": "broken", "material": true'
+    model = FakeModelClient(responses=[generated])
+    role = make_prompt_red_role(model, default_material=False)
+
+    finding = role(contract, blue)
+    assert finding.claim == generated
+    assert finding.payload["material"] is False
+    assert finding.block_integration is False
+    assert finding.severity == "medium"
+    assert finding.confidence == "medium"
+
+
+def test_prompt_driven_red_non_object_json_falls_back_safely() -> None:
+    contract = _contract()
+    blue = Move(game_id=contract.id, role="blue", summary="draft", payload={})
+    model = FakeModelClient(responses=['["not", "an", "object"]'])
+    role = make_prompt_red_role(model, default_material=True)
+
+    finding = role(contract, blue)
+    assert finding.claim == '["not", "an", "object"]'
+    assert finding.payload["material"] is True
+    assert finding.severity == "medium"
+    assert finding.confidence == "medium"
+
+
 def test_prompt_driven_referee_accepts_with_non_material_generated_red_finding() -> None:
     contract = _contract()
     blue = Move(game_id=contract.id, role="blue", summary="draft", payload={})
