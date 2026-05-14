@@ -6,6 +6,7 @@ from baps.schemas import (
     AcceptedArchitectureItem,
     AcceptedCapability,
     ActiveGameSummary,
+    ArtifactProposalRecord,
     DiscrepancySeverity,
     Event,
     IntegrationDecision,
@@ -399,6 +400,33 @@ def deferred_integration_decisions(events: list[Event]) -> list[IntegrationDecis
 
 def integration_review_queue(events: list[Event]) -> list[IntegrationDecision]:
     return deferred_integration_decisions(events)
+
+
+def artifact_proposal_records(events: list[Event]) -> list[ArtifactProposalRecord]:
+    records: list[ArtifactProposalRecord] = []
+    for event in events:
+        if event.type != "artifact_proposal_recorded":
+            continue
+        payload = event.payload.get("artifact_proposal_record")
+        if not isinstance(payload, dict):
+            continue
+        try:
+            records.append(ArtifactProposalRecord.model_validate(payload))
+        except Exception:
+            continue
+    return records
+
+
+def accepted_artifact_proposals(events: list[Event]) -> list[ArtifactProposalRecord]:
+    return [record for record in artifact_proposal_records(events) if record.status == "accepted"]
+
+
+def proposed_artifact_proposals(events: list[Event]) -> list[ArtifactProposalRecord]:
+    return [record for record in artifact_proposal_records(events) if record.status == "proposed"]
+
+
+def rejected_artifact_proposals(events: list[Event]) -> list[ArtifactProposalRecord]:
+    return [record for record in artifact_proposal_records(events) if record.status == "rejected"]
 
 
 def _derive_discrepancy_summary(payload: dict) -> str:

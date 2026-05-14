@@ -5,6 +5,8 @@ import pytest
 from baps.blackboard import Blackboard
 from baps.projections import (
     accepted_state_supersession_chain,
+    accepted_artifact_proposals,
+    artifact_proposal_records,
     build_projected_state,
     build_projected_state_from_blackboard,
     current_open_discrepancies,
@@ -14,11 +16,19 @@ from baps.projections import (
     discrepancies_for_artifact,
     discrepancy_supersession_chain,
     integration_review_queue,
+    proposed_artifact_proposals,
+    rejected_artifact_proposals,
     current_accepted_accomplishments,
     current_accepted_architecture,
     current_accepted_capabilities,
 )
-from baps.schemas import Event, IntegrationDecision, ProjectedState, UnresolvedDiscrepancy
+from baps.schemas import (
+    ArtifactProposalRecord,
+    Event,
+    IntegrationDecision,
+    ProjectedState,
+    UnresolvedDiscrepancy,
+)
 
 
 def test_build_projected_state_empty_events_returns_empty_state() -> None:
@@ -2432,3 +2442,165 @@ def test_discrepancies_for_artifact_does_not_mutate_input_state() -> None:
     _ = discrepancies_for_artifact(state, "artifact-a")
     assert state.unresolved_discrepancies[0].status == before_status
     assert state.unresolved_discrepancies[0].metadata == before_metadata
+
+
+def test_artifact_proposal_records_parse_valid_events_in_order() -> None:
+    events = [
+        Event(
+            id="e1",
+            type="artifact_proposal_recorded",
+            payload={
+                "artifact_proposal_record": {
+                    "id": "apr-1",
+                    "artifact_id": "art-1",
+                    "change_id": "chg-1",
+                    "source_run_id": "run-1",
+                    "status": "proposed",
+                    "summary": "summary-1",
+                }
+            },
+        ),
+        Event(
+            id="e2",
+            type="artifact_proposal_recorded",
+            payload={
+                "artifact_proposal_record": {
+                    "id": "apr-2",
+                    "artifact_id": "art-2",
+                    "change_id": "chg-2",
+                    "source_run_id": "run-2",
+                    "integration_decision_id": "int-2",
+                    "status": "accepted",
+                    "summary": "summary-2",
+                }
+            },
+        ),
+    ]
+
+    records = artifact_proposal_records(events)
+    assert [record.id for record in records] == ["apr-1", "apr-2"]
+    assert records[1].integration_decision_id == "int-2"
+
+
+def test_artifact_proposal_records_ignore_malformed_and_unrelated_events() -> None:
+    events = [
+        Event(id="e1", type="game_started", payload={"game_id": "g1", "run_id": "run-1"}),
+        Event(
+            id="e2",
+            type="artifact_proposal_recorded",
+            payload={"artifact_proposal_record": "not-a-dict"},
+        ),
+        Event(
+            id="e3",
+            type="artifact_proposal_recorded",
+            payload={
+                "artifact_proposal_record": {
+                    "id": "",
+                    "artifact_id": "art-3",
+                    "change_id": "chg-3",
+                    "source_run_id": "run-3",
+                    "status": "proposed",
+                    "summary": "bad",
+                }
+            },
+        ),
+    ]
+    assert artifact_proposal_records(events) == []
+
+
+def test_artifact_proposal_status_filters_and_order_preserved() -> None:
+    events = [
+        Event(
+            id="e1",
+            type="artifact_proposal_recorded",
+            payload={
+                "artifact_proposal_record": {
+                    "id": "apr-1",
+                    "artifact_id": "art-1",
+                    "change_id": "chg-1",
+                    "source_run_id": "run-1",
+                    "status": "accepted",
+                    "summary": "accepted-1",
+                }
+            },
+        ),
+        Event(
+            id="e2",
+            type="artifact_proposal_recorded",
+            payload={
+                "artifact_proposal_record": {
+                    "id": "apr-2",
+                    "artifact_id": "art-2",
+                    "change_id": "chg-2",
+                    "source_run_id": "run-2",
+                    "status": "proposed",
+                    "summary": "proposed-1",
+                }
+            },
+        ),
+        Event(
+            id="e3",
+            type="artifact_proposal_recorded",
+            payload={
+                "artifact_proposal_record": {
+                    "id": "apr-3",
+                    "artifact_id": "art-3",
+                    "change_id": "chg-3",
+                    "source_run_id": "run-3",
+                    "status": "accepted",
+                    "summary": "accepted-2",
+                }
+            },
+        ),
+        Event(
+            id="e4",
+            type="artifact_proposal_recorded",
+            payload={
+                "artifact_proposal_record": {
+                    "id": "apr-4",
+                    "artifact_id": "art-4",
+                    "change_id": "chg-4",
+                    "source_run_id": "run-4",
+                    "status": "rejected",
+                    "summary": "rejected-1",
+                }
+            },
+        ),
+    ]
+
+    accepted = accepted_artifact_proposals(events)
+    proposed = proposed_artifact_proposals(events)
+    rejected = rejected_artifact_proposals(events)
+
+    assert [record.id for record in accepted] == ["apr-1", "apr-3"]
+    assert [record.id for record in proposed] == ["apr-2"]
+    assert [record.id for record in rejected] == ["apr-4"]
+
+
+def test_artifact_proposal_helpers_do_not_mutate_inputs() -> None:
+    payload = {
+        "id": "apr-1",
+        "artifact_id": "art-1",
+        "change_id": "chg-1",
+        "source_run_id": "run-1",
+        "status": "accepted",
+        "summary": "accepted",
+        "metadata": {"k": "v"},
+    }
+    events = [
+        Event(
+            id="e1",
+            type="artifact_proposal_recorded",
+            payload={"artifact_proposal_record": dict(payload)},
+        )
+    ]
+    before = events[0].model_dump(mode="json")
+
+    records = artifact_proposal_records(events)
+    _ = accepted_artifact_proposals(events)
+    _ = proposed_artifact_proposals(events)
+    _ = rejected_artifact_proposals(events)
+
+    assert len(records) == 1
+    assert isinstance(records[0], ArtifactProposalRecord)
+    assert events[0].model_dump(mode="json") == before
