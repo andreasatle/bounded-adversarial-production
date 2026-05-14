@@ -180,6 +180,20 @@ IntegrationTargetKind = Literal[
     "discrepancy",
 ]
 
+DiscrepancyKind = Literal[
+    "missing_capability",
+    "architecture_drift",
+    "documentation_drift",
+    "goal_mismatch",
+    "unresolved_finding",
+]
+
+DiscrepancySeverity = Literal[
+    "low",
+    "medium",
+    "high",
+]
+
 
 class GameResponse(BaseModel):
     game_id: str
@@ -276,6 +290,8 @@ class AcceptedCapability(BaseModel):
 class UnresolvedDiscrepancy(BaseModel):
     id: str
     summary: str
+    kind: DiscrepancyKind
+    severity: DiscrepancySeverity
     source_event_id: str
     metadata: dict = Field(default_factory=dict)
 

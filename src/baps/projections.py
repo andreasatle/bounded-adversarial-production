@@ -106,6 +106,8 @@ def build_projected_state(events: list[Event]) -> ProjectedState:
                 discrepancies_by_run[run_id] = UnresolvedDiscrepancy(
                     id=run_id,
                     summary=_derive_discrepancy_summary(payload),
+                    kind="unresolved_finding",
+                    severity="medium",
                     source_event_id=event.id,
                     metadata={
                         "source_run_id": run_id,

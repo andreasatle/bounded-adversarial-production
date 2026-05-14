@@ -230,6 +230,8 @@ def test_projected_state_models_construct_successfully() -> None:
             UnresolvedDiscrepancy(
                 id="disc-1",
                 summary="Pending discrepancy triage",
+                kind="unresolved_finding",
+                severity="medium",
                 source_event_id="event-2",
                 metadata={"severity": "medium"},
             )
@@ -258,9 +260,45 @@ def test_projected_state_models_reject_non_empty_string_fields() -> None:
     with pytest.raises(ValidationError):
         AcceptedCapability(id="cap-1", name="capability", source_run_id=" ")
     with pytest.raises(ValidationError):
-        UnresolvedDiscrepancy(id="disc-1", summary=" ", source_event_id="event-1")
+        UnresolvedDiscrepancy(
+            id="disc-1",
+            summary=" ",
+            kind="unresolved_finding",
+            severity="medium",
+            source_event_id="event-1",
+        )
     with pytest.raises(ValidationError):
         ActiveGameSummary(id="game-1", title="title", source_run_id=" ")
+
+
+def test_unresolved_discrepancy_kind_and_severity_validation() -> None:
+    discrepancy = UnresolvedDiscrepancy(
+        id="disc-1",
+        summary="Pending discrepancy triage",
+        kind="unresolved_finding",
+        severity="medium",
+        source_event_id="event-1",
+    )
+    assert discrepancy.kind == "unresolved_finding"
+    assert discrepancy.severity == "medium"
+
+    with pytest.raises(ValidationError):
+        UnresolvedDiscrepancy(
+            id="disc-2",
+            summary="Bad kind",
+            kind="not_a_kind",
+            severity="medium",
+            source_event_id="event-2",
+        )
+
+    with pytest.raises(ValidationError):
+        UnresolvedDiscrepancy(
+            id="disc-3",
+            summary="Bad severity",
+            kind="unresolved_finding",
+            severity="critical",
+            source_event_id="event-3",
+        )
 
 
 def test_integration_decision_constructs_successfully() -> None:
@@ -939,7 +977,13 @@ def test_mutable_defaults_are_not_shared() -> None:
         AcceptedCapability(id="cap-1", name="n1", source_run_id="run-3")
     )
     projected_a.unresolved_discrepancies.append(
-        UnresolvedDiscrepancy(id="disc-1", summary="d1", source_event_id="event-2")
+        UnresolvedDiscrepancy(
+            id="disc-1",
+            summary="d1",
+            kind="unresolved_finding",
+            severity="medium",
+            source_event_id="event-2",
+        )
     )
     projected_a.active_games.append(
         ActiveGameSummary(id="game-1", title="g1", source_run_id="run-3")
