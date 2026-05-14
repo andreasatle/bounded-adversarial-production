@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 from typing import Protocol
 
+from baps.models import ModelClient
 from baps.projections import current_open_discrepancies
 from baps.schemas import GameRequest, ProjectedState, UnresolvedDiscrepancy
 
@@ -64,3 +66,61 @@ class DefaultPlanner:
             target_kind="discrepancy",
             target_ref=";".join(target_ref_parts),
         )
+
+
+class LLMPlanner:
+    def __init__(
+        self,
+        model_client: ModelClient,
+        fallback_planner: Planner | None = None,
+    ):
+        self.model_client = model_client
+        self.fallback_planner = fallback_planner
+
+    def plan_next_game(
+        self,
+        projected_state: ProjectedState,
+        north_star: str,
+    ) -> GameRequest:
+        prompt = self._build_prompt(projected_state, north_star)
+        model_output = self.model_client.generate(prompt)
+        try:
+            parsed = json.loads(model_output)
+            if not isinstance(parsed, dict):
+                raise ValueError("planner output must be a JSON object")
+            return GameRequest.model_validate(parsed)
+        except (json.JSONDecodeError, ValueError):
+            if self.fallback_planner is not None:
+                return self.fallback_planner.plan_next_game(projected_state, north_star)
+            raise ValueError("failed to parse valid GameRequest JSON from planner model output")
+
+    def _build_prompt(self, projected_state: ProjectedState, north_star: str) -> str:
+        open_discrepancies = current_open_discrepancies(projected_state)
+        lines = [
+            "You are selecting the next bounded game request.",
+            "Return JSON only with keys: game_type, subject, goal, target_kind, target_ref, state_source_ids.",
+            "",
+            f"NORTH_STAR: {north_star}",
+            "",
+            f"OPEN_DISCREPANCIES_COUNT: {len(open_discrepancies)}",
+        ]
+        for discrepancy in open_discrepancies[:5]:
+            artifact_ref = ""
+            if discrepancy.related_artifact_id:
+                artifact_ref = f", artifact_id={discrepancy.related_artifact_id}"
+            lines.append(
+                f"- discrepancy id={discrepancy.id}, severity={discrepancy.severity}, "
+                f"summary={discrepancy.summary}{artifact_ref}"
+            )
+
+        lines.extend(
+            [
+                f"ACCEPTED_ACCOMPLISHMENTS_COUNT: {len(projected_state.accepted_accomplishments)}",
+                f"ACCEPTED_ARCHITECTURE_COUNT: {len(projected_state.accepted_architecture)}",
+                f"ACCEPTED_CAPABILITIES_COUNT: {len(projected_state.accepted_capabilities)}",
+                f"ACTIVE_GAMES_COUNT: {len(projected_state.active_games)}",
+                "",
+                "Select one bounded next game aligned to NORTH_STAR.",
+            ]
+        )
+        return "\n".join(lines)
