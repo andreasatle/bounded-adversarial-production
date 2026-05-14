@@ -4,7 +4,12 @@ from baps.blackboard import Blackboard
 from baps.game_types import GameDefinition, build_game_definition
 from baps.integrator import integrate_response
 from baps.models import ModelClient
-from baps.prompt_roles import build_prompt_roles
+from baps.prompt_roles import (
+    build_prompt_roles,
+    default_blue_profile,
+    default_red_profile,
+    default_referee_profile,
+)
 from baps.runtime import RuntimeEngine, build_game_response
 from baps.schemas import GameContract, GameRequest, GameResponse, Target
 from baps.state_sources import StateManifest, StateSourceAdapter, resolve_state_context
@@ -20,6 +25,7 @@ class GameService:
         max_rounds: int = 1,
         shared_context: str = "",
         red_material: bool = True,
+        use_default_agent_profiles: bool = False,
         state_manifest: StateManifest | None = None,
         state_adapter: StateSourceAdapter | None = None,
     ):
@@ -31,6 +37,7 @@ class GameService:
         self.max_rounds = max_rounds
         self.shared_context = shared_context
         self.red_material = red_material
+        self.use_default_agent_profiles = use_default_agent_profiles
         self.state_manifest = state_manifest
         self.state_adapter = state_adapter
 
@@ -63,6 +70,9 @@ class GameService:
             prompt_sections=resolved_game_definition.prompt_sections,
             shared_context=resolved_shared_context,
             red_material=self.red_material,
+            blue_profile=default_blue_profile() if self.use_default_agent_profiles else None,
+            red_profile=default_red_profile() if self.use_default_agent_profiles else None,
+            referee_profile=default_referee_profile() if self.use_default_agent_profiles else None,
         )
 
         contract = GameContract(

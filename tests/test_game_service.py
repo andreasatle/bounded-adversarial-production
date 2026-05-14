@@ -372,3 +372,50 @@ def test_game_service_appends_deferred_integration_decision_for_budget_exhausted
     decision = integration_events[0].payload["integration_decision"]
     assert response.final_decision.decision == "revise"
     assert decision["outcome"] == "deferred"
+
+
+def test_game_service_default_behavior_does_not_inject_builtin_profiles(tmp_path: Path) -> None:
+    model = FakeModelClient(
+        responses=[
+            "candidate answer",
+            "MATERIAL: no\nCLAIM: looks good",
+            "rationale",
+        ]
+    )
+    service = GameService(
+        model_client=model,
+        blackboard=Blackboard(tmp_path / "events.jsonl"),
+        red_material=False,
+    )
+
+    service.play(_request())
+    assert len(model.prompts) == 3
+    assert all("Built-in Blue" not in prompt for prompt in model.prompts)
+    assert all("Built-in Red" not in prompt for prompt in model.prompts)
+    assert all("Built-in Referee" not in prompt for prompt in model.prompts)
+
+
+def test_game_service_can_inject_default_agent_profiles_when_enabled(tmp_path: Path) -> None:
+    model = FakeModelClient(
+        responses=[
+            "candidate answer",
+            "MATERIAL: no\nCLAIM: looks good",
+            "rationale",
+        ]
+    )
+    board = Blackboard(tmp_path / "events.jsonl")
+    service = GameService(
+        model_client=model,
+        blackboard=board,
+        red_material=False,
+        use_default_agent_profiles=True,
+    )
+
+    response = service.play(_request())
+    assert response.final_decision.decision == "accept"
+    assert len(model.prompts) == 3
+    assert "Built-in Blue" in model.prompts[0]
+    assert "Built-in Red" in model.prompts[1]
+    assert "Built-in Referee" in model.prompts[2]
+    integration_events = board.query("integration_decision_recorded")
+    assert len(integration_events) == 1
