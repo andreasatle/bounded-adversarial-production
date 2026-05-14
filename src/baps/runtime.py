@@ -32,10 +32,7 @@ def build_game_response(
     contract: GameContract,
     trace_event_ids: list[str] | None = None,
 ) -> GameResponse:
-    if state.final_decision is None:
-        raise ValueError("state.final_decision must be present")
-    if not state.rounds:
-        raise ValueError("state.rounds must be non-empty")
+    _validate_state_for_response(state=state, contract=contract)
     last_round = state.rounds[-1]
     if not last_round.moves:
         raise ValueError("last round must contain at least one move")
@@ -104,6 +101,25 @@ def _derive_terminal_semantics(
             "cannot build completed game response for revise decision before round budget exhaustion"
         )
     raise ValueError(f"unsupported final decision for game response: {decision.decision}")
+
+
+def _validate_state_for_response(*, state: GameState, contract: GameContract) -> None:
+    if state.final_decision is None:
+        raise ValueError("state.final_decision must be present")
+    if not state.rounds:
+        raise ValueError("state.rounds must be non-empty")
+
+    rounds_played = len(state.rounds)
+    if state.current_round != rounds_played:
+        raise ValueError("state.current_round must match number of completed rounds")
+    if rounds_played > contract.max_rounds:
+        raise ValueError("state.rounds exceeds contract.max_rounds")
+
+    last_round_decision = state.rounds[-1].decision
+    if last_round_decision is None:
+        raise ValueError("last round must contain a decision")
+    if state.final_decision != last_round_decision:
+        raise ValueError("state.final_decision must match the last round decision")
 
 
 class RuntimeEngine:

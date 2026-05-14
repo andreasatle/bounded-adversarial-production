@@ -238,6 +238,96 @@ def test_build_game_response_revise_before_budget_exhaustion_raises() -> None:
         build_game_response(state, contract)
 
 
+def test_build_game_response_raises_when_current_round_mismatches_round_count() -> None:
+    contract = GameContract(
+        id="game-1",
+        subject="auth",
+        goal="find flaws",
+        target=Target(kind="repo"),
+        active_roles=["blue", "red", "referee"],
+        max_rounds=3,
+    )
+    state = GameState(
+        game_id="game-1",
+        run_id="run-20260513-100000-deadbeef",
+        current_round=2,
+        rounds=[
+            GameRound(
+                round_number=1,
+                moves=[{"game_id": "game-1", "role": "blue", "summary": "blue1"}],
+                findings=[{"game_id": "game-1", "severity": "low", "confidence": "high", "claim": "red1"}],
+                decision={"game_id": "game-1", "decision": "accept", "rationale": "ok"},
+            )
+        ],
+        final_decision=Decision(game_id="game-1", decision="accept", rationale="ok"),
+    )
+
+    with pytest.raises(ValueError, match="current_round must match number of completed rounds"):
+        build_game_response(state, contract)
+
+
+def test_build_game_response_raises_when_rounds_exceed_contract_max_rounds() -> None:
+    contract = GameContract(
+        id="game-1",
+        subject="auth",
+        goal="find flaws",
+        target=Target(kind="repo"),
+        active_roles=["blue", "red", "referee"],
+        max_rounds=1,
+    )
+    state = GameState(
+        game_id="game-1",
+        run_id="run-20260513-100000-deadbeef",
+        current_round=2,
+        rounds=[
+            GameRound(
+                round_number=1,
+                moves=[{"game_id": "game-1", "role": "blue", "summary": "blue1"}],
+                findings=[{"game_id": "game-1", "severity": "medium", "confidence": "high", "claim": "red1"}],
+                decision={"game_id": "game-1", "decision": "revise", "rationale": "r1"},
+            ),
+            GameRound(
+                round_number=2,
+                moves=[{"game_id": "game-1", "role": "blue", "summary": "blue2"}],
+                findings=[{"game_id": "game-1", "severity": "low", "confidence": "high", "claim": "red2"}],
+                decision={"game_id": "game-1", "decision": "accept", "rationale": "ok"},
+            ),
+        ],
+        final_decision=Decision(game_id="game-1", decision="accept", rationale="ok"),
+    )
+
+    with pytest.raises(ValueError, match="state.rounds exceeds contract.max_rounds"):
+        build_game_response(state, contract)
+
+
+def test_build_game_response_raises_when_final_decision_mismatches_last_round() -> None:
+    contract = GameContract(
+        id="game-1",
+        subject="auth",
+        goal="find flaws",
+        target=Target(kind="repo"),
+        active_roles=["blue", "red", "referee"],
+        max_rounds=2,
+    )
+    state = GameState(
+        game_id="game-1",
+        run_id="run-20260513-100000-deadbeef",
+        current_round=1,
+        rounds=[
+            GameRound(
+                round_number=1,
+                moves=[{"game_id": "game-1", "role": "blue", "summary": "blue1"}],
+                findings=[{"game_id": "game-1", "severity": "low", "confidence": "high", "claim": "red1"}],
+                decision={"game_id": "game-1", "decision": "accept", "rationale": "ok"},
+            )
+        ],
+        final_decision=Decision(game_id="game-1", decision="reject", rationale="no"),
+    )
+
+    with pytest.raises(ValueError, match="state.final_decision must match the last round decision"):
+        build_game_response(state, contract)
+
+
 def test_invalid_blue_role_output_fails(tmp_path: Path) -> None:
     board = Blackboard(tmp_path / "events.jsonl")
     engine = RuntimeEngine(board)
