@@ -391,6 +391,22 @@ class DiscrepancySupersession(BaseModel):
     _validate_source_run_id = field_validator("source_run_id")(_require_non_empty)
 
 
+class AcceptedStateSupersession(BaseModel):
+    id: str
+    superseded_item_id: str
+    superseding_item_id: str
+    target_kind: IntegrationTargetKind
+    rationale: str
+    source_run_id: str
+    metadata: dict = Field(default_factory=dict)
+
+    _validate_id = field_validator("id")(_require_non_empty)
+    _validate_superseded_item_id = field_validator("superseded_item_id")(_require_non_empty)
+    _validate_superseding_item_id = field_validator("superseding_item_id")(_require_non_empty)
+    _validate_rationale = field_validator("rationale")(_require_non_empty)
+    _validate_source_run_id = field_validator("source_run_id")(_require_non_empty)
+
+
 class Artifact(BaseModel):
     id: str
     type: str

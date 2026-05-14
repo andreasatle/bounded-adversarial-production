@@ -5,6 +5,7 @@ import pytest
 
 from baps.blackboard import Blackboard
 from baps.schemas import (
+    AcceptedStateSupersession,
     DiscrepancyResolution,
     DiscrepancySupersession,
     Event,
@@ -193,3 +194,23 @@ def test_append_discrepancy_supersession_records_expected_event(tmp_path: Path) 
     event = events[0]
     assert event.type == "discrepancy_supersession_recorded"
     assert event.payload["discrepancy_supersession"] == supersession.model_dump(mode="json")
+
+
+def test_append_accepted_state_supersession_records_expected_event(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "board.jsonl")
+    supersession = AcceptedStateSupersession(
+        id="asup-001",
+        superseded_item_id="int-001",
+        superseding_item_id="int-002",
+        target_kind="accomplishment",
+        rationale="newer accepted item supersedes older one",
+        source_run_id="run-2",
+    )
+
+    board.append_accepted_state_supersession(supersession)
+
+    events = board.read_all()
+    assert len(events) == 1
+    event = events[0]
+    assert event.type == "accepted_state_supersession_recorded"
+    assert event.payload["accepted_state_supersession"] == supersession.model_dump(mode="json")

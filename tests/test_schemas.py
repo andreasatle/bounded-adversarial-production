@@ -2,6 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from baps.schemas import (
+    AcceptedStateSupersession,
     AcceptedAccomplishment,
     AcceptedArchitectureItem,
     AcceptedCapability,
@@ -356,6 +357,19 @@ def test_discrepancy_supersession_constructs_successfully() -> None:
     )
     assert supersession.id == "sup-1"
     assert supersession.superseded_discrepancy_id == "run-1"
+
+
+def test_accepted_state_supersession_constructs_successfully() -> None:
+    supersession = AcceptedStateSupersession(
+        id="asup-1",
+        superseded_item_id="item-1",
+        superseding_item_id="item-2",
+        target_kind="accomplishment",
+        rationale="item-2 supersedes item-1",
+        source_run_id="run-2",
+    )
+    assert supersession.id == "asup-1"
+    assert supersession.superseded_item_id == "item-1"
 
 
 def test_agent_profile_constructs_successfully() -> None:

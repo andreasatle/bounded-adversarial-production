@@ -884,3 +884,141 @@ def test_build_projected_state_metadata_counts_match_projected_lists() -> None:
     assert projected.metadata["unresolved_discrepancy_count"] == len(
         projected.unresolved_discrepancies
     )
+
+
+def test_build_projected_state_accepted_accomplishment_can_be_marked_superseded() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="integration:int-001",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "int-001",
+                        "run_id": "run-1",
+                        "outcome": "accepted",
+                        "target_kind": "accomplishment",
+                        "summary": "Accepted accomplishment",
+                        "rationale": "accepted",
+                    }
+                },
+            ),
+            Event(
+                id="asup:001",
+                type="accepted_state_supersession_recorded",
+                payload={
+                    "accepted_state_supersession": {
+                        "id": "asup-001",
+                        "superseded_item_id": "int-001",
+                        "superseding_item_id": "int-002",
+                        "target_kind": "accomplishment",
+                        "rationale": "newer accepted item",
+                        "source_run_id": "run-2",
+                    }
+                },
+            ),
+        ]
+    )
+    item = projected.accepted_accomplishments[0]
+    assert item.metadata["superseded"] is True
+    assert item.metadata["superseding_item_id"] == "int-002"
+
+
+def test_build_projected_state_accepted_architecture_can_be_marked_superseded() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="integration:int-arch-001",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "int-arch-001",
+                        "run_id": "run-arch-1",
+                        "outcome": "accepted",
+                        "target_kind": "architecture",
+                        "summary": "Accepted architecture",
+                        "rationale": "accepted",
+                    }
+                },
+            ),
+            Event(
+                id="asup:002",
+                type="accepted_state_supersession_recorded",
+                payload={
+                    "accepted_state_supersession": {
+                        "id": "asup-002",
+                        "superseded_item_id": "int-arch-001",
+                        "superseding_item_id": "int-arch-002",
+                        "target_kind": "architecture",
+                        "rationale": "newer architecture item",
+                        "source_run_id": "run-arch-2",
+                    }
+                },
+            ),
+        ]
+    )
+    item = projected.accepted_architecture[0]
+    assert item.metadata["superseded"] is True
+    assert item.metadata["superseding_item_id"] == "int-arch-002"
+
+
+def test_build_projected_state_accepted_capability_can_be_marked_superseded() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="integration:int-cap-001",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "int-cap-001",
+                        "run_id": "run-cap-1",
+                        "outcome": "accepted",
+                        "target_kind": "capability",
+                        "summary": "Accepted capability",
+                        "rationale": "accepted",
+                    }
+                },
+            ),
+            Event(
+                id="asup:003",
+                type="accepted_state_supersession_recorded",
+                payload={
+                    "accepted_state_supersession": {
+                        "id": "asup-003",
+                        "superseded_item_id": "int-cap-001",
+                        "superseding_item_id": "int-cap-002",
+                        "target_kind": "capability",
+                        "rationale": "newer capability item",
+                        "source_run_id": "run-cap-2",
+                    }
+                },
+            ),
+        ]
+    )
+    item = projected.accepted_capabilities[0]
+    assert item.metadata["superseded"] is True
+    assert item.metadata["superseding_item_id"] == "int-cap-002"
+
+
+def test_build_projected_state_unknown_accepted_state_superseded_id_is_ignored() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="asup:004",
+                type="accepted_state_supersession_recorded",
+                payload={
+                    "accepted_state_supersession": {
+                        "id": "asup-004",
+                        "superseded_item_id": "unknown-item",
+                        "superseding_item_id": "int-002",
+                        "target_kind": "accomplishment",
+                        "rationale": "unknown superseded id",
+                        "source_run_id": "run-2",
+                    }
+                },
+            ),
+        ]
+    )
+    assert projected.accepted_accomplishments == []
+    assert projected.accepted_architecture == []
+    assert projected.accepted_capabilities == []

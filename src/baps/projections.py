@@ -115,6 +115,32 @@ def build_projected_state(events: list[Event]) -> ProjectedState:
             discrepancy.status = "superseded"
             discrepancy.metadata["superseding_discrepancy_id"] = superseding_discrepancy_id
             continue
+        if event.type == "accepted_state_supersession_recorded":
+            supersession = payload.get("accepted_state_supersession")
+            if not isinstance(supersession, dict):
+                continue
+            superseded_item_id = supersession.get("superseded_item_id")
+            superseding_item_id = supersession.get("superseding_item_id")
+            target_kind = supersession.get("target_kind")
+            if not isinstance(superseded_item_id, str) or not superseded_item_id.strip():
+                continue
+            if not isinstance(superseding_item_id, str) or not superseding_item_id.strip():
+                continue
+
+            if target_kind == "accomplishment":
+                item = accomplishments_by_decision_id.get(superseded_item_id)
+            elif target_kind == "architecture":
+                item = architecture_by_decision_id.get(superseded_item_id)
+            elif target_kind == "capability":
+                item = capabilities_by_decision_id.get(superseded_item_id)
+            else:
+                item = None
+
+            if item is None:
+                continue
+            item.metadata["superseded"] = True
+            item.metadata["superseding_item_id"] = superseding_item_id
+            continue
 
         game_id = payload.get("game_id")
         run_id = payload.get("run_id")
