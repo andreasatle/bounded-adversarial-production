@@ -394,6 +394,7 @@ def test_build_projected_state_rejected_completion_produces_unresolved_discrepan
     assert discrepancy.summary == "blocking issue found"
     assert discrepancy.kind == "unresolved_finding"
     assert discrepancy.severity == "medium"
+    assert discrepancy.status == "open"
     assert discrepancy.metadata["terminal_outcome"] == "rejected_locally"
     assert discrepancy.metadata["integration_recommendation"] == "do_not_integrate"
 
@@ -420,6 +421,7 @@ def test_build_projected_state_budget_exhausted_completion_produces_unresolved_d
     assert discrepancy.summary == "needs more revision"
     assert discrepancy.kind == "unresolved_finding"
     assert discrepancy.severity == "medium"
+    assert discrepancy.status == "open"
     assert discrepancy.metadata["terminal_outcome"] == "revision_budget_exhausted"
     assert discrepancy.metadata["integration_recommendation"] == "do_not_integrate"
 

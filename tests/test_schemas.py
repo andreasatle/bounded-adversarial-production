@@ -232,6 +232,7 @@ def test_projected_state_models_construct_successfully() -> None:
                 summary="Pending discrepancy triage",
                 kind="unresolved_finding",
                 severity="medium",
+                status="open",
                 source_event_id="event-2",
                 metadata={"severity": "medium"},
             )
@@ -265,6 +266,7 @@ def test_projected_state_models_reject_non_empty_string_fields() -> None:
             summary=" ",
             kind="unresolved_finding",
             severity="medium",
+            status="open",
             source_event_id="event-1",
         )
     with pytest.raises(ValidationError):
@@ -277,10 +279,12 @@ def test_unresolved_discrepancy_kind_and_severity_validation() -> None:
         summary="Pending discrepancy triage",
         kind="unresolved_finding",
         severity="medium",
+        status="open",
         source_event_id="event-1",
     )
     assert discrepancy.kind == "unresolved_finding"
     assert discrepancy.severity == "medium"
+    assert discrepancy.status == "open"
 
     with pytest.raises(ValidationError):
         UnresolvedDiscrepancy(
@@ -288,6 +292,7 @@ def test_unresolved_discrepancy_kind_and_severity_validation() -> None:
             summary="Bad kind",
             kind="not_a_kind",
             severity="medium",
+            status="open",
             source_event_id="event-2",
         )
 
@@ -297,7 +302,18 @@ def test_unresolved_discrepancy_kind_and_severity_validation() -> None:
             summary="Bad severity",
             kind="unresolved_finding",
             severity="critical",
+            status="open",
             source_event_id="event-3",
+        )
+
+    with pytest.raises(ValidationError):
+        UnresolvedDiscrepancy(
+            id="disc-4",
+            summary="Bad status",
+            kind="unresolved_finding",
+            severity="medium",
+            status="closed",
+            source_event_id="event-4",
         )
 
 
@@ -982,6 +998,7 @@ def test_mutable_defaults_are_not_shared() -> None:
             summary="d1",
             kind="unresolved_finding",
             severity="medium",
+            status="open",
             source_event_id="event-2",
         )
     )

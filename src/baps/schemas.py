@@ -194,6 +194,12 @@ DiscrepancySeverity = Literal[
     "high",
 ]
 
+DiscrepancyStatus = Literal[
+    "open",
+    "resolved",
+    "superseded",
+]
+
 
 class GameResponse(BaseModel):
     game_id: str
@@ -292,6 +298,7 @@ class UnresolvedDiscrepancy(BaseModel):
     summary: str
     kind: DiscrepancyKind
     severity: DiscrepancySeverity
+    status: DiscrepancyStatus
     source_event_id: str
     metadata: dict = Field(default_factory=dict)
 
