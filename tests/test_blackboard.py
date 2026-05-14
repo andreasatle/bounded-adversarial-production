@@ -7,6 +7,7 @@ from baps.blackboard import Blackboard
 from baps.schemas import (
     AcceptedStateRevocation,
     AcceptedStateSupersession,
+    ArtifactProposalRecord,
     DiscrepancyResolution,
     DiscrepancySupersession,
     Event,
@@ -234,3 +235,43 @@ def test_append_accepted_state_revocation_records_expected_event(tmp_path: Path)
     event = events[0]
     assert event.type == "accepted_state_revocation_recorded"
     assert event.payload["accepted_state_revocation"] == revocation.model_dump(mode="json")
+
+
+def test_append_artifact_proposal_record_records_expected_event(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "board.jsonl")
+    record = ArtifactProposalRecord(
+        id="apr-001",
+        artifact_id="art-1",
+        change_id="chg-1",
+        source_run_id="run-1",
+        integration_decision_id="int-1",
+        status="accepted",
+        summary="Accepted proposal linked to integration outcome",
+    )
+
+    board.append_artifact_proposal_record(record)
+
+    events = board.read_all()
+    assert len(events) == 1
+    event = events[0]
+    assert event.type == "artifact_proposal_recorded"
+    assert event.payload["artifact_proposal_record"] == record.model_dump(mode="json")
+
+
+def test_query_can_retrieve_artifact_proposal_recorded_events(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "board.jsonl")
+    board.append(Event(id="e1", type="game_started", payload={"run_id": "run-1"}))
+    board.append_artifact_proposal_record(
+        ArtifactProposalRecord(
+            id="apr-002",
+            artifact_id="art-2",
+            change_id="chg-2",
+            source_run_id="run-2",
+            status="proposed",
+            summary="Pending proposal",
+        )
+    )
+
+    events = board.query("artifact_proposal_recorded")
+    assert len(events) == 1
+    assert events[0].payload["artifact_proposal_record"]["id"] == "apr-002"

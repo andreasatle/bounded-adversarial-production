@@ -498,6 +498,30 @@ class ArtifactAdapterResult(BaseModel):
     _validate_message = field_validator("message")(_require_non_empty)
 
 
+class ArtifactProposalRecord(BaseModel):
+    id: str
+    artifact_id: str
+    change_id: str
+    source_run_id: str
+    integration_decision_id: str | None = None
+    status: Literal["proposed", "accepted", "rejected"] = "proposed"
+    summary: str
+    metadata: dict = Field(default_factory=dict)
+
+    _validate_id = field_validator("id")(_require_non_empty)
+    _validate_artifact_id = field_validator("artifact_id")(_require_non_empty)
+    _validate_change_id = field_validator("change_id")(_require_non_empty)
+    _validate_source_run_id = field_validator("source_run_id")(_require_non_empty)
+    _validate_summary = field_validator("summary")(_require_non_empty)
+
+    @field_validator("integration_decision_id")
+    @classmethod
+    def _validate_optional_integration_decision_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _require_non_empty(value)
+
+
 class Event(BaseModel):
     id: str
     type: str

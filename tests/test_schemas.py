@@ -12,6 +12,7 @@ from baps.schemas import (
     Artifact,
     ArtifactAdapterResult,
     ArtifactChange,
+    ArtifactProposalRecord,
     ArtifactVersion,
     Decision,
     DiscrepancyResolution,
@@ -137,6 +138,20 @@ def test_artifact_adapter_result_constructs_successfully() -> None:
         message="ok",
     )
     assert result.message == "ok"
+
+
+def test_artifact_proposal_record_constructs_successfully() -> None:
+    record = ArtifactProposalRecord(
+        id="apr-1",
+        artifact_id="art-1",
+        change_id="chg-1",
+        source_run_id="run-1",
+        integration_decision_id="int-1",
+        status="proposed",
+        summary="Proposed README clarification changes",
+    )
+    assert record.id == "apr-1"
+    assert record.status == "proposed"
 
 
 def test_game_record_constructs_successfully() -> None:
@@ -587,6 +602,83 @@ def test_goal_amendment_proposal_source_run_id_optional_but_non_empty_when_provi
             rationale="Whitespace source run id should fail.",
             proposed_change="Change text",
             source_run_id="   ",
+        )
+
+
+def test_artifact_proposal_record_validation_rules() -> None:
+    # optional integration_decision_id omitted
+    record = ArtifactProposalRecord(
+        id="apr-2",
+        artifact_id="art-2",
+        change_id="chg-2",
+        source_run_id="run-2",
+        summary="Proposed code doc updates",
+    )
+    assert record.integration_decision_id is None
+
+    with pytest.raises(ValidationError):
+        ArtifactProposalRecord(
+            id=" ",
+            artifact_id="art-1",
+            change_id="chg-1",
+            source_run_id="run-1",
+            summary="s",
+        )
+
+    with pytest.raises(ValidationError):
+        ArtifactProposalRecord(
+            id="apr-3",
+            artifact_id=" ",
+            change_id="chg-1",
+            source_run_id="run-1",
+            summary="s",
+        )
+
+    with pytest.raises(ValidationError):
+        ArtifactProposalRecord(
+            id="apr-4",
+            artifact_id="art-1",
+            change_id=" ",
+            source_run_id="run-1",
+            summary="s",
+        )
+
+    with pytest.raises(ValidationError):
+        ArtifactProposalRecord(
+            id="apr-5",
+            artifact_id="art-1",
+            change_id="chg-1",
+            source_run_id=" ",
+            summary="s",
+        )
+
+    with pytest.raises(ValidationError):
+        ArtifactProposalRecord(
+            id="apr-6",
+            artifact_id="art-1",
+            change_id="chg-1",
+            source_run_id="run-1",
+            summary=" ",
+        )
+
+    with pytest.raises(ValidationError):
+        ArtifactProposalRecord(
+            id="apr-7",
+            artifact_id="art-1",
+            change_id="chg-1",
+            source_run_id="run-1",
+            integration_decision_id=" ",
+            summary="s",
+        )
+
+    with pytest.raises(ValidationError):
+        ArtifactProposalRecord(
+            id="apr-8",
+            artifact_id="art-1",
+            change_id="chg-1",
+            source_run_id="run-1",
+            status="pending",
+            summary="s",
         )
 
 
@@ -1321,3 +1413,20 @@ def test_mutable_defaults_are_not_shared() -> None:
     )
     goal_amendment_a.metadata["k"] = "v"
     assert goal_amendment_b.metadata == {}
+
+    artifact_proposal_a = ArtifactProposalRecord(
+        id="apr-a",
+        artifact_id="art-a",
+        change_id="chg-a",
+        source_run_id="run-a",
+        summary="proposal a",
+    )
+    artifact_proposal_b = ArtifactProposalRecord(
+        id="apr-b",
+        artifact_id="art-b",
+        change_id="chg-b",
+        source_run_id="run-b",
+        summary="proposal b",
+    )
+    artifact_proposal_a.metadata["k"] = "v"
+    assert artifact_proposal_b.metadata == {}

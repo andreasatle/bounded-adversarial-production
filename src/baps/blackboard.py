@@ -6,6 +6,7 @@ from pathlib import Path
 from baps.schemas import (
     AcceptedStateRevocation,
     AcceptedStateSupersession,
+    ArtifactProposalRecord,
     DiscrepancyResolution,
     DiscrepancySupersession,
     Event,
@@ -89,5 +90,14 @@ class Blackboard:
                 id=f"accepted_state_revocation:{revocation.id}",
                 type="accepted_state_revocation_recorded",
                 payload={"accepted_state_revocation": revocation.model_dump(mode="json")},
+            )
+        )
+
+    def append_artifact_proposal_record(self, record: ArtifactProposalRecord) -> None:
+        self.append(
+            Event(
+                id=f"artifact_proposal:{record.id}",
+                type="artifact_proposal_recorded",
+                payload={"artifact_proposal_record": record.model_dump(mode="json")},
             )
         )
