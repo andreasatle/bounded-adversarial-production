@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 from baps.game_types import (
     GameTypePromptSections,
     make_documentation_refinement_game_definition,
@@ -9,6 +7,7 @@ from baps.game_types import (
 from baps.models import ModelClient
 from baps.prompt_assembly import PromptSection, PromptSpec, assemble_prompt
 from baps.prompts import PromptRenderer
+from baps.role_output_parsing import get_dict, get_non_empty_string, parse_json_object
 from baps.schemas import Decision, Finding, GameContract, Move
 
 
@@ -34,41 +33,27 @@ def _parse_red_output(generated_text: str, default_material: bool) -> tuple[bool
 
 
 def _parse_red_output_json(generated_text: str) -> dict | None:
-    try:
-        parsed = json.loads(generated_text)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(parsed, dict):
-        return None
-    return parsed
+    return parse_json_object(generated_text)
 
 
 def _parse_referee_output(generated_text: str) -> str:
-    try:
-        parsed = json.loads(generated_text)
-    except json.JSONDecodeError:
+    parsed = parse_json_object(generated_text)
+    if parsed is None:
         return generated_text
-    if not isinstance(parsed, dict):
-        return generated_text
-    rationale = str(parsed.get("rationale", generated_text)).strip()
-    return rationale or generated_text
+    rationale = get_non_empty_string(parsed, "rationale")
+    return rationale if rationale is not None else generated_text
 
 
 def _parse_blue_output(generated_text: str) -> tuple[str, dict]:
-    try:
-        parsed = json.loads(generated_text)
-    except json.JSONDecodeError:
-        return generated_text, {}
-    if not isinstance(parsed, dict):
+    parsed = parse_json_object(generated_text)
+    if parsed is None:
         return generated_text, {}
 
-    summary = str(parsed.get("summary", "")).strip()
-    if not summary:
+    summary = get_non_empty_string(parsed, "summary")
+    if summary is None:
         return generated_text, {}
 
-    payload = parsed.get("payload", {})
-    if not isinstance(payload, dict):
-        payload = {}
+    payload = get_dict(parsed, "payload") or {}
     return summary, payload
 
 
