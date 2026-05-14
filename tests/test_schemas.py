@@ -19,6 +19,7 @@ from baps.schemas import (
     Finding,
     GameContract,
     GameRecord,
+    GoalAmendmentProposal,
     IntegrationDecision,
     GameResponse,
     GameRound,
@@ -494,6 +495,98 @@ def test_agent_profile_requires_non_empty_strings() -> None:
             name="Blue",
             critique_level="low",
             instructions=" ",
+        )
+
+
+def test_goal_amendment_proposal_constructs_successfully() -> None:
+    proposal = GoalAmendmentProposal(
+        id="goal-amend-1",
+        summary="Clarify north-star objective",
+        rationale="Current goal omits acceptance criteria.",
+        proposed_change="Add explicit acceptance criteria paragraph.",
+        source_run_id="run-1",
+    )
+    assert proposal.id == "goal-amend-1"
+    assert proposal.status == "proposed"
+
+
+def test_goal_amendment_proposal_status_values() -> None:
+    approved = GoalAmendmentProposal(
+        id="goal-amend-2",
+        summary="Approved update",
+        rationale="Human reviewer approved.",
+        proposed_change="Replace section A with revised text.",
+        status="approved",
+    )
+    rejected = GoalAmendmentProposal(
+        id="goal-amend-3",
+        summary="Rejected update",
+        rationale="Conflicts with product direction.",
+        proposed_change="Rewrite project objective.",
+        status="rejected",
+    )
+    assert approved.status == "approved"
+    assert rejected.status == "rejected"
+
+
+def test_goal_amendment_proposal_rejects_invalid_status() -> None:
+    with pytest.raises(ValidationError):
+        GoalAmendmentProposal(
+            id="goal-amend-4",
+            summary="Bad status",
+            rationale="Invalid status value",
+            proposed_change="Change text",
+            status="pending",
+        )
+
+
+def test_goal_amendment_proposal_requires_non_empty_strings() -> None:
+    with pytest.raises(ValidationError):
+        GoalAmendmentProposal(
+            id=" ",
+            summary="summary",
+            rationale="rationale",
+            proposed_change="change",
+        )
+    with pytest.raises(ValidationError):
+        GoalAmendmentProposal(
+            id="goal-amend-5",
+            summary=" ",
+            rationale="rationale",
+            proposed_change="change",
+        )
+    with pytest.raises(ValidationError):
+        GoalAmendmentProposal(
+            id="goal-amend-6",
+            summary="summary",
+            rationale=" ",
+            proposed_change="change",
+        )
+    with pytest.raises(ValidationError):
+        GoalAmendmentProposal(
+            id="goal-amend-7",
+            summary="summary",
+            rationale="rationale",
+            proposed_change=" ",
+        )
+
+
+def test_goal_amendment_proposal_source_run_id_optional_but_non_empty_when_provided() -> None:
+    proposal = GoalAmendmentProposal(
+        id="goal-amend-8",
+        summary="No source run id",
+        rationale="Manually proposed by sponsor.",
+        proposed_change="Add clarification sentence.",
+    )
+    assert proposal.source_run_id is None
+
+    with pytest.raises(ValidationError):
+        GoalAmendmentProposal(
+            id="goal-amend-9",
+            summary="Bad source run id",
+            rationale="Whitespace source run id should fail.",
+            proposed_change="Change text",
+            source_run_id="   ",
         )
 
 
@@ -1213,3 +1306,18 @@ def test_mutable_defaults_are_not_shared() -> None:
     )
     agent_profile_a.metadata["k"] = "v"
     assert agent_profile_b.metadata == {}
+
+    goal_amendment_a = GoalAmendmentProposal(
+        id="goal-amend-a",
+        summary="s1",
+        rationale="r1",
+        proposed_change="change 1",
+    )
+    goal_amendment_b = GoalAmendmentProposal(
+        id="goal-amend-b",
+        summary="s2",
+        rationale="r2",
+        proposed_change="change 2",
+    )
+    goal_amendment_a.metadata["k"] = "v"
+    assert goal_amendment_b.metadata == {}

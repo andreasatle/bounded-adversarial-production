@@ -172,6 +172,7 @@ IntegrationRecommendation = Literal[
 ]
 
 IntegrationOutcome = Literal["accepted", "rejected", "deferred"]
+GoalAmendmentStatus = Literal["proposed", "approved", "rejected"]
 
 IntegrationTargetKind = Literal[
     "accomplishment",
@@ -353,6 +354,28 @@ class IntegrationDecision(BaseModel):
     _validate_run_id = field_validator("run_id")(_require_non_empty)
     _validate_summary = field_validator("summary")(_require_non_empty)
     _validate_rationale = field_validator("rationale")(_require_non_empty)
+
+
+class GoalAmendmentProposal(BaseModel):
+    id: str
+    summary: str
+    rationale: str
+    proposed_change: str
+    source_run_id: str | None = None
+    status: GoalAmendmentStatus = "proposed"
+    metadata: dict = Field(default_factory=dict)
+
+    _validate_id = field_validator("id")(_require_non_empty)
+    _validate_summary = field_validator("summary")(_require_non_empty)
+    _validate_rationale = field_validator("rationale")(_require_non_empty)
+    _validate_proposed_change = field_validator("proposed_change")(_require_non_empty)
+
+    @field_validator("source_run_id")
+    @classmethod
+    def _validate_optional_source_run_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _require_non_empty(value)
 
 
 class AgentProfile(BaseModel):
