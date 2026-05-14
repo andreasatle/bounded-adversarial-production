@@ -252,11 +252,24 @@ class RuntimeEngine:
             rounds=rounds,
             final_decision=final_decision,
         )
+        if final_decision is None:
+            raise ValueError("final_decision must be present when writing game_completed event")
+        _, terminal_outcome, integration_recommendation = _derive_terminal_semantics(
+            decision=final_decision,
+            rounds_played=len(rounds),
+            max_rounds=contract.max_rounds,
+        )
         self.blackboard.append(
             Event(
                 id=f"{contract.id}:{run_id}:game_completed",
                 type="game_completed",
-                payload={"game_id": contract.id, "run_id": run_id, "state": state.model_dump(mode="json")},
+                payload={
+                    "game_id": contract.id,
+                    "run_id": run_id,
+                    "state": state.model_dump(mode="json"),
+                    "terminal_outcome": terminal_outcome,
+                    "integration_recommendation": integration_recommendation,
+                },
             )
         )
         return state

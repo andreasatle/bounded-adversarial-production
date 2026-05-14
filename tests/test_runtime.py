@@ -31,7 +31,7 @@ def test_run_game_returns_expected_game_state_and_events(tmp_path: Path) -> None
         return {"game_id": "game-1", "severity": "high", "confidence": "high", "claim": "risk found"}
 
     def referee_role(_contract: GameContract, _blue_move, _red_finding):
-        return {"game_id": "game-1", "decision": "integrate", "rationale": "acceptable risk"}
+        return {"game_id": "game-1", "decision": "accept", "rationale": "acceptable risk"}
 
     state = engine.run_game(contract, blue_role, red_role, referee_role)
 
@@ -42,7 +42,7 @@ def test_run_game_returns_expected_game_state_and_events(tmp_path: Path) -> None
     assert state.rounds[0].round_number == 1
     assert state.rounds[0].moves[0].role == "blue"
     assert state.final_decision is not None
-    assert state.final_decision.decision == "integrate"
+    assert state.final_decision.decision == "accept"
 
     events = board.read_all()
     assert [event.type for event in events] == [
@@ -56,6 +56,10 @@ def test_run_game_returns_expected_game_state_and_events(tmp_path: Path) -> None
         assert event.payload["game_id"] == "game-1"
         assert event.payload["run_id"] == state.run_id
         assert event.id.startswith(f"game-1:{state.run_id}:")
+    completed = events[-1]
+    assert completed.type == "game_completed"
+    assert completed.payload["terminal_outcome"] == "accepted_locally"
+    assert completed.payload["integration_recommendation"] == "integration_recommended"
 
 
 def test_repeated_runs_produce_different_run_ids(tmp_path: Path) -> None:
@@ -70,7 +74,7 @@ def test_repeated_runs_produce_different_run_ids(tmp_path: Path) -> None:
         return {"game_id": "game-1", "severity": "high", "confidence": "high", "claim": "risk found"}
 
     def referee_role(_contract: GameContract, _blue_move, _red_finding):
-        return {"game_id": "game-1", "decision": "integrate", "rationale": "acceptable risk"}
+        return {"game_id": "game-1", "decision": "accept", "rationale": "acceptable risk"}
 
     first = engine.run_game(contract, blue_role, red_role, referee_role)
     second = engine.run_game(contract, blue_role, red_role, referee_role)
@@ -93,7 +97,7 @@ def test_two_runtime_instances_produce_different_run_ids(tmp_path: Path) -> None
         return {"game_id": "game-1", "severity": "high", "confidence": "high", "claim": "risk found"}
 
     def referee_role(_contract: GameContract, _blue_move, _red_finding):
-        return {"game_id": "game-1", "decision": "integrate", "rationale": "acceptable risk"}
+        return {"game_id": "game-1", "decision": "accept", "rationale": "acceptable risk"}
 
     first = engine_one.run_game(contract, blue_role, red_role, referee_role)
     second = engine_two.run_game(contract, blue_role, red_role, referee_role)
@@ -340,7 +344,7 @@ def test_invalid_blue_role_output_fails(tmp_path: Path) -> None:
         return {"game_id": "game-1", "severity": "high", "confidence": "high", "claim": "risk found"}
 
     def referee_role(_contract: GameContract, _blue_move, _red_finding):
-        return {"game_id": "game-1", "decision": "integrate", "rationale": "acceptable risk"}
+        return {"game_id": "game-1", "decision": "accept", "rationale": "acceptable risk"}
 
     with pytest.raises(RoleInvocationError):
         engine.run_game(contract, blue_role, red_role, referee_role)
@@ -358,7 +362,7 @@ def test_blue_move_with_wrong_game_id_fails(tmp_path: Path) -> None:
         return {"game_id": "game-1", "severity": "high", "confidence": "high", "claim": "risk found"}
 
     def referee_role(_contract: GameContract, _blue_move, _red_finding):
-        return {"game_id": "game-1", "decision": "integrate", "rationale": "acceptable risk"}
+        return {"game_id": "game-1", "decision": "accept", "rationale": "acceptable risk"}
 
     with pytest.raises(RoleInvocationError):
         engine.run_game(contract, blue_role, red_role, referee_role)
@@ -376,7 +380,7 @@ def test_blue_move_with_wrong_role_fails(tmp_path: Path) -> None:
         return {"game_id": "game-1", "severity": "high", "confidence": "high", "claim": "risk found"}
 
     def referee_role(_contract: GameContract, _blue_move, _red_finding):
-        return {"game_id": "game-1", "decision": "integrate", "rationale": "acceptable risk"}
+        return {"game_id": "game-1", "decision": "accept", "rationale": "acceptable risk"}
 
     with pytest.raises(RoleInvocationError):
         engine.run_game(contract, blue_role, red_role, referee_role)
@@ -394,7 +398,7 @@ def test_red_finding_with_wrong_game_id_fails(tmp_path: Path) -> None:
         return {"game_id": "wrong", "severity": "high", "confidence": "high", "claim": "risk found"}
 
     def referee_role(_contract: GameContract, _blue_move, _red_finding):
-        return {"game_id": "game-1", "decision": "integrate", "rationale": "acceptable risk"}
+        return {"game_id": "game-1", "decision": "accept", "rationale": "acceptable risk"}
 
     with pytest.raises(RoleInvocationError):
         engine.run_game(contract, blue_role, red_role, referee_role)
@@ -412,7 +416,7 @@ def test_referee_decision_with_wrong_game_id_fails(tmp_path: Path) -> None:
         return {"game_id": "game-1", "severity": "high", "confidence": "high", "claim": "risk found"}
 
     def referee_role(_contract: GameContract, _blue_move, _red_finding):
-        return {"game_id": "wrong", "decision": "integrate", "rationale": "acceptable risk"}
+        return {"game_id": "wrong", "decision": "accept", "rationale": "acceptable risk"}
 
     with pytest.raises(RoleInvocationError):
         engine.run_game(contract, blue_role, red_role, referee_role)
@@ -434,7 +438,7 @@ def test_runtime_uses_guard_retry_behavior_and_succeeds(tmp_path: Path) -> None:
         return {"game_id": "game-1", "severity": "high", "confidence": "high", "claim": "risk found"}
 
     def referee_role(_contract: GameContract, _blue_move, _red_finding):
-        return {"game_id": "game-1", "decision": "integrate", "rationale": "acceptable risk"}
+        return {"game_id": "game-1", "decision": "accept", "rationale": "acceptable risk"}
 
     state = engine.run_game(contract, blue_role, red_role, referee_role)
     assert state.game_id == "game-1"
@@ -453,7 +457,7 @@ def test_runtime_failure_after_retries_raises_role_invocation_error(tmp_path: Pa
         return {"game_id": "game-1", "severity": "high", "confidence": "high", "claim": "risk found"}
 
     def referee_role(_contract: GameContract, _blue_move, _red_finding):
-        return {"game_id": "game-1", "decision": "integrate", "rationale": "acceptable risk"}
+        return {"game_id": "game-1", "decision": "accept", "rationale": "acceptable risk"}
 
     with pytest.raises(RoleInvocationError):
         engine.run_game(contract, blue_role, red_role, referee_role)
