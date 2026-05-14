@@ -298,3 +298,77 @@ def test_game_service_raises_when_request_state_sources_missing_manifest_or_adap
         ValueError, match="request.state_source_ids requires both state_manifest and state_adapter"
     ):
         service_no_adapter.play(request)
+
+
+def test_game_service_appends_integration_decision_event_for_accepted_local_response(
+    tmp_path: Path,
+) -> None:
+    board = Blackboard(tmp_path / "events.jsonl")
+    model = FakeModelClient(
+        responses=[
+            "candidate answer",
+            "CLAIM: minor note only",
+            "rationale",
+        ]
+    )
+    service = GameService(
+        model_client=model,
+        blackboard=board,
+        red_material=False,
+    )
+
+    response = service.play(_request())
+    integration_events = board.query("integration_decision_recorded")
+    assert len(integration_events) == 1
+    decision = integration_events[0].payload["integration_decision"]
+    assert response.final_decision.decision == "accept"
+    assert decision["outcome"] == "accepted"
+
+
+def test_game_service_appends_deferred_integration_decision_for_rejected_local_response(
+    tmp_path: Path,
+) -> None:
+    board = Blackboard(tmp_path / "events.jsonl")
+    model = FakeModelClient(
+        responses=[
+            "candidate answer",
+            '{"claim":"blocking issue","material":true,"block_integration":true,"severity":"high","confidence":"high"}',
+            "rationale",
+        ]
+    )
+    service = GameService(
+        model_client=model,
+        blackboard=board,
+    )
+
+    response = service.play(_request())
+    integration_events = board.query("integration_decision_recorded")
+    assert len(integration_events) == 1
+    decision = integration_events[0].payload["integration_decision"]
+    assert response.final_decision.decision == "reject"
+    assert decision["outcome"] == "deferred"
+
+
+def test_game_service_appends_deferred_integration_decision_for_budget_exhausted_revise(
+    tmp_path: Path,
+) -> None:
+    board = Blackboard(tmp_path / "events.jsonl")
+    model = FakeModelClient(
+        responses=[
+            "candidate answer",
+            "MATERIAL: yes\nCLAIM: still needs revision",
+            "rationale",
+        ]
+    )
+    service = GameService(
+        model_client=model,
+        blackboard=board,
+        max_rounds=1,
+    )
+
+    response = service.play(_request())
+    integration_events = board.query("integration_decision_recorded")
+    assert len(integration_events) == 1
+    decision = integration_events[0].payload["integration_decision"]
+    assert response.final_decision.decision == "revise"
+    assert decision["outcome"] == "deferred"

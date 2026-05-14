@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from baps.blackboard import Blackboard
 from baps.game_types import GameDefinition, build_game_definition
+from baps.integrator import integrate_response
 from baps.models import ModelClient
 from baps.prompt_roles import build_prompt_roles
 from baps.runtime import RuntimeEngine, build_game_response
@@ -74,4 +75,6 @@ class GameService:
         )
 
         state = RuntimeEngine(self.blackboard).run_game(contract, blue_role, red_role, referee_role)
-        return build_game_response(state, contract)
+        response = build_game_response(state, contract)
+        integrate_response(response=response, blackboard=self.blackboard)
+        return response
