@@ -1,7 +1,12 @@
 from pathlib import Path
 
 from baps.blackboard import Blackboard
-from baps.integrator import Integrator, integrate_response
+from baps.integrator import (
+    DefaultIntegrationPolicy,
+    IntegrationPolicy,
+    Integrator,
+    integrate_response,
+)
 from baps.schemas import Decision, GameResponse, IntegrationDecision
 
 
@@ -71,6 +76,41 @@ def test_integrator_defers_when_revision_budget_exhausted() -> None:
     assert decision.rationale
 
 
+def test_default_integration_policy_matches_default_integrator_behavior() -> None:
+    response = _make_response(
+        run_id="run-3b",
+        terminal_outcome="rejected_locally",
+        integration_recommendation="do_not_integrate",
+    )
+    policy_decision = DefaultIntegrationPolicy().decide(response)
+    integrator_decision = Integrator().integrate(response)
+    assert policy_decision.model_dump(mode="json") == integrator_decision.model_dump(mode="json")
+
+
+def test_integrator_delegates_to_custom_policy() -> None:
+    class StubPolicy(IntegrationPolicy):
+        def decide(self, response: GameResponse) -> IntegrationDecision:
+            return IntegrationDecision(
+                id=f"custom:{response.run_id}",
+                run_id=response.run_id,
+                outcome="rejected",
+                target_kind="accomplishment",
+                summary="custom decision summary",
+                rationale="custom policy rationale",
+            )
+
+    response = _make_response(
+        run_id="run-custom",
+        terminal_outcome="accepted_locally",
+        integration_recommendation="integration_recommended",
+    )
+    integrator = Integrator(policy=StubPolicy())
+    decision = integrator.integrate(response)
+
+    assert decision.id == "custom:run-custom"
+    assert decision.outcome == "rejected"
+
+
 def test_integrate_response_returns_integration_decision_and_appends_event(tmp_path: Path) -> None:
     board = Blackboard(tmp_path / "board.jsonl")
     response = _make_response(
@@ -112,3 +152,34 @@ def test_integrate_response_uses_injected_integrator(tmp_path: Path) -> None:
     events = board.query("integration_decision_recorded")
     assert len(events) == 1
     assert events[0].payload["integration_decision"]["id"] == "stub-id"
+
+
+def test_integrate_response_works_with_custom_policy_via_integrator(tmp_path: Path) -> None:
+    class StubPolicy(IntegrationPolicy):
+        def decide(self, response: GameResponse) -> IntegrationDecision:
+            return IntegrationDecision(
+                id=f"policy:{response.run_id}",
+                run_id=response.run_id,
+                outcome="deferred",
+                target_kind="accomplishment",
+                summary="policy summary",
+                rationale="policy rationale",
+            )
+
+    board = Blackboard(tmp_path / "board.jsonl")
+    response = _make_response(
+        run_id="run-6",
+        terminal_outcome="accepted_locally",
+        integration_recommendation="integration_recommended",
+    )
+
+    decision = integrate_response(
+        response=response,
+        blackboard=board,
+        integrator=Integrator(policy=StubPolicy()),
+    )
+
+    assert decision.id == "policy:run-6"
+    events = board.query("integration_decision_recorded")
+    assert len(events) == 1
+    assert events[0].payload["integration_decision"]["id"] == "policy:run-6"

@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+from typing import Protocol
+
 from baps.blackboard import Blackboard
 from baps.schemas import GameResponse, IntegrationDecision
 
 
-class Integrator:
-    def integrate(self, response: GameResponse) -> IntegrationDecision:
+class IntegrationPolicy(Protocol):
+    def decide(self, response: GameResponse) -> IntegrationDecision: ...
+
+
+class DefaultIntegrationPolicy:
+    def decide(self, response: GameResponse) -> IntegrationDecision:
         accepted = (
             response.terminal_outcome == "accepted_locally"
             and response.integration_recommendation == "integration_recommended"
@@ -34,6 +40,14 @@ class Integrator:
                 "final_decision": response.final_decision.decision,
             },
         )
+
+
+class Integrator:
+    def __init__(self, policy: IntegrationPolicy | None = None):
+        self.policy = policy if policy is not None else DefaultIntegrationPolicy()
+
+    def integrate(self, response: GameResponse) -> IntegrationDecision:
+        return self.policy.decide(response)
 
 
 def integrate_response(
