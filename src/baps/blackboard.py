@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from baps.schemas import Event
+from baps.schemas import Event, IntegrationDecision
 
 
 class Blackboard:
@@ -39,3 +39,12 @@ class Blackboard:
 
     def query_completed_runs(self) -> list[Event]:
         return self.query("game_completed")
+
+    def append_integration_decision(self, decision: IntegrationDecision) -> None:
+        self.append(
+            Event(
+                id=f"integration:{decision.id}",
+                type="integration_decision_recorded",
+                payload={"integration_decision": decision.model_dump(mode="json")},
+            )
+        )

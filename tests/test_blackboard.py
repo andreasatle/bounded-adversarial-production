@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from baps.blackboard import Blackboard
-from baps.schemas import Event
+from baps.schemas import Event, IntegrationDecision
 
 
 def test_append_one_event_creates_file(tmp_path: Path) -> None:
@@ -112,3 +112,42 @@ def test_query_completed_runs_returns_only_game_completed_events(tmp_path: Path)
     completed = board.query_completed_runs()
     assert [event.id for event in completed] == ["e2", "e4"]
     assert all(event.type == "game_completed" for event in completed)
+
+
+def test_append_integration_decision_records_expected_event(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "board.jsonl")
+    decision = IntegrationDecision(
+        id="int-001",
+        run_id="run-123",
+        outcome="accepted",
+        target_kind="accomplishment",
+        summary="Accept for durable state",
+        rationale="Meets integration criteria",
+    )
+
+    board.append_integration_decision(decision)
+
+    events = board.read_all()
+    assert len(events) == 1
+    event = events[0]
+    assert event.type == "integration_decision_recorded"
+    assert event.payload["integration_decision"] == decision.model_dump(mode="json")
+
+
+def test_query_can_retrieve_integration_decision_events(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "board.jsonl")
+    board.append(Event(id="e1", type="game_started", payload={"run_id": "run-1"}))
+    board.append_integration_decision(
+        IntegrationDecision(
+            id="int-002",
+            run_id="run-1",
+            outcome="deferred",
+            target_kind="discrepancy",
+            summary="Needs more evidence",
+            rationale="Insufficient confidence for integration",
+        )
+    )
+
+    integration_events = board.query("integration_decision_recorded")
+    assert len(integration_events) == 1
+    assert integration_events[0].payload["integration_decision"]["id"] == "int-002"
