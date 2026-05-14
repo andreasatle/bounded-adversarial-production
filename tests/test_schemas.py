@@ -1030,11 +1030,13 @@ def test_mutable_defaults_are_not_shared() -> None:
     projected_a.active_games.append(
         ActiveGameSummary(id="game-1", title="g1", source_run_id="run-3")
     )
+    projected_a.metadata["k"] = "v"
     assert projected_b.accepted_accomplishments == []
     assert projected_b.accepted_architecture == []
     assert projected_b.accepted_capabilities == []
     assert projected_b.unresolved_discrepancies == []
     assert projected_b.active_games == []
+    assert projected_b.metadata == {}
 
     integration_decision_a = IntegrationDecision(
         id="int-1",

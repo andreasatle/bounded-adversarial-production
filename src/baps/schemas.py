@@ -324,6 +324,7 @@ class ProjectedState(BaseModel):
     accepted_capabilities: list[AcceptedCapability] = Field(default_factory=list)
     unresolved_discrepancies: list[UnresolvedDiscrepancy] = Field(default_factory=list)
     active_games: list[ActiveGameSummary] = Field(default_factory=list)
+    metadata: dict = Field(default_factory=dict)
 
 
 class IntegrationDecision(BaseModel):

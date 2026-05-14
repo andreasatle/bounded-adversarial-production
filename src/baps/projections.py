@@ -158,28 +158,42 @@ def build_projected_state(events: list[Event]) -> ProjectedState:
             del active_by_run[run_id]
             active_run_order = [existing_run_id for existing_run_id in active_run_order if existing_run_id != run_id]
 
+    accepted_accomplishments = [
+        accomplishments_by_decision_id[decision_id]
+        for decision_id in accomplishment_order
+        if decision_id in accomplishments_by_decision_id
+    ]
+    accepted_architecture = [
+        architecture_by_decision_id[decision_id]
+        for decision_id in architecture_order
+        if decision_id in architecture_by_decision_id
+    ]
+    accepted_capabilities = [
+        capabilities_by_decision_id[decision_id]
+        for decision_id in capability_order
+        if decision_id in capabilities_by_decision_id
+    ]
+    unresolved_discrepancies = [
+        discrepancies_by_run[run_id]
+        for run_id in discrepancy_order
+        if run_id in discrepancies_by_run
+    ]
+    active_games = [active_by_run[run_id] for run_id in active_run_order if run_id in active_by_run]
+
     return ProjectedState(
-        accepted_accomplishments=[
-            accomplishments_by_decision_id[decision_id]
-            for decision_id in accomplishment_order
-            if decision_id in accomplishments_by_decision_id
-        ],
-        accepted_architecture=[
-            architecture_by_decision_id[decision_id]
-            for decision_id in architecture_order
-            if decision_id in architecture_by_decision_id
-        ],
-        accepted_capabilities=[
-            capabilities_by_decision_id[decision_id]
-            for decision_id in capability_order
-            if decision_id in capabilities_by_decision_id
-        ],
-        unresolved_discrepancies=[
-            discrepancies_by_run[run_id]
-            for run_id in discrepancy_order
-            if run_id in discrepancies_by_run
-        ],
-        active_games=[active_by_run[run_id] for run_id in active_run_order if run_id in active_by_run]
+        accepted_accomplishments=accepted_accomplishments,
+        accepted_architecture=accepted_architecture,
+        accepted_capabilities=accepted_capabilities,
+        unresolved_discrepancies=unresolved_discrepancies,
+        active_games=active_games,
+        metadata={
+            "event_count": len(events),
+            "active_game_count": len(active_games),
+            "accepted_accomplishment_count": len(accepted_accomplishments),
+            "accepted_architecture_count": len(accepted_architecture),
+            "accepted_capability_count": len(accepted_capabilities),
+            "unresolved_discrepancy_count": len(unresolved_discrepancies),
+        },
     )
 
 

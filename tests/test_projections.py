@@ -12,6 +12,12 @@ def test_build_projected_state_empty_events_returns_empty_state() -> None:
     assert projected.accepted_capabilities == []
     assert projected.unresolved_discrepancies == []
     assert projected.active_games == []
+    assert projected.metadata["event_count"] == 0
+    assert projected.metadata["active_game_count"] == 0
+    assert projected.metadata["accepted_accomplishment_count"] == 0
+    assert projected.metadata["accepted_architecture_count"] == 0
+    assert projected.metadata["accepted_capability_count"] == 0
+    assert projected.metadata["unresolved_discrepancy_count"] == 0
 
 
 def test_build_projected_state_started_game_becomes_active() -> None:
@@ -803,3 +809,78 @@ def test_build_projected_state_from_blackboard_preserves_discrepancy_lifecycle_p
     assert discrepancy.id == "run-1"
     assert discrepancy.status == "superseded"
     assert discrepancy.metadata["superseding_discrepancy_id"] == "run-3"
+
+
+def test_build_projected_state_metadata_counts_match_projected_lists() -> None:
+    events = [
+        Event(
+            id="g1:run-1:r0001:game_started",
+            type="game_started",
+            payload={"game_id": "g1", "run_id": "run-1"},
+        ),
+        Event(
+            id="g2:run-2:game_completed",
+            type="game_completed",
+            payload={
+                "game_id": "g2",
+                "run_id": "run-2",
+                "terminal_outcome": "rejected_locally",
+                "integration_recommendation": "do_not_integrate",
+                "state": {"final_decision": {"rationale": "blocking issue run-2"}},
+            },
+        ),
+        Event(
+            id="integration:int-1",
+            type="integration_decision_recorded",
+            payload={
+                "integration_decision": {
+                    "id": "int-1",
+                    "run_id": "run-3",
+                    "outcome": "accepted",
+                    "target_kind": "accomplishment",
+                    "summary": "Accepted accomplishment",
+                    "rationale": "accepted",
+                }
+            },
+        ),
+        Event(
+            id="integration:int-2",
+            type="integration_decision_recorded",
+            payload={
+                "integration_decision": {
+                    "id": "int-2",
+                    "run_id": "run-4",
+                    "outcome": "accepted",
+                    "target_kind": "architecture",
+                    "summary": "Accepted architecture",
+                    "rationale": "accepted",
+                }
+            },
+        ),
+        Event(
+            id="integration:int-3",
+            type="integration_decision_recorded",
+            payload={
+                "integration_decision": {
+                    "id": "int-3",
+                    "run_id": "run-5",
+                    "outcome": "accepted",
+                    "target_kind": "capability",
+                    "summary": "Accepted capability",
+                    "rationale": "accepted",
+                }
+            },
+        ),
+    ]
+    projected = build_projected_state(events)
+
+    assert projected.metadata["event_count"] == len(events)
+    assert projected.metadata["active_game_count"] == len(projected.active_games)
+    assert projected.metadata["accepted_accomplishment_count"] == len(
+        projected.accepted_accomplishments
+    )
+    assert projected.metadata["accepted_architecture_count"] == len(projected.accepted_architecture)
+    assert projected.metadata["accepted_capability_count"] == len(projected.accepted_capabilities)
+    assert projected.metadata["unresolved_discrepancy_count"] == len(
+        projected.unresolved_discrepancies
+    )
