@@ -112,7 +112,7 @@ def test_build_projected_state_active_game_order_is_preserved() -> None:
     assert [active.id for active in projected.active_games] == ["run-1", "run-3"]
 
 
-def test_build_projected_state_accepted_completion_produces_accomplishment() -> None:
+def test_build_projected_state_successful_completion_alone_does_not_produce_accomplishment() -> None:
     projected = build_projected_state(
         [
             Event(
@@ -132,24 +132,50 @@ def test_build_projected_state_accepted_completion_produces_accomplishment() -> 
             )
         ]
     )
+    assert projected.accepted_accomplishments == []
+
+
+def test_build_projected_state_accepted_integration_decision_produces_accomplishment() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="integration:int-001",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "int-001",
+                        "run_id": "run-1",
+                        "outcome": "accepted",
+                        "target_kind": "accomplishment",
+                        "summary": "Accepted accomplishment summary",
+                        "rationale": "Explicit integration authority accepted this.",
+                    }
+                },
+            ),
+        ]
+    )
     assert len(projected.accepted_accomplishments) == 1
     accomplishment = projected.accepted_accomplishments[0]
-    assert accomplishment.id == "run-1"
+    assert accomplishment.id == "int-001"
     assert accomplishment.source_run_id == "run-1"
-    assert accomplishment.summary == "accepted outcome rationale"
+    assert accomplishment.summary == "Accepted accomplishment summary"
 
 
-def test_build_projected_state_rejected_completion_does_not_produce_accomplishment() -> None:
+def test_build_projected_state_non_accepted_integration_decisions_do_not_produce_accomplishment() -> None:
     projected = build_projected_state(
         [
             Event(
-                id="g1:run-1:game_completed",
-                type="game_completed",
+                id="integration:int-002",
+                type="integration_decision_recorded",
                 payload={
-                    "game_id": "g1",
-                    "run_id": "run-1",
-                    "terminal_outcome": "rejected_locally",
-                    "integration_recommendation": "do_not_integrate",
+                    "integration_decision": {
+                        "id": "int-002",
+                        "run_id": "run-1",
+                        "outcome": "rejected",
+                        "target_kind": "accomplishment",
+                        "summary": "Rejected accomplishment summary",
+                        "rationale": "Rejected integration outcome.",
+                    }
                 },
             )
         ]
@@ -157,53 +183,63 @@ def test_build_projected_state_rejected_completion_does_not_produce_accomplishme
     assert projected.accepted_accomplishments == []
 
 
-def test_build_projected_state_unresolved_completion_does_not_produce_accomplishment() -> None:
+def test_build_projected_state_non_accomplishment_target_integration_decisions_do_not_produce_accomplishment() -> None:
     projected = build_projected_state(
         [
             Event(
-                id="g1:run-1:game_completed",
-                type="game_completed",
+                id="integration:int-003",
+                type="integration_decision_recorded",
                 payload={
-                    "game_id": "g1",
-                    "run_id": "run-1",
-                    "terminal_outcome": "revision_budget_exhausted",
-                    "integration_recommendation": "do_not_integrate",
+                    "integration_decision": {
+                        "id": "int-003",
+                        "run_id": "run-1",
+                        "outcome": "accepted",
+                        "target_kind": "capability",
+                        "summary": "Accepted capability summary",
+                        "rationale": "Accepted but not accomplishment.",
+                    }
                 },
-            )
+            ),
         ]
     )
     assert projected.accepted_accomplishments == []
 
 
-def test_build_projected_state_duplicate_successful_completions_do_not_duplicate_accomplishment() -> None:
+def test_build_projected_state_duplicate_accepted_integration_decisions_do_not_duplicate_accomplishment() -> None:
     projected = build_projected_state(
         [
             Event(
-                id="g1:run-1:game_completed-a",
-                type="game_completed",
+                id="integration:int-004-a",
+                type="integration_decision_recorded",
                 payload={
-                    "game_id": "g1",
-                    "run_id": "run-1",
-                    "terminal_outcome": "accepted_locally",
-                    "integration_recommendation": "integration_recommended",
-                    "state": {"final_decision": {"rationale": "accepted rationale"}},
+                    "integration_decision": {
+                        "id": "int-004",
+                        "run_id": "run-1",
+                        "outcome": "accepted",
+                        "target_kind": "accomplishment",
+                        "summary": "Accepted accomplishment summary",
+                        "rationale": "First event",
+                    }
                 },
             ),
             Event(
-                id="g1:run-1:game_completed-b",
-                type="game_completed",
+                id="integration:int-004-b",
+                type="integration_decision_recorded",
                 payload={
-                    "game_id": "g1",
-                    "run_id": "run-1",
-                    "terminal_outcome": "accepted_locally",
-                    "integration_recommendation": "integration_recommended",
-                    "state": {"final_decision": {"rationale": "accepted rationale duplicate"}},
+                    "integration_decision": {
+                        "id": "int-004",
+                        "run_id": "run-1",
+                        "outcome": "accepted",
+                        "target_kind": "accomplishment",
+                        "summary": "Accepted accomplishment summary duplicate",
+                        "rationale": "Second event",
+                    }
                 },
             ),
         ]
     )
     assert len(projected.accepted_accomplishments) == 1
-    assert projected.accepted_accomplishments[0].id == "run-1"
+    assert projected.accepted_accomplishments[0].id == "int-004"
 
 
 def test_build_projected_state_rejected_completion_produces_unresolved_discrepancy() -> None:
