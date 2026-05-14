@@ -323,6 +323,7 @@ def test_game_service_appends_integration_decision_event_for_accepted_local_resp
     decision = integration_events[0].payload["integration_decision"]
     assert response.final_decision.decision == "accept"
     assert decision["outcome"] == "accepted"
+    assert board.query("artifact_proposal_recorded") == []
 
 
 def test_game_service_appends_deferred_integration_decision_for_rejected_local_response(
@@ -347,6 +348,7 @@ def test_game_service_appends_deferred_integration_decision_for_rejected_local_r
     decision = integration_events[0].payload["integration_decision"]
     assert response.final_decision.decision == "reject"
     assert decision["outcome"] == "deferred"
+    assert board.query("artifact_proposal_recorded") == []
 
 
 def test_game_service_appends_deferred_integration_decision_for_budget_exhausted_revise(
@@ -372,6 +374,31 @@ def test_game_service_appends_deferred_integration_decision_for_budget_exhausted
     decision = integration_events[0].payload["integration_decision"]
     assert response.final_decision.decision == "revise"
     assert decision["outcome"] == "deferred"
+    assert board.query("artifact_proposal_recorded") == []
+
+
+def test_game_service_accepted_local_execution_does_not_append_artifact_proposal_by_default(
+    tmp_path: Path,
+) -> None:
+    board = Blackboard(tmp_path / "events.jsonl")
+    model = FakeModelClient(
+        responses=[
+            "candidate answer",
+            "CLAIM: minor note only",
+            "rationale",
+        ]
+    )
+    service = GameService(
+        model_client=model,
+        blackboard=board,
+        red_material=False,
+    )
+
+    response = service.play(_request())
+    assert response.terminal_outcome == "accepted_locally"
+    assert board.query("artifact_proposal_recorded") == []
+    integration_events = board.query("integration_decision_recorded")
+    assert len(integration_events) == 1
 
 
 def test_game_service_default_behavior_does_not_inject_builtin_profiles(tmp_path: Path) -> None:
