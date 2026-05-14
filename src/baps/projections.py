@@ -311,6 +311,34 @@ def accepted_state_supersession_chain(state: ProjectedState, item_id: str) -> li
     return chain
 
 
+def discrepancy_supersession_chain(state: ProjectedState, discrepancy_id: str) -> list[str]:
+    if not discrepancy_id.strip():
+        raise ValueError("discrepancy_id must be a non-empty string")
+
+    by_id = {item.id: item for item in state.unresolved_discrepancies}
+
+    chain = [discrepancy_id]
+    seen = {discrepancy_id}
+    current_id = discrepancy_id
+
+    while True:
+        current_item = by_id.get(current_id)
+        if current_item is None:
+            break
+        next_id = current_item.metadata.get("superseding_discrepancy_id")
+        if not isinstance(next_id, str) or not next_id.strip():
+            break
+        if next_id in seen:
+            break
+        chain.append(next_id)
+        seen.add(next_id)
+        if next_id not in by_id:
+            break
+        current_id = next_id
+
+    return chain
+
+
 def _derive_discrepancy_summary(payload: dict) -> str:
     state = payload.get("state")
     if isinstance(state, dict):

@@ -7,6 +7,7 @@ from baps.projections import (
     accepted_state_supersession_chain,
     build_projected_state,
     build_projected_state_from_blackboard,
+    discrepancy_supersession_chain,
     current_accepted_accomplishments,
     current_accepted_architecture,
     current_accepted_capabilities,
@@ -1612,3 +1613,247 @@ def test_accepted_state_supersession_chain_does_not_mutate_input_state() -> None
     before_metadata = dict(state.accepted_accomplishments[0].metadata)
     _ = accepted_state_supersession_chain(state, "item-1")
     assert state.accepted_accomplishments[0].metadata == before_metadata
+
+
+def test_discrepancy_supersession_chain_single_item_no_supersession() -> None:
+    state = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "issue run-1"}},
+                },
+            ),
+        ]
+    )
+    assert discrepancy_supersession_chain(state, "run-1") == ["run-1"]
+
+
+def test_discrepancy_supersession_chain_one_step() -> None:
+    state = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "issue run-1"}},
+                },
+            ),
+            Event(
+                id="g2:run-2:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g2",
+                    "run_id": "run-2",
+                    "terminal_outcome": "revision_budget_exhausted",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "issue run-2"}},
+                },
+            ),
+            Event(
+                id="sup:1",
+                type="discrepancy_supersession_recorded",
+                payload={
+                    "discrepancy_supersession": {
+                        "id": "sup-1",
+                        "superseded_discrepancy_id": "run-1",
+                        "superseding_discrepancy_id": "run-2",
+                        "rationale": "run-2 supersedes run-1",
+                        "source_run_id": "run-2",
+                    }
+                },
+            ),
+        ]
+    )
+    assert discrepancy_supersession_chain(state, "run-1") == ["run-1", "run-2"]
+
+
+def test_discrepancy_supersession_chain_multi_step() -> None:
+    state = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "issue run-1"}},
+                },
+            ),
+            Event(
+                id="g2:run-2:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g2",
+                    "run_id": "run-2",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "issue run-2"}},
+                },
+            ),
+            Event(
+                id="g3:run-3:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g3",
+                    "run_id": "run-3",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "issue run-3"}},
+                },
+            ),
+            Event(
+                id="sup:1",
+                type="discrepancy_supersession_recorded",
+                payload={
+                    "discrepancy_supersession": {
+                        "id": "sup-1",
+                        "superseded_discrepancy_id": "run-1",
+                        "superseding_discrepancy_id": "run-2",
+                        "rationale": "run-2 supersedes run-1",
+                        "source_run_id": "run-2",
+                    }
+                },
+            ),
+            Event(
+                id="sup:2",
+                type="discrepancy_supersession_recorded",
+                payload={
+                    "discrepancy_supersession": {
+                        "id": "sup-2",
+                        "superseded_discrepancy_id": "run-2",
+                        "superseding_discrepancy_id": "run-3",
+                        "rationale": "run-3 supersedes run-2",
+                        "source_run_id": "run-3",
+                    }
+                },
+            ),
+        ]
+    )
+    assert discrepancy_supersession_chain(state, "run-1") == ["run-1", "run-2", "run-3"]
+
+
+def test_discrepancy_supersession_chain_stops_on_unknown_next_id() -> None:
+    state = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "issue run-1"}},
+                },
+            ),
+            Event(
+                id="sup:1",
+                type="discrepancy_supersession_recorded",
+                payload={
+                    "discrepancy_supersession": {
+                        "id": "sup-1",
+                        "superseded_discrepancy_id": "run-1",
+                        "superseding_discrepancy_id": "run-missing",
+                        "rationale": "unknown next id",
+                        "source_run_id": "run-2",
+                    }
+                },
+            ),
+        ]
+    )
+    assert discrepancy_supersession_chain(state, "run-1") == ["run-1", "run-missing"]
+
+
+def test_discrepancy_supersession_chain_stops_on_cycle() -> None:
+    state = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "issue run-1"}},
+                },
+            ),
+            Event(
+                id="g2:run-2:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g2",
+                    "run_id": "run-2",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "issue run-2"}},
+                },
+            ),
+            Event(
+                id="sup:1",
+                type="discrepancy_supersession_recorded",
+                payload={
+                    "discrepancy_supersession": {
+                        "id": "sup-1",
+                        "superseded_discrepancy_id": "run-1",
+                        "superseding_discrepancy_id": "run-2",
+                        "rationale": "run-2 supersedes run-1",
+                        "source_run_id": "run-2",
+                    }
+                },
+            ),
+            Event(
+                id="sup:2",
+                type="discrepancy_supersession_recorded",
+                payload={
+                    "discrepancy_supersession": {
+                        "id": "sup-2",
+                        "superseded_discrepancy_id": "run-2",
+                        "superseding_discrepancy_id": "run-1",
+                        "rationale": "cycle",
+                        "source_run_id": "run-3",
+                    }
+                },
+            ),
+        ]
+    )
+    assert discrepancy_supersession_chain(state, "run-1") == ["run-1", "run-2"]
+
+
+def test_discrepancy_supersession_chain_rejects_empty_discrepancy_id() -> None:
+    state = build_projected_state([])
+    with pytest.raises(ValueError, match="discrepancy_id must be a non-empty string"):
+        discrepancy_supersession_chain(state, "   ")
+
+
+def test_discrepancy_supersession_chain_does_not_mutate_input_state() -> None:
+    state = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "issue run-1"}},
+                },
+            ),
+        ]
+    )
+    before_metadata = dict(state.unresolved_discrepancies[0].metadata)
+    _ = discrepancy_supersession_chain(state, "run-1")
+    assert state.unresolved_discrepancies[0].metadata == before_metadata
