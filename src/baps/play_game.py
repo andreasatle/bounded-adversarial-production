@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 
 from baps.blackboard import Blackboard
-from baps.example_roles import make_prompt_blue_role, make_prompt_red_role, make_prompt_referee_role
 from baps.game_service import GameService
 from baps.game_types import (
     GameDefinition,
@@ -13,9 +12,9 @@ from baps.game_types import (
     load_game_definition,
 )
 from baps.models import OllamaClient
-from baps.prompt_assembly import PromptSection, PromptSpec, assemble_prompt
+from baps.prompt_roles import build_prompt_roles
 from baps.run_specs import RunSpec, load_run_spec
-from baps.runtime import RuntimeEngine, build_game_response
+from baps.runtime import RuntimeEngine
 from baps.schemas import GameContract, GameRequest, GameState, Target
 from baps.state_sources import (
     DirectoryStateSourceAdapter,
@@ -162,88 +161,11 @@ def run_play_game(
         else get_builtin_game_definition(game_type)
     )
     model_client = OllamaClient(model=model, base_url=base_url)
-    prompt_sections = resolved_game_definition.prompt_sections
-
-    blue_template = assemble_prompt(
-        PromptSpec(
-            sections=[
-                PromptSection(
-                    name="Role",
-                    content=(
-                        "Using shared context, provide one concise candidate answer for goal `{goal}`."
-                    ),
-                ),
-                PromptSection(
-                    name="Shared Context",
-                    content="Shared context:\n{shared_context}",
-                ),
-                *prompt_sections.blue_sections,
-            ]
-        )
-    )
-
-    red_template = assemble_prompt(
-        PromptSpec(
-            sections=[
-                PromptSection(
-                    name="Scope",
-                    content=(
-                        "Critique only this Blue move/change from the current game: `{blue_summary}`. "
-                        "Do not perform a general audit. Use shared context only as supporting evidence."
-                    ),
-                ),
-                PromptSection(
-                    name="Shared Context",
-                    content="Shared context:\n{shared_context}",
-                ),
-                PromptSection(
-                    name="Output Format",
-                    content="MATERIAL: yes|no\nCLAIM: concise critique/assessment",
-                ),
-                *prompt_sections.red_sections,
-            ]
-        )
-    )
-
-    referee_template = assemble_prompt(
-        PromptSpec(
-            sections=[
-                PromptSection(
-                    name="Decision",
-                    content=(
-                        "Structured decision is already fixed to `{decision}`. "
-                        "Provide one concise rationale supporting that fixed decision. "
-                        "Do not contradict or reselect the decision."
-                    ),
-                ),
-                PromptSection(
-                    name="Inputs",
-                    content="Blue move: `{blue_summary}`. Red finding: `{red_claim}`.",
-                ),
-                PromptSection(
-                    name="Shared Context",
-                    content="Shared context:\n{shared_context}",
-                ),
-                *prompt_sections.referee_sections,
-            ]
-        )
-    )
-
-    blue_role = make_prompt_blue_role(
-        model_client,
-        template=blue_template,
-        extra_context={"shared_context": shared_context},
-    )
-    red_role = make_prompt_red_role(
-        model_client,
-        template=red_template,
-        extra_context={"shared_context": shared_context},
-        default_material=red_material,
-    )
-    referee_role = make_prompt_referee_role(
-        model_client,
-        template=referee_template,
-        extra_context={"shared_context": shared_context},
+    blue_role, red_role, referee_role = build_prompt_roles(
+        model_client=model_client,
+        prompt_sections=resolved_game_definition.prompt_sections,
+        shared_context=shared_context,
+        red_material=red_material,
     )
 
     contract = GameContract(

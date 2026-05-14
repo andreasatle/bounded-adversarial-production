@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from baps.blackboard import Blackboard
-from baps.example_roles import make_prompt_blue_role, make_prompt_red_role, make_prompt_referee_role
 from baps.game_types import GameDefinition, build_game_definition
 from baps.models import ModelClient
-from baps.prompt_assembly import PromptSection, PromptSpec, assemble_prompt
+from baps.prompt_roles import build_prompt_roles
 from baps.runtime import RuntimeEngine, build_game_response
 from baps.schemas import GameContract, GameRequest, GameResponse, Target
 from baps.state_sources import StateManifest, StateSourceAdapter, resolve_state_context
@@ -41,70 +40,6 @@ class GameService:
             else build_game_definition(request)
         )
 
-        prompt_sections = resolved_game_definition.prompt_sections
-        blue_template = assemble_prompt(
-            PromptSpec(
-                sections=[
-                    PromptSection(
-                        name="Role",
-                        content=(
-                            "Using shared context, provide one concise candidate answer for goal `{goal}`."
-                        ),
-                    ),
-                    PromptSection(
-                        name="Shared Context",
-                        content="Shared context:\n{shared_context}",
-                    ),
-                    *prompt_sections.blue_sections,
-                ]
-            )
-        )
-        red_template = assemble_prompt(
-            PromptSpec(
-                sections=[
-                    PromptSection(
-                        name="Scope",
-                        content=(
-                            "Critique only this Blue move/change from the current game: `{blue_summary}`. "
-                            "Do not perform a general audit. Use shared context only as supporting evidence."
-                        ),
-                    ),
-                    PromptSection(
-                        name="Shared Context",
-                        content="Shared context:\n{shared_context}",
-                    ),
-                    PromptSection(
-                        name="Output Format",
-                        content="MATERIAL: yes|no\nCLAIM: concise critique/assessment",
-                    ),
-                    *prompt_sections.red_sections,
-                ]
-            )
-        )
-        referee_template = assemble_prompt(
-            PromptSpec(
-                sections=[
-                    PromptSection(
-                        name="Decision",
-                        content=(
-                            "Structured decision is already fixed to `{decision}`. "
-                            "Provide one concise rationale supporting that fixed decision. "
-                            "Do not contradict or reselect the decision."
-                        ),
-                    ),
-                    PromptSection(
-                        name="Inputs",
-                        content="Blue move: `{blue_summary}`. Red finding: `{red_claim}`.",
-                    ),
-                    PromptSection(
-                        name="Shared Context",
-                        content="Shared context:\n{shared_context}",
-                    ),
-                    *prompt_sections.referee_sections,
-                ]
-            )
-        )
-
         resolved_shared_context = self.shared_context
         if request.state_source_ids:
             if self.state_manifest is None or self.state_adapter is None:
@@ -122,22 +57,11 @@ class GameService:
                 else state_context
             )
 
-        extra_context = {"shared_context": resolved_shared_context}
-        blue_role = make_prompt_blue_role(
-            self.model_client,
-            template=blue_template,
-            extra_context=extra_context,
-        )
-        red_role = make_prompt_red_role(
-            self.model_client,
-            template=red_template,
-            extra_context=extra_context,
-            default_material=self.red_material,
-        )
-        referee_role = make_prompt_referee_role(
-            self.model_client,
-            template=referee_template,
-            extra_context=extra_context,
+        blue_role, red_role, referee_role = build_prompt_roles(
+            model_client=self.model_client,
+            prompt_sections=resolved_game_definition.prompt_sections,
+            shared_context=resolved_shared_context,
+            red_material=self.red_material,
         )
 
         contract = GameContract(
