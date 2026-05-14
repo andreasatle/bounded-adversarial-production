@@ -82,3 +82,33 @@ def test_append_does_not_overwrite_previous_events(tmp_path: Path) -> None:
     assert len(lines) == 2
     assert json.loads(lines[0])["id"] == "e1"
     assert json.loads(lines[1])["id"] == "e2"
+
+
+def test_query_by_run_returns_only_matching_run_events_and_preserves_order(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "board.jsonl")
+    board.append(Event(id="e1", type="game_started", payload={"game_id": "g1", "run_id": "run-1"}))
+    board.append(Event(id="e2", type="blue_move_recorded", payload={"game_id": "g1", "run_id": "run-1"}))
+    board.append(Event(id="e3", type="game_started", payload={"game_id": "g2", "run_id": "run-2"}))
+    board.append(Event(id="e4", type="red_finding_recorded", payload={"game_id": "g1", "run_id": "run-1"}))
+
+    run_events = board.query_by_run("run-1")
+    assert [event.id for event in run_events] == ["e1", "e2", "e4"]
+    assert all(event.payload["run_id"] == "run-1" for event in run_events)
+
+
+def test_query_by_run_rejects_empty_run_id(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "board.jsonl")
+    with pytest.raises(ValueError):
+        board.query_by_run("   ")
+
+
+def test_query_completed_runs_returns_only_game_completed_events(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "board.jsonl")
+    board.append(Event(id="e1", type="game_started", payload={"game_id": "g1", "run_id": "run-1"}))
+    board.append(Event(id="e2", type="game_completed", payload={"game_id": "g1", "run_id": "run-1"}))
+    board.append(Event(id="e3", type="blue_move_recorded", payload={"game_id": "g2", "run_id": "run-2"}))
+    board.append(Event(id="e4", type="game_completed", payload={"game_id": "g2", "run_id": "run-2"}))
+
+    completed = board.query_completed_runs()
+    assert [event.id for event in completed] == ["e2", "e4"]
+    assert all(event.type == "game_completed" for event in completed)

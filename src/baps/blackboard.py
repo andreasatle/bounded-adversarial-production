@@ -31,3 +31,11 @@ class Blackboard:
         if not event_type.strip():
             raise ValueError("event_type must be a non-empty string")
         return [event for event in self.read_all() if event.type == event_type]
+
+    def query_by_run(self, run_id: str) -> list[Event]:
+        if not run_id.strip():
+            raise ValueError("run_id must be a non-empty string")
+        return [event for event in self.read_all() if event.payload.get("run_id") == run_id]
+
+    def query_completed_runs(self) -> list[Event]:
+        return self.query("game_completed")
