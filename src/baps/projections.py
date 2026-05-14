@@ -277,6 +277,40 @@ def current_accepted_capabilities(state: ProjectedState) -> list[AcceptedCapabil
     ]
 
 
+def accepted_state_supersession_chain(state: ProjectedState, item_id: str) -> list[str]:
+    if not item_id.strip():
+        raise ValueError("item_id must be a non-empty string")
+
+    by_id: dict[str, object] = {}
+    for item in state.accepted_accomplishments:
+        by_id[item.id] = item
+    for item in state.accepted_architecture:
+        by_id[item.id] = item
+    for item in state.accepted_capabilities:
+        by_id[item.id] = item
+
+    chain = [item_id]
+    seen = {item_id}
+    current_id = item_id
+
+    while True:
+        current_item = by_id.get(current_id)
+        if current_item is None:
+            break
+        next_id = current_item.metadata.get("superseding_item_id")
+        if not isinstance(next_id, str) or not next_id.strip():
+            break
+        if next_id in seen:
+            break
+        chain.append(next_id)
+        seen.add(next_id)
+        if next_id not in by_id:
+            break
+        current_id = next_id
+
+    return chain
+
+
 def _derive_discrepancy_summary(payload: dict) -> str:
     state = payload.get("state")
     if isinstance(state, dict):

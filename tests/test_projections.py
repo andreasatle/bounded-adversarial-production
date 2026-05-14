@@ -1,7 +1,10 @@
 from pathlib import Path
 
+import pytest
+
 from baps.blackboard import Blackboard
 from baps.projections import (
+    accepted_state_supersession_chain,
     build_projected_state,
     build_projected_state_from_blackboard,
     current_accepted_accomplishments,
@@ -1343,3 +1346,269 @@ def test_current_helpers_do_not_mutate_input_state() -> None:
     _ = current_accepted_architecture(state)
 
     assert state.accepted_architecture[0].metadata == before_metadata
+
+
+def test_accepted_state_supersession_chain_single_item_no_supersession() -> None:
+    state = build_projected_state(
+        [
+            Event(
+                id="integration:item-1",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "item-1",
+                        "run_id": "run-1",
+                        "outcome": "accepted",
+                        "target_kind": "accomplishment",
+                        "summary": "item 1",
+                        "rationale": "ok",
+                    }
+                },
+            ),
+        ]
+    )
+    assert accepted_state_supersession_chain(state, "item-1") == ["item-1"]
+
+
+def test_accepted_state_supersession_chain_one_step() -> None:
+    state = build_projected_state(
+        [
+            Event(
+                id="integration:item-1",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "item-1",
+                        "run_id": "run-1",
+                        "outcome": "accepted",
+                        "target_kind": "accomplishment",
+                        "summary": "item 1",
+                        "rationale": "ok",
+                    }
+                },
+            ),
+            Event(
+                id="asup:1",
+                type="accepted_state_supersession_recorded",
+                payload={
+                    "accepted_state_supersession": {
+                        "id": "asup-1",
+                        "superseded_item_id": "item-1",
+                        "superseding_item_id": "item-2",
+                        "target_kind": "accomplishment",
+                        "rationale": "superseded",
+                        "source_run_id": "run-2",
+                    }
+                },
+            ),
+        ]
+    )
+    assert accepted_state_supersession_chain(state, "item-1") == ["item-1", "item-2"]
+
+
+def test_accepted_state_supersession_chain_multi_step() -> None:
+    state = build_projected_state(
+        [
+            Event(
+                id="integration:item-1",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "item-1",
+                        "run_id": "run-1",
+                        "outcome": "accepted",
+                        "target_kind": "accomplishment",
+                        "summary": "item 1",
+                        "rationale": "ok",
+                    }
+                },
+            ),
+            Event(
+                id="integration:item-2",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "item-2",
+                        "run_id": "run-2",
+                        "outcome": "accepted",
+                        "target_kind": "accomplishment",
+                        "summary": "item 2",
+                        "rationale": "ok",
+                    }
+                },
+            ),
+            Event(
+                id="integration:item-3",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "item-3",
+                        "run_id": "run-3",
+                        "outcome": "accepted",
+                        "target_kind": "accomplishment",
+                        "summary": "item 3",
+                        "rationale": "ok",
+                    }
+                },
+            ),
+            Event(
+                id="asup:1",
+                type="accepted_state_supersession_recorded",
+                payload={
+                    "accepted_state_supersession": {
+                        "id": "asup-1",
+                        "superseded_item_id": "item-1",
+                        "superseding_item_id": "item-2",
+                        "target_kind": "accomplishment",
+                        "rationale": "superseded",
+                        "source_run_id": "run-2",
+                    }
+                },
+            ),
+            Event(
+                id="asup:2",
+                type="accepted_state_supersession_recorded",
+                payload={
+                    "accepted_state_supersession": {
+                        "id": "asup-2",
+                        "superseded_item_id": "item-2",
+                        "superseding_item_id": "item-3",
+                        "target_kind": "accomplishment",
+                        "rationale": "superseded",
+                        "source_run_id": "run-3",
+                    }
+                },
+            ),
+        ]
+    )
+    assert accepted_state_supersession_chain(state, "item-1") == ["item-1", "item-2", "item-3"]
+
+
+def test_accepted_state_supersession_chain_stops_on_unknown_next_id() -> None:
+    state = build_projected_state(
+        [
+            Event(
+                id="integration:item-1",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "item-1",
+                        "run_id": "run-1",
+                        "outcome": "accepted",
+                        "target_kind": "architecture",
+                        "summary": "item 1",
+                        "rationale": "ok",
+                    }
+                },
+            ),
+            Event(
+                id="asup:1",
+                type="accepted_state_supersession_recorded",
+                payload={
+                    "accepted_state_supersession": {
+                        "id": "asup-1",
+                        "superseded_item_id": "item-1",
+                        "superseding_item_id": "missing-item",
+                        "target_kind": "architecture",
+                        "rationale": "superseded",
+                        "source_run_id": "run-2",
+                    }
+                },
+            ),
+        ]
+    )
+    assert accepted_state_supersession_chain(state, "item-1") == ["item-1", "missing-item"]
+
+
+def test_accepted_state_supersession_chain_stops_on_cycle() -> None:
+    state = build_projected_state(
+        [
+            Event(
+                id="integration:item-1",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "item-1",
+                        "run_id": "run-1",
+                        "outcome": "accepted",
+                        "target_kind": "capability",
+                        "summary": "item 1",
+                        "rationale": "ok",
+                    }
+                },
+            ),
+            Event(
+                id="integration:item-2",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "item-2",
+                        "run_id": "run-2",
+                        "outcome": "accepted",
+                        "target_kind": "capability",
+                        "summary": "item 2",
+                        "rationale": "ok",
+                    }
+                },
+            ),
+            Event(
+                id="asup:1",
+                type="accepted_state_supersession_recorded",
+                payload={
+                    "accepted_state_supersession": {
+                        "id": "asup-1",
+                        "superseded_item_id": "item-1",
+                        "superseding_item_id": "item-2",
+                        "target_kind": "capability",
+                        "rationale": "superseded",
+                        "source_run_id": "run-2",
+                    }
+                },
+            ),
+            Event(
+                id="asup:2",
+                type="accepted_state_supersession_recorded",
+                payload={
+                    "accepted_state_supersession": {
+                        "id": "asup-2",
+                        "superseded_item_id": "item-2",
+                        "superseding_item_id": "item-1",
+                        "target_kind": "capability",
+                        "rationale": "cycle",
+                        "source_run_id": "run-3",
+                    }
+                },
+            ),
+        ]
+    )
+    assert accepted_state_supersession_chain(state, "item-1") == ["item-1", "item-2"]
+
+
+def test_accepted_state_supersession_chain_rejects_empty_item_id() -> None:
+    state = build_projected_state([])
+    with pytest.raises(ValueError, match="item_id must be a non-empty string"):
+        accepted_state_supersession_chain(state, "   ")
+
+
+def test_accepted_state_supersession_chain_does_not_mutate_input_state() -> None:
+    state = build_projected_state(
+        [
+            Event(
+                id="integration:item-1",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "item-1",
+                        "run_id": "run-1",
+                        "outcome": "accepted",
+                        "target_kind": "accomplishment",
+                        "summary": "item 1",
+                        "rationale": "ok",
+                    }
+                },
+            ),
+        ]
+    )
+    before_metadata = dict(state.accepted_accomplishments[0].metadata)
+    _ = accepted_state_supersession_chain(state, "item-1")
+    assert state.accepted_accomplishments[0].metadata == before_metadata
