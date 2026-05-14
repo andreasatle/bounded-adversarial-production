@@ -341,6 +341,19 @@ class IntegrationDecision(BaseModel):
     _validate_rationale = field_validator("rationale")(_require_non_empty)
 
 
+class DiscrepancyResolution(BaseModel):
+    id: str
+    discrepancy_id: str
+    resolution_summary: str
+    source_run_id: str
+    metadata: dict = Field(default_factory=dict)
+
+    _validate_id = field_validator("id")(_require_non_empty)
+    _validate_discrepancy_id = field_validator("discrepancy_id")(_require_non_empty)
+    _validate_resolution_summary = field_validator("resolution_summary")(_require_non_empty)
+    _validate_source_run_id = field_validator("source_run_id")(_require_non_empty)
+
+
 class Artifact(BaseModel):
     id: str
     type: str

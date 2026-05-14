@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from baps.schemas import Event, IntegrationDecision
+from baps.schemas import DiscrepancyResolution, Event, IntegrationDecision
 
 
 class Blackboard:
@@ -46,5 +46,14 @@ class Blackboard:
                 id=f"integration:{decision.id}",
                 type="integration_decision_recorded",
                 payload={"integration_decision": decision.model_dump(mode="json")},
+            )
+        )
+
+    def append_discrepancy_resolution(self, resolution: DiscrepancyResolution) -> None:
+        self.append(
+            Event(
+                id=f"discrepancy_resolution:{resolution.id}",
+                type="discrepancy_resolution_recorded",
+                payload={"discrepancy_resolution": resolution.model_dump(mode="json")},
             )
         )

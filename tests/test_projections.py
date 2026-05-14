@@ -474,3 +474,100 @@ def test_build_projected_state_duplicate_unsuccessful_completions_do_not_duplica
     )
     assert len(projected.unresolved_discrepancies) == 1
     assert projected.unresolved_discrepancies[0].id == "run-1"
+
+
+def test_build_projected_state_resolution_marks_known_discrepancy_resolved() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "blocking issue found"}},
+                },
+            ),
+            Event(
+                id="res:001",
+                type="discrepancy_resolution_recorded",
+                payload={
+                    "discrepancy_resolution": {
+                        "id": "res-001",
+                        "discrepancy_id": "run-1",
+                        "resolution_summary": "Addressed by follow-up run",
+                        "source_run_id": "run-2",
+                    }
+                },
+            ),
+        ]
+    )
+    assert len(projected.unresolved_discrepancies) == 1
+    assert projected.unresolved_discrepancies[0].id == "run-1"
+    assert projected.unresolved_discrepancies[0].status == "resolved"
+
+
+def test_build_projected_state_resolution_for_unknown_discrepancy_is_ignored() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="res:002",
+                type="discrepancy_resolution_recorded",
+                payload={
+                    "discrepancy_resolution": {
+                        "id": "res-002",
+                        "discrepancy_id": "run-unknown",
+                        "resolution_summary": "Unknown target",
+                        "source_run_id": "run-2",
+                    }
+                },
+            )
+        ]
+    )
+    assert projected.unresolved_discrepancies == []
+
+
+def test_build_projected_state_resolution_does_not_change_other_open_discrepancies() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "blocking issue run-1"}},
+                },
+            ),
+            Event(
+                id="g2:run-2:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g2",
+                    "run_id": "run-2",
+                    "terminal_outcome": "revision_budget_exhausted",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "blocking issue run-2"}},
+                },
+            ),
+            Event(
+                id="res:003",
+                type="discrepancy_resolution_recorded",
+                payload={
+                    "discrepancy_resolution": {
+                        "id": "res-003",
+                        "discrepancy_id": "run-1",
+                        "resolution_summary": "Resolved run-1",
+                        "source_run_id": "run-3",
+                    }
+                },
+            ),
+        ]
+    )
+    statuses = {d.id: d.status for d in projected.unresolved_discrepancies}
+    assert statuses["run-1"] == "resolved"
+    assert statuses["run-2"] == "open"

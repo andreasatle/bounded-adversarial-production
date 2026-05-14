@@ -80,6 +80,18 @@ def build_projected_state(events: list[Event]) -> ProjectedState:
                 )
                 capability_order.append(decision_id)
             continue
+        if event.type == "discrepancy_resolution_recorded":
+            resolution = payload.get("discrepancy_resolution")
+            if not isinstance(resolution, dict):
+                continue
+            discrepancy_id = resolution.get("discrepancy_id")
+            if not isinstance(discrepancy_id, str) or not discrepancy_id.strip():
+                continue
+            discrepancy = discrepancies_by_run.get(discrepancy_id)
+            if discrepancy is None:
+                continue
+            discrepancy.status = "resolved"
+            continue
 
         game_id = payload.get("game_id")
         run_id = payload.get("run_id")

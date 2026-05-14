@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from baps.blackboard import Blackboard
-from baps.schemas import Event, IntegrationDecision
+from baps.schemas import DiscrepancyResolution, Event, IntegrationDecision
 
 
 def test_append_one_event_creates_file(tmp_path: Path) -> None:
@@ -151,3 +151,21 @@ def test_query_can_retrieve_integration_decision_events(tmp_path: Path) -> None:
     integration_events = board.query("integration_decision_recorded")
     assert len(integration_events) == 1
     assert integration_events[0].payload["integration_decision"]["id"] == "int-002"
+
+
+def test_append_discrepancy_resolution_records_expected_event(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "board.jsonl")
+    resolution = DiscrepancyResolution(
+        id="res-001",
+        discrepancy_id="run-1",
+        resolution_summary="Issue resolved by follow-up game",
+        source_run_id="run-2",
+    )
+
+    board.append_discrepancy_resolution(resolution)
+
+    events = board.read_all()
+    assert len(events) == 1
+    event = events[0]
+    assert event.type == "discrepancy_resolution_recorded"
+    assert event.payload["discrepancy_resolution"] == resolution.model_dump(mode="json")

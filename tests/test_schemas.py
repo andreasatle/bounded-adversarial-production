@@ -11,6 +11,7 @@ from baps.schemas import (
     ArtifactChange,
     ArtifactVersion,
     Decision,
+    DiscrepancyResolution,
     Finding,
     GameContract,
     GameRecord,
@@ -330,6 +331,17 @@ def test_integration_decision_constructs_successfully() -> None:
     assert decision.id == "int-1"
     assert decision.outcome == "accepted"
     assert decision.target_kind == "accomplishment"
+
+
+def test_discrepancy_resolution_constructs_successfully() -> None:
+    resolution = DiscrepancyResolution(
+        id="res-1",
+        discrepancy_id="run-1",
+        resolution_summary="Resolved after follow-up run",
+        source_run_id="run-2",
+    )
+    assert resolution.id == "res-1"
+    assert resolution.discrepancy_id == "run-1"
 
 
 def test_integration_decision_rejects_invalid_outcome() -> None:
