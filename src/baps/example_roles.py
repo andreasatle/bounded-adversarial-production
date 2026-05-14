@@ -43,6 +43,17 @@ def _parse_red_output_json(generated_text: str) -> dict | None:
     return parsed
 
 
+def _parse_referee_output(generated_text: str) -> str:
+    try:
+        parsed = json.loads(generated_text)
+    except json.JSONDecodeError:
+        return generated_text
+    if not isinstance(parsed, dict):
+        return generated_text
+    rationale = str(parsed.get("rationale", generated_text)).strip()
+    return rationale or generated_text
+
+
 def blue_role(contract: GameContract) -> Move:
     return Move(
         game_id=contract.id,
@@ -300,7 +311,8 @@ def make_prompt_referee_role(
         }
         context.update(context_overrides)
         prompt = renderer.render(context)
-        rationale = model_client.generate(prompt)
+        generated = model_client.generate(prompt)
+        rationale = _parse_referee_output(generated)
         return Decision(
             game_id=contract.id,
             decision=decision,

@@ -229,6 +229,64 @@ def test_prompt_driven_referee_generated_text_becomes_rationale() -> None:
     assert decision.rationale == "rationale text"
 
 
+def test_prompt_driven_referee_parses_valid_json_output_rationale() -> None:
+    contract = _contract()
+    blue = Move(game_id=contract.id, role="blue", summary="draft", payload={})
+    red = Finding(
+        game_id=contract.id,
+        severity="low",
+        confidence="low",
+        claim="minor issue",
+        evidence=["e1"],
+        block_integration=False,
+    )
+    model = FakeModelClient(
+        responses=['{"rationale":"json rationale","confidence":"high","notes":"n"}']
+    )
+    role = make_prompt_referee_role(model)
+
+    decision = role(contract, blue, red)
+    assert decision.rationale == "json rationale"
+
+
+def test_prompt_driven_referee_malformed_json_falls_back_to_plain_text_rationale() -> None:
+    contract = _contract()
+    blue = Move(game_id=contract.id, role="blue", summary="draft", payload={})
+    red = Finding(
+        game_id=contract.id,
+        severity="low",
+        confidence="low",
+        claim="minor issue",
+        evidence=["e1"],
+        block_integration=False,
+    )
+    generated = '{"rationale":"broken"'
+    model = FakeModelClient(responses=[generated])
+    role = make_prompt_referee_role(model)
+
+    decision = role(contract, blue, red)
+    assert decision.rationale == generated
+
+
+def test_prompt_driven_referee_json_decision_field_does_not_override_computed_decision() -> None:
+    contract = _contract()
+    blue = Move(game_id=contract.id, role="blue", summary="draft", payload={})
+    red = Finding(
+        game_id=contract.id,
+        severity="high",
+        confidence="high",
+        claim="major issue",
+        evidence=["e1"],
+        block_integration=True,
+    )
+    model = FakeModelClient(responses=['{"decision":"accept","rationale":"json rationale"}'])
+    role = make_prompt_referee_role(model)
+
+    decision = role(contract, blue, red)
+    assert decision.decision == "reject"
+    assert decision.rationale == "json rationale"
+
+
 def test_prompt_driven_referee_rejects_when_block_integration_true() -> None:
     contract = _contract()
     blue = Move(game_id=contract.id, role="blue", summary="draft", payload={})
