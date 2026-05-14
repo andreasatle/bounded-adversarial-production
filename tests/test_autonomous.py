@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from baps.autonomous import run_one_autonomous_step
+from baps.autonomous import run_autonomous_steps, run_one_autonomous_step
 from baps.blackboard import Blackboard
 from baps.schemas import Decision, GameRequest, GameResponse, ProjectedState
 
@@ -104,4 +104,146 @@ def test_run_one_autonomous_step_rejects_empty_north_star(tmp_path: Path) -> Non
             blackboard=board,
             planner=StubPlanner(),
             game_service=StubGameService(),
+        )
+
+
+def test_run_autonomous_steps_returns_max_steps_responses_in_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    board = Blackboard(tmp_path / "events.jsonl")
+    call_index = {"value": 0}
+
+    def _stub_run_one_autonomous_step(
+        north_star: str,
+        blackboard: Blackboard,
+        planner: object,
+        game_service: object,
+    ) -> GameResponse:
+        assert north_star == "Protect project identity"
+        assert blackboard is board
+        call_index["value"] += 1
+        idx = call_index["value"]
+        return GameResponse(
+            game_id="play-game-001",
+            run_id=f"run-{idx}",
+            rounds_played=1,
+            max_rounds=1,
+            final_decision=Decision(game_id="play-game-001", decision="accept", rationale=f"ok-{idx}"),
+            terminal_reason="accepted",
+            terminal_outcome="accepted_locally",
+            integration_recommendation="integration_recommended",
+            final_blue_summary=f"blue-{idx}",
+            final_red_claim=f"red-{idx}",
+        )
+
+    monkeypatch.setattr(
+        "baps.autonomous.run_one_autonomous_step",
+        _stub_run_one_autonomous_step,
+    )
+
+    responses = run_autonomous_steps(
+        north_star="Protect project identity",
+        blackboard=board,
+        planner=object(),  # not used by stubbed helper
+        game_service=object(),  # not used by stubbed helper
+        max_steps=3,
+    )
+
+    assert len(responses) == 3
+    assert [response.run_id for response in responses] == ["run-1", "run-2", "run-3"]
+
+
+def test_run_autonomous_steps_calls_planner_and_service_once_per_step_and_rebuilds_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    board = Blackboard(tmp_path / "events.jsonl")
+    build_calls = {"count": 0}
+
+    def _stub_build_projected_state_from_blackboard(received_blackboard: Blackboard) -> ProjectedState:
+        assert received_blackboard is board
+        build_calls["count"] += 1
+        return ProjectedState(metadata={"build_index": build_calls["count"]})
+
+    class StubPlanner:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.received_build_indexes: list[int] = []
+
+        def plan_next_game(self, projected_state: ProjectedState, north_star: str) -> GameRequest:
+            self.calls += 1
+            assert north_star == "Protect project identity"
+            self.received_build_indexes.append(projected_state.metadata["build_index"])
+            return _request()
+
+    class StubGameService:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def play(self, request: GameRequest) -> GameResponse:
+            self.calls += 1
+            assert request == _request()
+            idx = self.calls
+            return GameResponse(
+                game_id="play-game-001",
+                run_id=f"run-{idx}",
+                rounds_played=1,
+                max_rounds=1,
+                final_decision=Decision(game_id="play-game-001", decision="accept", rationale="ok"),
+                terminal_reason="accepted",
+                terminal_outcome="accepted_locally",
+                integration_recommendation="integration_recommended",
+                final_blue_summary=f"blue-{idx}",
+                final_red_claim=f"red-{idx}",
+            )
+
+    monkeypatch.setattr(
+        "baps.autonomous.build_projected_state_from_blackboard",
+        _stub_build_projected_state_from_blackboard,
+    )
+
+    planner = StubPlanner()
+    service = StubGameService()
+    responses = run_autonomous_steps(
+        north_star="Protect project identity",
+        blackboard=board,
+        planner=planner,
+        game_service=service,
+        max_steps=3,
+    )
+
+    assert len(responses) == 3
+    assert build_calls["count"] == 3
+    assert planner.calls == 3
+    assert service.calls == 3
+    assert planner.received_build_indexes == [1, 2, 3]
+    assert [response.run_id for response in responses] == ["run-1", "run-2", "run-3"]
+
+
+def test_run_autonomous_steps_rejects_invalid_inputs(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "events.jsonl")
+
+    class StubPlanner:
+        def plan_next_game(self, projected_state: ProjectedState, north_star: str) -> GameRequest:
+            raise AssertionError("should not be called")
+
+    class StubGameService:
+        def play(self, request: GameRequest) -> GameResponse:
+            raise AssertionError("should not be called")
+
+    with pytest.raises(ValueError, match="north_star must be a non-empty string"):
+        run_autonomous_steps(
+            north_star="   ",
+            blackboard=board,
+            planner=StubPlanner(),
+            game_service=StubGameService(),
+            max_steps=1,
+        )
+
+    with pytest.raises(ValueError, match="max_steps must be >= 1"):
+        run_autonomous_steps(
+            north_star="Protect project identity",
+            blackboard=board,
+            planner=StubPlanner(),
+            game_service=StubGameService(),
+            max_steps=0,
         )
