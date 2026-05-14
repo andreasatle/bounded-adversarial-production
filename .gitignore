@@ -14,4 +14,4 @@ blackboard/
 .runs/
 .state/
 .workspace/
-.DS_Store
+.DS_Store.DS_Store
