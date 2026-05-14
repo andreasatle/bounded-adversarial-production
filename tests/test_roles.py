@@ -54,6 +54,7 @@ def test_invalid_output_fails_after_max_attempts() -> None:
     with pytest.raises(RoleInvocationError) as excinfo:
         guard.invoke(role_callable=role_callable, args=(), output_model=ExampleOutput)
     assert "2 attempts" in str(excinfo.value)
+    assert excinfo.value.failure_kind == "schema_validation_failed"
 
 
 def test_semantic_validator_failure_retried_then_succeeds() -> None:
@@ -99,6 +100,20 @@ def test_semantic_validator_failure_fails_after_max_attempts() -> None:
         )
     assert "2 attempts" in str(excinfo.value)
     assert "role must be blue" in str(excinfo.value)
+    assert excinfo.value.failure_kind == "semantic_validation_failed"
+
+
+def test_max_attempts_exhaustion_still_raised_after_configured_attempts() -> None:
+    guard = RoleInvocationGuard(max_attempts=3)
+    calls = {"count": 0}
+
+    def role_callable():
+        calls["count"] += 1
+        return {"game_id": "g1"}
+
+    with pytest.raises(RoleInvocationError):
+        guard.invoke(role_callable=role_callable, args=(), output_model=ExampleOutput)
+    assert calls["count"] == 3
 
 
 def test_max_attempts_less_than_one_raises_value_error() -> None:

@@ -1,10 +1,32 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ValidationError
 
 
+RoleInvocationFailureKind = Literal[
+    "schema_validation_failed",
+    "semantic_validation_failed",
+    "max_attempts_exhausted",
+]
+
+
 class RoleInvocationError(Exception):
-    pass
+    def __init__(
+        self,
+        *,
+        failure_kind: RoleInvocationFailureKind,
+        max_attempts: int,
+        detail: str,
+    ):
+        self.failure_kind = failure_kind
+        self.max_attempts = max_attempts
+        self.detail = detail
+        super().__init__(
+            f"Role invocation failed after {max_attempts} attempts "
+            f"(failure_kind={failure_kind}): {detail}"
+        )
 
 
 class RoleInvocationGuard:
@@ -21,6 +43,7 @@ class RoleInvocationGuard:
         semantic_validator=None,
     ) -> BaseModel:
         last_error: Exception | None = None
+        last_failure_kind: RoleInvocationFailureKind | None = None
 
         for _ in range(self.max_attempts):
             try:
@@ -29,14 +52,24 @@ class RoleInvocationGuard:
                 if semantic_validator is not None:
                     semantic_validator(validated_output)
                 return validated_output
-            except (ValidationError, ValueError) as exc:
+            except ValidationError as exc:
                 last_error = exc
+                last_failure_kind = "schema_validation_failed"
+            except ValueError as exc:
+                last_error = exc
+                last_failure_kind = "semantic_validation_failed"
 
         if last_error is None:
             raise RoleInvocationError(
-                f"Role invocation failed after {self.max_attempts} attempts: unknown error"
+                failure_kind="max_attempts_exhausted",
+                max_attempts=self.max_attempts,
+                detail="unknown error",
             )
 
         raise RoleInvocationError(
-            f"Role invocation failed after {self.max_attempts} attempts: {last_error}"
+            failure_kind=(
+                last_failure_kind if last_failure_kind is not None else "max_attempts_exhausted"
+            ),
+            max_attempts=self.max_attempts,
+            detail=str(last_error),
         ) from last_error
