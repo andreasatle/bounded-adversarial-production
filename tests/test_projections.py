@@ -1,7 +1,13 @@
 from pathlib import Path
 
 from baps.blackboard import Blackboard
-from baps.projections import build_projected_state, build_projected_state_from_blackboard
+from baps.projections import (
+    build_projected_state,
+    build_projected_state_from_blackboard,
+    current_accepted_accomplishments,
+    current_accepted_architecture,
+    current_accepted_capabilities,
+)
 from baps.schemas import Event
 
 
@@ -1156,3 +1162,184 @@ def test_build_projected_state_unknown_accepted_state_revoked_id_is_ignored() ->
     assert projected.accepted_accomplishments == []
     assert projected.accepted_architecture == []
     assert projected.accepted_capabilities == []
+
+
+def test_current_helpers_return_all_items_when_not_superseded_or_revoked() -> None:
+    state = build_projected_state(
+        [
+            Event(
+                id="integration:acc-1",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "acc-1",
+                        "run_id": "run-1",
+                        "outcome": "accepted",
+                        "target_kind": "accomplishment",
+                        "summary": "acc",
+                        "rationale": "ok",
+                    }
+                },
+            ),
+            Event(
+                id="integration:arch-1",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "arch-1",
+                        "run_id": "run-1",
+                        "outcome": "accepted",
+                        "target_kind": "architecture",
+                        "summary": "arch",
+                        "rationale": "ok",
+                    }
+                },
+            ),
+            Event(
+                id="integration:cap-1",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "cap-1",
+                        "run_id": "run-1",
+                        "outcome": "accepted",
+                        "target_kind": "capability",
+                        "summary": "cap",
+                        "rationale": "ok",
+                    }
+                },
+            ),
+        ]
+    )
+
+    assert len(current_accepted_accomplishments(state)) == 1
+    assert len(current_accepted_architecture(state)) == 1
+    assert len(current_accepted_capabilities(state)) == 1
+
+
+def test_current_helpers_exclude_superseded_and_revoked_items() -> None:
+    state = build_projected_state(
+        [
+            Event(
+                id="integration:acc-1",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "acc-1",
+                        "run_id": "run-1",
+                        "outcome": "accepted",
+                        "target_kind": "accomplishment",
+                        "summary": "acc",
+                        "rationale": "ok",
+                    }
+                },
+            ),
+            Event(
+                id="integration:acc-2",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "acc-2",
+                        "run_id": "run-2",
+                        "outcome": "accepted",
+                        "target_kind": "accomplishment",
+                        "summary": "acc2",
+                        "rationale": "ok",
+                    }
+                },
+            ),
+            Event(
+                id="asup:acc-1",
+                type="accepted_state_supersession_recorded",
+                payload={
+                    "accepted_state_supersession": {
+                        "id": "asup-acc-1",
+                        "superseded_item_id": "acc-1",
+                        "superseding_item_id": "acc-3",
+                        "target_kind": "accomplishment",
+                        "rationale": "superseded",
+                        "source_run_id": "run-3",
+                    }
+                },
+            ),
+            Event(
+                id="arev:acc-2",
+                type="accepted_state_revocation_recorded",
+                payload={
+                    "accepted_state_revocation": {
+                        "id": "arev-acc-2",
+                        "revoked_item_id": "acc-2",
+                        "target_kind": "accomplishment",
+                        "rationale": "revoked",
+                        "source_run_id": "run-4",
+                    }
+                },
+            ),
+        ]
+    )
+
+    assert current_accepted_accomplishments(state) == []
+
+
+def test_current_helpers_preserve_order() -> None:
+    state = build_projected_state(
+        [
+            Event(
+                id="integration:cap-1",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "cap-1",
+                        "run_id": "run-1",
+                        "outcome": "accepted",
+                        "target_kind": "capability",
+                        "summary": "cap1",
+                        "rationale": "ok",
+                    }
+                },
+            ),
+            Event(
+                id="integration:cap-2",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "cap-2",
+                        "run_id": "run-2",
+                        "outcome": "accepted",
+                        "target_kind": "capability",
+                        "summary": "cap2",
+                        "rationale": "ok",
+                    }
+                },
+            ),
+        ]
+    )
+
+    current = current_accepted_capabilities(state)
+    assert [item.id for item in current] == ["cap-1", "cap-2"]
+
+
+def test_current_helpers_do_not_mutate_input_state() -> None:
+    state = build_projected_state(
+        [
+            Event(
+                id="integration:arch-1",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "arch-1",
+                        "run_id": "run-1",
+                        "outcome": "accepted",
+                        "target_kind": "architecture",
+                        "summary": "arch1",
+                        "rationale": "ok",
+                    }
+                },
+            ),
+        ]
+    )
+    before_metadata = dict(state.accepted_architecture[0].metadata)
+
+    _ = current_accepted_architecture(state)
+
+    assert state.accepted_architecture[0].metadata == before_metadata

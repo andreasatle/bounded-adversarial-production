@@ -253,6 +253,30 @@ def build_projected_state_from_blackboard(blackboard: Blackboard) -> ProjectedSt
     return build_projected_state(blackboard.read_all())
 
 
+def current_accepted_accomplishments(state: ProjectedState) -> list[AcceptedAccomplishment]:
+    return [
+        item
+        for item in state.accepted_accomplishments
+        if item.metadata.get("superseded") is not True and item.metadata.get("revoked") is not True
+    ]
+
+
+def current_accepted_architecture(state: ProjectedState) -> list[AcceptedArchitectureItem]:
+    return [
+        item
+        for item in state.accepted_architecture
+        if item.metadata.get("superseded") is not True and item.metadata.get("revoked") is not True
+    ]
+
+
+def current_accepted_capabilities(state: ProjectedState) -> list[AcceptedCapability]:
+    return [
+        item
+        for item in state.accepted_capabilities
+        if item.metadata.get("superseded") is not True and item.metadata.get("revoked") is not True
+    ]
+
+
 def _derive_discrepancy_summary(payload: dict) -> str:
     state = payload.get("state")
     if isinstance(state, dict):
