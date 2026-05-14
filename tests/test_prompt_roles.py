@@ -2,7 +2,12 @@ import pytest
 
 from baps.game_types import make_documentation_refinement_game_definition
 from baps.models import FakeModelClient
-from baps.prompt_roles import build_prompt_roles
+from baps.prompt_roles import (
+    build_prompt_roles,
+    default_blue_profile,
+    default_red_profile,
+    default_referee_profile,
+)
 from baps.schemas import AgentProfile, GameContract, Target
 
 
@@ -191,6 +196,64 @@ def test_build_prompt_roles_rejects_mismatched_profile_roles() -> None:
                 instructions="bad",
             ),
         )
+
+
+def test_default_profiles_have_expected_roles_levels_and_ids() -> None:
+    blue = default_blue_profile()
+    red = default_red_profile()
+    referee = default_referee_profile()
+
+    assert blue.id == "builtin:blue"
+    assert blue.role == "blue"
+    assert blue.critique_level == "low"
+
+    assert red.id == "builtin:red"
+    assert red.role == "red"
+    assert red.critique_level == "high"
+
+    assert referee.id == "builtin:referee"
+    assert referee.role == "referee"
+    assert referee.critique_level == "medium"
+
+
+def test_default_profiles_can_be_passed_to_build_prompt_roles() -> None:
+    model = FakeModelClient(
+        responses=[
+            "candidate answer",
+            "MATERIAL: no\nCLAIM: looks good",
+            "rationale",
+        ]
+    )
+    contract = GameContract(
+        id="game-1",
+        subject="README",
+        goal="Improve docs",
+        target=Target(kind="documentation", ref="README.md"),
+        active_roles=["blue", "red", "referee"],
+        max_rounds=1,
+    )
+    sections = make_documentation_refinement_game_definition().prompt_sections
+
+    blue_role, red_role, referee_role = build_prompt_roles(
+        model_client=model,
+        prompt_sections=sections,
+        shared_context="shared-context",
+        red_material=True,
+        blue_profile=default_blue_profile(),
+        red_profile=default_red_profile(),
+        referee_profile=default_referee_profile(),
+    )
+
+    blue_move = blue_role(contract)
+    red_finding = red_role(contract, blue_move)
+    decision = referee_role(contract, blue_move, red_finding)
+
+    assert blue_move.summary == "candidate answer"
+    assert red_finding.claim == "looks good"
+    assert decision.rationale == "rationale"
+    assert "Built-in Blue" in model.prompts[0]
+    assert "Built-in Red" in model.prompts[1]
+    assert "Built-in Referee" in model.prompts[2]
 
     with pytest.raises(ValueError, match="red_profile.role must be 'red'"):
         build_prompt_roles(

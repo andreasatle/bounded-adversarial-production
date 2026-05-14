@@ -30,6 +30,45 @@ def _profile_section(profile: AgentProfile | None) -> list[PromptSection]:
     ]
 
 
+def default_blue_profile() -> AgentProfile:
+    return AgentProfile(
+        id="builtin:blue",
+        role="blue",
+        name="Built-in Blue",
+        critique_level="low",
+        instructions=(
+            "Produce one bounded candidate move for the current goal. "
+            "Prefer minimal, scoped changes that fit the stated target."
+        ),
+    )
+
+
+def default_red_profile() -> AgentProfile:
+    return AgentProfile(
+        id="builtin:red",
+        role="red",
+        name="Built-in Red",
+        critique_level="high",
+        instructions=(
+            "Provide scoped adversarial critique of the current Blue move only. "
+            "Prioritize material issues with concrete claims."
+        ),
+    )
+
+
+def default_referee_profile() -> AgentProfile:
+    return AgentProfile(
+        id="builtin:referee",
+        role="referee",
+        name="Built-in Referee",
+        critique_level="medium",
+        instructions=(
+            "Enforce the game contract and local decision authority. "
+            "Provide concise rationale aligned with the fixed structured decision."
+        ),
+    )
+
+
 def build_prompt_roles(
     *,
     model_client: ModelClient,
