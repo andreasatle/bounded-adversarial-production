@@ -231,6 +231,69 @@ class RoundSummary(BaseModel):
         return value
 
 
+class AcceptedAccomplishment(BaseModel):
+    id: str
+    summary: str
+    source_run_id: str
+    metadata: dict = Field(default_factory=dict)
+
+    _validate_id = field_validator("id")(_require_non_empty)
+    _validate_summary = field_validator("summary")(_require_non_empty)
+    _validate_source_run_id = field_validator("source_run_id")(_require_non_empty)
+
+
+class AcceptedArchitectureItem(BaseModel):
+    id: str
+    title: str
+    source_event_id: str
+    metadata: dict = Field(default_factory=dict)
+
+    _validate_id = field_validator("id")(_require_non_empty)
+    _validate_title = field_validator("title")(_require_non_empty)
+    _validate_source_event_id = field_validator("source_event_id")(_require_non_empty)
+
+
+class AcceptedCapability(BaseModel):
+    id: str
+    name: str
+    source_run_id: str
+    metadata: dict = Field(default_factory=dict)
+
+    _validate_id = field_validator("id")(_require_non_empty)
+    _validate_name = field_validator("name")(_require_non_empty)
+    _validate_source_run_id = field_validator("source_run_id")(_require_non_empty)
+
+
+class UnresolvedDiscrepancy(BaseModel):
+    id: str
+    summary: str
+    source_event_id: str
+    metadata: dict = Field(default_factory=dict)
+
+    _validate_id = field_validator("id")(_require_non_empty)
+    _validate_summary = field_validator("summary")(_require_non_empty)
+    _validate_source_event_id = field_validator("source_event_id")(_require_non_empty)
+
+
+class ActiveGameSummary(BaseModel):
+    id: str
+    title: str
+    source_run_id: str
+    metadata: dict = Field(default_factory=dict)
+
+    _validate_id = field_validator("id")(_require_non_empty)
+    _validate_title = field_validator("title")(_require_non_empty)
+    _validate_source_run_id = field_validator("source_run_id")(_require_non_empty)
+
+
+class ProjectedState(BaseModel):
+    accepted_accomplishments: list[AcceptedAccomplishment] = Field(default_factory=list)
+    accepted_architecture: list[AcceptedArchitectureItem] = Field(default_factory=list)
+    accepted_capabilities: list[AcceptedCapability] = Field(default_factory=list)
+    unresolved_discrepancies: list[UnresolvedDiscrepancy] = Field(default_factory=list)
+    active_games: list[ActiveGameSummary] = Field(default_factory=list)
+
+
 class Artifact(BaseModel):
     id: str
     type: str

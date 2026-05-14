@@ -2,6 +2,10 @@ import pytest
 from pydantic import ValidationError
 
 from baps.schemas import (
+    AcceptedAccomplishment,
+    AcceptedArchitectureItem,
+    AcceptedCapability,
+    ActiveGameSummary,
     Artifact,
     ArtifactAdapterResult,
     ArtifactChange,
@@ -12,11 +16,13 @@ from baps.schemas import (
     GameRecord,
     GameResponse,
     GameRound,
+    ProjectedState,
     RoundSummary,
     GameRequest,
     GameState,
     Move,
     Target,
+    UnresolvedDiscrepancy,
 )
 
 
@@ -191,6 +197,69 @@ def test_round_summary_constructs_successfully() -> None:
         referee_rationale="rationale",
     )
     assert summary.round_number == 1
+
+
+def test_projected_state_models_construct_successfully() -> None:
+    projected = ProjectedState(
+        accepted_accomplishments=[
+            AcceptedAccomplishment(
+                id="acc-1",
+                summary="Implemented runtime response hardening",
+                source_run_id="run-1",
+                metadata={"owner": "blue"},
+            )
+        ],
+        accepted_architecture=[
+            AcceptedArchitectureItem(
+                id="arch-1",
+                title="Runtime/blackboard boundary",
+                source_event_id="event-1",
+                metadata={"area": "runtime"},
+            )
+        ],
+        accepted_capabilities=[
+            AcceptedCapability(
+                id="cap-1",
+                name="Prompt-role JSON fallback parsing",
+                source_run_id="run-2",
+                metadata={"status": "accepted"},
+            )
+        ],
+        unresolved_discrepancies=[
+            UnresolvedDiscrepancy(
+                id="disc-1",
+                summary="Pending discrepancy triage",
+                source_event_id="event-2",
+                metadata={"severity": "medium"},
+            )
+        ],
+        active_games=[
+            ActiveGameSummary(
+                id="game-1",
+                title="README validation game",
+                source_run_id="run-3",
+                metadata={"phase": "active"},
+            )
+        ],
+    )
+    assert projected.accepted_accomplishments[0].id == "acc-1"
+    assert projected.accepted_architecture[0].title == "Runtime/blackboard boundary"
+    assert projected.accepted_capabilities[0].name == "Prompt-role JSON fallback parsing"
+    assert projected.unresolved_discrepancies[0].id == "disc-1"
+    assert projected.active_games[0].id == "game-1"
+
+
+def test_projected_state_models_reject_non_empty_string_fields() -> None:
+    with pytest.raises(ValidationError):
+        AcceptedAccomplishment(id=" ", summary="s", source_run_id="run-1")
+    with pytest.raises(ValidationError):
+        AcceptedArchitectureItem(id="arch-1", title=" ", source_event_id="event-1")
+    with pytest.raises(ValidationError):
+        AcceptedCapability(id="cap-1", name="capability", source_run_id=" ")
+    with pytest.raises(ValidationError):
+        UnresolvedDiscrepancy(id="disc-1", summary=" ", source_event_id="event-1")
+    with pytest.raises(ValidationError):
+        ActiveGameSummary(id="game-1", title="title", source_run_id=" ")
 
 
 @pytest.mark.parametrize(
@@ -765,3 +834,39 @@ def test_mutable_defaults_are_not_shared() -> None:
         )
     )
     assert result_b.round_summaries == []
+
+    accomplishment_a = AcceptedAccomplishment(
+        id="acc-1",
+        summary="s1",
+        source_run_id="run-1",
+    )
+    accomplishment_b = AcceptedAccomplishment(
+        id="acc-2",
+        summary="s2",
+        source_run_id="run-2",
+    )
+    accomplishment_a.metadata["k"] = "v"
+    assert accomplishment_b.metadata == {}
+
+    projected_a = ProjectedState()
+    projected_b = ProjectedState()
+    projected_a.accepted_accomplishments.append(
+        AcceptedAccomplishment(id="acc-3", summary="s3", source_run_id="run-3")
+    )
+    projected_a.accepted_architecture.append(
+        AcceptedArchitectureItem(id="arch-1", title="t1", source_event_id="event-1")
+    )
+    projected_a.accepted_capabilities.append(
+        AcceptedCapability(id="cap-1", name="n1", source_run_id="run-3")
+    )
+    projected_a.unresolved_discrepancies.append(
+        UnresolvedDiscrepancy(id="disc-1", summary="d1", source_event_id="event-2")
+    )
+    projected_a.active_games.append(
+        ActiveGameSummary(id="game-1", title="g1", source_run_id="run-3")
+    )
+    assert projected_b.accepted_accomplishments == []
+    assert projected_b.accepted_architecture == []
+    assert projected_b.accepted_capabilities == []
+    assert projected_b.unresolved_discrepancies == []
+    assert projected_b.active_games == []
