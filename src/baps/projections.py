@@ -141,6 +141,32 @@ def build_projected_state(events: list[Event]) -> ProjectedState:
             item.metadata["superseded"] = True
             item.metadata["superseding_item_id"] = superseding_item_id
             continue
+        if event.type == "accepted_state_revocation_recorded":
+            revocation = payload.get("accepted_state_revocation")
+            if not isinstance(revocation, dict):
+                continue
+            revoked_item_id = revocation.get("revoked_item_id")
+            target_kind = revocation.get("target_kind")
+            revocation_id = revocation.get("id")
+            if not isinstance(revoked_item_id, str) or not revoked_item_id.strip():
+                continue
+            if not isinstance(revocation_id, str) or not revocation_id.strip():
+                continue
+
+            if target_kind == "accomplishment":
+                item = accomplishments_by_decision_id.get(revoked_item_id)
+            elif target_kind == "architecture":
+                item = architecture_by_decision_id.get(revoked_item_id)
+            elif target_kind == "capability":
+                item = capabilities_by_decision_id.get(revoked_item_id)
+            else:
+                item = None
+
+            if item is None:
+                continue
+            item.metadata["revoked"] = True
+            item.metadata["revocation_id"] = revocation_id
+            continue
 
         game_id = payload.get("game_id")
         run_id = payload.get("run_id")

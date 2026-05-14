@@ -2,6 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from baps.schemas import (
+    AcceptedStateRevocation,
     AcceptedStateSupersession,
     AcceptedAccomplishment,
     AcceptedArchitectureItem,
@@ -370,6 +371,18 @@ def test_accepted_state_supersession_constructs_successfully() -> None:
     )
     assert supersession.id == "asup-1"
     assert supersession.superseded_item_id == "item-1"
+
+
+def test_accepted_state_revocation_constructs_successfully() -> None:
+    revocation = AcceptedStateRevocation(
+        id="arev-1",
+        revoked_item_id="item-1",
+        target_kind="accomplishment",
+        rationale="accepted item revoked due to updated evidence",
+        source_run_id="run-2",
+    )
+    assert revocation.id == "arev-1"
+    assert revocation.revoked_item_id == "item-1"
 
 
 def test_agent_profile_constructs_successfully() -> None:

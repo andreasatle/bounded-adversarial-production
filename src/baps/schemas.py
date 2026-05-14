@@ -407,6 +407,20 @@ class AcceptedStateSupersession(BaseModel):
     _validate_source_run_id = field_validator("source_run_id")(_require_non_empty)
 
 
+class AcceptedStateRevocation(BaseModel):
+    id: str
+    revoked_item_id: str
+    target_kind: IntegrationTargetKind
+    rationale: str
+    source_run_id: str
+    metadata: dict = Field(default_factory=dict)
+
+    _validate_id = field_validator("id")(_require_non_empty)
+    _validate_revoked_item_id = field_validator("revoked_item_id")(_require_non_empty)
+    _validate_rationale = field_validator("rationale")(_require_non_empty)
+    _validate_source_run_id = field_validator("source_run_id")(_require_non_empty)
+
+
 class Artifact(BaseModel):
     id: str
     type: str

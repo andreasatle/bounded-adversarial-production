@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from baps.schemas import (
+    AcceptedStateRevocation,
     AcceptedStateSupersession,
     DiscrepancyResolution,
     DiscrepancySupersession,
@@ -79,5 +80,14 @@ class Blackboard:
                 id=f"accepted_state_supersession:{supersession.id}",
                 type="accepted_state_supersession_recorded",
                 payload={"accepted_state_supersession": supersession.model_dump(mode="json")},
+            )
+        )
+
+    def append_accepted_state_revocation(self, revocation: AcceptedStateRevocation) -> None:
+        self.append(
+            Event(
+                id=f"accepted_state_revocation:{revocation.id}",
+                type="accepted_state_revocation_recorded",
+                payload={"accepted_state_revocation": revocation.model_dump(mode="json")},
             )
         )

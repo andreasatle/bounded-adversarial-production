@@ -5,6 +5,7 @@ import pytest
 
 from baps.blackboard import Blackboard
 from baps.schemas import (
+    AcceptedStateRevocation,
     AcceptedStateSupersession,
     DiscrepancyResolution,
     DiscrepancySupersession,
@@ -214,3 +215,22 @@ def test_append_accepted_state_supersession_records_expected_event(tmp_path: Pat
     event = events[0]
     assert event.type == "accepted_state_supersession_recorded"
     assert event.payload["accepted_state_supersession"] == supersession.model_dump(mode="json")
+
+
+def test_append_accepted_state_revocation_records_expected_event(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "board.jsonl")
+    revocation = AcceptedStateRevocation(
+        id="arev-001",
+        revoked_item_id="int-001",
+        target_kind="accomplishment",
+        rationale="Revoked due to contradictory evidence",
+        source_run_id="run-2",
+    )
+
+    board.append_accepted_state_revocation(revocation)
+
+    events = board.read_all()
+    assert len(events) == 1
+    event = events[0]
+    assert event.type == "accepted_state_revocation_recorded"
+    assert event.payload["accepted_state_revocation"] == revocation.model_dump(mode="json")
