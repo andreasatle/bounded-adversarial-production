@@ -3,8 +3,11 @@ from pathlib import Path
 from baps.blackboard import Blackboard
 from baps.integrator import (
     DefaultIntegrationPolicy,
+    DefaultMultiCandidateIntegrationPolicy,
     IntegrationPolicy,
+    MultiCandidateIntegrationPolicy,
     Integrator,
+    integrate_many,
     integrate_response,
 )
 from baps.schemas import Decision, GameResponse, IntegrationDecision
@@ -183,3 +186,116 @@ def test_integrate_response_works_with_custom_policy_via_integrator(tmp_path: Pa
     events = board.query("integration_decision_recorded")
     assert len(events) == 1
     assert events[0].payload["integration_decision"]["id"] == "policy:run-6"
+
+
+def test_default_multi_candidate_policy_keeps_single_accepted_candidate() -> None:
+    policy = DefaultMultiCandidateIntegrationPolicy()
+    responses = [
+        _make_response(
+            run_id="run-1",
+            terminal_outcome="accepted_locally",
+            integration_recommendation="integration_recommended",
+        )
+    ]
+
+    decisions = policy.decide_many(responses)
+    assert len(decisions) == 1
+    assert decisions[0].outcome == "accepted"
+
+
+def test_default_multi_candidate_policy_defers_later_accepted_candidates() -> None:
+    policy = DefaultMultiCandidateIntegrationPolicy()
+    responses = [
+        _make_response(
+            run_id="run-1",
+            terminal_outcome="accepted_locally",
+            integration_recommendation="integration_recommended",
+        ),
+        _make_response(
+            run_id="run-2",
+            terminal_outcome="accepted_locally",
+            integration_recommendation="integration_recommended",
+        ),
+        _make_response(
+            run_id="run-3",
+            terminal_outcome="rejected_locally",
+            integration_recommendation="do_not_integrate",
+        ),
+    ]
+
+    decisions = policy.decide_many(responses)
+    assert [d.run_id for d in decisions] == ["run-1", "run-2", "run-3"]
+    assert decisions[0].outcome == "accepted"
+    assert decisions[1].outcome == "deferred"
+    assert decisions[2].outcome == "deferred"
+
+
+def test_integrate_many_appends_events_and_preserves_order(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "board.jsonl")
+    responses = [
+        _make_response(
+            run_id="run-1",
+            terminal_outcome="accepted_locally",
+            integration_recommendation="integration_recommended",
+        ),
+        _make_response(
+            run_id="run-2",
+            terminal_outcome="accepted_locally",
+            integration_recommendation="integration_recommended",
+        ),
+        _make_response(
+            run_id="run-3",
+            terminal_outcome="rejected_locally",
+            integration_recommendation="do_not_integrate",
+        ),
+    ]
+
+    decisions = integrate_many(responses=responses, blackboard=board)
+    assert [d.run_id for d in decisions] == ["run-1", "run-2", "run-3"]
+    assert [d.outcome for d in decisions] == ["accepted", "deferred", "deferred"]
+
+    events = board.query("integration_decision_recorded")
+    assert len(events) == 3
+    assert [e.payload["integration_decision"]["run_id"] for e in events] == [
+        "run-1",
+        "run-2",
+        "run-3",
+    ]
+
+
+def test_integrate_many_uses_custom_multi_candidate_policy(tmp_path: Path) -> None:
+    class StubMultiPolicy(MultiCandidateIntegrationPolicy):
+        def decide_many(self, responses: list[GameResponse]) -> list[IntegrationDecision]:
+            decisions: list[IntegrationDecision] = []
+            for response in responses:
+                decisions.append(
+                    IntegrationDecision(
+                        id=f"multi:{response.run_id}",
+                        run_id=response.run_id,
+                        outcome="deferred",
+                        target_kind="accomplishment",
+                        summary="stub summary",
+                        rationale="stub rationale",
+                    )
+                )
+            return decisions
+
+    board = Blackboard(tmp_path / "board.jsonl")
+    responses = [
+        _make_response(
+            run_id="run-a",
+            terminal_outcome="accepted_locally",
+            integration_recommendation="integration_recommended",
+        ),
+        _make_response(
+            run_id="run-b",
+            terminal_outcome="rejected_locally",
+            integration_recommendation="do_not_integrate",
+        ),
+    ]
+
+    decisions = integrate_many(responses=responses, blackboard=board, policy=StubMultiPolicy())
+    assert [d.id for d in decisions] == ["multi:run-a", "multi:run-b"]
+    events = board.query("integration_decision_recorded")
+    assert len(events) == 2
+    assert [e.payload["integration_decision"]["id"] for e in events] == ["multi:run-a", "multi:run-b"]

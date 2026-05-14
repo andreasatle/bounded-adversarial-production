@@ -10,6 +10,10 @@ class IntegrationPolicy(Protocol):
     def decide(self, response: GameResponse) -> IntegrationDecision: ...
 
 
+class MultiCandidateIntegrationPolicy(Protocol):
+    def decide_many(self, responses: list[GameResponse]) -> list[IntegrationDecision]: ...
+
+
 class DefaultIntegrationPolicy:
     def decide(self, response: GameResponse) -> IntegrationDecision:
         accepted = (
@@ -50,6 +54,28 @@ class Integrator:
         return self.policy.decide(response)
 
 
+class DefaultMultiCandidateIntegrationPolicy:
+    def __init__(self, base_policy: IntegrationPolicy | None = None):
+        self.base_policy = base_policy if base_policy is not None else DefaultIntegrationPolicy()
+
+    def decide_many(self, responses: list[GameResponse]) -> list[IntegrationDecision]:
+        decisions = [self.base_policy.decide(response) for response in responses]
+        accepted_seen = False
+        for decision in decisions:
+            if decision.outcome != "accepted":
+                continue
+            if not accepted_seen:
+                accepted_seen = True
+                continue
+            decision.outcome = "deferred"
+            decision.summary = f"Integration outcome for run {decision.run_id}: deferred"
+            decision.rationale = (
+                "Deferred by deterministic multi-candidate policy because an earlier accepted "
+                "candidate already claimed acceptance."
+            )
+        return decisions
+
+
 def integrate_response(
     response: GameResponse,
     blackboard: Blackboard,
@@ -59,3 +85,15 @@ def integrate_response(
     decision = active_integrator.integrate(response)
     blackboard.append_integration_decision(decision)
     return decision
+
+
+def integrate_many(
+    responses: list[GameResponse],
+    blackboard: Blackboard,
+    policy: MultiCandidateIntegrationPolicy | None = None,
+) -> list[IntegrationDecision]:
+    active_policy = policy if policy is not None else DefaultMultiCandidateIntegrationPolicy()
+    decisions = active_policy.decide_many(responses)
+    for decision in decisions:
+        blackboard.append_integration_decision(decision)
+    return decisions
