@@ -204,3 +204,101 @@ def test_build_projected_state_duplicate_successful_completions_do_not_duplicate
     )
     assert len(projected.accepted_accomplishments) == 1
     assert projected.accepted_accomplishments[0].id == "run-1"
+
+
+def test_build_projected_state_rejected_completion_produces_unresolved_discrepancy() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "blocking issue found"}},
+                },
+            )
+        ]
+    )
+    assert len(projected.unresolved_discrepancies) == 1
+    discrepancy = projected.unresolved_discrepancies[0]
+    assert discrepancy.id == "run-1"
+    assert discrepancy.summary == "blocking issue found"
+    assert discrepancy.metadata["terminal_outcome"] == "rejected_locally"
+    assert discrepancy.metadata["integration_recommendation"] == "do_not_integrate"
+
+
+def test_build_projected_state_budget_exhausted_completion_produces_unresolved_discrepancy() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "revision_budget_exhausted",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "needs more revision"}},
+                },
+            )
+        ]
+    )
+    assert len(projected.unresolved_discrepancies) == 1
+    discrepancy = projected.unresolved_discrepancies[0]
+    assert discrepancy.id == "run-1"
+    assert discrepancy.summary == "needs more revision"
+    assert discrepancy.metadata["terminal_outcome"] == "revision_budget_exhausted"
+    assert discrepancy.metadata["integration_recommendation"] == "do_not_integrate"
+
+
+def test_build_projected_state_accepted_completion_does_not_produce_discrepancy() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "accepted_locally",
+                    "integration_recommendation": "integration_recommended",
+                    "state": {"final_decision": {"rationale": "accepted rationale"}},
+                },
+            )
+        ]
+    )
+    assert projected.unresolved_discrepancies == []
+
+
+def test_build_projected_state_duplicate_unsuccessful_completions_do_not_duplicate_discrepancy() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed-a",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "rationale-a"}},
+                },
+            ),
+            Event(
+                id="g1:run-1:game_completed-b",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "rationale-b"}},
+                },
+            ),
+        ]
+    )
+    assert len(projected.unresolved_discrepancies) == 1
+    assert projected.unresolved_discrepancies[0].id == "run-1"
