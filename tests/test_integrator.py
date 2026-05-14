@@ -228,6 +228,12 @@ def test_default_multi_candidate_policy_defers_later_accepted_candidates() -> No
     assert decisions[0].outcome == "accepted"
     assert decisions[1].outcome == "deferred"
     assert decisions[2].outcome == "deferred"
+    assert "deferred_reason" not in decisions[0].metadata
+    assert "accepted_competitor_run_id" not in decisions[0].metadata
+    assert decisions[1].metadata["deferred_reason"] == "competing_candidate_already_accepted"
+    assert decisions[1].metadata["accepted_competitor_run_id"] == "run-1"
+    assert "deferred_reason" not in decisions[2].metadata
+    assert "accepted_competitor_run_id" not in decisions[2].metadata
 
 
 def test_integrate_many_appends_events_and_preserves_order(tmp_path: Path) -> None:

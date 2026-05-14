@@ -61,11 +61,13 @@ class DefaultMultiCandidateIntegrationPolicy:
     def decide_many(self, responses: list[GameResponse]) -> list[IntegrationDecision]:
         decisions = [self.base_policy.decide(response) for response in responses]
         accepted_seen = False
+        first_accepted_run_id: str | None = None
         for decision in decisions:
             if decision.outcome != "accepted":
                 continue
             if not accepted_seen:
                 accepted_seen = True
+                first_accepted_run_id = decision.run_id
                 continue
             decision.outcome = "deferred"
             decision.summary = f"Integration outcome for run {decision.run_id}: deferred"
@@ -73,6 +75,8 @@ class DefaultMultiCandidateIntegrationPolicy:
                 "Deferred by deterministic multi-candidate policy because an earlier accepted "
                 "candidate already claimed acceptance."
             )
+            decision.metadata["deferred_reason"] = "competing_candidate_already_accepted"
+            decision.metadata["accepted_competitor_run_id"] = first_accepted_run_id
         return decisions
 
 
