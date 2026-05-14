@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from baps.blackboard import Blackboard
 from baps.schemas import (
     AcceptedAccomplishment,
     AcceptedArchitectureItem,
@@ -180,6 +181,10 @@ def build_projected_state(events: list[Event]) -> ProjectedState:
         ],
         active_games=[active_by_run[run_id] for run_id in active_run_order if run_id in active_by_run]
     )
+
+
+def build_projected_state_from_blackboard(blackboard: Blackboard) -> ProjectedState:
+    return build_projected_state(blackboard.read_all())
 
 
 def _derive_discrepancy_summary(payload: dict) -> str:

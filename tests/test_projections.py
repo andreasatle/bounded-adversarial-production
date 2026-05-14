@@ -1,4 +1,7 @@
-from baps.projections import build_projected_state
+from pathlib import Path
+
+from baps.blackboard import Blackboard
+from baps.projections import build_projected_state, build_projected_state_from_blackboard
 from baps.schemas import Event
 
 
@@ -705,3 +708,98 @@ def test_build_projected_state_resolution_behavior_still_works() -> None:
     )
     assert len(projected.unresolved_discrepancies) == 1
     assert projected.unresolved_discrepancies[0].status == "resolved"
+
+
+def test_build_projected_state_from_blackboard_preserves_active_game_projection(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "board.jsonl")
+    board.append(
+        Event(
+            id="g1:run-1:r0001:game_started",
+            type="game_started",
+            payload={"game_id": "g1", "run_id": "run-1"},
+        )
+    )
+
+    projected = build_projected_state_from_blackboard(board)
+    assert [active.id for active in projected.active_games] == ["run-1"]
+
+
+def test_build_projected_state_from_blackboard_preserves_integration_decision_projection(
+    tmp_path: Path,
+) -> None:
+    board = Blackboard(tmp_path / "board.jsonl")
+    board.append(
+        Event(
+            id="integration:int-001",
+            type="integration_decision_recorded",
+            payload={
+                "integration_decision": {
+                    "id": "int-001",
+                    "run_id": "run-1",
+                    "outcome": "accepted",
+                    "target_kind": "accomplishment",
+                    "summary": "Accepted accomplishment summary",
+                    "rationale": "Accepted by integration authority",
+                }
+            },
+        )
+    )
+
+    projected = build_projected_state_from_blackboard(board)
+    assert len(projected.accepted_accomplishments) == 1
+    assert projected.accepted_accomplishments[0].id == "int-001"
+
+
+def test_build_projected_state_from_blackboard_preserves_discrepancy_lifecycle_projection(
+    tmp_path: Path,
+) -> None:
+    board = Blackboard(tmp_path / "board.jsonl")
+    board.append(
+        Event(
+            id="g1:run-1:game_completed",
+            type="game_completed",
+            payload={
+                "game_id": "g1",
+                "run_id": "run-1",
+                "terminal_outcome": "rejected_locally",
+                "integration_recommendation": "do_not_integrate",
+                "state": {"final_decision": {"rationale": "blocking issue run-1"}},
+            },
+        )
+    )
+    board.append(
+        Event(
+            id="res:001",
+            type="discrepancy_resolution_recorded",
+            payload={
+                "discrepancy_resolution": {
+                    "id": "res-001",
+                    "discrepancy_id": "run-1",
+                    "resolution_summary": "resolved run-1",
+                    "source_run_id": "run-2",
+                }
+            },
+        )
+    )
+    board.append(
+        Event(
+            id="sup:001",
+            type="discrepancy_supersession_recorded",
+            payload={
+                "discrepancy_supersession": {
+                    "id": "sup-001",
+                    "superseded_discrepancy_id": "run-1",
+                    "superseding_discrepancy_id": "run-3",
+                    "rationale": "run-3 supersedes run-1",
+                    "source_run_id": "run-3",
+                }
+            },
+        )
+    )
+
+    projected = build_projected_state_from_blackboard(board)
+    assert len(projected.unresolved_discrepancies) == 1
+    discrepancy = projected.unresolved_discrepancies[0]
+    assert discrepancy.id == "run-1"
+    assert discrepancy.status == "superseded"
+    assert discrepancy.metadata["superseding_discrepancy_id"] == "run-3"
