@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from baps.schemas import (
     AcceptedAccomplishment,
+    AcceptedArchitectureItem,
+    AcceptedCapability,
     ActiveGameSummary,
     Event,
     ProjectedState,
@@ -14,6 +16,10 @@ def build_projected_state(events: list[Event]) -> ProjectedState:
     active_run_order: list[str] = []
     accomplishments_by_decision_id: dict[str, AcceptedAccomplishment] = {}
     accomplishment_order: list[str] = []
+    architecture_by_decision_id: dict[str, AcceptedArchitectureItem] = {}
+    architecture_order: list[str] = []
+    capabilities_by_decision_id: dict[str, AcceptedCapability] = {}
+    capability_order: list[str] = []
     discrepancies_by_run: dict[str, UnresolvedDiscrepancy] = {}
     discrepancy_order: list[str] = []
 
@@ -30,22 +36,49 @@ def build_projected_state(events: list[Event]) -> ProjectedState:
             summary = integration_decision.get("summary")
             if not isinstance(decision_id, str) or not decision_id.strip():
                 continue
-            if decision_id in accomplishments_by_decision_id:
+            if (
+                decision_id in accomplishments_by_decision_id
+                or decision_id in architecture_by_decision_id
+                or decision_id in capabilities_by_decision_id
+            ):
                 continue
-            if outcome != "accepted" or target_kind != "accomplishment":
+            if outcome != "accepted":
                 continue
             if not isinstance(run_id, str) or not run_id.strip():
                 continue
             if not isinstance(summary, str) or not summary.strip():
                 continue
 
-            accomplishments_by_decision_id[decision_id] = AcceptedAccomplishment(
-                id=decision_id,
-                summary=summary,
-                source_run_id=run_id,
-                metadata={"source_event_id": event.id},
-            )
-            accomplishment_order.append(decision_id)
+            metadata = {
+                "source_event_id": event.id,
+                "integration_decision_id": decision_id,
+                "integration_outcome": outcome,
+                "integration_target_kind": target_kind,
+            }
+            if target_kind == "accomplishment":
+                accomplishments_by_decision_id[decision_id] = AcceptedAccomplishment(
+                    id=decision_id,
+                    summary=summary,
+                    source_run_id=run_id,
+                    metadata=metadata,
+                )
+                accomplishment_order.append(decision_id)
+            elif target_kind == "architecture":
+                architecture_by_decision_id[decision_id] = AcceptedArchitectureItem(
+                    id=decision_id,
+                    title=summary,
+                    source_event_id=run_id,
+                    metadata=metadata,
+                )
+                architecture_order.append(decision_id)
+            elif target_kind == "capability":
+                capabilities_by_decision_id[decision_id] = AcceptedCapability(
+                    id=decision_id,
+                    name=summary,
+                    source_run_id=run_id,
+                    metadata=metadata,
+                )
+                capability_order.append(decision_id)
             continue
 
         game_id = payload.get("game_id")
@@ -92,6 +125,16 @@ def build_projected_state(events: list[Event]) -> ProjectedState:
             accomplishments_by_decision_id[decision_id]
             for decision_id in accomplishment_order
             if decision_id in accomplishments_by_decision_id
+        ],
+        accepted_architecture=[
+            architecture_by_decision_id[decision_id]
+            for decision_id in architecture_order
+            if decision_id in architecture_by_decision_id
+        ],
+        accepted_capabilities=[
+            capabilities_by_decision_id[decision_id]
+            for decision_id in capability_order
+            if decision_id in capabilities_by_decision_id
         ],
         unresolved_discrepancies=[
             discrepancies_by_run[run_id]

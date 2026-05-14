@@ -242,6 +242,136 @@ def test_build_projected_state_duplicate_accepted_integration_decisions_do_not_d
     assert projected.accepted_accomplishments[0].id == "int-004"
 
 
+def test_build_projected_state_accepted_integration_decision_produces_architecture_item() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="integration:int-arch-001",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "int-arch-001",
+                        "run_id": "run-arch-1",
+                        "outcome": "accepted",
+                        "target_kind": "architecture",
+                        "summary": "Adopt bounded projection pipeline",
+                        "rationale": "Architecture accepted by integrator",
+                    }
+                },
+            )
+        ]
+    )
+    assert len(projected.accepted_architecture) == 1
+    item = projected.accepted_architecture[0]
+    assert item.id == "int-arch-001"
+    assert item.title == "Adopt bounded projection pipeline"
+    assert item.source_event_id == "run-arch-1"
+    assert item.metadata["integration_decision_id"] == "int-arch-001"
+    assert item.metadata["integration_target_kind"] == "architecture"
+
+
+def test_build_projected_state_accepted_integration_decision_produces_capability() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="integration:int-cap-001",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "int-cap-001",
+                        "run_id": "run-cap-1",
+                        "outcome": "accepted",
+                        "target_kind": "capability",
+                        "summary": "Event-level integration decision recording",
+                        "rationale": "Capability accepted by integrator",
+                    }
+                },
+            )
+        ]
+    )
+    assert len(projected.accepted_capabilities) == 1
+    capability = projected.accepted_capabilities[0]
+    assert capability.id == "int-cap-001"
+    assert capability.name == "Event-level integration decision recording"
+    assert capability.source_run_id == "run-cap-1"
+    assert capability.metadata["integration_decision_id"] == "int-cap-001"
+    assert capability.metadata["integration_target_kind"] == "capability"
+
+
+def test_build_projected_state_non_accepted_architecture_and_capability_decisions_are_ignored() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="integration:int-arch-002",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "int-arch-002",
+                        "run_id": "run-arch-2",
+                        "outcome": "rejected",
+                        "target_kind": "architecture",
+                        "summary": "Rejected architecture item",
+                        "rationale": "Not accepted",
+                    }
+                },
+            ),
+            Event(
+                id="integration:int-cap-002",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "int-cap-002",
+                        "run_id": "run-cap-2",
+                        "outcome": "deferred",
+                        "target_kind": "capability",
+                        "summary": "Deferred capability",
+                        "rationale": "Needs more evidence",
+                    }
+                },
+            ),
+        ]
+    )
+    assert projected.accepted_architecture == []
+    assert projected.accepted_capabilities == []
+
+
+def test_build_projected_state_duplicate_accepted_architecture_decision_id_does_not_duplicate() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="integration:int-arch-003-a",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "int-arch-003",
+                        "run_id": "run-arch-3",
+                        "outcome": "accepted",
+                        "target_kind": "architecture",
+                        "summary": "Architecture summary v1",
+                        "rationale": "first",
+                    }
+                },
+            ),
+            Event(
+                id="integration:int-arch-003-b",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "int-arch-003",
+                        "run_id": "run-arch-3",
+                        "outcome": "accepted",
+                        "target_kind": "architecture",
+                        "summary": "Architecture summary v2",
+                        "rationale": "second",
+                    }
+                },
+            ),
+        ]
+    )
+    assert len(projected.accepted_architecture) == 1
+    assert projected.accepted_architecture[0].id == "int-arch-003"
+
+
 def test_build_projected_state_rejected_completion_produces_unresolved_discrepancy() -> None:
     projected = build_projected_state(
         [
