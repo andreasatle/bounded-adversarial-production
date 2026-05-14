@@ -322,6 +322,55 @@ def test_unresolved_discrepancy_kind_and_severity_validation() -> None:
         )
 
 
+def test_unresolved_discrepancy_optional_artifact_linkage_validation() -> None:
+    discrepancy = UnresolvedDiscrepancy(
+        id="disc-linked-1",
+        summary="Artifact-linked discrepancy",
+        kind="unresolved_finding",
+        severity="medium",
+        status="open",
+        source_event_id="event-1",
+        related_artifact_id="artifact-1",
+        related_artifact_version="v3",
+    )
+    assert discrepancy.related_artifact_id == "artifact-1"
+    assert discrepancy.related_artifact_version == "v3"
+
+    # Backward-compatible optional fields
+    discrepancy_without_links = UnresolvedDiscrepancy(
+        id="disc-unlinked-1",
+        summary="No linkage",
+        kind="unresolved_finding",
+        severity="medium",
+        status="open",
+        source_event_id="event-2",
+    )
+    assert discrepancy_without_links.related_artifact_id is None
+    assert discrepancy_without_links.related_artifact_version is None
+
+    with pytest.raises(ValidationError):
+        UnresolvedDiscrepancy(
+            id="disc-bad-1",
+            summary="bad linkage",
+            kind="unresolved_finding",
+            severity="medium",
+            status="open",
+            source_event_id="event-3",
+            related_artifact_id="   ",
+        )
+
+    with pytest.raises(ValidationError):
+        UnresolvedDiscrepancy(
+            id="disc-bad-2",
+            summary="bad linkage",
+            kind="unresolved_finding",
+            severity="medium",
+            status="open",
+            source_event_id="event-4",
+            related_artifact_version="   ",
+        )
+
+
 def test_integration_decision_constructs_successfully() -> None:
     decision = IntegrationDecision(
         id="int-1",

@@ -304,11 +304,20 @@ class UnresolvedDiscrepancy(BaseModel):
     severity: DiscrepancySeverity
     status: DiscrepancyStatus
     source_event_id: str
+    related_artifact_id: str | None = None
+    related_artifact_version: str | None = None
     metadata: dict = Field(default_factory=dict)
 
     _validate_id = field_validator("id")(_require_non_empty)
     _validate_summary = field_validator("summary")(_require_non_empty)
     _validate_source_event_id = field_validator("source_event_id")(_require_non_empty)
+
+    @field_validator("related_artifact_id", "related_artifact_version")
+    @classmethod
+    def _validate_optional_non_empty_strings(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _require_non_empty(value)
 
 
 class ActiveGameSummary(BaseModel):

@@ -367,6 +367,19 @@ def current_open_discrepancies_by_severity(
     ]
 
 
+def discrepancies_for_artifact(
+    state: ProjectedState,
+    artifact_id: str,
+) -> list[UnresolvedDiscrepancy]:
+    if not artifact_id.strip():
+        raise ValueError("artifact_id must be a non-empty string")
+    return [
+        item
+        for item in state.unresolved_discrepancies
+        if item.related_artifact_id == artifact_id
+    ]
+
+
 def deferred_integration_decisions(events: list[Event]) -> list[IntegrationDecision]:
     deferred: list[IntegrationDecision] = []
     for event in events:

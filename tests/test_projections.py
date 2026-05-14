@@ -11,6 +11,7 @@ from baps.projections import (
     current_open_discrepancies_by_severity,
     deferred_integration_decisions,
     discrepancies_by_severity,
+    discrepancies_for_artifact,
     discrepancy_supersession_chain,
     integration_review_queue,
     current_accepted_accomplishments,
@@ -2330,3 +2331,104 @@ def test_integration_review_queue_reuses_deferred_integration_decisions_behavior
     assert [d.model_dump(mode="json") for d in integration_review_queue(events)] == [
         d.model_dump(mode="json") for d in deferred_integration_decisions(events)
     ]
+
+
+def test_discrepancies_for_artifact_returns_matching_discrepancies_only() -> None:
+    state = ProjectedState(
+        unresolved_discrepancies=[
+            UnresolvedDiscrepancy(
+                id="d1",
+                summary="s1",
+                kind="unresolved_finding",
+                severity="medium",
+                status="open",
+                source_event_id="e1",
+                related_artifact_id="artifact-a",
+                related_artifact_version="v1",
+            ),
+            UnresolvedDiscrepancy(
+                id="d2",
+                summary="s2",
+                kind="unresolved_finding",
+                severity="high",
+                status="open",
+                source_event_id="e2",
+                related_artifact_id="artifact-b",
+            ),
+            UnresolvedDiscrepancy(
+                id="d3",
+                summary="s3",
+                kind="unresolved_finding",
+                severity="low",
+                status="resolved",
+                source_event_id="e3",
+            ),
+        ]
+    )
+
+    filtered = discrepancies_for_artifact(state, "artifact-a")
+    assert [d.id for d in filtered] == ["d1"]
+
+
+def test_discrepancies_for_artifact_preserves_order_and_ignores_unlinked() -> None:
+    state = ProjectedState(
+        unresolved_discrepancies=[
+            UnresolvedDiscrepancy(
+                id="d1",
+                summary="s1",
+                kind="unresolved_finding",
+                severity="medium",
+                status="open",
+                source_event_id="e1",
+                related_artifact_id="artifact-a",
+            ),
+            UnresolvedDiscrepancy(
+                id="d2",
+                summary="s2",
+                kind="unresolved_finding",
+                severity="medium",
+                status="open",
+                source_event_id="e2",
+            ),
+            UnresolvedDiscrepancy(
+                id="d3",
+                summary="s3",
+                kind="unresolved_finding",
+                severity="medium",
+                status="open",
+                source_event_id="e3",
+                related_artifact_id="artifact-a",
+            ),
+        ]
+    )
+
+    filtered = discrepancies_for_artifact(state, "artifact-a")
+    assert [d.id for d in filtered] == ["d1", "d3"]
+
+
+def test_discrepancies_for_artifact_rejects_empty_artifact_id() -> None:
+    state = ProjectedState()
+    with pytest.raises(ValueError, match="artifact_id must be a non-empty string"):
+        discrepancies_for_artifact(state, "   ")
+
+
+def test_discrepancies_for_artifact_does_not_mutate_input_state() -> None:
+    state = ProjectedState(
+        unresolved_discrepancies=[
+            UnresolvedDiscrepancy(
+                id="d1",
+                summary="s1",
+                kind="unresolved_finding",
+                severity="medium",
+                status="open",
+                source_event_id="e1",
+                related_artifact_id="artifact-a",
+                metadata={"k": "v"},
+            ),
+        ]
+    )
+    before_status = state.unresolved_discrepancies[0].status
+    before_metadata = dict(state.unresolved_discrepancies[0].metadata)
+    _ = discrepancies_for_artifact(state, "artifact-a")
+    assert state.unresolved_discrepancies[0].status == before_status
+    assert state.unresolved_discrepancies[0].metadata == before_metadata
