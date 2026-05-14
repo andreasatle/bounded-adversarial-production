@@ -7,6 +7,7 @@ from baps.projections import (
     accepted_state_supersession_chain,
     build_projected_state,
     build_projected_state_from_blackboard,
+    current_open_discrepancies,
     discrepancy_supersession_chain,
     current_accepted_accomplishments,
     current_accepted_architecture,
@@ -1856,4 +1857,125 @@ def test_discrepancy_supersession_chain_does_not_mutate_input_state() -> None:
     )
     before_metadata = dict(state.unresolved_discrepancies[0].metadata)
     _ = discrepancy_supersession_chain(state, "run-1")
+    assert state.unresolved_discrepancies[0].metadata == before_metadata
+
+
+def test_current_open_discrepancies_returns_only_open_items() -> None:
+    state = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "issue run-1"}},
+                },
+            ),
+            Event(
+                id="g2:run-2:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g2",
+                    "run_id": "run-2",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "issue run-2"}},
+                },
+            ),
+            Event(
+                id="g3:run-3:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g3",
+                    "run_id": "run-3",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "issue run-3"}},
+                },
+            ),
+            Event(
+                id="res:2",
+                type="discrepancy_resolution_recorded",
+                payload={
+                    "discrepancy_resolution": {
+                        "id": "res-2",
+                        "discrepancy_id": "run-2",
+                        "resolution_summary": "resolved run-2",
+                        "source_run_id": "run-9",
+                    }
+                },
+            ),
+            Event(
+                id="sup:3",
+                type="discrepancy_supersession_recorded",
+                payload={
+                    "discrepancy_supersession": {
+                        "id": "sup-3",
+                        "superseded_discrepancy_id": "run-3",
+                        "superseding_discrepancy_id": "run-10",
+                        "rationale": "run-10 supersedes run-3",
+                        "source_run_id": "run-10",
+                    }
+                },
+            ),
+        ]
+    )
+
+    current = current_open_discrepancies(state)
+    assert [item.id for item in current] == ["run-1"]
+
+
+def test_current_open_discrepancies_preserves_order() -> None:
+    state = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "issue run-1"}},
+                },
+            ),
+            Event(
+                id="g2:run-2:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g2",
+                    "run_id": "run-2",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "issue run-2"}},
+                },
+            ),
+        ]
+    )
+    assert [item.id for item in current_open_discrepancies(state)] == ["run-1", "run-2"]
+
+
+def test_current_open_discrepancies_does_not_mutate_input_state() -> None:
+    state = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "issue run-1"}},
+                },
+            ),
+        ]
+    )
+    before_status = state.unresolved_discrepancies[0].status
+    before_metadata = dict(state.unresolved_discrepancies[0].metadata)
+    _ = current_open_discrepancies(state)
+    assert state.unresolved_discrepancies[0].status == before_status
     assert state.unresolved_discrepancies[0].metadata == before_metadata

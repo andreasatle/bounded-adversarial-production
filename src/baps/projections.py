@@ -339,6 +339,10 @@ def discrepancy_supersession_chain(state: ProjectedState, discrepancy_id: str) -
     return chain
 
 
+def current_open_discrepancies(state: ProjectedState) -> list[UnresolvedDiscrepancy]:
+    return [item for item in state.unresolved_discrepancies if item.status == "open"]
+
+
 def _derive_discrepancy_summary(payload: dict) -> str:
     state = payload.get("state")
     if isinstance(state, dict):
