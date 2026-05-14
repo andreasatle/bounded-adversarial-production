@@ -25,6 +25,9 @@ class PromptSpec(BaseModel):
     def validate_sections(cls, value: list[PromptSection]) -> list[PromptSection]:
         if not value:
             raise ValueError("sections must be non-empty")
+        names = [section.name for section in value]
+        if len(names) != len(set(names)):
+            raise ValueError("section names must be unique")
         return value
 
 
