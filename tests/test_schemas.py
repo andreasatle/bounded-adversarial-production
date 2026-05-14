@@ -603,6 +603,38 @@ def test_game_result_round_and_max_round_constraints() -> None:
         )
 
 
+def test_game_response_terminal_outcome_must_be_allowed() -> None:
+    with pytest.raises(ValidationError):
+        GameResponse(
+            game_id="game-1",
+            run_id="run-20260513-100000-deadbeef",
+            rounds_played=1,
+            max_rounds=2,
+            final_decision=Decision(game_id="game-1", decision="accept", rationale="ok"),
+            terminal_reason="accepted",
+            terminal_outcome="not_allowed",
+            integration_recommendation="integration_recommended",
+            final_blue_summary="blue summary",
+            final_red_claim="red claim",
+        )
+
+
+def test_game_response_integration_recommendation_must_be_allowed() -> None:
+    with pytest.raises(ValidationError):
+        GameResponse(
+            game_id="game-1",
+            run_id="run-20260513-100000-deadbeef",
+            rounds_played=1,
+            max_rounds=2,
+            final_decision=Decision(game_id="game-1", decision="accept", rationale="ok"),
+            terminal_reason="accepted",
+            terminal_outcome="accepted_locally",
+            integration_recommendation="ship_it_now",
+            final_blue_summary="blue summary",
+            final_red_claim="red claim",
+        )
+
+
 def test_mutable_defaults_are_not_shared() -> None:
     game_a = GameContract(
         id="gc-1",

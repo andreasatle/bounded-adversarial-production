@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -158,6 +160,20 @@ class GameState(BaseModel):
         return value
 
 
+TerminalOutcome = Literal[
+    "accepted_locally",
+    "rejected_locally",
+    "revision_budget_exhausted",
+    "completed_without_terminal_resolution",
+]
+
+IntegrationRecommendation = Literal[
+    "integration_recommended",
+    "do_not_integrate",
+    "manual_review_required",
+]
+
+
 class GameResponse(BaseModel):
     game_id: str
     run_id: str
@@ -165,8 +181,8 @@ class GameResponse(BaseModel):
     max_rounds: int
     final_decision: Decision
     terminal_reason: str
-    terminal_outcome: str
-    integration_recommendation: str
+    terminal_outcome: TerminalOutcome
+    integration_recommendation: IntegrationRecommendation
     final_blue_summary: str
     final_red_claim: str
     trace_event_ids: list[str] = Field(default_factory=list)
