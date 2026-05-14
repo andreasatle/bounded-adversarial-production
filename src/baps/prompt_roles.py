@@ -4,6 +4,30 @@ from baps.example_roles import make_prompt_blue_role, make_prompt_red_role, make
 from baps.game_types import GameTypePromptSections
 from baps.models import ModelClient
 from baps.prompt_assembly import PromptSection, PromptSpec, assemble_prompt
+from baps.schemas import AgentProfile
+
+
+def _validate_profile_role(profile: AgentProfile | None, expected_role: str, arg_name: str) -> None:
+    if profile is None:
+        return
+    if profile.role != expected_role:
+        raise ValueError(f"{arg_name}.role must be '{expected_role}'")
+
+
+def _profile_section(profile: AgentProfile | None) -> list[PromptSection]:
+    if profile is None:
+        return []
+    return [
+        PromptSection(
+            name="Agent Profile",
+            content=(
+                f"Profile name: {profile.name}\n"
+                f"Role: {profile.role}\n"
+                f"Critique level: {profile.critique_level}\n"
+                f"Instructions: {profile.instructions}"
+            ),
+        )
+    ]
 
 
 def build_prompt_roles(
@@ -12,7 +36,14 @@ def build_prompt_roles(
     prompt_sections: GameTypePromptSections,
     shared_context: str,
     red_material: bool,
+    blue_profile: AgentProfile | None = None,
+    red_profile: AgentProfile | None = None,
+    referee_profile: AgentProfile | None = None,
 ):
+    _validate_profile_role(blue_profile, "blue", "blue_profile")
+    _validate_profile_role(red_profile, "red", "red_profile")
+    _validate_profile_role(referee_profile, "referee", "referee_profile")
+
     blue_template = assemble_prompt(
         PromptSpec(
             sections=[
@@ -22,6 +53,7 @@ def build_prompt_roles(
                         "Using shared context, provide one concise candidate answer for goal `{goal}`."
                     ),
                 ),
+                *_profile_section(blue_profile),
                 PromptSection(
                     name="Shared Context",
                     content="Shared context:\n{shared_context}",
@@ -41,6 +73,7 @@ def build_prompt_roles(
                         "Do not perform a general audit. Use shared context only as supporting evidence."
                     ),
                 ),
+                *_profile_section(red_profile),
                 PromptSection(
                     name="Shared Context",
                     content="Shared context:\n{shared_context}",
@@ -65,6 +98,7 @@ def build_prompt_roles(
                         "Do not contradict or reselect the decision."
                     ),
                 ),
+                *_profile_section(referee_profile),
                 PromptSection(
                     name="Inputs",
                     content="Blue move: `{blue_summary}`. Red finding: `{red_claim}`.",
