@@ -12,6 +12,7 @@ from baps.schemas import (
     ArtifactVersion,
     Decision,
     DiscrepancyResolution,
+    DiscrepancySupersession,
     Finding,
     GameContract,
     GameRecord,
@@ -342,6 +343,18 @@ def test_discrepancy_resolution_constructs_successfully() -> None:
     )
     assert resolution.id == "res-1"
     assert resolution.discrepancy_id == "run-1"
+
+
+def test_discrepancy_supersession_constructs_successfully() -> None:
+    supersession = DiscrepancySupersession(
+        id="sup-1",
+        superseded_discrepancy_id="run-1",
+        superseding_discrepancy_id="run-2",
+        rationale="run-2 supersedes run-1 based on newer evidence",
+        source_run_id="run-2",
+    )
+    assert supersession.id == "sup-1"
+    assert supersession.superseded_discrepancy_id == "run-1"
 
 
 def test_integration_decision_rejects_invalid_outcome() -> None:

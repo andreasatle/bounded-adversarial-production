@@ -354,6 +354,25 @@ class DiscrepancyResolution(BaseModel):
     _validate_source_run_id = field_validator("source_run_id")(_require_non_empty)
 
 
+class DiscrepancySupersession(BaseModel):
+    id: str
+    superseded_discrepancy_id: str
+    superseding_discrepancy_id: str
+    rationale: str
+    source_run_id: str
+    metadata: dict = Field(default_factory=dict)
+
+    _validate_id = field_validator("id")(_require_non_empty)
+    _validate_superseded_discrepancy_id = field_validator("superseded_discrepancy_id")(
+        _require_non_empty
+    )
+    _validate_superseding_discrepancy_id = field_validator("superseding_discrepancy_id")(
+        _require_non_empty
+    )
+    _validate_rationale = field_validator("rationale")(_require_non_empty)
+    _validate_source_run_id = field_validator("source_run_id")(_require_non_empty)
+
+
 class Artifact(BaseModel):
     id: str
     type: str

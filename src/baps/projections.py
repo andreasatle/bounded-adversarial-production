@@ -92,6 +92,28 @@ def build_projected_state(events: list[Event]) -> ProjectedState:
                 continue
             discrepancy.status = "resolved"
             continue
+        if event.type == "discrepancy_supersession_recorded":
+            supersession = payload.get("discrepancy_supersession")
+            if not isinstance(supersession, dict):
+                continue
+            superseded_discrepancy_id = supersession.get("superseded_discrepancy_id")
+            superseding_discrepancy_id = supersession.get("superseding_discrepancy_id")
+            if (
+                not isinstance(superseded_discrepancy_id, str)
+                or not superseded_discrepancy_id.strip()
+            ):
+                continue
+            if (
+                not isinstance(superseding_discrepancy_id, str)
+                or not superseding_discrepancy_id.strip()
+            ):
+                continue
+            discrepancy = discrepancies_by_run.get(superseded_discrepancy_id)
+            if discrepancy is None:
+                continue
+            discrepancy.status = "superseded"
+            discrepancy.metadata["superseding_discrepancy_id"] = superseding_discrepancy_id
+            continue
 
         game_id = payload.get("game_id")
         run_id = payload.get("run_id")

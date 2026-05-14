@@ -571,3 +571,137 @@ def test_build_projected_state_resolution_does_not_change_other_open_discrepanci
     statuses = {d.id: d.status for d in projected.unresolved_discrepancies}
     assert statuses["run-1"] == "resolved"
     assert statuses["run-2"] == "open"
+
+
+def test_build_projected_state_supersession_marks_known_discrepancy_superseded() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "blocking issue found"}},
+                },
+            ),
+            Event(
+                id="sup:001",
+                type="discrepancy_supersession_recorded",
+                payload={
+                    "discrepancy_supersession": {
+                        "id": "sup-001",
+                        "superseded_discrepancy_id": "run-1",
+                        "superseding_discrepancy_id": "run-2",
+                        "rationale": "run-2 supersedes run-1",
+                        "source_run_id": "run-2",
+                    }
+                },
+            ),
+        ]
+    )
+    assert len(projected.unresolved_discrepancies) == 1
+    discrepancy = projected.unresolved_discrepancies[0]
+    assert discrepancy.id == "run-1"
+    assert discrepancy.status == "superseded"
+    assert discrepancy.metadata["superseding_discrepancy_id"] == "run-2"
+
+
+def test_build_projected_state_unknown_superseded_discrepancy_is_ignored() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="sup:002",
+                type="discrepancy_supersession_recorded",
+                payload={
+                    "discrepancy_supersession": {
+                        "id": "sup-002",
+                        "superseded_discrepancy_id": "run-unknown",
+                        "superseding_discrepancy_id": "run-2",
+                        "rationale": "unknown superseded id",
+                        "source_run_id": "run-2",
+                    }
+                },
+            )
+        ]
+    )
+    assert projected.unresolved_discrepancies == []
+
+
+def test_build_projected_state_supersession_does_not_change_unrelated_discrepancies() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "blocking issue run-1"}},
+                },
+            ),
+            Event(
+                id="g2:run-2:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g2",
+                    "run_id": "run-2",
+                    "terminal_outcome": "revision_budget_exhausted",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "blocking issue run-2"}},
+                },
+            ),
+            Event(
+                id="sup:003",
+                type="discrepancy_supersession_recorded",
+                payload={
+                    "discrepancy_supersession": {
+                        "id": "sup-003",
+                        "superseded_discrepancy_id": "run-1",
+                        "superseding_discrepancy_id": "run-3",
+                        "rationale": "run-3 supersedes run-1",
+                        "source_run_id": "run-3",
+                    }
+                },
+            ),
+        ]
+    )
+    statuses = {d.id: d.status for d in projected.unresolved_discrepancies}
+    assert statuses["run-1"] == "superseded"
+    assert statuses["run-2"] == "open"
+
+
+def test_build_projected_state_resolution_behavior_still_works() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "blocking issue run-1"}},
+                },
+            ),
+            Event(
+                id="res:004",
+                type="discrepancy_resolution_recorded",
+                payload={
+                    "discrepancy_resolution": {
+                        "id": "res-004",
+                        "discrepancy_id": "run-1",
+                        "resolution_summary": "resolved run-1",
+                        "source_run_id": "run-2",
+                    }
+                },
+            ),
+        ]
+    )
+    assert len(projected.unresolved_discrepancies) == 1
+    assert projected.unresolved_discrepancies[0].status == "resolved"

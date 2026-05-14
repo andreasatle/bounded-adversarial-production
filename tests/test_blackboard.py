@@ -4,7 +4,12 @@ from pathlib import Path
 import pytest
 
 from baps.blackboard import Blackboard
-from baps.schemas import DiscrepancyResolution, Event, IntegrationDecision
+from baps.schemas import (
+    DiscrepancyResolution,
+    DiscrepancySupersession,
+    Event,
+    IntegrationDecision,
+)
 
 
 def test_append_one_event_creates_file(tmp_path: Path) -> None:
@@ -169,3 +174,22 @@ def test_append_discrepancy_resolution_records_expected_event(tmp_path: Path) ->
     event = events[0]
     assert event.type == "discrepancy_resolution_recorded"
     assert event.payload["discrepancy_resolution"] == resolution.model_dump(mode="json")
+
+
+def test_append_discrepancy_supersession_records_expected_event(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "board.jsonl")
+    supersession = DiscrepancySupersession(
+        id="sup-001",
+        superseded_discrepancy_id="run-1",
+        superseding_discrepancy_id="run-2",
+        rationale="run-2 includes more complete evidence",
+        source_run_id="run-2",
+    )
+
+    board.append_discrepancy_supersession(supersession)
+
+    events = board.read_all()
+    assert len(events) == 1
+    event = events[0]
+    assert event.type == "discrepancy_supersession_recorded"
+    assert event.payload["discrepancy_supersession"] == supersession.model_dump(mode="json")
