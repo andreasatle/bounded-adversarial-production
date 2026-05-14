@@ -39,7 +39,15 @@ def test_build_projected_state_completed_game_is_removed_from_active() -> None:
             Event(
                 id="g1:run-1:game_completed",
                 type="game_completed",
-                payload={"game_id": "g1", "run_id": "run-1"},
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "accepted_locally",
+                    "integration_recommendation": "integration_recommended",
+                    "state": {
+                        "final_decision": {"rationale": "accepted rationale"},
+                    },
+                },
             ),
         ]
     )
@@ -102,3 +110,97 @@ def test_build_projected_state_active_game_order_is_preserved() -> None:
         ]
     )
     assert [active.id for active in projected.active_games] == ["run-1", "run-3"]
+
+
+def test_build_projected_state_accepted_completion_produces_accomplishment() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "accepted_locally",
+                    "integration_recommendation": "integration_recommended",
+                    "state": {
+                        "final_decision": {
+                            "rationale": "accepted outcome rationale",
+                        }
+                    },
+                },
+            )
+        ]
+    )
+    assert len(projected.accepted_accomplishments) == 1
+    accomplishment = projected.accepted_accomplishments[0]
+    assert accomplishment.id == "run-1"
+    assert accomplishment.source_run_id == "run-1"
+    assert accomplishment.summary == "accepted outcome rationale"
+
+
+def test_build_projected_state_rejected_completion_does_not_produce_accomplishment() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                },
+            )
+        ]
+    )
+    assert projected.accepted_accomplishments == []
+
+
+def test_build_projected_state_unresolved_completion_does_not_produce_accomplishment() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "revision_budget_exhausted",
+                    "integration_recommendation": "do_not_integrate",
+                },
+            )
+        ]
+    )
+    assert projected.accepted_accomplishments == []
+
+
+def test_build_projected_state_duplicate_successful_completions_do_not_duplicate_accomplishment() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed-a",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "accepted_locally",
+                    "integration_recommendation": "integration_recommended",
+                    "state": {"final_decision": {"rationale": "accepted rationale"}},
+                },
+            ),
+            Event(
+                id="g1:run-1:game_completed-b",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "accepted_locally",
+                    "integration_recommendation": "integration_recommended",
+                    "state": {"final_decision": {"rationale": "accepted rationale duplicate"}},
+                },
+            ),
+        ]
+    )
+    assert len(projected.accepted_accomplishments) == 1
+    assert projected.accepted_accomplishments[0].id == "run-1"
