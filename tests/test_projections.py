@@ -8,12 +8,14 @@ from baps.projections import (
     build_projected_state,
     build_projected_state_from_blackboard,
     current_open_discrepancies,
+    current_open_discrepancies_by_severity,
+    discrepancies_by_severity,
     discrepancy_supersession_chain,
     current_accepted_accomplishments,
     current_accepted_architecture,
     current_accepted_capabilities,
 )
-from baps.schemas import Event
+from baps.schemas import Event, ProjectedState, UnresolvedDiscrepancy
 
 
 def test_build_projected_state_empty_events_returns_empty_state() -> None:
@@ -1977,5 +1979,128 @@ def test_current_open_discrepancies_does_not_mutate_input_state() -> None:
     before_status = state.unresolved_discrepancies[0].status
     before_metadata = dict(state.unresolved_discrepancies[0].metadata)
     _ = current_open_discrepancies(state)
+    assert state.unresolved_discrepancies[0].status == before_status
+    assert state.unresolved_discrepancies[0].metadata == before_metadata
+
+
+def test_discrepancies_by_severity_returns_matching_discrepancies_only() -> None:
+    state = ProjectedState(
+        unresolved_discrepancies=[
+            UnresolvedDiscrepancy(
+                id="d1",
+                summary="s1",
+                kind="unresolved_finding",
+                severity="high",
+                status="open",
+                source_event_id="e1",
+            ),
+            UnresolvedDiscrepancy(
+                id="d2",
+                summary="s2",
+                kind="unresolved_finding",
+                severity="medium",
+                status="resolved",
+                source_event_id="e2",
+            ),
+            UnresolvedDiscrepancy(
+                id="d3",
+                summary="s3",
+                kind="unresolved_finding",
+                severity="high",
+                status="superseded",
+                source_event_id="e3",
+            ),
+        ]
+    )
+
+    filtered = discrepancies_by_severity(state, "high")
+    assert [d.id for d in filtered] == ["d1", "d3"]
+
+
+def test_current_open_discrepancies_by_severity_excludes_resolved_and_superseded() -> None:
+    state = ProjectedState(
+        unresolved_discrepancies=[
+            UnresolvedDiscrepancy(
+                id="d1",
+                summary="s1",
+                kind="unresolved_finding",
+                severity="high",
+                status="open",
+                source_event_id="e1",
+            ),
+            UnresolvedDiscrepancy(
+                id="d2",
+                summary="s2",
+                kind="unresolved_finding",
+                severity="high",
+                status="resolved",
+                source_event_id="e2",
+            ),
+            UnresolvedDiscrepancy(
+                id="d3",
+                summary="s3",
+                kind="unresolved_finding",
+                severity="high",
+                status="superseded",
+                source_event_id="e3",
+            ),
+        ]
+    )
+
+    filtered = current_open_discrepancies_by_severity(state, "high")
+    assert [d.id for d in filtered] == ["d1"]
+
+
+def test_discrepancy_severity_helpers_preserve_order() -> None:
+    state = ProjectedState(
+        unresolved_discrepancies=[
+            UnresolvedDiscrepancy(
+                id="d1",
+                summary="s1",
+                kind="unresolved_finding",
+                severity="medium",
+                status="open",
+                source_event_id="e1",
+            ),
+            UnresolvedDiscrepancy(
+                id="d2",
+                summary="s2",
+                kind="unresolved_finding",
+                severity="medium",
+                status="open",
+                source_event_id="e2",
+            ),
+        ]
+    )
+
+    assert [d.id for d in discrepancies_by_severity(state, "medium")] == ["d1", "d2"]
+    assert [d.id for d in current_open_discrepancies_by_severity(state, "medium")] == ["d1", "d2"]
+
+
+def test_discrepancy_severity_helpers_reject_invalid_severity() -> None:
+    state = ProjectedState()
+    with pytest.raises(ValueError, match="severity must be one of: low, medium, high"):
+        discrepancies_by_severity(state, "critical")
+    with pytest.raises(ValueError, match="severity must be one of: low, medium, high"):
+        current_open_discrepancies_by_severity(state, "critical")
+
+
+def test_discrepancy_severity_helpers_do_not_mutate_input_state() -> None:
+    state = ProjectedState(
+        unresolved_discrepancies=[
+            UnresolvedDiscrepancy(
+                id="d1",
+                summary="s1",
+                kind="unresolved_finding",
+                severity="low",
+                status="open",
+                source_event_id="e1",
+            ),
+        ]
+    )
+    before_status = state.unresolved_discrepancies[0].status
+    before_metadata = dict(state.unresolved_discrepancies[0].metadata)
+    _ = discrepancies_by_severity(state, "low")
+    _ = current_open_discrepancies_by_severity(state, "low")
     assert state.unresolved_discrepancies[0].status == before_status
     assert state.unresolved_discrepancies[0].metadata == before_metadata

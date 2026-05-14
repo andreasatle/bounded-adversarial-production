@@ -6,6 +6,7 @@ from baps.schemas import (
     AcceptedArchitectureItem,
     AcceptedCapability,
     ActiveGameSummary,
+    DiscrepancySeverity,
     Event,
     ProjectedState,
     UnresolvedDiscrepancy,
@@ -341,6 +342,28 @@ def discrepancy_supersession_chain(state: ProjectedState, discrepancy_id: str) -
 
 def current_open_discrepancies(state: ProjectedState) -> list[UnresolvedDiscrepancy]:
     return [item for item in state.unresolved_discrepancies if item.status == "open"]
+
+
+def discrepancies_by_severity(
+    state: ProjectedState,
+    severity: DiscrepancySeverity,
+) -> list[UnresolvedDiscrepancy]:
+    if severity not in {"low", "medium", "high"}:
+        raise ValueError("severity must be one of: low, medium, high")
+    return [item for item in state.unresolved_discrepancies if item.severity == severity]
+
+
+def current_open_discrepancies_by_severity(
+    state: ProjectedState,
+    severity: DiscrepancySeverity,
+) -> list[UnresolvedDiscrepancy]:
+    if severity not in {"low", "medium", "high"}:
+        raise ValueError("severity must be one of: low, medium, high")
+    return [
+        item
+        for item in state.unresolved_discrepancies
+        if item.status == "open" and item.severity == severity
+    ]
 
 
 def _derive_discrepancy_summary(payload: dict) -> str:
