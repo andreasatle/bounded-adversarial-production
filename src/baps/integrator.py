@@ -80,6 +80,21 @@ class DefaultMultiCandidateIntegrationPolicy:
         return decisions
 
 
+def append_integration_decision_once(
+    blackboard: Blackboard,
+    decision: IntegrationDecision,
+) -> bool:
+    for event in blackboard.query("integration_decision_recorded"):
+        existing_decision = event.payload.get("integration_decision")
+        if not isinstance(existing_decision, dict):
+            continue
+        existing_id = existing_decision.get("id")
+        if isinstance(existing_id, str) and existing_id == decision.id:
+            return False
+    blackboard.append_integration_decision(decision)
+    return True
+
+
 def integrate_response(
     response: GameResponse,
     blackboard: Blackboard,
@@ -87,7 +102,7 @@ def integrate_response(
 ) -> IntegrationDecision:
     active_integrator = integrator if integrator is not None else Integrator()
     decision = active_integrator.integrate(response)
-    blackboard.append_integration_decision(decision)
+    append_integration_decision_once(blackboard, decision)
     return decision
 
 
@@ -99,5 +114,5 @@ def integrate_many(
     active_policy = policy if policy is not None else DefaultMultiCandidateIntegrationPolicy()
     decisions = active_policy.decide_many(responses)
     for decision in decisions:
-        blackboard.append_integration_decision(decision)
+        append_integration_decision_once(blackboard, decision)
     return decisions

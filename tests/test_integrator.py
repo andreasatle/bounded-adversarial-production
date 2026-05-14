@@ -7,6 +7,7 @@ from baps.integrator import (
     IntegrationPolicy,
     MultiCandidateIntegrationPolicy,
     Integrator,
+    append_integration_decision_once,
     integrate_many,
     integrate_response,
 )
@@ -305,3 +306,89 @@ def test_integrate_many_uses_custom_multi_candidate_policy(tmp_path: Path) -> No
     events = board.query("integration_decision_recorded")
     assert len(events) == 2
     assert [e.payload["integration_decision"]["id"] for e in events] == ["multi:run-a", "multi:run-b"]
+
+
+def test_append_integration_decision_once_appends_first_time_and_skips_duplicate(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "board.jsonl")
+    decision = IntegrationDecision(
+        id="integration:run-1:accomplishment",
+        run_id="run-1",
+        outcome="deferred",
+        target_kind="accomplishment",
+        summary="summary",
+        rationale="rationale",
+    )
+
+    first = append_integration_decision_once(board, decision)
+    second = append_integration_decision_once(board, decision)
+
+    assert first is True
+    assert second is False
+    events = board.query("integration_decision_recorded")
+    assert len(events) == 1
+    assert events[0].payload["integration_decision"]["id"] == decision.id
+
+
+def test_append_integration_decision_once_allows_different_ids(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "board.jsonl")
+    decision_one = IntegrationDecision(
+        id="integration:run-1:accomplishment",
+        run_id="run-1",
+        outcome="deferred",
+        target_kind="accomplishment",
+        summary="summary-1",
+        rationale="rationale-1",
+    )
+    decision_two = IntegrationDecision(
+        id="integration:run-2:accomplishment",
+        run_id="run-2",
+        outcome="accepted",
+        target_kind="accomplishment",
+        summary="summary-2",
+        rationale="rationale-2",
+    )
+
+    assert append_integration_decision_once(board, decision_one) is True
+    assert append_integration_decision_once(board, decision_two) is True
+    events = board.query("integration_decision_recorded")
+    assert len(events) == 2
+
+
+def test_integrate_response_is_idempotent_for_same_response(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "board.jsonl")
+    response = _make_response(
+        run_id="run-same",
+        terminal_outcome="accepted_locally",
+        integration_recommendation="integration_recommended",
+    )
+
+    first = integrate_response(response=response, blackboard=board)
+    second = integrate_response(response=response, blackboard=board)
+
+    assert first.id == second.id
+    events = board.query("integration_decision_recorded")
+    assert len(events) == 1
+    assert events[0].payload["integration_decision"]["id"] == first.id
+
+
+def test_integrate_many_skips_already_recorded_decisions(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "board.jsonl")
+    responses = [
+        _make_response(
+            run_id="run-1",
+            terminal_outcome="accepted_locally",
+            integration_recommendation="integration_recommended",
+        ),
+        _make_response(
+            run_id="run-2",
+            terminal_outcome="rejected_locally",
+            integration_recommendation="do_not_integrate",
+        ),
+    ]
+
+    first_batch = integrate_many(responses=responses, blackboard=board)
+    second_batch = integrate_many(responses=responses, blackboard=board)
+
+    assert [d.id for d in first_batch] == [d.id for d in second_batch]
+    events = board.query("integration_decision_recorded")
+    assert len(events) == 2
