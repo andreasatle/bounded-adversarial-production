@@ -317,7 +317,8 @@ Artifact interaction:
 - `UnresolvedDiscrepancy`: includes kind, severity, status, optional artifact linkage.
 - `Accepted*` item models and `ActiveGameSummary`.
   - Current implementation note:
-    - In architecture projections, `AcceptedArchitectureItem.source_event_id` is currently populated from the integration decision `run_id`.
+    - In architecture projections, `AcceptedArchitectureItem.source_run_id` is populated from the integration decision `run_id`.
+    - `source_event_id` remains accepted as a backward-compatible input alias during transition.
 
 ### Lifecycle event payload schemas
 - `DiscrepancyResolution`, `DiscrepancySupersession`.
@@ -545,7 +546,7 @@ Contribution style reflected in repo:
 
 ## Observations and Ambiguities
 
-1. `AcceptedArchitectureItem.source_event_id` is currently populated from integration decision `run_id` in projection logic; name suggests event identity while value currently carries run identity.
+1. `AcceptedArchitectureItem.source_run_id` is currently populated from integration decision `run_id` in projection logic.
 2. `GoalAmendmentProposal.status` includes `approved` and `rejected`, but no approval authority workflow is implemented yet.
 3. Artifact proposal records are available as explicit schemas/events/read-model helpers, but there is currently no runtime/service-level explicit proposal signal protocol; automatic inference from local acceptance was intentionally removed.
 4. Autonomous multi-step early-stop with `stop_when_no_open_discrepancies=True` rebuilds projected state before each step and may invoke an additional projection build for the final stop check; this is correct but relevant for performance expectations.

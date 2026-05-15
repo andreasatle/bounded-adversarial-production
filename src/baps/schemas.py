@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 
 def _require_non_empty(value: str) -> str:
@@ -301,12 +301,14 @@ class AcceptedAccomplishment(BaseModel):
 class AcceptedArchitectureItem(BaseModel):
     id: str
     title: str
-    source_event_id: str
+    source_run_id: str = Field(
+        validation_alias=AliasChoices("source_run_id", "source_event_id")
+    )
     metadata: dict = Field(default_factory=dict)
 
     _validate_id = field_validator("id")(_require_non_empty)
     _validate_title = field_validator("title")(_require_non_empty)
-    _validate_source_event_id = field_validator("source_event_id")(_require_non_empty)
+    _validate_source_run_id = field_validator("source_run_id")(_require_non_empty)
 
 
 class AcceptedCapability(BaseModel):

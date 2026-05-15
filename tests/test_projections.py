@@ -319,12 +319,12 @@ def test_build_projected_state_accepted_integration_decision_produces_architectu
     item = projected.accepted_architecture[0]
     assert item.id == "int-arch-001"
     assert item.title == "Adopt bounded projection pipeline"
-    assert item.source_event_id == "run-arch-1"
+    assert item.source_run_id == "run-arch-1"
     assert item.metadata["integration_decision_id"] == "int-arch-001"
     assert item.metadata["integration_target_kind"] == "architecture"
 
 
-def test_build_projected_state_architecture_source_event_id_currently_uses_integration_run_id() -> None:
+def test_build_projected_state_architecture_source_run_id_uses_integration_run_id() -> None:
     projected = build_projected_state(
         [
             Event(
@@ -344,8 +344,8 @@ def test_build_projected_state_architecture_source_event_id_currently_uses_integ
         ]
     )
     assert len(projected.accepted_architecture) == 1
-    # Current behavior: source_event_id is populated from integration decision run_id.
-    assert projected.accepted_architecture[0].source_event_id == "run-arch-10"
+    # Current behavior: source_run_id is populated from integration decision run_id.
+    assert projected.accepted_architecture[0].source_run_id == "run-arch-10"
 
 
 def test_build_projected_state_accepted_integration_decision_produces_capability() -> None:

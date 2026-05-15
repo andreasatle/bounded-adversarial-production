@@ -71,7 +71,7 @@ def build_projected_state(events: list[Event]) -> ProjectedState:
                 architecture_by_decision_id[decision_id] = AcceptedArchitectureItem(
                     id=decision_id,
                     title=summary,
-                    source_event_id=run_id,
+                    source_run_id=run_id,
                     metadata=metadata,
                 )
                 architecture_order.append(decision_id)

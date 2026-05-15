@@ -122,7 +122,7 @@ Need:
 * accepted-state provenance clarity
 
 Important current ambiguity:
-`source_event_id` semantics vs `run_id` usage.
+cross-schema provenance naming and event-vs-run identity consistency.
 
 ## 5. Artifact Governance Integration
 

@@ -280,7 +280,7 @@ def test_projected_state_models_construct_successfully() -> None:
             AcceptedArchitectureItem(
                 id="arch-1",
                 title="Runtime/blackboard boundary",
-                source_event_id="event-1",
+                source_run_id="run-1",
                 metadata={"area": "runtime"},
             )
         ],
@@ -323,7 +323,7 @@ def test_projected_state_models_reject_non_empty_string_fields() -> None:
     with pytest.raises(ValidationError):
         AcceptedAccomplishment(id=" ", summary="s", source_run_id="run-1")
     with pytest.raises(ValidationError):
-        AcceptedArchitectureItem(id="arch-1", title=" ", source_event_id="event-1")
+        AcceptedArchitectureItem(id="arch-1", title=" ", source_run_id="run-1")
     with pytest.raises(ValidationError):
         AcceptedCapability(id="cap-1", name="capability", source_run_id=" ")
     with pytest.raises(ValidationError):
@@ -337,6 +337,26 @@ def test_projected_state_models_reject_non_empty_string_fields() -> None:
         )
     with pytest.raises(ValidationError):
         ActiveGameSummary(id="game-1", title="title", source_run_id=" ")
+
+
+def test_accepted_architecture_item_accepts_source_run_id() -> None:
+    item = AcceptedArchitectureItem(
+        id="arch-1",
+        title="Architecture boundary",
+        source_run_id="run-1",
+    )
+    assert item.source_run_id == "run-1"
+
+
+def test_accepted_architecture_item_accepts_deprecated_source_event_id_alias() -> None:
+    item = AcceptedArchitectureItem.model_validate(
+        {
+            "id": "arch-1",
+            "title": "Architecture boundary",
+            "source_event_id": "run-legacy-1",
+        }
+    )
+    assert item.source_run_id == "run-legacy-1"
 
 
 def test_unresolved_discrepancy_kind_and_severity_validation() -> None:
@@ -1382,7 +1402,7 @@ def test_mutable_defaults_are_not_shared() -> None:
         AcceptedAccomplishment(id="acc-3", summary="s3", source_run_id="run-3")
     )
     projected_a.accepted_architecture.append(
-        AcceptedArchitectureItem(id="arch-1", title="t1", source_event_id="event-1")
+        AcceptedArchitectureItem(id="arch-1", title="t1", source_run_id="run-3")
     )
     projected_a.accepted_capabilities.append(
         AcceptedCapability(id="cap-1", name="n1", source_run_id="run-3")
