@@ -12,6 +12,7 @@ from baps.state import (
     StateArtifactRegistry,
     StateUpdateProposal,
     StateUpdateTarget,
+    validate_state_artifacts,
 )
 
 
@@ -333,6 +334,180 @@ def test_apply_state_update_does_not_mutate_input_state() -> None:
 
     with pytest.raises(NotImplementedError):
         apply_state_update(state, proposal)
+
+    after = state.model_dump(mode="json")
+    assert after == before
+
+
+def test_validate_state_artifacts_validates_all_northstar_artifacts() -> None:
+    calls: list[str] = []
+
+    class DocumentTrackingAdapter:
+        kind = "document"
+
+        def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
+            calls.append(artifact.id)
+            return artifact
+
+    class GitTrackingAdapter:
+        kind = "git_repository"
+
+        def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
+            calls.append(artifact.id)
+            return artifact
+
+    state = State(
+        northstar=NorthStar(
+            artifacts=(
+                StateArtifact(id="n-doc", kind="document"),
+                StateArtifact(id="n-git", kind="git_repository"),
+            )
+        ),
+    )
+    registry = StateArtifactRegistry()
+    registry.register(DocumentTrackingAdapter())
+    registry.register(GitTrackingAdapter())
+
+    _ = validate_state_artifacts(state, registry)
+    assert calls == ["n-doc", "n-git"]
+
+
+def test_validate_state_artifacts_validates_all_ordinary_artifacts() -> None:
+    calls: list[str] = []
+
+    class DocumentTrackingAdapter:
+        kind = "document"
+
+        def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
+            calls.append(artifact.id)
+            return artifact
+
+    class GitTrackingAdapter:
+        kind = "git_repository"
+
+        def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
+            calls.append(artifact.id)
+            return artifact
+
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="northstar", kind="document"),)),
+        artifacts=(
+            StateArtifact(id="s-doc", kind="document"),
+            StateArtifact(id="s-git", kind="git_repository"),
+        ),
+    )
+    registry = StateArtifactRegistry()
+    registry.register(DocumentTrackingAdapter())
+    registry.register(GitTrackingAdapter())
+
+    _ = validate_state_artifacts(state, registry)
+    assert calls == ["northstar", "s-doc", "s-git"]
+
+
+def test_validate_state_artifacts_preserves_ordering() -> None:
+    state = State(
+        northstar=NorthStar(
+            artifacts=(
+                StateArtifact(id="n1", kind="document"),
+                StateArtifact(id="n2", kind="git_repository"),
+            )
+        ),
+        artifacts=(
+            StateArtifact(id="s1", kind="document"),
+            StateArtifact(id="s2", kind="git_repository"),
+        ),
+    )
+    registry = StateArtifactRegistry()
+    registry.register(DocumentArtifactAdapter())
+    registry.register(GitRepositoryArtifactAdapter())
+
+    validated = validate_state_artifacts(state, registry)
+    assert [artifact.id for artifact in validated.northstar.artifacts] == ["n1", "n2"]
+    assert [artifact.id for artifact in validated.artifacts] == ["s1", "s2"]
+
+
+def test_validate_state_artifacts_preserves_northstar_ordinary_separation() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+        artifacts=(StateArtifact(id="s1", kind="git_repository"),),
+    )
+    registry = StateArtifactRegistry()
+    registry.register(DocumentArtifactAdapter())
+    registry.register(GitRepositoryArtifactAdapter())
+
+    validated = validate_state_artifacts(state, registry)
+    assert [artifact.id for artifact in validated.northstar.artifacts] == ["n1"]
+    assert [artifact.id for artifact in validated.artifacts] == ["s1"]
+
+
+def test_validate_state_artifacts_raises_for_unknown_northstar_artifact_kind() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="unknown"),)),
+    )
+    registry = StateArtifactRegistry()
+    registry.register(DocumentArtifactAdapter())
+
+    with pytest.raises(ValueError, match="unknown artifact kind"):
+        validate_state_artifacts(state, registry)
+
+
+def test_validate_state_artifacts_raises_for_unknown_ordinary_artifact_kind() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+        artifacts=(StateArtifact(id="s1", kind="unknown"),),
+    )
+    registry = StateArtifactRegistry()
+    registry.register(DocumentArtifactAdapter())
+
+    with pytest.raises(ValueError, match="unknown artifact kind"):
+        validate_state_artifacts(state, registry)
+
+
+def test_validate_state_artifacts_raises_if_adapter_changes_id() -> None:
+    class ChangingIdAdapter:
+        kind = "document"
+
+        def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
+            return StateArtifact(id=f"{artifact.id}-changed", kind=artifact.kind)
+
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+    )
+    registry = StateArtifactRegistry()
+    registry.register(ChangingIdAdapter())
+
+    with pytest.raises(ValueError, match="must not change artifact id"):
+        validate_state_artifacts(state, registry)
+
+
+def test_validate_state_artifacts_raises_if_adapter_changes_kind() -> None:
+    class ChangingKindAdapter:
+        kind = "document"
+
+        def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
+            return StateArtifact(id=artifact.id, kind="git_repository")
+
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+    )
+    registry = StateArtifactRegistry()
+    registry.register(ChangingKindAdapter())
+
+    with pytest.raises(ValueError, match="must not change artifact kind"):
+        validate_state_artifacts(state, registry)
+
+
+def test_validate_state_artifacts_does_not_mutate_input_state() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+        artifacts=(StateArtifact(id="s1", kind="git_repository"),),
+    )
+    before = state.model_dump(mode="json")
+    registry = StateArtifactRegistry()
+    registry.register(DocumentArtifactAdapter())
+    registry.register(GitRepositoryArtifactAdapter())
+
+    _ = validate_state_artifacts(state, registry)
 
     after = state.model_dump(mode="json")
     assert after == before

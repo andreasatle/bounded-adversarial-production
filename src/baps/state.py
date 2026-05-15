@@ -102,6 +102,32 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
     )
 
 
+def validate_state_artifacts(state: State, registry: StateArtifactRegistry) -> State:
+    def _validate_one(artifact: StateArtifact) -> StateArtifact:
+        adapter = registry.resolve(artifact.kind)
+        validated = adapter.validate_artifact(artifact)
+        if validated.id != artifact.id:
+            raise ValueError(
+                f"adapter must not change artifact id: expected {artifact.id}, got {validated.id}"
+            )
+        if validated.kind != artifact.kind:
+            raise ValueError(
+                "adapter must not change artifact kind: "
+                f"expected {artifact.kind}, got {validated.kind}"
+            )
+        return validated
+
+    validated_northstar_artifacts = tuple(
+        _validate_one(artifact) for artifact in state.northstar.artifacts
+    )
+    validated_state_artifacts = tuple(_validate_one(artifact) for artifact in state.artifacts)
+
+    return State(
+        northstar=NorthStar(artifacts=validated_northstar_artifacts),
+        artifacts=validated_state_artifacts,
+    )
+
+
 class StateArtifactAdapter(Protocol):
     kind: str
 
