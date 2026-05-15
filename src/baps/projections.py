@@ -242,6 +242,8 @@ def build_projected_state(events: list[Event]) -> ProjectedState:
         unresolved_discrepancies=unresolved_discrepancies,
         active_games=active_games,
         metadata={
+            "projection_version": "v1",
+            "projection_authority": "event_replay",
             "event_count": len(events),
             "active_game_count": len(active_games),
             "accepted_accomplishment_count": len(accepted_accomplishments),

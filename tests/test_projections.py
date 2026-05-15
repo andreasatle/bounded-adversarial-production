@@ -170,6 +170,25 @@ def test_build_projected_state_successful_completion_alone_does_not_produce_acco
     assert projected.accepted_accomplishments == []
 
 
+def test_game_response_recommendation_alone_does_not_create_accepted_projected_state() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "accepted_locally",
+                    "integration_recommendation": "integration_recommended",
+                    "state": {"final_decision": {"rationale": "locally accepted"}},
+                },
+            ),
+        ]
+    )
+    assert projected.accepted_accomplishments == []
+
+
 def test_build_projected_state_accepted_integration_decision_produces_accomplishment() -> None:
     projected = build_projected_state(
         [
@@ -303,6 +322,30 @@ def test_build_projected_state_accepted_integration_decision_produces_architectu
     assert item.source_event_id == "run-arch-1"
     assert item.metadata["integration_decision_id"] == "int-arch-001"
     assert item.metadata["integration_target_kind"] == "architecture"
+
+
+def test_build_projected_state_architecture_source_event_id_currently_uses_integration_run_id() -> None:
+    projected = build_projected_state(
+        [
+            Event(
+                id="integration:int-arch-010",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "int-arch-010",
+                        "run_id": "run-arch-10",
+                        "outcome": "accepted",
+                        "target_kind": "architecture",
+                        "summary": "Architecture accepted",
+                        "rationale": "accepted",
+                    }
+                },
+            )
+        ]
+    )
+    assert len(projected.accepted_architecture) == 1
+    # Current behavior: source_event_id is populated from integration decision run_id.
+    assert projected.accepted_architecture[0].source_event_id == "run-arch-10"
 
 
 def test_build_projected_state_accepted_integration_decision_produces_capability() -> None:
@@ -901,6 +944,8 @@ def test_build_projected_state_metadata_counts_match_projected_lists() -> None:
     projected = build_projected_state(events)
 
     assert projected.metadata["event_count"] == len(events)
+    assert projected.metadata["projection_version"] == "v1"
+    assert projected.metadata["projection_authority"] == "event_replay"
     assert projected.metadata["active_game_count"] == len(projected.active_games)
     assert projected.metadata["accepted_accomplishment_count"] == len(
         projected.accepted_accomplishments
@@ -910,6 +955,44 @@ def test_build_projected_state_metadata_counts_match_projected_lists() -> None:
     assert projected.metadata["unresolved_discrepancy_count"] == len(
         projected.unresolved_discrepancies
     )
+
+
+def test_same_ordered_events_replay_to_identical_projected_state() -> None:
+    events = [
+        Event(
+            id="g1:run-1:r0001:game_started",
+            type="game_started",
+            payload={"game_id": "g1", "run_id": "run-1"},
+        ),
+        Event(
+            id="integration:int-1",
+            type="integration_decision_recorded",
+            payload={
+                "integration_decision": {
+                    "id": "int-1",
+                    "run_id": "run-1",
+                    "outcome": "accepted",
+                    "target_kind": "accomplishment",
+                    "summary": "Accepted accomplishment",
+                    "rationale": "accepted",
+                }
+            },
+        ),
+        Event(
+            id="g2:run-2:game_completed",
+            type="game_completed",
+            payload={
+                "game_id": "g2",
+                "run_id": "run-2",
+                "terminal_outcome": "rejected_locally",
+                "integration_recommendation": "do_not_integrate",
+                "state": {"final_decision": {"rationale": "blocking issue"}},
+            },
+        ),
+    ]
+    first = build_projected_state(events)
+    second = build_projected_state(events)
+    assert first.model_dump(mode="json") == second.model_dump(mode="json")
 
 
 def test_build_projected_state_accepted_accomplishment_can_be_marked_superseded() -> None:

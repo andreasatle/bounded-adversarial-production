@@ -302,6 +302,9 @@ Artifact interaction:
   - Includes constrained local terminal semantics:
     - `terminal_outcome`: `accepted_locally|rejected_locally|revision_budget_exhausted`
     - `integration_recommendation`: `integration_recommended|do_not_integrate`
+  - Authority note:
+    - `integration_recommendation` is non-authoritative guidance.
+    - Durable acceptance authority is represented by recorded `IntegrationDecision` events.
   - Why: stable response projection boundary for downstream governance.
 
 ### Governance and planning-related schemas
@@ -313,6 +316,8 @@ Artifact interaction:
 - `ProjectedState`: accepted lists + discrepancy list + active games + projection metadata.
 - `UnresolvedDiscrepancy`: includes kind, severity, status, optional artifact linkage.
 - `Accepted*` item models and `ActiveGameSummary`.
+  - Current implementation note:
+    - In architecture projections, `AcceptedArchitectureItem.source_event_id` is currently populated from the integration decision `run_id`.
 
 ### Lifecycle event payload schemas
 - `DiscrepancyResolution`, `DiscrepancySupersession`.

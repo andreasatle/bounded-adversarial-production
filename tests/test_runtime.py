@@ -139,6 +139,7 @@ def test_build_game_response_accept_terminal_reason() -> None:
     assert result.final_blue_summary == "blue1"
     assert result.final_red_claim == "red1"
     assert result.trace_event_ids == ["a", "b"]
+    assert state.current_round == len(state.rounds)
 
 
 def test_build_game_response_reject_terminal_reason() -> None:
