@@ -432,3 +432,51 @@ def test_run_autonomous_steps_stop_flag_false_preserves_default_behavior(
 
     assert len(responses) == 3
     assert [response.run_id for response in responses] == ["run-1", "run-2", "run-3"]
+
+
+def test_run_autonomous_steps_stop_flag_true_can_return_zero_steps_when_initially_no_open_discrepancies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    board = Blackboard(tmp_path / "events.jsonl")
+
+    def _state_without_open() -> ProjectedState:
+        return ProjectedState(
+            unresolved_discrepancies=[
+                UnresolvedDiscrepancy(
+                    id="d1",
+                    summary="s1",
+                    kind="unresolved_finding",
+                    severity="high",
+                    status="resolved",
+                    source_event_id="e1",
+                )
+            ]
+        )
+
+    def _stub_build_projected_state_from_blackboard(received_blackboard: Blackboard) -> ProjectedState:
+        assert received_blackboard is board
+        return _state_without_open()
+
+    class StubPlanner:
+        def plan_next_game(self, projected_state: ProjectedState, north_star: str) -> GameRequest:
+            raise AssertionError("should not be called")
+
+    class StubGameService:
+        def play(self, request: GameRequest) -> GameResponse:
+            raise AssertionError("should not be called")
+
+    monkeypatch.setattr(
+        "baps.autonomous.build_projected_state_from_blackboard",
+        _stub_build_projected_state_from_blackboard,
+    )
+
+    responses = run_autonomous_steps(
+        north_star="Protect project identity",
+        blackboard=board,
+        planner=StubPlanner(),
+        game_service=StubGameService(),
+        max_steps=3,
+        stop_when_no_open_discrepancies=True,
+    )
+
+    assert responses == []

@@ -8,6 +8,12 @@ from baps.projections import current_open_discrepancies
 from baps.schemas import GameRequest, ProjectedState, UnresolvedDiscrepancy
 
 
+def _require_non_empty_north_star(north_star: str) -> str:
+    if not north_star.strip():
+        raise ValueError("north_star must be a non-empty string")
+    return north_star
+
+
 class Planner(Protocol):
     def plan_next_game(
         self,
@@ -22,6 +28,7 @@ class DefaultPlanner:
         projected_state: ProjectedState,
         north_star: str,
     ) -> GameRequest:
+        _require_non_empty_north_star(north_star)
         open_discrepancies = current_open_discrepancies(projected_state)
         selected = self._select_discrepancy(open_discrepancies)
         if selected is None:
@@ -82,6 +89,7 @@ class LLMPlanner:
         projected_state: ProjectedState,
         north_star: str,
     ) -> GameRequest:
+        _require_non_empty_north_star(north_star)
         prompt = self._build_prompt(projected_state, north_star)
         model_output = self.model_client.generate(prompt)
         try:
