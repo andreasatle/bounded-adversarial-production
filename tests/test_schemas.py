@@ -29,6 +29,7 @@ from baps.schemas import (
     GameRequest,
     GameState,
     Move,
+    PlannerGroundingMetadata,
     Target,
     UnresolvedDiscrepancy,
 )
@@ -60,6 +61,50 @@ def test_game_request_rejects_blank_state_source_ids() -> None:
             goal="g",
             target_kind="documentation",
             state_source_ids=["architecture", " "],
+        )
+
+
+def test_game_request_planner_grounding_defaults_to_none() -> None:
+    request = GameRequest(
+        game_type="documentation-refinement",
+        subject="s",
+        goal="g",
+        target_kind="documentation",
+    )
+    assert request.planner_grounding is None
+
+
+def test_game_request_accepts_valid_planner_grounding_metadata() -> None:
+    request = GameRequest(
+        game_type="documentation-refinement",
+        subject="s",
+        goal="g",
+        target_kind="documentation",
+        planner_grounding=PlannerGroundingMetadata(
+            grounding_status="grounded",
+            grounding_rationale="Grounded in open discrepancy d1 and north star.",
+        ),
+    )
+    assert request.planner_grounding is not None
+    assert request.planner_grounding.grounding_status == "grounded"
+
+
+def test_game_request_rejects_invalid_planner_grounding_metadata() -> None:
+    with pytest.raises(ValidationError):
+        GameRequest(
+            game_type="documentation-refinement",
+            subject="s",
+            goal="g",
+            target_kind="documentation",
+            planner_grounding={"grounding_status": "invalid", "grounding_rationale": "x"},
+        )
+    with pytest.raises(ValidationError):
+        GameRequest(
+            game_type="documentation-refinement",
+            subject="s",
+            goal="g",
+            target_kind="documentation",
+            planner_grounding={"grounding_status": "grounded", "grounding_rationale": "   "},
         )
 
 

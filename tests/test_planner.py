@@ -39,6 +39,9 @@ def test_default_planner_prioritizes_high_severity_open_discrepancy() -> None:
 
     assert request.target_kind == "discrepancy"
     assert "discrepancy_id=d2" in request.target_ref
+    assert request.planner_grounding is not None
+    assert request.planner_grounding.grounding_status == "grounded"
+    assert request.planner_grounding.grounding_rationale
 
 
 def test_default_planner_prioritizes_open_discrepancies_over_maintenance() -> None:
@@ -69,6 +72,9 @@ def test_default_planner_produces_maintenance_game_when_no_open_discrepancies() 
 
     assert request.target_kind == "maintenance"
     assert request.target_ref == "project-maintenance"
+    assert request.planner_grounding is not None
+    assert request.planner_grounding.grounding_status == "weakly_grounded"
+    assert request.planner_grounding.grounding_rationale
 
 
 def test_default_planner_is_deterministic_for_discrepancy_ordering() -> None:
@@ -119,7 +125,28 @@ def test_llm_planner_returns_game_request_from_valid_json() -> None:
     assert request.game_type == "documentation-refinement"
     assert request.subject == "S"
     assert request.goal == "G"
+    assert request.planner_grounding is None
     assert len(model.prompts) == 1
+
+
+def test_llm_planner_parses_explicit_planner_grounding_metadata() -> None:
+    model = FakeModelClient(
+        responses=[
+            (
+                '{"game_type":"documentation-refinement","subject":"S","goal":"G",'
+                '"target_kind":"discrepancy","target_ref":"d1",'
+                '"planner_grounding":{"grounding_status":"underspecified",'
+                '"grounding_rationale":"North star is ambiguous for this choice."}}'
+            )
+        ]
+    )
+    planner = LLMPlanner(model_client=model)
+
+    request = planner.plan_next_game(ProjectedState(), "North star")
+
+    assert request.planner_grounding is not None
+    assert request.planner_grounding.grounding_status == "underspecified"
+    assert request.planner_grounding.grounding_rationale == "North star is ambiguous for this choice."
 
 
 def test_llm_planner_prompt_includes_north_star_and_projected_state_summary() -> None:

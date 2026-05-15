@@ -5,7 +5,7 @@ from typing import Protocol
 
 from baps.models import ModelClient
 from baps.projections import current_open_discrepancies
-from baps.schemas import GameRequest, ProjectedState, UnresolvedDiscrepancy
+from baps.schemas import GameRequest, PlannerGroundingMetadata, ProjectedState, UnresolvedDiscrepancy
 
 
 def _require_non_empty_north_star(north_star: str) -> str:
@@ -38,6 +38,13 @@ class DefaultPlanner:
                 goal=f"Identify one bounded improvement aligned with north star: {north_star}",
                 target_kind="maintenance",
                 target_ref="project-maintenance",
+                planner_grounding=PlannerGroundingMetadata(
+                    grounding_status="weakly_grounded",
+                    grounding_rationale=(
+                        "No open discrepancies were available; selected a bounded maintenance task "
+                        "aligned to the provided north star."
+                    ),
+                ),
             )
         return self._build_discrepancy_request(selected, north_star)
 
@@ -72,6 +79,13 @@ class DefaultPlanner:
             ),
             target_kind="discrepancy",
             target_ref=";".join(target_ref_parts),
+            planner_grounding=PlannerGroundingMetadata(
+                grounding_status="grounded",
+                grounding_rationale=(
+                    f"Selected open discrepancy {discrepancy.id} from projected state and aligned "
+                    "the request goal to the provided north star."
+                ),
+            ),
         )
 
 

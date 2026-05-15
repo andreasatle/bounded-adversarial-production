@@ -18,6 +18,22 @@ class Target(BaseModel):
     _validate_kind = field_validator("kind")(_require_non_empty)
 
 
+PlannerGroundingStatus = Literal[
+    "grounded",
+    "weakly_grounded",
+    "ungrounded",
+    "underspecified",
+]
+
+
+class PlannerGroundingMetadata(BaseModel):
+    grounding_status: PlannerGroundingStatus
+    grounding_rationale: str
+    metadata: dict = Field(default_factory=dict)
+
+    _validate_grounding_rationale = field_validator("grounding_rationale")(_require_non_empty)
+
+
 class GameRequest(BaseModel):
     game_type: str
     subject: str
@@ -25,6 +41,7 @@ class GameRequest(BaseModel):
     target_kind: str
     target_ref: str = ""
     state_source_ids: list[str] = Field(default_factory=list)
+    planner_grounding: PlannerGroundingMetadata | None = None
 
     @field_validator("game_type", "subject", "goal", "target_kind")
     @classmethod
