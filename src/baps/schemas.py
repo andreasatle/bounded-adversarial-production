@@ -262,6 +262,11 @@ class GameResponse(BaseModel):
         return value
 
 
+class AutonomousStepResult(BaseModel):
+    response: GameResponse
+    planner_grounding: PlannerGroundingMetadata | None = None
+
+
 class RoundSummary(BaseModel):
     round_number: int
     blue_summary: str

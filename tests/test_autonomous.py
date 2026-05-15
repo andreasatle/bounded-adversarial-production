@@ -4,7 +4,15 @@ import pytest
 
 from baps.autonomous import run_autonomous_steps, run_one_autonomous_step
 from baps.blackboard import Blackboard
-from baps.schemas import Decision, GameRequest, GameResponse, ProjectedState, UnresolvedDiscrepancy
+from baps.schemas import (
+    AutonomousStepResult,
+    Decision,
+    GameRequest,
+    GameResponse,
+    PlannerGroundingMetadata,
+    ProjectedState,
+    UnresolvedDiscrepancy,
+)
 
 
 def _response() -> GameResponse:
@@ -74,14 +82,15 @@ def test_run_one_autonomous_step_builds_projected_state_before_planning_and_pass
 
     planner = StubPlanner()
     service = StubGameService()
-    response = run_one_autonomous_step(
+    result = run_one_autonomous_step(
         north_star="Protect project identity",
         blackboard=board,
         planner=planner,
         game_service=service,
     )
 
-    assert response == expected_response
+    assert result.response == expected_response
+    assert result.planner_grounding is None
     assert planner.calls == 1
     assert service.calls == 1
     assert calls == ["build", "plan", "play"]
@@ -118,22 +127,24 @@ def test_run_autonomous_steps_returns_max_steps_responses_in_order(
         blackboard: Blackboard,
         planner: object,
         game_service: object,
-    ) -> GameResponse:
+    ) -> AutonomousStepResult:
         assert north_star == "Protect project identity"
         assert blackboard is board
         call_index["value"] += 1
         idx = call_index["value"]
-        return GameResponse(
-            game_id="play-game-001",
-            run_id=f"run-{idx}",
-            rounds_played=1,
-            max_rounds=1,
-            final_decision=Decision(game_id="play-game-001", decision="accept", rationale=f"ok-{idx}"),
-            terminal_reason="accepted",
-            terminal_outcome="accepted_locally",
-            integration_recommendation="integration_recommended",
-            final_blue_summary=f"blue-{idx}",
-            final_red_claim=f"red-{idx}",
+        return AutonomousStepResult(
+            response=GameResponse(
+                game_id="play-game-001",
+                run_id=f"run-{idx}",
+                rounds_played=1,
+                max_rounds=1,
+                final_decision=Decision(game_id="play-game-001", decision="accept", rationale=f"ok-{idx}"),
+                terminal_reason="accepted",
+                terminal_outcome="accepted_locally",
+                integration_recommendation="integration_recommended",
+                final_blue_summary=f"blue-{idx}",
+                final_red_claim=f"red-{idx}",
+            )
         )
 
     monkeypatch.setattr(
@@ -150,7 +161,7 @@ def test_run_autonomous_steps_returns_max_steps_responses_in_order(
     )
 
     assert len(responses) == 3
-    assert [response.run_id for response in responses] == ["run-1", "run-2", "run-3"]
+    assert [result.response.run_id for result in responses] == ["run-1", "run-2", "run-3"]
 
 
 def test_run_autonomous_steps_calls_planner_and_service_once_per_step_and_rebuilds_state(
@@ -216,7 +227,7 @@ def test_run_autonomous_steps_calls_planner_and_service_once_per_step_and_rebuil
     assert planner.calls == 3
     assert service.calls == 3
     assert planner.received_build_indexes == [1, 2, 3]
-    assert [response.run_id for response in responses] == ["run-1", "run-2", "run-3"]
+    assert [result.response.run_id for result in responses] == ["run-1", "run-2", "run-3"]
 
 
 def test_run_autonomous_steps_rejects_invalid_inputs(tmp_path: Path) -> None:
@@ -390,7 +401,7 @@ def test_run_autonomous_steps_continues_when_open_discrepancies_exist(
     )
 
     assert len(responses) == 3
-    assert [response.run_id for response in responses] == ["run-1", "run-2", "run-3"]
+    assert [result.response.run_id for result in responses] == ["run-1", "run-2", "run-3"]
     assert planner.calls == 3
     assert service.calls == 3
     assert build_calls["count"] == 6
@@ -407,14 +418,14 @@ def test_run_autonomous_steps_stop_flag_false_preserves_default_behavior(
         blackboard: Blackboard,
         planner: object,
         game_service: object,
-    ) -> GameResponse:
+    ) -> AutonomousStepResult:
         assert north_star == "Protect project identity"
         assert blackboard is board
         call_index["value"] += 1
         idx = call_index["value"]
         response = _response()
         response.run_id = f"run-{idx}"
-        return response
+        return AutonomousStepResult(response=response)
 
     monkeypatch.setattr(
         "baps.autonomous.run_one_autonomous_step",
@@ -431,7 +442,7 @@ def test_run_autonomous_steps_stop_flag_false_preserves_default_behavior(
     )
 
     assert len(responses) == 3
-    assert [response.run_id for response in responses] == ["run-1", "run-2", "run-3"]
+    assert [result.response.run_id for result in responses] == ["run-1", "run-2", "run-3"]
 
 
 def test_run_autonomous_steps_stop_flag_true_can_return_zero_steps_when_initially_no_open_discrepancies(
@@ -480,3 +491,96 @@ def test_run_autonomous_steps_stop_flag_true_can_return_zero_steps_when_initiall
     )
 
     assert responses == []
+
+
+def test_run_one_autonomous_step_exposes_grounded_planner_metadata(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "events.jsonl")
+
+    class StubPlanner:
+        def plan_next_game(self, projected_state: ProjectedState, north_star: str) -> GameRequest:
+            return GameRequest(
+                game_type="documentation-refinement",
+                subject="s",
+                goal="g",
+                target_kind="documentation",
+                target_ref="README.md",
+                planner_grounding=PlannerGroundingMetadata(
+                    grounding_status="grounded",
+                    grounding_rationale="Grounded in discrepancy d1 and north star.",
+                ),
+            )
+
+    class StubGameService:
+        def play(self, request: GameRequest) -> GameResponse:
+            return _response()
+
+    result = run_one_autonomous_step(
+        north_star="Protect project identity",
+        blackboard=board,
+        planner=StubPlanner(),
+        game_service=StubGameService(),
+    )
+
+    assert result.planner_grounding is not None
+    assert result.planner_grounding.grounding_status == "grounded"
+
+
+def test_run_one_autonomous_step_exposes_weakly_grounded_planner_metadata(tmp_path: Path) -> None:
+    board = Blackboard(tmp_path / "events.jsonl")
+
+    class StubPlanner:
+        def plan_next_game(self, projected_state: ProjectedState, north_star: str) -> GameRequest:
+            return GameRequest(
+                game_type="documentation-refinement",
+                subject="s",
+                goal="g",
+                target_kind="maintenance",
+                target_ref="project-maintenance",
+                planner_grounding=PlannerGroundingMetadata(
+                    grounding_status="weakly_grounded",
+                    grounding_rationale="No open discrepancies; maintenance selected.",
+                ),
+            )
+
+    class StubGameService:
+        def play(self, request: GameRequest) -> GameResponse:
+            return _response()
+
+    result = run_one_autonomous_step(
+        north_star="Protect project identity",
+        blackboard=board,
+        planner=StubPlanner(),
+        game_service=StubGameService(),
+    )
+
+    assert result.planner_grounding is not None
+    assert result.planner_grounding.grounding_status == "weakly_grounded"
+
+
+def test_run_one_autonomous_step_supports_missing_planner_grounding_for_backward_compatibility(
+    tmp_path: Path,
+) -> None:
+    board = Blackboard(tmp_path / "events.jsonl")
+
+    class StubPlanner:
+        def plan_next_game(self, projected_state: ProjectedState, north_star: str) -> GameRequest:
+            return GameRequest(
+                game_type="documentation-refinement",
+                subject="s",
+                goal="g",
+                target_kind="documentation",
+                target_ref="README.md",
+            )
+
+    class StubGameService:
+        def play(self, request: GameRequest) -> GameResponse:
+            return _response()
+
+    result = run_one_autonomous_step(
+        north_star="Protect project identity",
+        blackboard=board,
+        planner=StubPlanner(),
+        game_service=StubGameService(),
+    )
+
+    assert result.planner_grounding is None
