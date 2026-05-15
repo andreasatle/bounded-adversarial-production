@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from pydantic import BaseModel, model_validator, field_validator
+from pydantic import BaseModel, Field, model_validator, field_validator
 
 
 def _require_non_empty(value: str) -> str:
@@ -58,6 +58,30 @@ class State(BaseModel):
                 f"overlap: {sorted(overlap)}"
             )
         return self
+
+
+class StateUpdateTarget(BaseModel):
+    artifact_id: str
+    section: str | None = None
+
+    _validate_artifact_id = field_validator("artifact_id")(_require_non_empty)
+
+    @field_validator("section")
+    @classmethod
+    def _validate_optional_section(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _require_non_empty(value)
+
+
+class StateUpdateProposal(BaseModel):
+    id: str
+    target: StateUpdateTarget
+    summary: str
+    payload: dict[str, object] = Field(default_factory=dict)
+
+    _validate_id = field_validator("id")(_require_non_empty)
+    _validate_summary = field_validator("summary")(_require_non_empty)
 
 
 class StateArtifactAdapter(Protocol):

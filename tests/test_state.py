@@ -8,6 +8,8 @@ from baps.state import (
     State,
     StateArtifact,
     StateArtifactRegistry,
+    StateUpdateProposal,
+    StateUpdateTarget,
 )
 
 
@@ -160,3 +162,71 @@ def test_state_accepts_distinct_northstar_and_state_artifact_ids() -> None:
         "northstar-2",
     ]
     assert [artifact.id for artifact in state.artifacts] == ["state-1", "state-2"]
+
+
+def test_state_update_target_accepts_valid_values() -> None:
+    target = StateUpdateTarget(artifact_id="artifact-1", section="intro")
+    assert target.artifact_id == "artifact-1"
+    assert target.section == "intro"
+
+
+@pytest.mark.parametrize("bad_artifact_id", ["", "   ", "\n\t"])
+def test_state_update_target_rejects_empty_artifact_id(bad_artifact_id: str) -> None:
+    with pytest.raises(ValidationError):
+        StateUpdateTarget(artifact_id=bad_artifact_id)
+
+
+@pytest.mark.parametrize("bad_section", ["", "   ", "\n\t"])
+def test_state_update_target_rejects_empty_section_when_provided(bad_section: str) -> None:
+    with pytest.raises(ValidationError):
+        StateUpdateTarget(artifact_id="artifact-1", section=bad_section)
+
+
+def test_state_update_proposal_accepts_valid_values() -> None:
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="artifact-1", section="intro"),
+        summary="Update introduction wording.",
+        payload={"key": "value"},
+    )
+    assert proposal.id == "proposal-1"
+    assert proposal.target.artifact_id == "artifact-1"
+    assert proposal.summary == "Update introduction wording."
+    assert proposal.payload == {"key": "value"}
+
+
+@pytest.mark.parametrize("bad_id", ["", "   ", "\n\t"])
+def test_state_update_proposal_rejects_empty_id(bad_id: str) -> None:
+    with pytest.raises(ValidationError):
+        StateUpdateProposal(
+            id=bad_id,
+            target=StateUpdateTarget(artifact_id="artifact-1"),
+            summary="Valid summary",
+        )
+
+
+@pytest.mark.parametrize("bad_summary", ["", "   ", "\n\t"])
+def test_state_update_proposal_rejects_empty_summary(bad_summary: str) -> None:
+    with pytest.raises(ValidationError):
+        StateUpdateProposal(
+            id="proposal-1",
+            target=StateUpdateTarget(artifact_id="artifact-1"),
+            summary=bad_summary,
+        )
+
+
+def test_state_update_proposal_payload_default_is_isolated_per_instance() -> None:
+    first = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="artifact-1"),
+        summary="First summary",
+    )
+    second = StateUpdateProposal(
+        id="proposal-2",
+        target=StateUpdateTarget(artifact_id="artifact-2"),
+        summary="Second summary",
+    )
+
+    first.payload["mutated"] = "yes"
+    assert first.payload == {"mutated": "yes"}
+    assert second.payload == {}
