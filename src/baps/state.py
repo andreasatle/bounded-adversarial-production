@@ -195,3 +195,10 @@ class GitRepositoryArtifactAdapter:
 
     def project_artifact(self, artifact: StateArtifact) -> str:
         return f"git repository artifact: {artifact.id}"
+
+
+def build_default_state_artifact_registry() -> StateArtifactRegistry:
+    registry = StateArtifactRegistry()
+    registry.register(DocumentArtifactAdapter())
+    registry.register(GitRepositoryArtifactAdapter())
+    return registry

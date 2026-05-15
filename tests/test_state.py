@@ -3,6 +3,7 @@ from pydantic import ValidationError
 
 from baps.state import (
     apply_state_update,
+    build_default_state_artifact_registry,
     DocumentArtifactAdapter,
     find_state_artifact,
     GitRepositoryArtifactAdapter,
@@ -351,6 +352,67 @@ def test_apply_state_update_does_not_mutate_input_state() -> None:
 
     after = state.model_dump(mode="json")
     assert after == before
+
+
+def test_build_default_registry_resolves_document_adapter() -> None:
+    registry = build_default_state_artifact_registry()
+    adapter = registry.resolve("document")
+    assert isinstance(adapter, DocumentArtifactAdapter)
+
+
+def test_build_default_registry_resolves_git_repository_adapter() -> None:
+    registry = build_default_state_artifact_registry()
+    adapter = registry.resolve("git_repository")
+    assert isinstance(adapter, GitRepositoryArtifactAdapter)
+
+
+def test_build_default_registry_adapters_validate_artifacts_unchanged() -> None:
+    registry = build_default_state_artifact_registry()
+    document_artifact = StateArtifact(id="doc-1", kind="document")
+    git_artifact = StateArtifact(id="repo-1", kind="git_repository")
+
+    assert registry.resolve("document").validate_artifact(document_artifact) is document_artifact
+    assert registry.resolve("git_repository").validate_artifact(git_artifact) is git_artifact
+
+
+def test_build_default_registry_adapters_project_deterministic_strings() -> None:
+    registry = build_default_state_artifact_registry()
+    document_artifact = StateArtifact(id="doc-1", kind="document")
+    git_artifact = StateArtifact(id="repo-1", kind="git_repository")
+
+    assert (
+        registry.resolve("document").project_artifact(document_artifact)
+        == "document artifact: doc-1"
+    )
+    assert (
+        registry.resolve("git_repository").project_artifact(git_artifact)
+        == "git repository artifact: repo-1"
+    )
+
+
+def test_build_default_registry_returns_independent_instances() -> None:
+    first = build_default_state_artifact_registry()
+    second = build_default_state_artifact_registry()
+    assert first is not second
+
+
+def test_modifying_one_default_registry_does_not_affect_another() -> None:
+    class CustomAdapter:
+        kind = "custom"
+
+        def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
+            return artifact
+
+        def project_artifact(self, artifact: StateArtifact) -> str:
+            return f"custom artifact: {artifact.id}"
+
+    first = build_default_state_artifact_registry()
+    second = build_default_state_artifact_registry()
+    first.register(CustomAdapter())
+
+    assert first.resolve("custom").project_artifact(StateArtifact(id="x", kind="custom")) == "custom artifact: x"
+    with pytest.raises(ValueError, match="unknown artifact kind"):
+        second.resolve("custom")
 
 
 def test_validate_state_artifacts_validates_all_northstar_artifacts() -> None:
