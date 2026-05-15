@@ -84,6 +84,24 @@ class StateUpdateProposal(BaseModel):
     _validate_summary = field_validator("summary")(_require_non_empty)
 
 
+def find_state_artifact(state: State, artifact_id: str) -> StateArtifact:
+    resolved_artifact_id = _require_non_empty(artifact_id)
+    for artifact in state.northstar.artifacts:
+        if artifact.id == resolved_artifact_id:
+            return artifact
+    for artifact in state.artifacts:
+        if artifact.id == resolved_artifact_id:
+            return artifact
+    raise ValueError(f"artifact id not found in state: {resolved_artifact_id}")
+
+
+def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
+    find_state_artifact(state, proposal.target.artifact_id)
+    raise NotImplementedError(
+        "state update application is not implemented yet; dispatch boundary validated only"
+    )
+
+
 class StateArtifactAdapter(Protocol):
     kind: str
 

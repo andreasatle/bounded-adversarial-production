@@ -2,7 +2,9 @@ import pytest
 from pydantic import ValidationError
 
 from baps.state import (
+    apply_state_update,
     DocumentArtifactAdapter,
+    find_state_artifact,
     GitRepositoryArtifactAdapter,
     NorthStar,
     State,
@@ -230,3 +232,107 @@ def test_state_update_proposal_payload_default_is_isolated_per_instance() -> Non
     first.payload["mutated"] = "yes"
     assert first.payload == {"mutated": "yes"}
     assert second.payload == {}
+
+
+def test_find_state_artifact_finds_northstar_artifact() -> None:
+    state = State(
+        northstar=NorthStar(
+            artifacts=(
+                StateArtifact(id="northstar-1", kind="document"),
+                StateArtifact(id="northstar-2", kind="git_repository"),
+            )
+        ),
+        artifacts=(StateArtifact(id="state-1", kind="document"),),
+    )
+    artifact = find_state_artifact(state, "northstar-2")
+    assert artifact.id == "northstar-2"
+    assert artifact.kind == "git_repository"
+
+
+def test_find_state_artifact_finds_ordinary_state_artifact() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
+        artifacts=(StateArtifact(id="state-1", kind="git_repository"),),
+    )
+    artifact = find_state_artifact(state, "state-1")
+    assert artifact.id == "state-1"
+    assert artifact.kind == "git_repository"
+
+
+@pytest.mark.parametrize("bad_artifact_id", ["", "   ", "\n\t"])
+def test_find_state_artifact_rejects_empty_or_whitespace_artifact_id(
+    bad_artifact_id: str,
+) -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
+    )
+    with pytest.raises(ValueError, match="non-empty string"):
+        find_state_artifact(state, bad_artifact_id)
+
+
+def test_find_state_artifact_raises_for_missing_artifact_id() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
+        artifacts=(StateArtifact(id="state-1", kind="git_repository"),),
+    )
+    with pytest.raises(ValueError, match="artifact id not found in state"):
+        find_state_artifact(state, "missing")
+
+
+def test_apply_state_update_raises_value_error_for_missing_target_artifact() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
+    )
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="missing"),
+        summary="Attempt update on unknown artifact.",
+    )
+    with pytest.raises(ValueError, match="artifact id not found in state"):
+        apply_state_update(state, proposal)
+
+
+def test_apply_state_update_raises_not_implemented_for_northstar_target() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
+    )
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="northstar-1"),
+        summary="Attempt update on known northstar artifact.",
+    )
+    with pytest.raises(NotImplementedError, match="not implemented yet"):
+        apply_state_update(state, proposal)
+
+
+def test_apply_state_update_raises_not_implemented_for_ordinary_target() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
+        artifacts=(StateArtifact(id="state-1", kind="git_repository"),),
+    )
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="state-1"),
+        summary="Attempt update on known ordinary state artifact.",
+    )
+    with pytest.raises(NotImplementedError, match="not implemented yet"):
+        apply_state_update(state, proposal)
+
+
+def test_apply_state_update_does_not_mutate_input_state() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
+        artifacts=(StateArtifact(id="state-1", kind="git_repository"),),
+    )
+    before = state.model_dump(mode="json")
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="state-1"),
+        summary="No-op because implementation is pending.",
+    )
+
+    with pytest.raises(NotImplementedError):
+        apply_state_update(state, proposal)
+
+    after = state.model_dump(mode="json")
+    assert after == before
