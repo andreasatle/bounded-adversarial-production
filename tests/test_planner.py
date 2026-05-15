@@ -225,3 +225,16 @@ def test_llm_planner_can_return_valid_but_ungrounded_request_when_no_fallback() 
 
     assert request.target_kind == "maintenance"
     assert request.target_ref == "invented-ref"
+
+
+def test_llm_planner_accepts_schema_valid_state_source_ids_without_policy_checks() -> None:
+    model = FakeModelClient(
+        responses=[
+            '{"game_type":"documentation-refinement","subject":"S","goal":"G","target_kind":"maintenance","target_ref":"m1","state_source_ids":["untrusted-source"]}'
+        ]
+    )
+    planner = LLMPlanner(model_client=model)
+
+    request = planner.plan_next_game(ProjectedState(), "North star")
+
+    assert request.state_source_ids == ["untrusted-source"]
