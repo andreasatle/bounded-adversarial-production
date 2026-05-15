@@ -2687,3 +2687,160 @@ def test_artifact_proposal_helpers_do_not_mutate_inputs() -> None:
     assert len(records) == 1
     assert isinstance(records[0], ArtifactProposalRecord)
     assert events[0].model_dump(mode="json") == before
+
+
+def test_local_acceptance_without_integration_decision_does_not_create_accepted_item_even_with_other_acceptance() -> None:
+    state = build_projected_state(
+        [
+            Event(
+                id="g1:run-local-only:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-local-only",
+                    "terminal_outcome": "accepted_locally",
+                    "integration_recommendation": "integration_recommended",
+                    "state": {"final_decision": {"rationale": "local acceptance only"}},
+                },
+            ),
+            Event(
+                id="integration:int-other",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "int-other",
+                        "run_id": "run-other",
+                        "outcome": "accepted",
+                        "target_kind": "accomplishment",
+                        "summary": "Accepted by integration authority",
+                        "rationale": "explicit integration decision",
+                    }
+                },
+            ),
+        ]
+    )
+
+    assert [item.id for item in state.accepted_accomplishments] == ["int-other"]
+
+
+def test_rejected_local_run_can_coexist_with_accepted_integration_decision_for_same_run() -> None:
+    state = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "unresolved issue"}},
+                },
+            ),
+            Event(
+                id="integration:int-1",
+                type="integration_decision_recorded",
+                payload={
+                    "integration_decision": {
+                        "id": "int-1",
+                        "run_id": "run-1",
+                        "outcome": "accepted",
+                        "target_kind": "accomplishment",
+                        "summary": "Accepted despite local rejection",
+                        "rationale": "integration authority override",
+                    }
+                },
+            ),
+        ]
+    )
+
+    assert [item.id for item in state.accepted_accomplishments] == ["int-1"]
+    assert [item.id for item in state.unresolved_discrepancies] == ["run-1"]
+    assert state.unresolved_discrepancies[0].status == "open"
+
+
+def test_discrepancy_resolution_and_supersession_are_order_dependent_last_write_wins() -> None:
+    resolution_then_supersession = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "issue"}},
+                },
+            ),
+            Event(
+                id="res:1",
+                type="discrepancy_resolution_recorded",
+                payload={
+                    "discrepancy_resolution": {
+                        "id": "res-1",
+                        "discrepancy_id": "run-1",
+                        "resolution_summary": "resolved",
+                        "source_run_id": "run-2",
+                    }
+                },
+            ),
+            Event(
+                id="sup:1",
+                type="discrepancy_supersession_recorded",
+                payload={
+                    "discrepancy_supersession": {
+                        "id": "sup-1",
+                        "superseded_discrepancy_id": "run-1",
+                        "superseding_discrepancy_id": "run-2",
+                        "rationale": "superseded",
+                        "source_run_id": "run-2",
+                    }
+                },
+            ),
+        ]
+    )
+
+    supersession_then_resolution = build_projected_state(
+        [
+            Event(
+                id="g1:run-1:game_completed",
+                type="game_completed",
+                payload={
+                    "game_id": "g1",
+                    "run_id": "run-1",
+                    "terminal_outcome": "rejected_locally",
+                    "integration_recommendation": "do_not_integrate",
+                    "state": {"final_decision": {"rationale": "issue"}},
+                },
+            ),
+            Event(
+                id="sup:1",
+                type="discrepancy_supersession_recorded",
+                payload={
+                    "discrepancy_supersession": {
+                        "id": "sup-1",
+                        "superseded_discrepancy_id": "run-1",
+                        "superseding_discrepancy_id": "run-2",
+                        "rationale": "superseded",
+                        "source_run_id": "run-2",
+                    }
+                },
+            ),
+            Event(
+                id="res:1",
+                type="discrepancy_resolution_recorded",
+                payload={
+                    "discrepancy_resolution": {
+                        "id": "res-1",
+                        "discrepancy_id": "run-1",
+                        "resolution_summary": "resolved",
+                        "source_run_id": "run-2",
+                    }
+                },
+            ),
+        ]
+    )
+
+    assert resolution_then_supersession.unresolved_discrepancies[0].status == "superseded"
+    assert supersession_then_resolution.unresolved_discrepancies[0].status == "resolved"
