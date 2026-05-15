@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, model_validator, field_validator
 
 
 def _require_non_empty(value: str) -> str:
@@ -22,10 +22,42 @@ class StateArtifact(BaseModel):
 class NorthStar(BaseModel):
     artifacts: tuple[StateArtifact, ...]
 
+    @field_validator("artifacts")
+    @classmethod
+    def _validate_unique_artifact_ids(
+        cls, artifacts: tuple[StateArtifact, ...]
+    ) -> tuple[StateArtifact, ...]:
+        ids = [artifact.id for artifact in artifacts]
+        if len(ids) != len(set(ids)):
+            raise ValueError("northstar artifact ids must be unique")
+        return artifacts
+
 
 class State(BaseModel):
     northstar: NorthStar
     artifacts: tuple[StateArtifact, ...] = ()
+
+    @field_validator("artifacts")
+    @classmethod
+    def _validate_unique_artifact_ids(
+        cls, artifacts: tuple[StateArtifact, ...]
+    ) -> tuple[StateArtifact, ...]:
+        ids = [artifact.id for artifact in artifacts]
+        if len(ids) != len(set(ids)):
+            raise ValueError("state artifact ids must be unique")
+        return artifacts
+
+    @model_validator(mode="after")
+    def _validate_northstar_and_state_artifact_disjointness(self) -> "State":
+        northstar_ids = {artifact.id for artifact in self.northstar.artifacts}
+        state_ids = {artifact.id for artifact in self.artifacts}
+        overlap = northstar_ids.intersection(state_ids)
+        if overlap:
+            raise ValueError(
+                "northstar and state artifacts must not share ids; "
+                f"overlap: {sorted(overlap)}"
+            )
+        return self
 
 
 class StateArtifactAdapter(Protocol):

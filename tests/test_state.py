@@ -107,3 +107,56 @@ def test_document_and_git_adapters_return_artifact_unchanged() -> None:
 
     assert document_adapter.validate_artifact(artifact) is artifact
     assert git_adapter.validate_artifact(artifact) is artifact
+
+
+def test_northstar_rejects_duplicate_artifact_ids() -> None:
+    with pytest.raises(ValidationError, match="northstar artifact ids must be unique"):
+        NorthStar(
+            artifacts=(
+                StateArtifact(id="dup", kind="document"),
+                StateArtifact(id="dup", kind="git_repository"),
+            )
+        )
+
+
+def test_state_rejects_duplicate_ordinary_artifact_ids() -> None:
+    with pytest.raises(ValidationError, match="state artifact ids must be unique"):
+        State(
+            northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+            artifacts=(
+                StateArtifact(id="dup", kind="document"),
+                StateArtifact(id="dup", kind="git_repository"),
+            ),
+        )
+
+
+def test_state_rejects_overlap_between_northstar_and_state_artifact_ids() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="northstar and state artifacts must not share ids",
+    ):
+        State(
+            northstar=NorthStar(artifacts=(StateArtifact(id="shared", kind="document"),)),
+            artifacts=(StateArtifact(id="shared", kind="git_repository"),),
+        )
+
+
+def test_state_accepts_distinct_northstar_and_state_artifact_ids() -> None:
+    state = State(
+        northstar=NorthStar(
+            artifacts=(
+                StateArtifact(id="northstar-1", kind="document"),
+                StateArtifact(id="northstar-2", kind="git_repository"),
+            )
+        ),
+        artifacts=(
+            StateArtifact(id="state-1", kind="document"),
+            StateArtifact(id="state-2", kind="git_repository"),
+        ),
+    )
+
+    assert [artifact.id for artifact in state.northstar.artifacts] == [
+        "northstar-1",
+        "northstar-2",
+    ]
+    assert [artifact.id for artifact in state.artifacts] == ["state-1", "state-2"]
