@@ -4,7 +4,7 @@ from baps.blackboard import Blackboard
 from baps.game_service import GameService
 from baps.planner import Planner
 from baps.projections import build_projected_state_from_blackboard, current_open_discrepancies
-from baps.schemas import AutonomousStepResult
+from baps.schemas import PlannedExecutionResult
 
 
 def run_one_autonomous_step(
@@ -12,14 +12,14 @@ def run_one_autonomous_step(
     blackboard: Blackboard,
     planner: Planner,
     game_service: GameService,
-) -> AutonomousStepResult:
+) -> PlannedExecutionResult:
     if not north_star.strip():
         raise ValueError("north_star must be a non-empty string")
 
     projected_state = build_projected_state_from_blackboard(blackboard)
     request = planner.plan_next_game(projected_state, north_star)
     response = game_service.play(request)
-    return AutonomousStepResult(
+    return PlannedExecutionResult(
         response=response,
         planner_grounding=request.planner_grounding,
     )
@@ -32,13 +32,13 @@ def run_autonomous_steps(
     game_service: GameService,
     max_steps: int,
     stop_when_no_open_discrepancies: bool = False,
-) -> list[AutonomousStepResult]:
+) -> list[PlannedExecutionResult]:
     if not north_star.strip():
         raise ValueError("north_star must be a non-empty string")
     if max_steps < 1:
         raise ValueError("max_steps must be >= 1")
 
-    responses: list[AutonomousStepResult] = []
+    responses: list[PlannedExecutionResult] = []
     for _ in range(max_steps):
         if stop_when_no_open_discrepancies:
             projected_state = build_projected_state_from_blackboard(blackboard)

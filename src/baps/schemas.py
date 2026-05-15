@@ -262,7 +262,7 @@ class GameResponse(BaseModel):
         return value
 
 
-class AutonomousStepResult(BaseModel):
+class PlannedExecutionResult(BaseModel):
     response: GameResponse
     planner_grounding: PlannerGroundingMetadata | None = None
 

@@ -5,7 +5,7 @@ import pytest
 from baps.autonomous import run_autonomous_steps, run_one_autonomous_step
 from baps.blackboard import Blackboard
 from baps.schemas import (
-    AutonomousStepResult,
+    PlannedExecutionResult,
     Decision,
     GameRequest,
     GameResponse,
@@ -127,12 +127,12 @@ def test_run_autonomous_steps_returns_max_steps_responses_in_order(
         blackboard: Blackboard,
         planner: object,
         game_service: object,
-    ) -> AutonomousStepResult:
+    ) -> PlannedExecutionResult:
         assert north_star == "Protect project identity"
         assert blackboard is board
         call_index["value"] += 1
         idx = call_index["value"]
-        return AutonomousStepResult(
+        return PlannedExecutionResult(
             response=GameResponse(
                 game_id="play-game-001",
                 run_id=f"run-{idx}",
@@ -418,14 +418,14 @@ def test_run_autonomous_steps_stop_flag_false_preserves_default_behavior(
         blackboard: Blackboard,
         planner: object,
         game_service: object,
-    ) -> AutonomousStepResult:
+    ) -> PlannedExecutionResult:
         assert north_star == "Protect project identity"
         assert blackboard is board
         call_index["value"] += 1
         idx = call_index["value"]
         response = _response()
         response.run_id = f"run-{idx}"
-        return AutonomousStepResult(response=response)
+        return PlannedExecutionResult(response=response)
 
     monkeypatch.setattr(
         "baps.autonomous.run_one_autonomous_step",
