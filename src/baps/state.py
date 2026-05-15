@@ -84,6 +84,11 @@ class StateUpdateProposal(BaseModel):
     _validate_summary = field_validator("summary")(_require_non_empty)
 
 
+class StateProjection(BaseModel):
+    northstar: tuple[str, ...] = ()
+    artifacts: tuple[str, ...] = ()
+
+
 def find_state_artifact(state: State, artifact_id: str) -> StateArtifact:
     resolved_artifact_id = _require_non_empty(artifact_id)
     for artifact in state.northstar.artifacts:
@@ -128,10 +133,28 @@ def validate_state_artifacts(state: State, registry: StateArtifactRegistry) -> S
     )
 
 
+def project_state(state: State, registry: StateArtifactRegistry) -> StateProjection:
+    def _project_one(artifact: StateArtifact) -> str:
+        adapter = registry.resolve(artifact.kind)
+        projection = adapter.project_artifact(artifact)
+        if not projection.strip():
+            raise ValueError(
+                f"artifact projection must be a non-empty string for artifact id: {artifact.id}"
+            )
+        return projection
+
+    projected_northstar = tuple(_project_one(artifact) for artifact in state.northstar.artifacts)
+    projected_artifacts = tuple(_project_one(artifact) for artifact in state.artifacts)
+    return StateProjection(northstar=projected_northstar, artifacts=projected_artifacts)
+
+
 class StateArtifactAdapter(Protocol):
     kind: str
 
     def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
+        ...
+
+    def project_artifact(self, artifact: StateArtifact) -> str:
         ...
 
 
@@ -160,9 +183,15 @@ class DocumentArtifactAdapter:
     def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
         return artifact
 
+    def project_artifact(self, artifact: StateArtifact) -> str:
+        return f"document artifact: {artifact.id}"
+
 
 class GitRepositoryArtifactAdapter:
     kind = "git_repository"
 
     def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
         return artifact
+
+    def project_artifact(self, artifact: StateArtifact) -> str:
+        return f"git repository artifact: {artifact.id}"

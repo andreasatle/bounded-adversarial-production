@@ -10,8 +10,10 @@ from baps.state import (
     State,
     StateArtifact,
     StateArtifactRegistry,
+    StateProjection,
     StateUpdateProposal,
     StateUpdateTarget,
+    project_state,
     validate_state_artifacts,
 )
 
@@ -94,6 +96,9 @@ def test_registry_rejects_empty_adapter_kind() -> None:
         def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
             return artifact
 
+        def project_artifact(self, artifact: StateArtifact) -> str:
+            return f"artifact: {artifact.id}"
+
     registry = StateArtifactRegistry()
     with pytest.raises(ValueError, match="non-empty string"):
         registry.register(EmptyKindAdapter())
@@ -112,6 +117,15 @@ def test_document_and_git_adapters_return_artifact_unchanged() -> None:
 
     assert document_adapter.validate_artifact(artifact) is artifact
     assert git_adapter.validate_artifact(artifact) is artifact
+
+
+def test_document_and_git_adapters_return_deterministic_projection_strings() -> None:
+    artifact = StateArtifact(id="a1", kind="document")
+    document_adapter = DocumentArtifactAdapter()
+    git_adapter = GitRepositoryArtifactAdapter()
+
+    assert document_adapter.project_artifact(artifact) == "document artifact: a1"
+    assert git_adapter.project_artifact(artifact) == "git repository artifact: a1"
 
 
 def test_northstar_rejects_duplicate_artifact_ids() -> None:
@@ -349,12 +363,18 @@ def test_validate_state_artifacts_validates_all_northstar_artifacts() -> None:
             calls.append(artifact.id)
             return artifact
 
+        def project_artifact(self, artifact: StateArtifact) -> str:
+            return f"doc:{artifact.id}"
+
     class GitTrackingAdapter:
         kind = "git_repository"
 
         def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
             calls.append(artifact.id)
             return artifact
+
+        def project_artifact(self, artifact: StateArtifact) -> str:
+            return f"git:{artifact.id}"
 
     state = State(
         northstar=NorthStar(
@@ -382,12 +402,18 @@ def test_validate_state_artifacts_validates_all_ordinary_artifacts() -> None:
             calls.append(artifact.id)
             return artifact
 
+        def project_artifact(self, artifact: StateArtifact) -> str:
+            return f"doc:{artifact.id}"
+
     class GitTrackingAdapter:
         kind = "git_repository"
 
         def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
             calls.append(artifact.id)
             return artifact
+
+        def project_artifact(self, artifact: StateArtifact) -> str:
+            return f"git:{artifact.id}"
 
     state = State(
         northstar=NorthStar(artifacts=(StateArtifact(id="northstar", kind="document"),)),
@@ -470,6 +496,9 @@ def test_validate_state_artifacts_raises_if_adapter_changes_id() -> None:
         def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
             return StateArtifact(id=f"{artifact.id}-changed", kind=artifact.kind)
 
+        def project_artifact(self, artifact: StateArtifact) -> str:
+            return f"doc:{artifact.id}"
+
     state = State(
         northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
     )
@@ -486,6 +515,9 @@ def test_validate_state_artifacts_raises_if_adapter_changes_kind() -> None:
 
         def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
             return StateArtifact(id=artifact.id, kind="git_repository")
+
+        def project_artifact(self, artifact: StateArtifact) -> str:
+            return f"doc:{artifact.id}"
 
     state = State(
         northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
@@ -508,6 +540,152 @@ def test_validate_state_artifacts_does_not_mutate_input_state() -> None:
     registry.register(GitRepositoryArtifactAdapter())
 
     _ = validate_state_artifacts(state, registry)
+
+    after = state.model_dump(mode="json")
+    assert after == before
+
+
+def test_state_projection_defaults_to_empty_tuples() -> None:
+    projection = StateProjection()
+    assert projection.northstar == ()
+    assert projection.artifacts == ()
+
+
+def test_project_state_projects_northstar_artifacts_through_adapters() -> None:
+    state = State(
+        northstar=NorthStar(
+            artifacts=(
+                StateArtifact(id="n1", kind="document"),
+                StateArtifact(id="n2", kind="git_repository"),
+            )
+        ),
+    )
+    registry = StateArtifactRegistry()
+    registry.register(DocumentArtifactAdapter())
+    registry.register(GitRepositoryArtifactAdapter())
+
+    projection = project_state(state, registry)
+    assert projection.northstar == (
+        "document artifact: n1",
+        "git repository artifact: n2",
+    )
+
+
+def test_project_state_projects_ordinary_artifacts_through_adapters() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+        artifacts=(
+            StateArtifact(id="s1", kind="document"),
+            StateArtifact(id="s2", kind="git_repository"),
+        ),
+    )
+    registry = StateArtifactRegistry()
+    registry.register(DocumentArtifactAdapter())
+    registry.register(GitRepositoryArtifactAdapter())
+
+    projection = project_state(state, registry)
+    assert projection.artifacts == (
+        "document artifact: s1",
+        "git repository artifact: s2",
+    )
+
+
+def test_project_state_preserves_ordering() -> None:
+    state = State(
+        northstar=NorthStar(
+            artifacts=(
+                StateArtifact(id="n1", kind="document"),
+                StateArtifact(id="n2", kind="git_repository"),
+            )
+        ),
+        artifacts=(
+            StateArtifact(id="s1", kind="git_repository"),
+            StateArtifact(id="s2", kind="document"),
+        ),
+    )
+    registry = StateArtifactRegistry()
+    registry.register(DocumentArtifactAdapter())
+    registry.register(GitRepositoryArtifactAdapter())
+
+    projection = project_state(state, registry)
+    assert projection.northstar == (
+        "document artifact: n1",
+        "git repository artifact: n2",
+    )
+    assert projection.artifacts == (
+        "git repository artifact: s1",
+        "document artifact: s2",
+    )
+
+
+def test_project_state_preserves_northstar_ordinary_separation() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+        artifacts=(StateArtifact(id="s1", kind="git_repository"),),
+    )
+    registry = StateArtifactRegistry()
+    registry.register(DocumentArtifactAdapter())
+    registry.register(GitRepositoryArtifactAdapter())
+
+    projection = project_state(state, registry)
+    assert projection.northstar == ("document artifact: n1",)
+    assert projection.artifacts == ("git repository artifact: s1",)
+
+
+def test_project_state_raises_for_unknown_northstar_artifact_kind() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="unknown"),)),
+    )
+    registry = StateArtifactRegistry()
+    registry.register(DocumentArtifactAdapter())
+
+    with pytest.raises(ValueError, match="unknown artifact kind"):
+        project_state(state, registry)
+
+
+def test_project_state_raises_for_unknown_ordinary_artifact_kind() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+        artifacts=(StateArtifact(id="s1", kind="unknown"),),
+    )
+    registry = StateArtifactRegistry()
+    registry.register(DocumentArtifactAdapter())
+
+    with pytest.raises(ValueError, match="unknown artifact kind"):
+        project_state(state, registry)
+
+
+def test_project_state_raises_if_adapter_projection_is_empty_or_whitespace() -> None:
+    class EmptyProjectionAdapter:
+        kind = "document"
+
+        def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
+            return artifact
+
+        def project_artifact(self, artifact: StateArtifact) -> str:
+            return "   "
+
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+    )
+    registry = StateArtifactRegistry()
+    registry.register(EmptyProjectionAdapter())
+
+    with pytest.raises(ValueError, match="projection must be a non-empty string"):
+        project_state(state, registry)
+
+
+def test_project_state_does_not_mutate_input_state() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+        artifacts=(StateArtifact(id="s1", kind="git_repository"),),
+    )
+    before = state.model_dump(mode="json")
+    registry = StateArtifactRegistry()
+    registry.register(DocumentArtifactAdapter())
+    registry.register(GitRepositoryArtifactAdapter())
+
+    _ = project_state(state, registry)
 
     after = state.model_dump(mode="json")
     assert after == before
