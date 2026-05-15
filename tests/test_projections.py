@@ -2844,3 +2844,80 @@ def test_discrepancy_resolution_and_supersession_are_order_dependent_last_write_
 
     assert resolution_then_supersession.unresolved_discrepancies[0].status == "superseded"
     assert supersession_then_resolution.unresolved_discrepancies[0].status == "resolved"
+
+
+def test_artifact_proposal_filters_allow_conflicting_status_records_with_same_id() -> None:
+    events = [
+        Event(
+            id="e1",
+            type="artifact_proposal_recorded",
+            payload={
+                "artifact_proposal_record": {
+                    "id": "apr-1",
+                    "artifact_id": "art-1",
+                    "change_id": "chg-1",
+                    "source_run_id": "run-1",
+                    "status": "proposed",
+                    "summary": "first status",
+                }
+            },
+        ),
+        Event(
+            id="e2",
+            type="artifact_proposal_recorded",
+            payload={
+                "artifact_proposal_record": {
+                    "id": "apr-1",
+                    "artifact_id": "art-1",
+                    "change_id": "chg-1",
+                    "source_run_id": "run-1",
+                    "status": "accepted",
+                    "summary": "updated status",
+                }
+            },
+        ),
+    ]
+
+    records = artifact_proposal_records(events)
+    assert [record.id for record in records] == ["apr-1", "apr-1"]
+    assert [record.status for record in records] == ["proposed", "accepted"]
+    assert [record.id for record in proposed_artifact_proposals(events)] == ["apr-1"]
+    assert [record.id for record in accepted_artifact_proposals(events)] == ["apr-1"]
+
+
+def test_artifact_proposal_record_status_is_not_derived_from_integration_decision_outcome() -> None:
+    events = [
+        Event(
+            id="int:1",
+            type="integration_decision_recorded",
+            payload={
+                "integration_decision": {
+                    "id": "int-1",
+                    "run_id": "run-1",
+                    "outcome": "rejected",
+                    "target_kind": "accomplishment",
+                    "summary": "not accepted",
+                    "rationale": "manual rejection",
+                }
+            },
+        ),
+        Event(
+            id="apr:1",
+            type="artifact_proposal_recorded",
+            payload={
+                "artifact_proposal_record": {
+                    "id": "apr-1",
+                    "artifact_id": "art-1",
+                    "change_id": "chg-1",
+                    "source_run_id": "run-1",
+                    "integration_decision_id": "int-1",
+                    "status": "accepted",
+                    "summary": "accepted review state",
+                }
+            },
+        ),
+    ]
+
+    accepted = accepted_artifact_proposals(events)
+    assert [record.id for record in accepted] == ["apr-1"]
+    assert accepted[0].integration_decision_id == "int-1"

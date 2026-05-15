@@ -227,3 +227,28 @@ def test_handler_rejects_unknown_artifact_type_for_new_methods(tmp_path: Path) -
         handler.apply_change(artifact=artifact, change_id="c001")
     with pytest.raises(ValueError):
         handler.rollback(artifact=artifact, version_id="v001")
+
+
+def test_propose_change_does_not_mutate_current_main_file(tmp_path: Path) -> None:
+    adapter = DocumentArtifactAdapter(tmp_path)
+    artifact = Artifact(id="doc-1", type="document")
+    adapter.create(artifact)
+    current_main = tmp_path / "doc-1" / "current" / "main.md"
+    current_main.write_text("old\n", encoding="utf-8")
+
+    _ = adapter.propose_change(artifact=artifact, description="proposal only", new_content="new\n")
+
+    assert current_main.read_text(encoding="utf-8") == "old\n"
+
+
+def test_apply_change_does_not_require_artifact_proposal_record_or_integration_event(tmp_path: Path) -> None:
+    adapter = DocumentArtifactAdapter(tmp_path)
+    artifact = Artifact(id="doc-1", type="document")
+    adapter.create(artifact)
+    current_main = tmp_path / "doc-1" / "current" / "main.md"
+    current_main.write_text("old\n", encoding="utf-8")
+    change = adapter.propose_change(artifact=artifact, description="local apply", new_content="new\n")
+
+    _ = adapter.apply_change(artifact=artifact, change_id=change.change_id)
+
+    assert current_main.read_text(encoding="utf-8") == "new\n"
