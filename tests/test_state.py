@@ -308,30 +308,175 @@ def test_apply_state_update_raises_value_error_for_missing_target_artifact() -> 
         apply_state_update(state, proposal)
 
 
-def test_apply_state_update_raises_not_implemented_for_northstar_target() -> None:
+def test_apply_state_update_replace_artifact_updates_northstar_artifact() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
+        northstar=NorthStar(
+            artifacts=(
+                StateArtifact(id="northstar-1", kind="document"),
+                StateArtifact(id="northstar-2", kind="git_repository"),
+            )
+        ),
+        artifacts=(StateArtifact(id="state-1", kind="document"),),
     )
     proposal = StateUpdateProposal(
         id="proposal-1",
         target=StateUpdateTarget(artifact_id="northstar-1"),
-        summary="Attempt update on known northstar artifact.",
+        summary="Replace known northstar artifact.",
+        payload={
+            "operation": "replace_artifact",
+            "artifact": {"id": "northstar-1", "kind": "document"},
+        },
     )
-    with pytest.raises(NotImplementedError, match="not implemented yet"):
-        apply_state_update(state, proposal)
+    updated = apply_state_update(state, proposal)
+    assert [artifact.id for artifact in updated.northstar.artifacts] == [
+        "northstar-1",
+        "northstar-2",
+    ]
+    assert [artifact.id for artifact in updated.artifacts] == ["state-1"]
 
 
-def test_apply_state_update_raises_not_implemented_for_ordinary_target() -> None:
+def test_apply_state_update_replace_artifact_updates_ordinary_artifact() -> None:
     state = State(
         northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
-        artifacts=(StateArtifact(id="state-1", kind="git_repository"),),
+        artifacts=(
+            StateArtifact(id="state-1", kind="git_repository"),
+            StateArtifact(id="state-2", kind="document"),
+        ),
     )
     proposal = StateUpdateProposal(
         id="proposal-1",
         target=StateUpdateTarget(artifact_id="state-1"),
-        summary="Attempt update on known ordinary state artifact.",
+        summary="Replace known ordinary state artifact.",
+        payload={
+            "operation": "replace_artifact",
+            "artifact": {"id": "state-1", "kind": "git_repository"},
+        },
     )
-    with pytest.raises(NotImplementedError, match="not implemented yet"):
+    updated = apply_state_update(state, proposal)
+    assert [artifact.id for artifact in updated.northstar.artifacts] == ["northstar-1"]
+    assert [artifact.id for artifact in updated.artifacts] == ["state-1", "state-2"]
+
+
+def test_apply_state_update_replacement_preserves_ordering() -> None:
+    state = State(
+        northstar=NorthStar(
+            artifacts=(
+                StateArtifact(id="n1", kind="document"),
+                StateArtifact(id="n2", kind="git_repository"),
+            )
+        ),
+        artifacts=(
+            StateArtifact(id="s1", kind="document"),
+            StateArtifact(id="s2", kind="git_repository"),
+            StateArtifact(id="s3", kind="document"),
+        ),
+    )
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="s2"),
+        summary="Replace middle ordinary artifact.",
+        payload={
+            "operation": "replace_artifact",
+            "artifact": {"id": "s2", "kind": "git_repository"},
+        },
+    )
+    updated = apply_state_update(state, proposal)
+    assert [artifact.id for artifact in updated.northstar.artifacts] == ["n1", "n2"]
+    assert [artifact.id for artifact in updated.artifacts] == ["s1", "s2", "s3"]
+
+
+def test_apply_state_update_replacement_preserves_northstar_ordinary_separation() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+        artifacts=(StateArtifact(id="s1", kind="git_repository"),),
+    )
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="n1"),
+        summary="Replace northstar artifact only.",
+        payload={
+            "operation": "replace_artifact",
+            "artifact": {"id": "n1", "kind": "document"},
+        },
+    )
+    updated = apply_state_update(state, proposal)
+    assert [artifact.id for artifact in updated.northstar.artifacts] == ["n1"]
+    assert [artifact.id for artifact in updated.artifacts] == ["s1"]
+
+
+def test_apply_state_update_replacement_rejects_different_id() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+    )
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="n1"),
+        summary="Bad replacement id.",
+        payload={
+            "operation": "replace_artifact",
+            "artifact": {"id": "different", "kind": "document"},
+        },
+    )
+    with pytest.raises(ValueError, match="id must match proposal.target.artifact_id"):
+        apply_state_update(state, proposal)
+
+
+def test_apply_state_update_replacement_rejects_different_kind() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+    )
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="n1"),
+        summary="Bad replacement kind.",
+        payload={
+            "operation": "replace_artifact",
+            "artifact": {"id": "n1", "kind": "git_repository"},
+        },
+    )
+    with pytest.raises(ValueError, match="kind must match existing artifact kind"):
+        apply_state_update(state, proposal)
+
+
+def test_apply_state_update_unsupported_operation_raises_not_implemented() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+    )
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="n1"),
+        summary="Unsupported operation.",
+        payload={"operation": "unsupported_operation"},
+    )
+    with pytest.raises(NotImplementedError, match="unsupported state update operation"):
+        apply_state_update(state, proposal)
+
+
+def test_apply_state_update_missing_operation_raises_clear_error() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+    )
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="n1"),
+        summary="Missing operation.",
+        payload={},
+    )
+    with pytest.raises(NotImplementedError, match="unsupported state update operation"):
+        apply_state_update(state, proposal)
+
+
+def test_apply_state_update_missing_artifact_raises_value_error() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+    )
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="n1"),
+        summary="Missing artifact payload field.",
+        payload={"operation": "replace_artifact"},
+    )
+    with pytest.raises(ValueError, match="requires payload\\['artifact'\\]"):
         apply_state_update(state, proposal)
 
 
@@ -344,11 +489,13 @@ def test_apply_state_update_does_not_mutate_input_state() -> None:
     proposal = StateUpdateProposal(
         id="proposal-1",
         target=StateUpdateTarget(artifact_id="state-1"),
-        summary="No-op because implementation is pending.",
+        summary="Replace with same-shape artifact.",
+        payload={
+            "operation": "replace_artifact",
+            "artifact": {"id": "state-1", "kind": "git_repository"},
+        },
     )
-
-    with pytest.raises(NotImplementedError):
-        apply_state_update(state, proposal)
+    _ = apply_state_update(state, proposal)
 
     after = state.model_dump(mode="json")
     assert after == before

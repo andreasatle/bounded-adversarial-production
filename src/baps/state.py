@@ -101,9 +101,55 @@ def find_state_artifact(state: State, artifact_id: str) -> StateArtifact:
 
 
 def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
-    find_state_artifact(state, proposal.target.artifact_id)
-    raise NotImplementedError(
-        "state update application is not implemented yet; dispatch boundary validated only"
+    target_artifact_id = proposal.target.artifact_id
+    existing = find_state_artifact(state, target_artifact_id)
+
+    operation = proposal.payload.get("operation")
+    if operation != "replace_artifact":
+        raise NotImplementedError(
+            f"unsupported state update operation: {operation!r}; supported: 'replace_artifact'"
+        )
+
+    if "artifact" not in proposal.payload:
+        raise ValueError("replace_artifact operation requires payload['artifact']")
+    replacement = StateArtifact.model_validate(proposal.payload["artifact"])
+
+    if replacement.id != target_artifact_id:
+        raise ValueError(
+            "replacement artifact id must match proposal.target.artifact_id: "
+            f"expected {target_artifact_id}, got {replacement.id}"
+        )
+    if replacement.kind != existing.kind:
+        raise ValueError(
+            "replacement artifact kind must match existing artifact kind: "
+            f"expected {existing.kind}, got {replacement.kind}"
+        )
+
+    northstar_replaced = False
+    new_northstar_artifacts: list[StateArtifact] = []
+    for artifact in state.northstar.artifacts:
+        if artifact.id == target_artifact_id:
+            new_northstar_artifacts.append(replacement)
+            northstar_replaced = True
+        else:
+            new_northstar_artifacts.append(artifact)
+
+    if northstar_replaced:
+        return State(
+            northstar=NorthStar(artifacts=tuple(new_northstar_artifacts)),
+            artifacts=state.artifacts,
+        )
+
+    new_state_artifacts: list[StateArtifact] = []
+    for artifact in state.artifacts:
+        if artifact.id == target_artifact_id:
+            new_state_artifacts.append(replacement)
+        else:
+            new_state_artifacts.append(artifact)
+
+    return State(
+        northstar=state.northstar,
+        artifacts=tuple(new_state_artifacts),
     )
 
 
