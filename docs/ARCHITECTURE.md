@@ -3,193 +3,225 @@
 ## 1. Project Overview
 
 ### Purpose of the framework
-`bounded-adversarial-production` is a Python framework for running bounded Blue/Red/Referee game loops and recording execution traces to an append-only JSONL blackboard.
+`bounded-adversarial-production` (`baps`) implements a bounded adversarial execution pattern around three roles (`blue`, `red`, `referee`) and records durable runtime/governance traces in an append-only blackboard. The repository provides:
 
-Current end-to-end path:
-1. Build a `GameRequest`.
-2. Resolve a `GameDefinition` (built-in or file-backed).
-3. Build prompt-driven roles.
-4. Execute bounded runtime rounds.
-5. Derive a `GameResponse`.
-6. Append deterministic integration-decision events.
+- a runtime loop for bounded game execution,
+- typed contracts (Pydantic) for requests, moves, findings, decisions, and outcomes,
+- integration-policy recording,
+- replay-based projected state,
+- planner/autonomous orchestration helpers,
+- artifact lifecycle primitives,
+- and a separate in-memory `State` model boundary (`src/baps/state.py`) for authoritative project condition.
 
-### Current project philosophy in code
-The codebase currently emphasizes:
-- Pydantic boundary validation for contracts and records.
-- Explicit runtime boundaries (`GameService` orchestration vs `RuntimeEngine` execution).
-- Append-only event persistence (`Blackboard.append`).
-- Deterministic behavior in tests (fake models, local role callables, no network dependencies in unit tests).
-- Additive layering (runtime + integration + projection + planner/autonomous modules).
+### Current project philosophy
+Observed code-level philosophy:
+
+- strict typed boundaries at module edges,
+- deterministic tests preferred over nondeterministic integration tests,
+- append-only event history for durable replay,
+- additive layering (new modules added without replacing core runtime),
+- explicit separation between execution semantics and integration semantics.
 
 ### Current architectural direction
-The architecture is currently split into:
-- Execution path: `game_service.py` + `runtime.py` + prompt role/model adapters.
-- Governance path: `integrator.py` + blackboard integration-decision events.
-- Read model path: `projections.py` replaying events into `ProjectedState`.
-- Next-step planning path: `planner.py` + `autonomous.py`.
+Current code is split into layers:
 
-### Meaning of “bounded adversarial production” in practice
+- Execution: `game_service.py` + `runtime.py` + role/model/prompt modules.
+- Durable memory: `blackboard.py` event log + append helpers.
+- Governance: `integrator.py` and lifecycle events.
+- Replay/read model: `projections.py`.
+- Planning: `planner.py` and `autonomous.py`.
+- Artifact lifecycle: `artifacts.py`.
+- State boundary slice: `state.py` (pure typed authoritative state + adapter dispatch skeletons).
+
+### What “bounded adversarial production” means in practice
 In current implementation:
-- Bounded: runtime loop is capped by `GameContract.max_rounds`; continuing only when decision is `revise` and budget remains.
-- Adversarial: Blue produces candidate, Red critiques, Referee decides.
-- Production-oriented: emits structured events, projects current state from replay, and records explicit integration decisions.
 
-### Implemented vs future aspiration distinction
+- **Bounded**: execution rounds are limited by `max_rounds`; revision loops stop at budget.
+- **Adversarial**: Blue proposes, Red critiques, Referee decides.
+- **Production-oriented**: outputs are persisted as structured events; replay derives projected state; integration decision events establish durable acceptance/defer outcomes.
+
+### Current implementation vs future aspirations
 Implemented now:
-- Single sequential role chain per round.
-- Deterministic integration policy.
-- Event replay projection for accepted items/discrepancies.
-- Optional state-source context injection.
-- Prompt-driven role wrappers and Ollama model client.
 
-Conceptual/future indicated by code shape but not fully implemented:
-- Richer multi-role/multi-move adversarial orchestration.
-- Tool-calling boundary and action execution.
-- Automated artifact integration loop from accepted outcomes.
-- Strong policy/authority checks over planner outputs.
+- deterministic/game-loop execution with retry-guarded role invocation,
+- append-only event logging and replay projection,
+- integration decision policies and idempotent append behavior,
+- state-source ingestion for context,
+- pure `State`/adapter/projection/update-boundary APIs in `baps.state`.
+
+Conceptual/future (not implemented end-to-end):
+
+- tool-execution boundaries inside runtime roles,
+- richer multi-role adversarial orchestration,
+- automatic artifact mutation from accepted decisions,
+- full human-approval workflow for NorthStar updates,
+- broader convergence between `baps.state` projection/update APIs and runtime/planner pipelines.
 
 ## 2. Current System Capabilities
 
 ### Schemas (`src/baps/schemas.py`)
 Purpose:
-- Defines all runtime contracts, event envelopes, integration records, projected-state records, planner metadata, and artifact records.
+- canonical contracts for runtime inputs/outputs, event payloads, integration records, projection records, planner metadata, and artifact records.
 
-Important models:
-- Runtime contracts: `GameRequest`, `GameContract`, `Target`.
-- Role outputs: `Move`, `Finding`, `Decision`.
-- Runtime state/response: `GameRound`, `GameState`, `RoundSummary`, `GameResponse`, `PlannedExecutionResult`.
-- Governance/projection: `IntegrationDecision`, `ProjectedState`, accepted/discrepancy lifecycle models.
-- Artifacts: `Artifact`, `ArtifactVersion`, `ArtifactChange`, `ArtifactProposalRecord`.
-- Event envelope: `Event`.
+Important classes/functions:
+- runtime contracts: `GameRequest`, `GameContract`, `Target`.
+- role outputs: `Move`, `Finding`, `Decision`.
+- run/result: `GameRound`, `GameState`, `GameResponse`, `RoundSummary`, `PlannedExecutionResult`.
+- governance: `IntegrationDecision`, discrepancy/accepted-state lifecycle models.
+- projection models: `ProjectedState`, accepted/discrepancy summaries.
+- artifact models: `Artifact`, `ArtifactVersion`, `ArtifactChange`, `ArtifactProposalRecord`.
+- envelope: `Event`.
 
-Limitations:
-- Many cross-model semantic policies are enforced outside schemas (runtime/integrator/projection logic).
-- `GameRecord` exists but is not written by runtime/game service.
+Current limitations:
+- cross-object policies are often enforced in service/runtime/integrator modules, not entirely in schemas.
+- `GameRecord` exists but is not persisted by runtime/service.
 
 Relationships:
-- Imported across runtime, blackboard, integrator, projections, planner, game service, artifacts.
+- shared by runtime, blackboard, integrator, projections, planner, artifacts, and tests.
 
 ### Blackboard (`src/baps/blackboard.py`)
 Purpose:
-- Append/read/query JSONL event log.
+- append/read/query JSONL event store.
 
-Important functions:
-- `append`, `read_all`, `query`, `query_by_run`, `query_completed_runs`.
-- Typed append helpers for integration/discrepancy/accepted-state/artifact-proposal records.
+Important classes/functions:
+- `Blackboard.append`, `read_all`, `query`, `query_by_run`, `query_completed_runs`.
+- typed append helpers for integration/discrepancy/accepted-state/artifact-proposal events.
 
-Limitations:
-- No locking, no transactional writes, no index.
-- Query operations replay entire file each call.
+Current limitations:
+- no locking, no indexing, no compaction.
+- queries scan full file.
 
 Relationships:
-- Runtime appends game lifecycle events.
-- Integrator/projection lifecycle helpers append governance events.
-- Projection functions consume `read_all()` results.
+- runtime and integrator emit events.
+- projections replay events.
 
 ### Artifacts (`src/baps/artifacts.py`)
 Purpose:
-- Filesystem artifact lifecycle abstraction and document adapter.
+- filesystem artifact lifecycle for document artifacts.
 
 Important classes/functions:
-- `ArtifactAdapter` protocol-style base class.
-- `ArtifactHandler` adapter delegator by `artifact.type`.
-- `DocumentArtifactAdapter`: `create`, `snapshot`, `propose_change`, `apply_change`, `rollback`.
+- `ArtifactAdapter` abstract interface.
+- `ArtifactHandler` adapter dispatch by `artifact.type`.
+- `DocumentArtifactAdapter.create/snapshot/propose_change/apply_change/rollback`.
 
-Limitations:
-- Only `document` artifact type implemented.
-- No integration gating in `apply_change` (can apply locally without integration decision).
-- No merge/conflict model.
+Current limitations:
+- only `document` type implemented.
+- no merge/conflict logic.
+- no default coupling to runtime or integration acceptance.
 
 Relationships:
-- Uses artifact schemas; currently not coupled to runtime event flow by default.
+- uses `schemas.py` artifact models.
+- operationally separate from runtime loop.
 
 ### Runtime (`src/baps/runtime.py`)
 Purpose:
-- Executes bounded rounds and appends runtime events.
+- execute bounded game loop and persist round events.
 
-Important functions/classes:
+Important classes/functions:
 - `RuntimeEngine.run_game`.
 - `generate_run_id`.
-- `build_game_response`.
-- `_derive_terminal_semantics`.
-- `_supports_revision_context` (inspection-based optional second arg to blue role).
+- `build_game_response` + terminal semantics helpers.
 
-Limitations:
-- Exactly one blue move and one red finding per round.
-- No role scheduling abstraction.
-- No tool invocation subsystem.
+Current limitations:
+- fixed single blue/red/referee sequence per round.
+- no tool system.
+- no branching or parallel role execution.
 
 Relationships:
-- Uses `RoleInvocationGuard` for validation/retries.
-- Uses `Blackboard` for durable event stream.
-- `GameService` wraps runtime and post-processing.
+- depends on `Blackboard` and `RoleInvocationGuard`.
+- called by `GameService` and demos.
 
 ### Roles (`src/baps/roles.py`, `src/baps/example_roles.py`, `src/baps/prompt_roles.py`)
 Purpose:
-- Role invocation safety and deterministic/prompt-driven role implementations.
+- role invocation guard + deterministic and prompt-driven role implementations.
 
-Important components:
-- `RoleInvocationGuard` with bounded retries and failure classification.
-- Deterministic example roles: `blue_role`, `red_role`, `referee_role`.
-- Prompt role factories: `make_prompt_blue_role`, `make_prompt_red_role`, `make_prompt_referee_role`.
-- `build_prompt_roles` with optional `AgentProfile` injection.
+Important classes/functions:
+- `RoleInvocationGuard`, `RoleInvocationError`.
+- deterministic role fns: `blue_role`, `red_role`, `referee_role`.
+- prompt role factories: `make_prompt_blue_role`, `make_prompt_red_role`, `make_prompt_referee_role`.
+- `build_prompt_roles` and default profile builders.
 
-Limitations:
-- No role sandbox/tool API.
-- Referee decision is currently derived deterministically from finding fields in prompt role implementation.
+Current limitations:
+- no tool invocation protocol.
+- referee decision in prompt path is still locally computed from finding properties; model supplies rationale text.
 
 Relationships:
-- Runtime treats roles as callables; prompt/model concerns are encapsulated in factories.
+- runtime consumes role callables.
+- prompt roles depend on prompt/model modules.
 
-### Prompt rendering and assembly (`src/baps/prompts.py`, `src/baps/prompt_assembly.py`)
+### Prompt rendering (`src/baps/prompts.py`, `src/baps/prompt_assembly.py`)
 Purpose:
-- Prompt section schema + deterministic assembly + `str.format` rendering.
+- compose prompt sections and render string templates.
 
-Important components:
+Important classes/functions:
 - `PromptSection`, `PromptSpec`, `assemble_prompt`.
 - `PromptRenderer.render`, `render_prompt`.
 
-Limitations:
-- Uses Python format templates; missing keys raise `KeyError`.
-- No automatic escaping/templating policy layer.
+Current limitations:
+- `str.format` rendering only.
+- no templating sandbox/escaping layer.
 
 Relationships:
-- Used by prompt role factories and game-type prompt definition path.
+- used by prompt role factories and game type definitions.
 
 ### Model abstraction (`src/baps/models.py`)
 Purpose:
-- Model-client boundary for runtime/planner prompt generation.
+- model-client abstraction for prompt generation.
 
-Important classes:
+Important classes/functions:
 - `ModelClient` interface.
-- `FakeModelClient` (deterministic queue-based responses + prompt capture).
-- `OllamaClient` (`POST /api/generate`, non-streaming).
+- `FakeModelClient`.
+- `OllamaClient`.
 
-Limitations:
-- No chat/tool schema abstraction.
-- No backoff/retry strategy in client.
+Current limitations:
+- no chat/tool abstraction.
+- no client retry/backoff strategy.
 
 Relationships:
-- Used by prompt roles, game service wiring, and `LLMPlanner`.
+- used by prompt roles, `GameService`, and `LLMPlanner`.
 
 ### Ollama integration
-Current behavior:
-- `OllamaClient` validates non-empty model/base URL and prompt.
-- Sends JSON `{model, prompt, stream: false}`.
-- Raises `RuntimeError` on HTTP/URL errors or missing `response` field.
-- Used by CLI flows and Ollama demo modules.
+Purpose:
+- local Ollama inference integration via HTTP POST.
+
+Important behavior:
+- endpoint: `{base_url}/api/generate`, payload includes `stream=False`.
+- validates non-empty model/base_url/prompt.
+- raises `RuntimeError` on HTTP/URL errors or malformed response.
+
+Current limitations:
+- no stream support.
+- no retry/backoff.
+
+Relationships:
+- used in CLI + Ollama demo paths.
 
 ### Deterministic testing
-Current behavior:
-- Extensive `pytest` suite validates schemas, runtime semantics, event replay, planners, adapters, prompts, and CLIs.
-- Determinism comes from fake model responses and deterministic role outputs.
+Purpose:
+- verify behavior contracts with reproducible results.
+
+Important behavior:
+- fake model responses and deterministic role outputs dominate tests.
+- event ordering, validation behavior, projection replay logic are heavily asserted.
+
+Current limitations:
+- limited end-to-end nondeterministic/live integration testing.
+
+Relationships:
+- all core modules have focused tests.
 
 ### Demo game execution
-Current demo entry points:
-- `demo.py`: deterministic one-round cycle.
-- `adversarial_demo.py`: deterministic rejection example.
-- `ollama_adversarial_demo.py`: prompt roles + Ollama.
-- `play_game.py`: full CLI orchestration with run specs and state sources.
+Purpose:
+- run narrow deterministic or Ollama-backed examples.
+
+Important entry points:
+- `baps-demo`, `baps-adversarial-demo`, `baps-ollama-adversarial-demo`, `baps-play-game`.
+
+Current limitations:
+- demos exercise bounded paths, not full autonomous pipelines.
+
+Relationships:
+- demos call runtime/service modules with fixed contracts.
 
 ## 3. Repository Structure
 
@@ -217,181 +249,192 @@ src/baps/
   run_specs.py
   runtime.py
   schemas.py
+  state.py
   state_sources.py
 examples/
-  game_definitions/documentation_refinement.json
-  runs/fake_goal_audit.yaml
-  state_manifests/baps_project_state.json
+  game_definitions/
+  runs/
+  state_manifests/
 tests/
   test_*.py
+docs/
+  ARCHITECTURE.md
+  STATE_MODEL.md
+  ...
 ```
 
-Important module responsibilities and boundaries:
-- `schemas.py`: canonical contracts and value constraints only.
-- `runtime.py`: bounded round loop and runtime event emission.
-- `roles.py`: invocation retries/classified errors.
-- `example_roles.py`: deterministic and prompt-driven callable implementations.
-- `prompt_assembly.py` + `prompts.py`: section-level prompt assembly/rendering.
-- `prompt_roles.py`: role-construction orchestration around prompt sections + profiles.
-- `game_types.py`: built-in and file-loaded game definitions.
-- `game_service.py`: request orchestration; state-source context resolution; integration append.
-- `integrator.py`: local acceptance-to-integration policy translation.
-- `blackboard.py`: append-only event storage and query.
-- `projections.py`: replay-driven projected state and query helpers.
-- `planner.py`: deterministic and LLM planner implementations.
-- `autonomous.py`: bounded repeated plan/play loop.
-- `state_sources.py`: manifest schemas and source adapters.
-- `run_specs.py`: YAML run spec schema/loader.
-- `play_game.py`: CLI glue for run spec, context loading, and game execution.
-- `artifacts.py`: filesystem document artifact lifecycle and adapter dispatch.
+Module map (purpose, key APIs, dependencies, boundaries):
+
+- `schemas.py`: Pydantic contracts; central dependency for most modules; no side effects.
+- `runtime.py`: game loop + response derivation; depends on `roles.py`, `blackboard.py`, `schemas.py`.
+- `roles.py`: invocation guard only; no blackboard logic.
+- `example_roles.py`: deterministic and prompt-based role callables; depends on prompts/parsers/models.
+- `prompt_assembly.py`: section-level prompt structuring.
+- `prompts.py`: rendering wrapper around `str.format`.
+- `prompt_roles.py`: assembles role prompts from game-type sections and optional profiles.
+- `models.py`: fake and Ollama model clients.
+- `blackboard.py`: JSONL event persistence and typed append helpers.
+- `integrator.py`: integration policies and idempotent appending.
+- `projections.py`: replay from events to projected state and query helpers.
+- `planner.py`: deterministic and LLM planner APIs.
+- `autonomous.py`: bounded repeated plan+play orchestration.
+- `game_types.py`: built-in/file game definitions.
+- `game_service.py`: orchestration boundary from `GameRequest` to `GameResponse` + integration decision append.
+- `state_sources.py`: state source manifest + adapters (`markdown_doc`, `jsonl_event_log`, `directory`, `git_repo`).
+- `run_specs.py`: YAML run spec parsing.
+- `play_game.py`: CLI integration layer.
+- `artifacts.py`: filesystem artifact lifecycle.
+- `state.py`: pure authoritative-state API slice (state models, registry, projection/update dispatch skeletons).
 
 ## 4. Core Runtime Flow
 
-### Sequence: game execution (`RuntimeEngine.run_game`)
-1. Generate `run_id` with UTC timestamp + UUID suffix.
-2. Append `game_started` event.
-3. For each round (1..`max_rounds`):
-4. Resolve blue-role invocation args.
-5. Invoke blue role through `RoleInvocationGuard` with schema + semantic validation.
-6. Append `blue_move_recorded` event.
-7. Invoke red role through guard; append `red_finding_recorded`.
-8. Invoke referee role through guard; append `referee_decision_recorded`.
-9. Materialize `GameRound` and update `previous_context` for possible blue revision.
-10. Exit on `accept` or `reject`.
-11. Continue only when decision is `revise` and round budget remains.
-12. Build `GameState`; derive terminal semantics; append `game_completed` event.
+### Sequence: game execution
+`RuntimeEngine.run_game(contract, blue_role, red_role, referee_role)`:
 
-### Sequence: role invocation guard
-1. Call role callable.
-2. Validate output against target Pydantic model.
-3. Apply optional semantic validator.
-4. Retry up to `max_attempts` on `ValidationError` or `ValueError`.
-5. Raise `RoleInvocationError` with failure kind when exhausted.
+1. create `run_id`.
+2. append `game_started` event.
+3. enter round loop (1..`max_rounds`).
+4. determine Blue call signature (`contract` only or `contract + revision_context`).
+5. invoke Blue via `RoleInvocationGuard` -> `Move`.
+6. append `blue_move_recorded`.
+7. invoke Red via guard -> `Finding`.
+8. append `red_finding_recorded`.
+9. invoke Referee via guard -> `Decision`.
+10. append `referee_decision_recorded`.
+11. append round state to in-memory `rounds`; update previous-context.
+12. stop on `accept`/`reject`; continue on `revise` when budget remains.
+13. construct `GameState`.
+14. derive terminal semantics and append `game_completed`.
+15. return `GameState`.
 
-### Sequence: prompt rendering + model call for prompt roles
-1. Build template using assembled sections.
-2. Build render context (contract fields + additional context).
-3. `PromptRenderer.render` via `str.format`.
-4. Call `ModelClient.generate`.
-5. Parse role-specific output (`JSON object` path or text fallback).
-6. Emit schema model (`Move`/`Finding`/`Decision`).
+### Role invocation flow
+`RoleInvocationGuard.invoke(...)`:
 
-### Runtime state persistence and blackboard recording
-Persistence in current code means event persistence, not DB state storage.
-- State object is returned in-memory.
-- Events are persisted line-by-line to blackboard JSONL.
-- `game_completed` payload embeds serialized `GameState`.
+1. call role callable.
+2. validate output against target Pydantic model.
+3. run optional semantic validator.
+4. retry on schema or semantic failure up to `max_attempts`.
+5. raise `RoleInvocationError` after exhaustion.
+
+### Prompt rendering flow
+Prompt roles call sequence:
+
+1. assemble template sections.
+2. build context dict from contract + optional shared context.
+3. render via `PromptRenderer.render`.
+4. call model client `generate(prompt)`.
+5. parse model text (JSON-path or fallback text) into schema models.
+
+### Model call flow
+- Fake path: deterministic queue return from `FakeModelClient.responses`.
+- Ollama path: HTTP POST via `OllamaClient.generate`.
+
+### Runtime state persistence
+- `GameState` is returned in memory.
+- durable persistence is event-based (`blackboard/*.jsonl`), not a DB state table.
+- completed event payload embeds serialized state.
+
+### Blackboard event recording
+Per run, runtime records ordered game events; game service then appends integration decision event through integrator helper.
 
 ### Artifact interaction with runtime
-Current runtime flow does not invoke `ArtifactHandler` or artifact adapters.
-Artifact lifecycle is separate and explicitly callable from artifact module APIs.
-
-### Example runtime event IDs
-```text
-game-1:run-20260515-120000-deadbeef:r0001:game_started
-game-1:run-20260515-120000-deadbeef:r0001:blue_move_recorded
-game-1:run-20260515-120000-deadbeef:r0001:red_finding_recorded
-game-1:run-20260515-120000-deadbeef:r0001:referee_decision_recorded
-game-1:run-20260515-120000-deadbeef:game_completed
-```
+- `src/baps/artifacts.py` is not called in default runtime/service flow.
+- artifact proposal events exist in blackboard schema, but automatic artifact mutation flow is not wired.
+- `src/baps/state.py` is a separate pure state boundary and is also not wired into runtime/service yet.
 
 ## 5. Schema Documentation
 
-### Core request/contract schemas
-- `Target(kind, ref=None)`.
-- `GameRequest(game_type, subject, goal, target_kind, target_ref="", state_source_ids=[], planner_grounding=None)`.
-- `GameContract(id, subject, goal, target, active_roles, max_rounds=3, scope_allowed=[], scope_forbidden=[])`.
+Important model groups and rationale:
 
-Why they exist:
-- `GameRequest`: external orchestration/API request object.
-- `GameContract`: runtime-local executable contract.
-- `Target`: normalized target reference.
+### Runtime contracts
+- `Target(kind, ref)`.
+- `GameRequest(game_type, subject, goal, target_kind, target_ref, state_source_ids, planner_grounding)`.
+- `GameContract(id, subject, goal, target, active_roles, max_rounds, scope_allowed, scope_forbidden)`.
 
-Validation/invariants:
-- Required strings must be non-empty (trim-aware).
-- `active_roles` non-empty.
-- `max_rounds >= 1`.
-- `state_source_ids` entries non-empty.
-
-### Runtime output/state schemas
-- `Move(game_id, role, summary, payload={})`.
-- `Finding(game_id, severity, confidence, claim, evidence=[], payload={}, block_integration=False)`.
-- `Decision(game_id, decision, rationale)`.
-- `GameRound(round_number>=1, moves, findings, decision)`.
-- `GameState(game_id, run_id, current_round>=1, rounds, final_decision)`.
-- `RoundSummary(round_number, blue_summary, red_claim, referee_decision, referee_rationale)`.
-- `GameResponse(...)` with terminal semantics fields.
-
-Why they exist:
-- Capture role-by-role outputs and create a deterministic, inspectable terminal response object.
+Why:
+- normalize request/contract boundaries and prevent malformed runtime inputs.
 
 Validation behavior:
-- String non-empty validators on key fields.
-- `TerminalOutcome` and `IntegrationRecommendation` constrained by `Literal` types.
+- non-empty required strings.
+- `active_roles` non-empty.
+- `max_rounds >= 1`.
+- non-empty entries for `state_source_ids`.
 
-### Projection/governance schemas
-- `IntegrationDecision`, `ProjectedState`, `AcceptedAccomplishment`, `AcceptedArchitectureItem`, `AcceptedCapability`, `UnresolvedDiscrepancy`, `ActiveGameSummary`.
-- Lifecycle: `DiscrepancyResolution`, `DiscrepancySupersession`, `AcceptedStateSupersession`, `AcceptedStateRevocation`.
+### Runtime outputs/state
+- `Move`, `Finding`, `Decision`, `GameRound`, `GameState`, `RoundSummary`, `GameResponse`.
 
-Why they exist:
-- Represent durable integration and replayed project state that is not identical to raw runtime traces.
+Why:
+- preserve structured decision trace and terminal semantics with consistent shape.
 
-### Artifact schemas
+Validation behavior:
+- non-empty key fields.
+- bounded numeric fields (`round_number`, `current_round`, etc.).
+- terminal semantic literals constrain outcomes.
+
+### Governance/projection records
+- `IntegrationDecision`, discrepancy lifecycle records, accepted-state lifecycle records, `ProjectedState` and list item models.
+
+Why:
+- represent durable acceptance/discrepancy lifecycle and replay-derived state.
+
+### Artifact records
 - `Artifact`, `ArtifactVersion`, `ArtifactChange`, `ArtifactAdapterResult`, `ArtifactProposalRecord`.
 
-Why they exist:
-- Provide normalized records for local artifact lifecycle and blackboard proposal tracking.
+Why:
+- normalize local artifact lifecycle operations and event records.
 
-### Event schema
-- `Event(id, type, payload={})`.
+### Event envelope
+- `Event(id, type, payload)`.
 
-Why it exists:
-- Uniform append-only envelope for runtime, integration, discrepancy, and artifact proposal events.
+Why:
+- common append-only event container for all durable blackboard records.
 
 ## 6. Blackboard/Event System
 
 ### Append-only philosophy
-`Blackboard.append` only appends newline-delimited JSON events; no in-place update/delete APIs are provided.
+- `Blackboard.append` only appends new JSONL lines.
+- no update/delete API on existing events.
 
 ### Event persistence
-- Path parent is created as needed.
-- Each event is serialized via `event.model_dump(mode="json")`.
-- Stored format: one JSON object per line.
+- persisted as one JSON object per line.
+- validated on read through `Event.model_validate`.
 
 ### Event querying
-- `read_all()` parses all events as `Event` models.
-- `query(type)` filters by `event.type`.
-- `query_by_run(run_id)` filters by `event.payload.run_id`.
-- `query_completed_runs()` maps to `query("game_completed")`.
+- `query(type)` filters by event type.
+- `query_by_run(run_id)` filters payload run id.
+- `query_completed_runs()` convenience wrapper.
 
-### Event lifecycle in current architecture
-1. Runtime appends gameplay events.
-2. Game service appends integration decision event.
-3. Optional lifecycle events (resolution/supersession/revocation/artifact proposal) can be appended via helper methods.
-4. Projections replay entire history to derive current state.
+### Event lifecycle
+Typical lifecycle for one `GameService.play` run:
 
-### Intended future role (inferred from modules)
-Blackboard is treated as the durable source for:
-- State projection.
-- Integration review queues.
-- Discrepancy lifecycle transitions.
-- Artifact proposal tracking.
+1. runtime emits game events (`game_started` -> role events -> `game_completed`).
+2. service/integrator emits `integration_decision_recorded`.
+3. optional external calls may append discrepancy/accepted-state/artifact-proposal lifecycle events.
+4. projections replay all events to compute current projected state.
 
-Observation:
-- There is no explicit event versioning/migration layer yet; projection code is tolerant of malformed payloads by skipping invalid records.
+### Intended future role (as indicated by code organization)
+- durable process memory source for replay, review queues, and lifecycle transitions.
+- not a replacement for the pure authoritative `State` model in `src/baps/state.py`.
 
 ## 7. Artifact System
 
-### Implemented artifact lifecycle
-For `DocumentArtifactAdapter`:
-1. `create(artifact)` creates directory structure and metadata.
-2. `snapshot(artifact)` copies `current/` to next `versions/vNNN`.
-3. `propose_change(...)` writes `changes/cNNN/proposed.md` + `change.json` + unified diff.
-4. `apply_change(...)` copies proposed content to `current/main.md` and snapshots.
-5. `rollback(...)` replaces `current/` from selected version.
+### Artifact lifecycle
+`DocumentArtifactAdapter` flow:
 
-### Adapter/handler delegation
-`ArtifactHandler` selects adapter by `artifact.type` and delegates all operations (`create`, `snapshot`, `propose_change`, `apply_change`, `rollback`).
+1. `create`: initialize artifact directory and metadata.
+2. `snapshot`: copy current state to next version directory.
+3. `propose_change`: record diff + proposed content.
+4. `apply_change`: copy proposal into `current/main.md` then snapshot.
+5. `rollback`: restore `current/` from chosen version.
+
+### Adapters and delegation
+- `ArtifactHandler` resolves adapter by `artifact.type` and delegates operations.
+- unknown types raise `ValueError`.
+
+### Snapshots and metadata
+- version ids are sequential (`v001`, `v002`, ...).
+- proposal ids are sequential (`c001`, `c002`, ...).
+- metadata serialized to `metadata.json` from artifact model.
 
 ### Filesystem structure
 ```text
@@ -401,175 +444,164 @@ For `DocumentArtifactAdapter`:
     main.md
   versions/
     v001/
-    v002/
   changes/
     c001/
       proposed.md
       change.json
 ```
 
-### Metadata and assumptions
-- Artifact metadata is persisted as JSON from `Artifact` model.
-- Change `base_version` falls back to `"unversioned"` when `artifact.current_version` is `None`.
-- Version/change IDs are sequential based on existing folder count.
-
-Constraints:
-- Adapter enforces `artifact.type == "document"`.
-- `propose_change` requires existing `current/main.md`.
-- `apply_change` only checks proposed file existence; does not validate blackboard/integration state.
+### Assumptions/constraints
+- only document adapter implemented.
+- no durable lock/transaction mechanism.
+- apply/rollback do not require integration decision events.
 
 ## 8. Runtime Engine
 
-### Responsibilities
-- Execute round loop.
-- Validate role outputs with guard + semantic checks.
-- Emit runtime events.
-- Materialize `GameState`.
-- Provide terminal semantics via `build_game_response` (called by game service).
+### Runtime responsibilities
+- enforce bounded round semantics,
+- validate role outputs with schema + semantic checks,
+- emit ordered runtime events,
+- return structured in-memory `GameState`.
 
-### Role invocation guard behavior
-- Default `max_attempts=2`.
-- Retries on schema validation failures and semantic `ValueError`s.
-- Raises `RoleInvocationError` with `failure_kind` when exhausted.
+### Role invocation guard
+- configurable `max_attempts` (default 2),
+- classifies failures (`schema_validation_failed`, `semantic_validation_failed`, etc.),
+- raises explicit `RoleInvocationError`.
 
 ### Retry behavior
-- Guard retries per role invocation independently.
-- Runtime itself does not retry whole rounds.
+- retries are local to each role invocation.
+- full-run retries are not implemented.
 
 ### Game execution model
-- Sequential: Blue -> Red -> Referee.
-- `revise` decision can trigger next round up to `max_rounds`.
-- `accept`/`reject` terminate immediately.
+- linear sequence per round: Blue -> Red -> Referee.
+- termination on `accept`/`reject`; controlled continuation for `revise`.
 
 ### Deterministic execution approach
-Determinism is achieved in tests and local demos by:
-- deterministic role callables or fake model response queues,
-- explicit round bounds,
-- append-only event order assertions.
+- deterministic role functions and fake model responses in tests.
+- strict event ordering assertions.
 
 ## 9. Roles and Prompt System
 
 ### Deterministic example roles
-- `blue_role`: emits fixed bounded move.
-- `red_role`: emits low-severity finding referencing blue summary.
-- `referee_role`: emits accept decision referencing blue/red content.
+- `blue_role`: fixed bounded proposal.
+- `red_role`: finding referencing blue summary.
+- `referee_role`: decision/rationale referencing role outputs.
 
 ### Prompt-driven roles
-- `make_prompt_blue_role`: renders blue prompt, parses JSON or plain text summary.
-- `make_prompt_red_role`: parses either JSON fields or `MATERIAL:`/`CLAIM:` text format.
-- `make_prompt_referee_role`: computes decision from finding flags and asks model only for rationale.
+- blue: render prompt, parse JSON/text summary.
+- red: parse JSON or `MATERIAL/CLAIM` text format.
+- referee: compute decision from finding flags, generate rationale text.
 
-### `PromptRenderer`
-- Simple `template.format(**context)` renderer.
-- Rejects blank template and blank rendered result.
+### PromptRenderer
+- `PromptRenderer(template).render(context)` with non-empty output check.
 
-### Model clients
-- `FakeModelClient`: deterministic queued responses and prompt capture.
-- `OllamaClient`: local HTTP generate endpoint.
+### FakeModelClient
+- returns queued responses in order,
+- records prompts for test assertions,
+- raises when queue is exhausted.
 
-### Role execution flow in runtime
-1. Game service builds prompt roles.
-2. Runtime invokes role callables through guard.
-3. Role factory output models become runtime `Move`/`Finding`/`Decision` records.
+### OllamaClient
+- synchronous non-streamed HTTP generation.
+
+### Role execution flow
+- game service builds prompt roles,
+- runtime invokes roles through guard,
+- validated role models are emitted as game events.
 
 ### Current limitations
-- No tool-calling subsystem.
-- No parallel/multi-agent arbitration beyond fixed 3-role sequence.
-- No autonomous self-healing referee policy beyond deterministic rules in role implementation.
+- no tool system,
+- no true multi-agent adversarial topology,
+- no external environment action loop.
 
 ## 10. Testing Strategy
 
-### Current testing philosophy
-- High coverage of behavior contracts over implementation internals.
-- Deterministic local tests prioritized.
-- Network paths monkeypatched for transport validation.
+### Philosophy
+- behavior-first tests with deterministic inputs and explicit error-path coverage.
 
 ### Deterministic approach
-- `FakeModelClient` drives predictable prompt role outputs.
-- Blackbox runtime tests assert event sequence and semantic outcomes.
-- Projection tests replay explicit event fixtures and assert derived state exactly.
+- `FakeModelClient` for predictable role/planner outputs.
+- deterministic role stubs in runtime tests.
+- no network calls in core unit tests.
 
-### Main tested areas
-- Schema validation and invariants (`test_schemas.py`).
-- Runtime loop/terminal semantics (`test_runtime.py`).
-- Blackboard persistence/query helper behavior (`test_blackboard.py`).
-- Prompt assembly/rendering and role parsing (`test_prompts.py`, `test_prompt_assembly.py`, `test_example_roles.py`, `test_prompt_roles.py`).
-- Integration policy/idempotence (`test_integrator.py`).
-- Projection lifecycle and helper queries (`test_projections.py`).
-- Artifact lifecycle and handler delegation (`test_artifacts.py`).
-- CLI/run spec/state source orchestration (`test_play_game.py`, `test_run_specs.py`, `test_state_sources.py`).
-- Demo/autonomous/planner behavior (`test_demo.py`, `test_adversarial_demo.py`, `test_ollama_adversarial_demo.py`, `test_autonomous.py`, `test_planner.py`).
+### Coverage areas
+- schema validation (`test_schemas.py`),
+- runtime loop/terminal semantics (`test_runtime.py`),
+- role guard (`test_roles.py`),
+- prompt rendering/assembly/role parsing,
+- blackboard persistence/query,
+- integrator policies/idempotence,
+- projections replay logic,
+- artifacts lifecycle,
+- CLI/run-spec/state-source ingestion,
+- state-model slice APIs (`test_state.py`).
 
-### Why deterministic tests matter here
-This architecture relies on:
-- ordered append-only event traces,
-- replay-based state projection,
-- bounded decision semantics.
+### Why deterministic tests matter
+- replay semantics, event order, and bounded decision logic must remain stable.
+- deterministic fixtures prevent false positives from model/network variance.
 
-Nondeterminism would undermine repeatable projection and integration assertions, so deterministic test inputs are foundational to trust in runtime/governance behavior.
+## 11. Architectural Invariants (Enforced in code)
 
-## 11. Architectural Invariants (Observed/Enforced)
+Only invariants with direct enforcement:
 
-Enforced in code today:
-- `GameContract.max_rounds >= 1`.
-- Runtime emits `game_started` before per-round events and `game_completed` at end.
-- Runtime round loop advances only on `revise` with remaining budget.
-- Role outputs must pass schema validation and semantic validator checks.
-- Blackboard API is append/read/query; no mutate/delete operations provided.
-- Integration decisions are appended at most once per decision ID via `append_integration_decision_once`.
-- Projection functions are replay-based and deterministic for ordered equal input events.
-- Schema-required strings are non-empty across core models.
-
-Not strictly enforced globally:
-- External processes can still overwrite blackboard file directly.
-- `active_roles` content is validated non-empty but not used by runtime for role dispatch.
+1. required schema fields must be non-empty where validators exist.
+2. runtime `max_rounds` and round counters are bounded (`>=1`).
+3. role outputs must pass Pydantic + semantic validation.
+4. runtime event emission order is deterministic per run path.
+5. blackboard API is append/read/query; no in-place mutation API.
+6. integration append helper prevents duplicate decision IDs.
+7. projection replay is deterministic for identical ordered events.
+8. `baps.state` invariants:
+   - unique IDs within `NorthStar.artifacts` and `State.artifacts`,
+   - no overlap between northstar and ordinary artifact IDs,
+   - adapter registry rejects empty/duplicate kinds,
+   - `validate_state_artifacts` forbids adapter mutation of `id`/`kind`,
+   - `project_state` requires non-empty projection strings,
+   - `apply_state_update` validates target existence then refuses application (`NotImplementedError`).
 
 ## 12. Current Architectural Direction
 
 ### Implemented direction
-- Bounded adversarial games with revise loops.
-- Separation of local runtime result and integration decision recording.
-- Event replay projected state with discrepancy lifecycle support.
-- Planner-driven next-game request generation (deterministic and LLM-backed).
-- Autonomous bounded step runner around planner + game service.
+- bounded adversarial rounds,
+- event-first durability,
+- deterministic integration recommendation recording,
+- replay-driven projected state,
+- pure `State` boundary APIs for authoritative-state modeling (currently local module only).
 
-### Conceptual/future direction inferred from code
-- More explicit referee-style governance over accepted architecture/capability/accomplishment streams.
-- Tool integration boundary (not implemented yet).
-- Pipeline generation from discrepancies and accepted-state transitions.
-- Self-inspection loops using projected state and north-star planning.
+### Conceptual/future direction (inferred from modules/docs/tests)
+- tighter coupling of state boundary with planner/runtime flow,
+- richer referee/adversarial interaction patterns,
+- future tool-boundary and action execution,
+- explicit human authority workflows (especially around NorthStar updates),
+- broader pipeline generation from discrepancies and accepted outcomes.
 
 ## 13. Current Limitations
 
-Concrete limitations in current code:
-- No tool execution interface in role outputs or runtime.
-- No true multi-agent adversarial loop beyond one blue/red/fixed referee chain per round.
-- Runtime contract `active_roles` does not dynamically control invocation order.
-- `GameContract.id` in service/CLI path is hardcoded to `"play-game-001"`.
-- Artifact lifecycle is not integrated into `GameService.play` acceptance path.
-- No persistent transactional store beyond JSONL append log.
-- LLM planner output validity is schema-checked but strategic grounding policy is limited.
-- No explicit event schema version field or migration framework.
-- No concurrency controls around blackboard append/read.
+Concrete gaps:
 
-What is deterministic/fake:
-- Most tests and demos rely on deterministic roles or `FakeModelClient`.
-- Integration policy is deterministic and local-rule based.
+- `baps.state` is not integrated with runtime/planner/game_service/blackboard.
+- no real update application in `apply_state_update`.
+- no persistence/materialization layer for `baps.state`.
+- document/git adapters in `baps.state` are deterministic stubs.
+- `artifacts.py` and `state.py` are separate artifact concepts (operational filesystem lifecycle vs authoritative-state adapter slice).
+- no tool execution path in runtime roles.
+- no multi-agent concurrent game topology.
+- no automatic artifact integration from accepted decisions.
 
-What would be needed for a fuller adversarial game loop (additive view):
-- Multiple blue/red exchanges per round or role graph scheduling.
-- Tool request/result schema and guarded executor boundary.
-- Referee policy that can evaluate richer evidence sets.
-- Runtime hooks to create artifact proposals and lifecycle events from accepted outcomes.
+What would be needed for a fuller adversarial loop:
+
+- role/tool request protocol,
+- richer round orchestration and role graph,
+- explicit state mutation pipeline from accepted integration decisions,
+- reconciliation between `baps.state` projection and existing `projections.py` event replay pipeline.
 
 ## 14. Suggested Next Milestones (Additive)
 
-1. Add runtime-level `finding`/`decision` trace linkage IDs to strengthen evidence chains.
-2. Introduce explicit tool-request schema plus no-op validator/executor boundary (without replacing current role flow).
-3. Add additive role-orchestration mode for multi-red or multi-blue within current round bounds.
-4. Emit artifact-proposal records from accepted integration outcomes behind an optional feature flag.
-5. Extend referee prompt contract to include explicit decision rubric tokens while keeping current fixed decision authority in prompt-role implementation.
-6. Add projection helpers for “next actionable discrepancy” and integration review prioritization.
+1. Add a read-only bridge from runtime/integration outputs to `baps.state` constructor inputs (no mutation yet).
+2. Introduce typed adapter-backed artifact subclasses (still side-effect free) to reduce `kind` string ambiguity.
+3. Add explicit update-application policy interface in `baps.state` that remains pure but no longer hard-fails all known targets.
+4. Add a deferred `NorthStar` update decision record type and explicit human-approval status transitions.
+5. Add adapter conformance checks (runtime typing/shape checks) in `StateArtifactRegistry`.
+6. Add integration tests that compare `project_state` output with selected replay projections to prevent drift.
 
 ## 15. Developer Workflow
 
@@ -578,55 +610,50 @@ What would be needed for a fuller adversarial game loop (additive view):
 uv run pytest
 ```
 
-### Typical execution paths
-- Deterministic demo:
-```bash
-uv run baps-demo
-```
-- Prompt/Ollama game:
-```bash
-uv run baps-play-game --subject ... --goal ... --target-kind ...
-```
-- Run-spec path:
-```bash
-uv run baps-play-game --run-spec examples/runs/fake_goal_audit.yaml
-```
+### Typical development pattern in this repository
+1. add or adjust schema/types.
+2. add deterministic tests for success + failure paths.
+3. implement narrow additive behavior in one module.
+4. avoid redesigning unrelated subsystems.
+5. run full test suite.
 
-### Development style reflected by repository
-- Additive changes are preferred over rewrites.
-- New behavior is usually introduced with narrow modules and dedicated tests.
-- Validation and replay semantics are treated as hard boundaries.
+### Commit style observed in current iteration
+- small, additive slices,
+- explicit boundary hardening before integration,
+- documentation updated to match implemented APIs.
 
-### Commit/test expectations (inferred from repository shape)
-- Tests are granular by module (`tests/test_<module>.py`).
-- Behavior additions generally require deterministic test cases.
-- Event-level changes require projection/integration test updates.
+### Contributor expectations
+- preserve current terminology (`blue`, `red`, `referee`, `blackboard`, `integration`, `projection`, `state`).
+- avoid silent behavior changes; document observations when inconsistencies are found.
+- keep side effects in explicit service/adapter layers, not core schema/state models.
 
 ## 16. Glossary
 
-- Game: a bounded runtime execution defined by `GameContract` and identified by `game_id` + `run_id`.
-- Role: callable participant (`blue`, `red`, `referee`) invoked by runtime.
-- Move: Blue output (`Move`) for current round.
-- Finding: Red critique (`Finding`) with severity/confidence/material payload and optional block flag.
-- Decision: Referee output (`Decision`) selecting `accept`, `revise`, or `reject`.
-- Round: one blue/red/referee cycle stored as `GameRound`.
-- Runtime: `RuntimeEngine` executing rounds and emitting events.
-- Blackboard: append-only JSONL event log managed by `Blackboard`.
-- Event: `Event` envelope with `id`, `type`, and JSON payload.
-- Prompt renderer: `PromptRenderer` that renders templates with context.
-- Prompt assembly: `PromptSpec`/`PromptSection` + `assemble_prompt` section composer.
-- Model client: abstraction for text generation (`FakeModelClient`, `OllamaClient`).
-- Integration decision: durable local acceptance/defer/reject record (`IntegrationDecision`).
-- Projection: replay-derived `ProjectedState` view built from event history.
-- Discrepancy: unresolved issue in projected state (`UnresolvedDiscrepancy`) derived from event outcomes.
-- Artifact: filesystem-managed entity (`Artifact`) with versions and proposed changes.
-- State source: external context declaration resolved via adapters into prompt evidence text.
+- **Game**: one bounded runtime execution under a `GameContract`.
+- **Role**: callable participant (`blue`, `red`, `referee`) invoked by runtime.
+- **Move**: Blue output (`Move`) for a round.
+- **Finding**: Red critique output (`Finding`).
+- **Decision**: Referee output (`Decision`) controlling termination/continuation.
+- **Artifact (runtime/artifacts module)**: filesystem-managed object in `src/baps/artifacts.py`.
+- **StateArtifact (`baps.state`)**: minimal authoritative-state artifact reference (`id`, `kind`).
+- **Blackboard**: append-only JSONL durable process memory.
+- **Runtime**: bounded execution engine (`RuntimeEngine`).
+- **PromptRenderer**: string template renderer used by prompt-driven roles.
+- **ModelClient**: interface for text generation (`FakeModelClient`, `OllamaClient`).
+- **Projection (event replay)**: `src/baps/projections.py` replay of blackboard events into `ProjectedState`.
+- **StateProjection (`baps.state`)**: pure adapter-projected view of authoritative state artifacts.
+- **Integration decision**: durable accepted/deferred/rejected record appended to blackboard.
 
 ## Observations and Ambiguities
 
-Observed inconsistencies or ambiguous boundaries (documented, not modified):
-- `GameContract.active_roles` is validated but runtime invocation order is hardcoded and does not use that list.
-- `GameRecord` schema exists but no module currently persists a game-record entity.
-- `run_play_game(...)` exists in `play_game.py`, while `main()` uses `GameService.play(...)`; both paths are maintained.
-- Projection of accepted state depends on `integration_decision_recorded` events, not directly on `game_completed` acceptance, by design.
-- Artifact proposal lifecycle records are queryable/projectable, but no default path currently emits them from game/integration acceptance.
+1. `GameContract.active_roles` is validated but runtime invocation order is fixed and does not consult that list.
+2. `GameRecord` schema exists without runtime/service persistence usage.
+3. Two projection concepts now coexist:
+   - event-replay projection (`src/baps/projections.py`),
+   - authoritative-state adapter projection (`src/baps/state.py`).
+   No integration bridge exists yet.
+4. Two artifact systems coexist:
+   - filesystem artifact lifecycle (`src/baps/artifacts.py`),
+   - minimal authoritative-state artifact references (`src/baps/state.py`).
+   Their integration contract is not yet implemented.
+5. `apply_state_update` validates target existence but intentionally raises `NotImplementedError` for known targets; update pipeline is boundary-only at this stage.
