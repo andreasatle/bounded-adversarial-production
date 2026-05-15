@@ -597,6 +597,75 @@ Ordinary artifact updates require accepted integration decisions.
 
 ---
 
+## Implemented API Slice
+
+The current implemented API in `src/baps/state.py` is:
+
+* `StateArtifact`
+* `NorthStar`
+* `State`
+* `StateUpdateTarget`
+* `StateUpdateProposal`
+* `StateProjection`
+* `StateArtifactAdapter`
+* `StateArtifactRegistry`
+* `DocumentArtifactAdapter`
+* `GitRepositoryArtifactAdapter`
+* `build_default_state_artifact_registry`
+* `find_state_artifact`
+* `validate_state_artifacts`
+* `project_state`
+* `apply_state_update`
+
+Current implementation semantics:
+
+* `StateArtifact` is minimal (`id`, `kind`) with non-empty string validation.
+* `NorthStar.artifacts` and `State.artifacts` enforce artifact-id uniqueness.
+* `State` enforces no ID overlap between northstar artifacts and ordinary artifacts.
+* `StateUpdateTarget` validates non-empty `artifact_id`, and non-empty `section` when provided.
+* `StateUpdateProposal` validates non-empty `id` and `summary`; `payload` uses isolated per-instance default.
+* `StateProjection` contains two tuple channels:
+  * `northstar: tuple[str, ...]`
+  * `artifacts: tuple[str, ...]`
+* `StateArtifactRegistry` registers adapters by `kind`, rejects empty/duplicate kinds, and resolves adapters by artifact kind.
+* `build_default_state_artifact_registry()` returns a fresh registry per call with:
+  * `DocumentArtifactAdapter`
+  * `GitRepositoryArtifactAdapter`
+* `find_state_artifact` searches `state.northstar.artifacts` first, then `state.artifacts`.
+* `validate_state_artifacts` validates every artifact through resolved adapters and rejects adapter attempts to change artifact `id` or `kind`.
+* `project_state` is pure and local to `baps.state`; it projects northstar and ordinary artifacts separately through adapters and rejects empty/whitespace projection output.
+* `apply_state_update` currently validates target artifact existence, then raises `NotImplementedError` for known targets.
+
+Important scope notes:
+
+* `DocumentArtifactAdapter` and `GitRepositoryArtifactAdapter` are stubs.
+* `project_state` is not integrated with runtime, planner, blackboard, or `src/baps/projections.py`.
+* `apply_state_update` does not apply real updates yet.
+
+---
+
+## Current State Model Boundaries
+
+* `State` has no side effects.
+* `State` has no history/provenance fields.
+* Blackboard remains process memory and is not part of `State`.
+* Projection is derived from `State` by default.
+* Artifact-specific behavior goes through adapters and adapter registry dispatch.
+
+---
+
+## Current Known Limitations
+
+* no real document/git semantics,
+* no persistence,
+* no blackboard integration,
+* no runtime/planner integration,
+* no concrete artifact schemas beyond minimal `StateArtifact`,
+* no real update application (target existence check + `NotImplementedError` only),
+* no `NorthStar` human-approval flow yet.
+
+---
+
 ## Non-Goals For This Phase
 
 Do not solve these yet:
