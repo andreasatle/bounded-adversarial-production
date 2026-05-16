@@ -29,6 +29,15 @@ def _northstar_view():
     )
 
 
+@pytest.fixture
+def minimal_state_progressor_input() -> StateProgressorInput:
+    return StateProgressorInput(
+        id="input-1",
+        northstar_view=_northstar_view(),
+        runtime_objective="Improve architecture clarity",
+    )
+
+
 @pytest.mark.parametrize("bad_value", ["", "   ", "\n\t"])
 def test_state_progressor_input_rejects_empty_required_strings(bad_value: str) -> None:
     with pytest.raises(ValidationError):
@@ -223,12 +232,10 @@ def test_fake_state_progressor_does_not_mutate_inputs() -> None:
     assert after_game_proposal == before_game_proposal
 
 
-def test_render_state_progressor_prompt_includes_required_sections_in_order() -> None:
-    progressor_input = StateProgressorInput(
-        id="input-1",
-        northstar_view=_northstar_view(),
-        runtime_objective="Improve architecture clarity",
-    )
+def test_render_state_progressor_prompt_includes_required_sections_in_order(
+    minimal_state_progressor_input: StateProgressorInput,
+) -> None:
+    progressor_input = minimal_state_progressor_input
 
     prompt = render_state_progressor_prompt(progressor_input)
 
@@ -238,6 +245,51 @@ def test_render_state_progressor_prompt_includes_required_sections_in_order() ->
     output_idx = prompt.index("## Required Output")
 
     assert task_idx < objective_idx < view_idx < output_idx
+
+
+def test_render_state_progressor_prompt_full_snapshot_matches_expected_string(
+    minimal_state_progressor_input: StateProgressorInput,
+) -> None:
+    prompt = render_state_progressor_prompt(minimal_state_progressor_input)
+    expected = (
+        "## State Progressor Task\n"
+        "Propose one deterministic game candidate aligned to the runtime objective and "
+        "the provided North Star view.\n\n"
+        "## Runtime Objective\n"
+        "Improve architecture clarity\n\n"
+        "## North Star View\n"
+        "## Framework Policy\n"
+        "_No items._\n\n"
+        "## Project State\n"
+        "1. Current accepted state\n"
+        "   - id: state-item-1\n"
+        "   - source: state\n"
+        "   - authority: project\n"
+        "   - status: accepted\n\n"
+        "## Blackboard History\n"
+        "_No items._\n\n"
+        "## Runtime Context\n"
+        "_No items._\n\n"
+        "## Required Output\n"
+        "Return only JSON.\n"
+        "No markdown.\n"
+        "No prose outside JSON.\n"
+        "No extra fields.\n"
+        "risks must be a list of strings.\n\n"
+        "Required JSON shape:\n"
+        "{\n"
+        "  \"id\": \"...\",\n"
+        "  \"game_proposal\": {\n"
+        "    \"id\": \"...\",\n"
+        "    \"title\": \"...\",\n"
+        "    \"description\": \"...\",\n"
+        "    \"expected_state_delta\": \"...\",\n"
+        "    \"risks\": [\"...\"]\n"
+        "  },\n"
+        "  \"rationale\": \"...\"\n"
+        "}"
+    )
+    assert prompt == expected
 
 
 def test_render_state_progressor_prompt_renders_runtime_objective_verbatim() -> None:
