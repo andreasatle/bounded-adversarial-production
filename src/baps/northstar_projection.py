@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from enum import Enum
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 def _require_non_empty(value: str) -> str:
@@ -31,9 +32,15 @@ class NorthStarProjectionInput(BaseModel):
     runtime_context: tuple[NorthStarProjectionItem, ...] = ()
 
 
+class ProjectionType(str, Enum):
+    NORTH_STAR = "north_star"
+
+
 class ProjectionArtifact(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     id: str
-    projection_type: str
+    projection_type: ProjectionType
     content: str
     input_fingerprint: str
     metadata: dict = Field(default_factory=dict)
@@ -84,7 +91,7 @@ def render_northstar_projection_artifact(
     input_fingerprint = fingerprint_northstar_projection_input(input_data)
     return ProjectionArtifact(
         id=f"projection:northstar:{input_fingerprint}",
-        projection_type="northstar_markdown",
+        projection_type=ProjectionType.NORTH_STAR,
         content=content,
         input_fingerprint=input_fingerprint,
     )
