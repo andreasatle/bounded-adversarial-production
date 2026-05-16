@@ -1,0 +1,63 @@
+from __future__ import annotations
+
+from typing import Protocol
+
+from pydantic import BaseModel, Field, field_validator
+
+from baps.game_executor import GameExecutionResult
+
+
+def _require_non_empty(value: str) -> str:
+    if not value.strip():
+        raise ValueError("must be a non-empty string")
+    return value
+
+
+class StateChange(BaseModel):
+    id: str
+    execution_result_id: str
+    summary: str
+    applied_delta: str
+    risks: list[str] = Field(default_factory=list)
+
+    _validate_id = field_validator("id")(_require_non_empty)
+    _validate_execution_result_id = field_validator("execution_result_id")(_require_non_empty)
+    _validate_summary = field_validator("summary")(_require_non_empty)
+    _validate_applied_delta = field_validator("applied_delta")(_require_non_empty)
+
+
+class IntegrationDecision(BaseModel):
+    id: str
+    state_change: StateChange
+    accepted: bool
+    rationale: str
+
+    _validate_id = field_validator("id")(_require_non_empty)
+    _validate_rationale = field_validator("rationale")(_require_non_empty)
+
+
+class Integrator(Protocol):
+    def integrate(self, result: GameExecutionResult) -> IntegrationDecision:
+        ...
+
+
+class FakeIntegrator:
+    def __init__(self, accepted: bool, rationale: str, applied_delta: str):
+        self.accepted = accepted
+        self.rationale = _require_non_empty(rationale)
+        self.applied_delta = _require_non_empty(applied_delta)
+
+    def integrate(self, result: GameExecutionResult) -> IntegrationDecision:
+        state_change = StateChange(
+            id=f"state-change:{result.id}",
+            execution_result_id=result.id,
+            summary=result.summary,
+            applied_delta=self.applied_delta,
+            risks=list(result.risks),
+        )
+        return IntegrationDecision(
+            id=f"integration-decision:{result.id}",
+            state_change=state_change,
+            accepted=self.accepted,
+            rationale=self.rationale,
+        )
