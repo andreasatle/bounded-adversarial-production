@@ -14,11 +14,19 @@ def _require_non_empty(value: str) -> str:
     return value
 
 
+class ProjectionPolicy(str, Enum):
+    VERBATIM = "verbatim"
+    SUMMARIZED = "summarized"
+    FILTERED = "filtered"
+    DIRECT = "direct"
+
+
 class NorthStarProjectionItem(BaseModel):
     content: str
     source: str
     authority: str
     status: str
+    projection_policy: ProjectionPolicy = ProjectionPolicy.VERBATIM
 
     _validate_content = field_validator("content")(_require_non_empty)
     _validate_source = field_validator("source")(_require_non_empty)
@@ -64,6 +72,11 @@ def _render_section(title: str, items: tuple[NorthStarProjectionItem, ...]) -> s
         return "\n".join(lines)
 
     for index, item in enumerate(items, start=1):
+        if item.projection_policy is not ProjectionPolicy.VERBATIM:
+            raise ValueError(
+                "unsupported projection policy for renderer: "
+                f"{item.projection_policy.value}; only 'verbatim' is supported"
+            )
         lines.append(f"{index}. {item.content}")
         lines.append(f"   - source: {item.source}")
         lines.append(f"   - authority: {item.authority}")

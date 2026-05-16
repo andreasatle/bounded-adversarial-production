@@ -7,6 +7,7 @@ from baps.northstar_projection import (
     NorthStarProjectionInput,
     NorthStarProjectionItem,
     ProjectionArtifact,
+    ProjectionPolicy,
     ProjectionType,
     fingerprint_northstar_projection_input,
     render_northstar_projection_artifact,
@@ -39,6 +40,23 @@ def test_render_includes_all_sections_in_required_order() -> None:
     runtime_idx = rendered.index("## Runtime Context")
 
     assert framework_idx < project_idx < history_idx < runtime_idx
+
+
+def test_verbatim_content_is_preserved_exactly() -> None:
+    verbatim = "Exact  content\\nwith   spacing\\nand\\ttabs"
+    data = NorthStarProjectionInput(
+        project_state=(
+            NorthStarProjectionItem(
+                content=verbatim,
+                source="state-src",
+                authority="project",
+                status="accepted",
+                projection_policy=ProjectionPolicy.VERBATIM,
+            ),
+        ),
+    )
+    rendered = render_northstar_projection(data)
+    assert f"1. {verbatim}" in rendered
 
 
 def test_rendered_items_include_provenance_fields() -> None:
@@ -267,6 +285,31 @@ def test_modifying_input_after_render_does_not_mutate_projection_artifact() -> N
 
     assert artifact.content == before_content
     assert artifact.input_fingerprint == before_fingerprint
+
+
+@pytest.mark.parametrize(
+    "policy",
+    [
+        ProjectionPolicy.SUMMARIZED,
+        ProjectionPolicy.FILTERED,
+        ProjectionPolicy.DIRECT,
+    ],
+)
+def test_renderer_rejects_unsupported_projection_policies(policy: ProjectionPolicy) -> None:
+    data = NorthStarProjectionInput(
+        project_state=(
+            NorthStarProjectionItem(
+                content="State A",
+                source="state",
+                authority="project",
+                status="accepted",
+                projection_policy=policy,
+            ),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="unsupported projection policy"):
+        render_northstar_projection(data)
 
 
 def test_northstar_projection_renderer_returns_projection_artifact() -> None:
