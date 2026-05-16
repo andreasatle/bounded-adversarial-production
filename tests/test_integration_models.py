@@ -6,9 +6,20 @@ from baps.integration import (
     FakeIntegrator,
     IntegrationDecision,
     StateChange,
+    apply_decision_update,
     derive_state_update_from_decision,
 )
-from baps.state import StateUpdateProposal
+from baps.state import NorthStar, State, StateArtifact, StateUpdateProposal
+
+
+class _FakeStateService:
+    def __init__(self, result: State):
+        self.result = result
+        self.calls: list[StateUpdateProposal] = []
+
+    def apply_update(self, proposal: StateUpdateProposal) -> State:
+        self.calls.append(proposal)
+        return self.result
 
 
 @pytest.mark.parametrize(
@@ -273,6 +284,108 @@ def test_derive_state_update_from_decision_does_not_mutate_input_decision() -> N
     before = decision.model_dump(mode="json")
 
     _ = derive_state_update_from_decision(decision)
+
+    after = decision.model_dump(mode="json")
+    assert after == before
+
+
+def test_apply_decision_update_rejected_returns_none_and_does_not_call_service() -> None:
+    decision = IntegrationDecision(
+        id="decision-1",
+        state_change=StateChange(
+            id="artifact-1",
+            execution_result_id="result-1",
+            summary="Summary 1",
+            applied_delta="Delta 1",
+            risks=[],
+        ),
+        accepted=False,
+        rationale="Rejected",
+    )
+    service = _FakeStateService(
+        State(northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)))
+    )
+
+    result = apply_decision_update(service=service, decision=decision)  # type: ignore[arg-type]
+
+    assert result is None
+    assert service.calls == []
+
+
+def test_apply_decision_update_accepted_calls_service_with_derived_proposal() -> None:
+    decision = IntegrationDecision(
+        id="decision-1",
+        state_change=StateChange(
+            id="artifact-1",
+            execution_result_id="result-1",
+            summary="Summary 1",
+            applied_delta="Delta 1",
+            risks=[],
+        ),
+        accepted=True,
+        rationale="Accepted",
+    )
+    service = _FakeStateService(
+        State(northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)))
+    )
+
+    _ = apply_decision_update(service=service, decision=decision)  # type: ignore[arg-type]
+
+    assert len(service.calls) == 1
+    proposal = service.calls[0]
+    assert proposal.id == "state-update:decision-1"
+    assert proposal.target.artifact_id == "artifact-1"
+    assert proposal.summary == "Summary 1"
+    assert proposal.payload == {
+        "applied_delta": "Delta 1",
+        "execution_result_id": "result-1",
+        "integration_decision_id": "decision-1",
+    }
+
+
+def test_apply_decision_update_accepted_returns_updated_state_from_service() -> None:
+    decision = IntegrationDecision(
+        id="decision-1",
+        state_change=StateChange(
+            id="artifact-1",
+            execution_result_id="result-1",
+            summary="Summary 1",
+            applied_delta="Delta 1",
+            risks=[],
+        ),
+        accepted=True,
+        rationale="Accepted",
+    )
+    updated_state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)),
+        artifacts=(StateArtifact(id="artifact-2", kind="document"),),
+    )
+    service = _FakeStateService(updated_state)
+
+    result = apply_decision_update(service=service, decision=decision)  # type: ignore[arg-type]
+
+    assert result == updated_state
+
+
+def test_apply_decision_update_does_not_mutate_input_decision() -> None:
+    decision = IntegrationDecision(
+        id="decision-1",
+        state_change=StateChange(
+            id="artifact-1",
+            execution_result_id="result-1",
+            summary="Summary 1",
+            applied_delta="Delta 1",
+            risks=["risk-a"],
+        ),
+        accepted=True,
+        rationale="Accepted",
+    )
+    service = _FakeStateService(
+        State(northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)))
+    )
+    before = decision.model_dump(mode="json")
+
+    _ = apply_decision_update(service=service, decision=decision)  # type: ignore[arg-type]
 
     after = decision.model_dump(mode="json")
     assert after == before

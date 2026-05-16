@@ -5,7 +5,8 @@ from typing import Protocol
 from pydantic import BaseModel, Field, field_validator
 
 from baps.game_executor import GameExecutionResult
-from baps.state import StateUpdateProposal, StateUpdateTarget
+from baps.state import State, StateUpdateProposal, StateUpdateTarget
+from baps.state_service import StateService
 
 
 def _require_non_empty(value: str) -> str:
@@ -80,3 +81,10 @@ def derive_state_update_from_decision(
             "integration_decision_id": decision.id,
         },
     )
+
+
+def apply_decision_update(service: StateService, decision: IntegrationDecision) -> State | None:
+    proposal = derive_state_update_from_decision(decision)
+    if proposal is None:
+        return None
+    return service.apply_update(proposal)
