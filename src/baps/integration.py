@@ -5,6 +5,7 @@ from typing import Protocol
 from pydantic import BaseModel, Field, field_validator
 
 from baps.game_executor import GameExecutionResult
+from baps.state import StateUpdateProposal, StateUpdateTarget
 
 
 def _require_non_empty(value: str) -> str:
@@ -61,3 +62,21 @@ class FakeIntegrator:
             accepted=self.accepted,
             rationale=self.rationale,
         )
+
+
+def derive_state_update_from_decision(
+    decision: IntegrationDecision,
+) -> StateUpdateProposal | None:
+    if not decision.accepted:
+        return None
+
+    return StateUpdateProposal(
+        id=f"state-update:{decision.id}",
+        target=StateUpdateTarget(artifact_id=decision.state_change.id),
+        summary=decision.state_change.summary,
+        payload={
+            "applied_delta": decision.state_change.applied_delta,
+            "execution_result_id": decision.state_change.execution_result_id,
+            "integration_decision_id": decision.id,
+        },
+    )

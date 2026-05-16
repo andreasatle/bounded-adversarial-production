@@ -2,7 +2,13 @@ import pytest
 from pydantic import ValidationError
 
 from baps.game_executor import GameExecutionResult
-from baps.integration import FakeIntegrator, IntegrationDecision, StateChange
+from baps.integration import (
+    FakeIntegrator,
+    IntegrationDecision,
+    StateChange,
+    derive_state_update_from_decision,
+)
+from baps.state import StateUpdateProposal
 
 
 @pytest.mark.parametrize(
@@ -145,4 +151,128 @@ def test_fake_integrator_does_not_mutate_input_game_execution_result() -> None:
     _ = integrator.integrate(result)
 
     after = result.model_dump(mode="json")
+    assert after == before
+
+
+def test_derive_state_update_from_decision_returns_none_for_rejected_decision() -> None:
+    decision = IntegrationDecision(
+        id="decision-1",
+        state_change=StateChange(
+            id="artifact-1",
+            execution_result_id="result-1",
+            summary="Summary 1",
+            applied_delta="Delta 1",
+            risks=[],
+        ),
+        accepted=False,
+        rationale="Rejected",
+    )
+
+    assert derive_state_update_from_decision(decision) is None
+
+
+def test_derive_state_update_from_decision_returns_proposal_for_accepted_decision() -> None:
+    decision = IntegrationDecision(
+        id="decision-1",
+        state_change=StateChange(
+            id="artifact-1",
+            execution_result_id="result-1",
+            summary="Summary 1",
+            applied_delta="Delta 1",
+            risks=[],
+        ),
+        accepted=True,
+        rationale="Accepted",
+    )
+
+    proposal = derive_state_update_from_decision(decision)
+
+    assert isinstance(proposal, StateUpdateProposal)
+
+
+def test_derive_state_update_from_decision_proposal_id_is_deterministic_from_decision_id() -> None:
+    decision = IntegrationDecision(
+        id="decision-123",
+        state_change=StateChange(
+            id="artifact-1",
+            execution_result_id="result-1",
+            summary="Summary 1",
+            applied_delta="Delta 1",
+            risks=[],
+        ),
+        accepted=True,
+        rationale="Accepted",
+    )
+
+    first = derive_state_update_from_decision(decision)
+    second = derive_state_update_from_decision(decision)
+
+    assert first is not None
+    assert second is not None
+    assert first.id == "state-update:decision-123"
+    assert first.id == second.id
+
+
+def test_derive_state_update_from_decision_target_artifact_id_from_state_change_id() -> None:
+    decision = IntegrationDecision(
+        id="decision-1",
+        state_change=StateChange(
+            id="artifact-target",
+            execution_result_id="result-1",
+            summary="Summary 1",
+            applied_delta="Delta 1",
+            risks=[],
+        ),
+        accepted=True,
+        rationale="Accepted",
+    )
+
+    proposal = derive_state_update_from_decision(decision)
+
+    assert proposal is not None
+    assert proposal.target.artifact_id == "artifact-target"
+
+
+def test_derive_state_update_from_decision_payload_includes_required_fields() -> None:
+    decision = IntegrationDecision(
+        id="decision-1",
+        state_change=StateChange(
+            id="artifact-1",
+            execution_result_id="result-123",
+            summary="Summary 1",
+            applied_delta="Delta 123",
+            risks=[],
+        ),
+        accepted=True,
+        rationale="Accepted",
+    )
+
+    proposal = derive_state_update_from_decision(decision)
+
+    assert proposal is not None
+    assert proposal.payload == {
+        "applied_delta": "Delta 123",
+        "execution_result_id": "result-123",
+        "integration_decision_id": "decision-1",
+    }
+
+
+def test_derive_state_update_from_decision_does_not_mutate_input_decision() -> None:
+    decision = IntegrationDecision(
+        id="decision-1",
+        state_change=StateChange(
+            id="artifact-1",
+            execution_result_id="result-1",
+            summary="Summary 1",
+            applied_delta="Delta 1",
+            risks=["risk-a"],
+        ),
+        accepted=True,
+        rationale="Accepted",
+    )
+    before = decision.model_dump(mode="json")
+
+    _ = derive_state_update_from_decision(decision)
+
+    after = decision.model_dump(mode="json")
     assert after == before
