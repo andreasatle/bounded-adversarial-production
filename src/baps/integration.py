@@ -5,7 +5,7 @@ from typing import Protocol
 from pydantic import BaseModel, Field, field_validator
 
 from baps.game_executor import GameExecutionResult
-from baps.state import State, StateUpdateProposal, StateUpdateTarget
+from baps.state import State, StateUpdateProposal, StateUpdateTarget, fingerprint_state
 from baps.state_service import StateService
 
 
@@ -89,3 +89,20 @@ def apply_decision_update(service: StateService, decision: IntegrationDecision) 
     if proposal is None:
         return None
     return service.apply_update(proposal)
+
+
+def derive_state_update_from_decision_for_state(
+    state: State,
+    decision: IntegrationDecision,
+) -> StateUpdateProposal | None:
+    proposal = derive_state_update_from_decision(decision)
+    if proposal is None:
+        return None
+
+    return StateUpdateProposal(
+        id=proposal.id,
+        target=proposal.target.model_copy(deep=True),
+        summary=proposal.summary,
+        payload=dict(proposal.payload),
+        base_state_fingerprint=fingerprint_state(state),
+    )

@@ -7,9 +7,10 @@ from baps.integration import (
     IntegrationDecision,
     StateChange,
     apply_decision_update,
+    derive_state_update_from_decision_for_state,
     derive_state_update_from_decision,
 )
-from baps.state import NorthStar, State, StateArtifact, StateUpdateProposal
+from baps.state import NorthStar, State, StateArtifact, StateUpdateProposal, fingerprint_state
 
 
 class _FakeStateService:
@@ -307,6 +308,98 @@ def test_derive_state_update_from_decision_sets_base_state_fingerprint_to_none()
 
     assert proposal is not None
     assert proposal.base_state_fingerprint is None
+
+
+def test_derive_state_update_from_decision_for_state_rejected_returns_none() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)),
+    )
+    decision = IntegrationDecision(
+        id="decision-1",
+        state_change=StateChange(
+            id="artifact-1",
+            execution_result_id="result-1",
+            summary="Summary 1",
+            applied_delta="Delta 1",
+            risks=[],
+        ),
+        accepted=False,
+        rationale="Rejected",
+    )
+
+    assert derive_state_update_from_decision_for_state(state, decision) is None
+
+
+def test_derive_state_update_from_decision_for_state_accepted_returns_proposal() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)),
+    )
+    decision = IntegrationDecision(
+        id="decision-1",
+        state_change=StateChange(
+            id="artifact-1",
+            execution_result_id="result-1",
+            summary="Summary 1",
+            applied_delta="Delta 1",
+            risks=[],
+        ),
+        accepted=True,
+        rationale="Accepted",
+    )
+
+    proposal = derive_state_update_from_decision_for_state(state, decision)
+
+    assert isinstance(proposal, StateUpdateProposal)
+
+
+def test_derive_state_update_from_decision_for_state_sets_fingerprint() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)),
+        artifacts=(StateArtifact(id="artifact-2", kind="git_repository"),),
+    )
+    decision = IntegrationDecision(
+        id="decision-1",
+        state_change=StateChange(
+            id="artifact-1",
+            execution_result_id="result-1",
+            summary="Summary 1",
+            applied_delta="Delta 1",
+            risks=[],
+        ),
+        accepted=True,
+        rationale="Accepted",
+    )
+
+    proposal = derive_state_update_from_decision_for_state(state, decision)
+
+    assert proposal is not None
+    assert proposal.base_state_fingerprint == fingerprint_state(state)
+
+
+def test_derive_state_update_from_decision_for_state_does_not_mutate_inputs() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)),
+        artifacts=(StateArtifact(id="artifact-2", kind="git_repository"),),
+    )
+    decision = IntegrationDecision(
+        id="decision-1",
+        state_change=StateChange(
+            id="artifact-1",
+            execution_result_id="result-1",
+            summary="Summary 1",
+            applied_delta="Delta 1",
+            risks=["risk-a"],
+        ),
+        accepted=True,
+        rationale="Accepted",
+    )
+    state_before = state.model_dump(mode="json")
+    decision_before = decision.model_dump(mode="json")
+
+    _ = derive_state_update_from_decision_for_state(state, decision)
+
+    assert state.model_dump(mode="json") == state_before
+    assert decision.model_dump(mode="json") == decision_before
 
 
 def test_apply_decision_update_rejected_returns_none_and_does_not_call_service() -> None:
