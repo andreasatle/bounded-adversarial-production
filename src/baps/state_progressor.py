@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Protocol
+
 from pydantic import BaseModel, Field, field_validator
 
 from baps.northstar_projection import NorthStarView
@@ -42,3 +44,22 @@ class StateProgressionProposal(BaseModel):
     _validate_id = field_validator("id")(_require_non_empty)
     _validate_input_id = field_validator("input_id")(_require_non_empty)
     _validate_rationale = field_validator("rationale")(_require_non_empty)
+
+
+class StateProgressor(Protocol):
+    def progress(self, input: StateProgressorInput) -> StateProgressionProposal:
+        ...
+
+
+class FakeStateProgressor:
+    def __init__(self, game_proposal: GameProposal, rationale: str):
+        self.game_proposal = game_proposal
+        self.rationale = _require_non_empty(rationale)
+
+    def progress(self, input: StateProgressorInput) -> StateProgressionProposal:
+        return StateProgressionProposal(
+            id=f"state-progression:{input.id}:{self.game_proposal.id}",
+            input_id=input.id,
+            game_proposal=self.game_proposal.model_copy(deep=True),
+            rationale=self.rationale,
+        )

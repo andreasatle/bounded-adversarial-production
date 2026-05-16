@@ -2,7 +2,12 @@ import pytest
 from pydantic import ValidationError
 
 from baps.northstar_projection import NorthStarProjectionInput, NorthStarProjectionItem, render_northstar_view
-from baps.state_progressor import GameProposal, StateProgressionProposal, StateProgressorInput
+from baps.state_progressor import (
+    FakeStateProgressor,
+    GameProposal,
+    StateProgressionProposal,
+    StateProgressorInput,
+)
 
 
 def _northstar_view():
@@ -118,3 +123,98 @@ def test_valid_nested_state_progressor_models_validate_successfully() -> None:
     assert progression.input_id == progressor_input.id
     assert progression.game_proposal.id == "game-1"
     assert progression.game_proposal.risks == ["minor documentation drift"]
+
+
+def test_fake_state_progressor_returns_valid_state_progression_proposal() -> None:
+    progressor = FakeStateProgressor(
+        game_proposal=GameProposal(
+            id="game-1",
+            title="Refine docs",
+            description="Run docs refinement game",
+            expected_state_delta="Clearer docs",
+            risks=["minor drift"],
+        ),
+        rationale="Deterministic fake rationale",
+    )
+    progressor_input = StateProgressorInput(
+        id="input-1",
+        northstar_view=_northstar_view(),
+        runtime_objective="Improve clarity",
+    )
+
+    proposal = progressor.progress(progressor_input)
+
+    assert isinstance(proposal, StateProgressionProposal)
+    assert proposal.game_proposal.id == "game-1"
+
+
+def test_fake_state_progressor_preserves_input_id_linkage() -> None:
+    progressor = FakeStateProgressor(
+        game_proposal=GameProposal(
+            id="game-1",
+            title="Refine docs",
+            description="Run docs refinement game",
+            expected_state_delta="Clearer docs",
+        ),
+        rationale="Deterministic fake rationale",
+    )
+    progressor_input = StateProgressorInput(
+        id="input-77",
+        northstar_view=_northstar_view(),
+        runtime_objective="Improve clarity",
+    )
+
+    proposal = progressor.progress(progressor_input)
+
+    assert proposal.input_id == "input-77"
+
+
+def test_fake_state_progressor_repeated_calls_are_deterministic() -> None:
+    progressor = FakeStateProgressor(
+        game_proposal=GameProposal(
+            id="game-1",
+            title="Refine docs",
+            description="Run docs refinement game",
+            expected_state_delta="Clearer docs",
+            risks=["minor drift"],
+        ),
+        rationale="Deterministic fake rationale",
+    )
+    progressor_input = StateProgressorInput(
+        id="input-1",
+        northstar_view=_northstar_view(),
+        runtime_objective="Improve clarity",
+    )
+
+    first = progressor.progress(progressor_input)
+    second = progressor.progress(progressor_input)
+
+    assert first.model_dump(mode="json") == second.model_dump(mode="json")
+
+
+def test_fake_state_progressor_does_not_mutate_inputs() -> None:
+    game_proposal = GameProposal(
+        id="game-1",
+        title="Refine docs",
+        description="Run docs refinement game",
+        expected_state_delta="Clearer docs",
+        risks=["minor drift"],
+    )
+    progressor = FakeStateProgressor(
+        game_proposal=game_proposal,
+        rationale="Deterministic fake rationale",
+    )
+    progressor_input = StateProgressorInput(
+        id="input-1",
+        northstar_view=_northstar_view(),
+        runtime_objective="Improve clarity",
+    )
+    before_input = progressor_input.model_dump(mode="json")
+    before_game_proposal = game_proposal.model_dump(mode="json")
+
+    _ = progressor.progress(progressor_input)
+
+    after_input = progressor_input.model_dump(mode="json")
+    after_game_proposal = game_proposal.model_dump(mode="json")
+    assert after_input == before_input
+    assert after_game_proposal == before_game_proposal
