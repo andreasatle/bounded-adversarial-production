@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, field_validator
+import hashlib
+import json
+
+from pydantic import BaseModel, Field, field_validator
 
 
 def _require_non_empty(value: str) -> str:
@@ -28,6 +31,19 @@ class NorthStarProjectionInput(BaseModel):
     runtime_context: tuple[NorthStarProjectionItem, ...] = ()
 
 
+class ProjectionArtifact(BaseModel):
+    id: str
+    projection_type: str
+    content: str
+    input_fingerprint: str
+    metadata: dict = Field(default_factory=dict)
+
+    _validate_id = field_validator("id")(_require_non_empty)
+    _validate_projection_type = field_validator("projection_type")(_require_non_empty)
+    _validate_content = field_validator("content")(_require_non_empty)
+    _validate_input_fingerprint = field_validator("input_fingerprint")(_require_non_empty)
+
+
 def _render_section(title: str, items: tuple[NorthStarProjectionItem, ...]) -> str:
     lines = [f"## {title}"]
     if not items:
@@ -50,3 +66,25 @@ def render_northstar_projection(input_data: NorthStarProjectionInput) -> str:
         _render_section("Runtime Context", input_data.runtime_context),
     )
     return "\n\n".join(sections)
+
+
+def fingerprint_northstar_projection_input(input_data: NorthStarProjectionInput) -> str:
+    canonical = json.dumps(
+        input_data.model_dump(mode="json"),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def render_northstar_projection_artifact(
+    input_data: NorthStarProjectionInput,
+) -> ProjectionArtifact:
+    content = render_northstar_projection(input_data)
+    input_fingerprint = fingerprint_northstar_projection_input(input_data)
+    return ProjectionArtifact(
+        id=f"projection:northstar:{input_fingerprint}",
+        projection_type="northstar_markdown",
+        content=content,
+        input_fingerprint=input_fingerprint,
+    )

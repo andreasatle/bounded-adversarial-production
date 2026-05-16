@@ -1,6 +1,13 @@
+import pytest
+from pydantic import ValidationError
+
+from baps.state import NorthStar, State, StateArtifact
 from baps.northstar_projection import (
     NorthStarProjectionInput,
     NorthStarProjectionItem,
+    ProjectionArtifact,
+    fingerprint_northstar_projection_input,
+    render_northstar_projection_artifact,
     render_northstar_projection,
 )
 
@@ -105,3 +112,105 @@ def test_repeated_rendering_of_same_input_is_identical() -> None:
     second = render_northstar_projection(data)
 
     assert first == second
+
+
+@pytest.mark.parametrize(
+    "field_name, value",
+    [
+        ("id", " "),
+        ("projection_type", " "),
+        ("content", " "),
+        ("input_fingerprint", " "),
+    ],
+)
+def test_projection_artifact_rejects_empty_required_strings(field_name: str, value: str) -> None:
+    payload = {
+        "id": "projection-1",
+        "projection_type": "northstar_markdown",
+        "content": "content",
+        "input_fingerprint": "fingerprint",
+    }
+    payload[field_name] = value
+    with pytest.raises(ValidationError):
+        ProjectionArtifact.model_validate(payload)
+
+
+def test_projection_artifact_metadata_defaults_are_isolated_per_instance() -> None:
+    first = ProjectionArtifact(
+        id="projection-1",
+        projection_type="northstar_markdown",
+        content="content-1",
+        input_fingerprint="fp-1",
+    )
+    second = ProjectionArtifact(
+        id="projection-2",
+        projection_type="northstar_markdown",
+        content="content-2",
+        input_fingerprint="fp-2",
+    )
+
+    first.metadata["mutated"] = "yes"
+    assert first.metadata == {"mutated": "yes"}
+    assert second.metadata == {}
+
+
+def test_render_northstar_projection_artifact_preserves_markdown_content() -> None:
+    data = NorthStarProjectionInput(
+        framework_policy=(_item("Policy A", "policy", "framework", "active"),),
+        project_state=(_item("State A", "state", "project", "accepted"),),
+        blackboard_history=(_item("History A", "history", "historical", "recorded"),),
+        runtime_context=(_item("Runtime A", "runtime", "temporary", "active"),),
+    )
+    expected_markdown = render_northstar_projection(data)
+
+    artifact = render_northstar_projection_artifact(data)
+
+    assert artifact.content == expected_markdown
+
+
+def test_identical_northstar_inputs_produce_identical_fingerprints() -> None:
+    first = NorthStarProjectionInput(
+        framework_policy=(_item("Policy A", "policy", "framework", "active"),),
+        project_state=(_item("State A", "state", "project", "accepted"),),
+        blackboard_history=(_item("History A", "history", "historical", "recorded"),),
+        runtime_context=(_item("Runtime A", "runtime", "temporary", "active"),),
+    )
+    second = NorthStarProjectionInput(
+        framework_policy=(_item("Policy A", "policy", "framework", "active"),),
+        project_state=(_item("State A", "state", "project", "accepted"),),
+        blackboard_history=(_item("History A", "history", "historical", "recorded"),),
+        runtime_context=(_item("Runtime A", "runtime", "temporary", "active"),),
+    )
+
+    assert fingerprint_northstar_projection_input(first) == fingerprint_northstar_projection_input(
+        second
+    )
+
+
+def test_changed_northstar_inputs_produce_different_fingerprints() -> None:
+    first = NorthStarProjectionInput(
+        project_state=(_item("State A", "state", "project", "accepted"),),
+    )
+    second = NorthStarProjectionInput(
+        project_state=(_item("State B", "state", "project", "accepted"),),
+    )
+
+    assert fingerprint_northstar_projection_input(first) != fingerprint_northstar_projection_input(
+        second
+    )
+
+
+def test_projection_artifact_is_distinct_from_state_and_does_not_mutate_state() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+        artifacts=(StateArtifact(id="a1", kind="git_repository"),),
+    )
+    before = state.model_dump(mode="json")
+    projection_input = NorthStarProjectionInput(
+        project_state=(_item("State A", "state", "project", "accepted"),),
+    )
+
+    artifact = render_northstar_projection_artifact(projection_input)
+
+    assert not isinstance(artifact, State)
+    assert state.model_dump(mode="json") == before
