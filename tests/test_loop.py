@@ -1,6 +1,9 @@
+from pathlib import Path
+
+from baps.blackboard import Blackboard
 from baps.game_executor import FakeGameExecutor, GameExecutionResult
 from baps.integration import FakeIntegrator
-from baps.loop import LoopResult, run_loop
+from baps.loop import LoopResult, record_loop_result, run_loop
 from baps.northstar_projection import NorthStarProjectionInput, NorthStarProjectionItem, render_northstar_view
 from baps.state_progressor import FakeStateProgressor, GameProposal, StateProgressionProposal, StateProgressorInput
 
@@ -170,3 +173,74 @@ def test_run_loop_is_deterministic_for_deterministic_components() -> None:
     )
 
     assert first.model_dump(mode="json") == second.model_dump(mode="json")
+
+
+def _deterministic_loop_result() -> LoopResult:
+    progressor = FakeStateProgressor(
+        game_proposal=GameProposal(
+            id="game-1",
+            title="Title",
+            description="Description",
+            expected_state_delta="Delta",
+        ),
+        rationale="Progressor rationale",
+    )
+    executor = FakeGameExecutor(
+        result=GameExecutionResult(
+            id="result-1",
+            game_proposal_id="template",
+            status="completed",
+            summary="Execution summary",
+            state_delta="State delta",
+            risks=["risk-a"],
+        )
+    )
+    integrator = FakeIntegrator(
+        accepted=True,
+        rationale="Integrator rationale",
+        applied_delta="Applied delta",
+    )
+    return run_loop(progressor=progressor, executor=executor, integrator=integrator, input=_input())
+
+
+def test_record_loop_result_appends_exactly_three_events(tmp_path: Path) -> None:
+    blackboard = Blackboard(tmp_path / "events.jsonl")
+    result = _deterministic_loop_result()
+
+    record_loop_result(blackboard, result)
+
+    events = blackboard.read_all()
+    assert len(events) == 3
+
+
+def test_record_loop_result_event_order_is_exact(tmp_path: Path) -> None:
+    blackboard = Blackboard(tmp_path / "events.jsonl")
+    result = _deterministic_loop_result()
+
+    record_loop_result(blackboard, result)
+
+    events = blackboard.read_all()
+    assert [event.type for event in events] == [
+        "state_progression_proposed",
+        "game_executed",
+        "integration_decided",
+    ]
+
+
+def test_record_loop_result_payloads_preserve_model_data(tmp_path: Path) -> None:
+    blackboard = Blackboard(tmp_path / "events.jsonl")
+    result = _deterministic_loop_result()
+
+    record_loop_result(blackboard, result)
+
+    events = blackboard.read_all()
+    assert events[0].payload["proposal"] == result.proposal.model_dump(mode="json")
+    assert events[1].payload["execution_result"] == result.execution_result.model_dump(mode="json")
+    assert events[2].payload["decision"] == result.decision.model_dump(mode="json")
+
+
+def test_run_loop_does_not_write_to_blackboard_implicitly(tmp_path: Path) -> None:
+    blackboard = Blackboard(tmp_path / "events.jsonl")
+    _ = _deterministic_loop_result()
+
+    assert blackboard.read_all() == []
