@@ -1,0 +1,44 @@
+from __future__ import annotations
+
+from pydantic import BaseModel, Field, field_validator
+
+from baps.northstar_projection import NorthStarView
+
+
+def _require_non_empty(value: str) -> str:
+    if not value.strip():
+        raise ValueError("must be a non-empty string")
+    return value
+
+
+class StateProgressorInput(BaseModel):
+    id: str
+    northstar_view: NorthStarView
+    runtime_objective: str
+
+    _validate_id = field_validator("id")(_require_non_empty)
+    _validate_runtime_objective = field_validator("runtime_objective")(_require_non_empty)
+
+
+class GameProposal(BaseModel):
+    id: str
+    title: str
+    description: str
+    expected_state_delta: str
+    risks: list[str] = Field(default_factory=list)
+
+    _validate_id = field_validator("id")(_require_non_empty)
+    _validate_title = field_validator("title")(_require_non_empty)
+    _validate_description = field_validator("description")(_require_non_empty)
+    _validate_expected_state_delta = field_validator("expected_state_delta")(_require_non_empty)
+
+
+class StateProgressionProposal(BaseModel):
+    id: str
+    input_id: str
+    game_proposal: GameProposal
+    rationale: str
+
+    _validate_id = field_validator("id")(_require_non_empty)
+    _validate_input_id = field_validator("input_id")(_require_non_empty)
+    _validate_rationale = field_validator("rationale")(_require_non_empty)
