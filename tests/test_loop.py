@@ -3,8 +3,9 @@ from pathlib import Path
 from baps.blackboard import Blackboard
 from baps.game_executor import FakeGameExecutor, GameExecutionResult
 from baps.integration import FakeIntegrator
-from baps.loop import LoopResult, record_loop_result, run_loop
+from baps.loop import LoopResult, apply_loop_decision_update, record_loop_result, run_loop
 from baps.northstar_projection import NorthStarProjectionInput, NorthStarProjectionItem, render_northstar_view
+from baps.state import NorthStar, State, StateArtifact, StateUpdateProposal
 from baps.state_progressor import FakeStateProgressor, GameProposal, StateProgressionProposal, StateProgressorInput
 
 
@@ -36,6 +37,16 @@ class _RecordingIntegrator:
     def integrate(self, result: GameExecutionResult):
         self.call_log.append("integrate")
         return self.decision
+
+
+class _RecordingStateService:
+    def __init__(self, updated_state: State):
+        self.updated_state = updated_state
+        self.calls: list[StateUpdateProposal] = []
+
+    def apply_update(self, proposal: StateUpdateProposal) -> State:
+        self.calls.append(proposal)
+        return self.updated_state
 
 
 def _input() -> StateProgressorInput:
@@ -244,3 +255,109 @@ def test_run_loop_does_not_write_to_blackboard_implicitly(tmp_path: Path) -> Non
     _ = _deterministic_loop_result()
 
     assert blackboard.read_all() == []
+
+
+def test_apply_loop_decision_update_rejected_returns_none_and_does_not_call_service() -> None:
+    progressor = FakeStateProgressor(
+        game_proposal=GameProposal(
+            id="game-1",
+            title="Title",
+            description="Description",
+            expected_state_delta="Delta",
+        ),
+        rationale="Progressor rationale",
+    )
+    executor = FakeGameExecutor(
+        result=GameExecutionResult(
+            id="result-1",
+            game_proposal_id="template",
+            status="completed",
+            summary="Execution summary",
+            state_delta="State delta",
+            risks=[],
+        )
+    )
+    integrator = FakeIntegrator(
+        accepted=False,
+        rationale="Rejected rationale",
+        applied_delta="Applied delta",
+    )
+    result = run_loop(progressor=progressor, executor=executor, integrator=integrator, input=_input())
+    service = _RecordingStateService(
+        State(northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)))
+    )
+
+    update_result = apply_loop_decision_update(service=service, result=result)  # type: ignore[arg-type]
+
+    assert update_result is None
+    assert service.calls == []
+
+
+def test_apply_loop_decision_update_accepted_applies_derived_state_update() -> None:
+    result = _deterministic_loop_result()
+    service = _RecordingStateService(
+        State(
+            northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)),
+            artifacts=(StateArtifact(id="artifact-2", kind="document"),),
+        )
+    )
+
+    _ = apply_loop_decision_update(service=service, result=result)  # type: ignore[arg-type]
+
+    assert len(service.calls) == 1
+    proposal = service.calls[0]
+    assert proposal.id == f"state-update:{result.decision.id}"
+    assert proposal.target.artifact_id == result.decision.state_change.id
+    assert proposal.summary == result.decision.state_change.summary
+    assert proposal.payload == {
+        "applied_delta": result.decision.state_change.applied_delta,
+        "execution_result_id": result.decision.state_change.execution_result_id,
+        "integration_decision_id": result.decision.id,
+    }
+
+
+def test_apply_loop_decision_update_returns_updated_state_from_service() -> None:
+    result = _deterministic_loop_result()
+    updated_state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)),
+        artifacts=(StateArtifact(id="artifact-2", kind="document"),),
+    )
+    service = _RecordingStateService(updated_state)
+
+    applied = apply_loop_decision_update(service=service, result=result)  # type: ignore[arg-type]
+
+    assert applied == updated_state
+
+
+def test_run_loop_still_does_not_apply_state_updates() -> None:
+    progressor = FakeStateProgressor(
+        game_proposal=GameProposal(
+            id="game-1",
+            title="Title",
+            description="Description",
+            expected_state_delta="Delta",
+        ),
+        rationale="Progressor rationale",
+    )
+    executor = FakeGameExecutor(
+        result=GameExecutionResult(
+            id="result-1",
+            game_proposal_id="template",
+            status="completed",
+            summary="Execution summary",
+            state_delta="State delta",
+            risks=[],
+        )
+    )
+    integrator = FakeIntegrator(
+        accepted=True,
+        rationale="Accepted rationale",
+        applied_delta="Applied delta",
+    )
+    service = _RecordingStateService(
+        State(northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)))
+    )
+
+    _ = run_loop(progressor=progressor, executor=executor, integrator=integrator, input=_input())
+
+    assert service.calls == []

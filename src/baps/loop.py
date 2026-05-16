@@ -4,9 +4,11 @@ from pydantic import BaseModel
 
 from baps.blackboard import Blackboard
 from baps.game_executor import GameExecutionResult, GameExecutor
-from baps.integration import IntegrationDecision, Integrator
+from baps.integration import IntegrationDecision, Integrator, apply_decision_update
 from baps.schemas import Event
+from baps.state import State
 from baps.state_progressor import StateProgressionProposal, StateProgressor, StateProgressorInput
+from baps.state_service import StateService
 
 
 class LoopResult(BaseModel):
@@ -62,3 +64,7 @@ def record_loop_result(blackboard: Blackboard, result: LoopResult) -> None:
             payload={"decision": result.decision.model_dump(mode="json")},
         )
     )
+
+
+def apply_loop_decision_update(service: StateService, result: LoopResult) -> State | None:
+    return apply_decision_update(service, result.decision)
