@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from baps.state import State, StateArtifactRegistry, StateUpdateProposal, apply_state_update, validate_state_artifacts
+from baps.state import (
+    State,
+    StateArtifactRegistry,
+    StateUpdateProposal,
+    apply_state_update,
+    validate_state_artifacts,
+    validate_update_base_state,
+)
 from baps.state_store import StateStore
 
 
@@ -19,6 +26,8 @@ class StateService:
     def apply_update(self, proposal: StateUpdateProposal) -> State:
         current = self.store.load()
         validated_current = validate_state_artifacts(current, self.registry)
+        if not validate_update_base_state(validated_current, proposal):
+            raise ValueError("base_state_fingerprint does not match current state")
         updated = apply_state_update(validated_current, proposal)
         validated_updated = validate_state_artifacts(updated, self.registry)
         self.store.save(validated_updated)

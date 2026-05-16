@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import pytest
 
 from baps.state import (
+    fingerprint_state,
     NorthStar,
     State,
     StateArtifact,
@@ -183,3 +184,85 @@ def test_service_does_not_mutate_original_loaded_state() -> None:
 
     after = original.model_dump(mode="json")
     assert after == before
+
+
+def test_apply_update_accepts_proposal_without_base_state_fingerprint() -> None:
+    store = InMemoryStateStore(state=_state())
+    registry = _registry_with_counting_adapters([])
+    service = StateService(store=store, registry=registry)
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="artifact-1"),
+        summary="Replace artifact",
+        payload={
+            "operation": "replace_artifact",
+            "artifact": {"id": "artifact-1", "kind": "document"},
+        },
+    )
+
+    updated = service.apply_update(proposal)
+
+    assert isinstance(updated, State)
+    assert store.save_calls == 1
+
+
+def test_apply_update_accepts_matching_base_state_fingerprint() -> None:
+    state = _state()
+    store = InMemoryStateStore(state=state)
+    registry = _registry_with_counting_adapters([])
+    service = StateService(store=store, registry=registry)
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="artifact-1"),
+        summary="Replace artifact",
+        payload={
+            "operation": "replace_artifact",
+            "artifact": {"id": "artifact-1", "kind": "document"},
+        },
+        base_state_fingerprint=fingerprint_state(state),
+    )
+
+    updated = service.apply_update(proposal)
+
+    assert isinstance(updated, State)
+    assert store.save_calls == 1
+
+
+def test_apply_update_rejects_non_matching_base_state_fingerprint() -> None:
+    store = InMemoryStateStore(state=_state())
+    registry = _registry_with_counting_adapters([])
+    service = StateService(store=store, registry=registry)
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="artifact-1"),
+        summary="Replace artifact",
+        payload={
+            "operation": "replace_artifact",
+            "artifact": {"id": "artifact-1", "kind": "document"},
+        },
+        base_state_fingerprint="not-the-current-fingerprint",
+    )
+
+    with pytest.raises(ValueError, match="base_state_fingerprint"):
+        service.apply_update(proposal)
+
+
+def test_apply_update_fingerprint_rejection_does_not_save_updated_state() -> None:
+    store = InMemoryStateStore(state=_state())
+    registry = _registry_with_counting_adapters([])
+    service = StateService(store=store, registry=registry)
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="artifact-1"),
+        summary="Replace artifact",
+        payload={
+            "operation": "replace_artifact",
+            "artifact": {"id": "artifact-1", "kind": "document"},
+        },
+        base_state_fingerprint="not-the-current-fingerprint",
+    )
+
+    with pytest.raises(ValueError, match="base_state_fingerprint"):
+        service.apply_update(proposal)
+
+    assert store.save_calls == 0
