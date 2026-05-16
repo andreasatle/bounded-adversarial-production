@@ -22,12 +22,14 @@ class ProjectionPolicy(str, Enum):
 
 
 class NorthStarProjectionItem(BaseModel):
+    id: str
     content: str
     source: str
     authority: str
     status: str
     projection_policy: ProjectionPolicy = ProjectionPolicy.VERBATIM
 
+    _validate_id = field_validator("id")(_require_non_empty)
     _validate_content = field_validator("content")(_require_non_empty)
     _validate_source = field_validator("source")(_require_non_empty)
     _validate_authority = field_validator("authority")(_require_non_empty)
@@ -78,6 +80,7 @@ def _render_section(title: str, items: tuple[NorthStarProjectionItem, ...]) -> s
                 f"{item.projection_policy.value}; only 'verbatim' is supported"
             )
         lines.append(f"{index}. {item.content}")
+        lines.append(f"   - id: {item.id}")
         lines.append(f"   - source: {item.source}")
         lines.append(f"   - authority: {item.authority}")
         lines.append(f"   - status: {item.status}")

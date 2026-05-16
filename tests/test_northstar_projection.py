@@ -15,8 +15,15 @@ from baps.northstar_projection import (
 )
 
 
-def _item(content: str, source: str, authority: str, status: str) -> NorthStarProjectionItem:
+def _item(
+    content: str,
+    source: str,
+    authority: str,
+    status: str,
+    item_id: str = "item",
+) -> NorthStarProjectionItem:
     return NorthStarProjectionItem(
+        id=item_id,
         content=content,
         source=source,
         authority=authority,
@@ -47,6 +54,7 @@ def test_verbatim_content_is_preserved_exactly() -> None:
     data = NorthStarProjectionInput(
         project_state=(
             NorthStarProjectionItem(
+                id="state-item-1",
                 content=verbatim,
                 source="state-src",
                 authority="project",
@@ -69,6 +77,7 @@ def test_rendered_items_include_provenance_fields() -> None:
 
     rendered = render_northstar_projection(data)
 
+    assert "id: item" in rendered
     assert "source: policy-src" in rendered
     assert "authority: framework" in rendered
     assert "status: active" in rendered
@@ -270,6 +279,7 @@ def test_repeated_artifact_generation_with_identical_input_is_byte_identical() -
 
 def test_modifying_input_after_render_does_not_mutate_projection_artifact() -> None:
     item = NorthStarProjectionItem(
+        id="state-item-1",
         content="State A",
         source="state",
         authority="project",
@@ -299,6 +309,7 @@ def test_renderer_rejects_unsupported_projection_policies(policy: ProjectionPoli
     data = NorthStarProjectionInput(
         project_state=(
             NorthStarProjectionItem(
+                id="state-item-1",
                 content="State A",
                 source="state",
                 authority="project",
@@ -341,6 +352,7 @@ def test_northstar_projection_renderer_repeated_renders_are_byte_identical() -> 
 def test_northstar_projection_renderer_does_not_mutate_inputs() -> None:
     renderer = NorthStarProjectionRenderer()
     item = NorthStarProjectionItem(
+        id="state-item-1",
         content="State A",
         source="state",
         authority="project",
@@ -353,3 +365,82 @@ def test_northstar_projection_renderer_does_not_mutate_inputs() -> None:
 
     after = data.model_dump(mode="json")
     assert after == before
+
+
+@pytest.mark.parametrize("bad_id", ["", "   ", "\n\t"])
+def test_northstar_projection_item_rejects_empty_id(bad_id: str) -> None:
+    with pytest.raises(ValidationError):
+        NorthStarProjectionItem(
+            id=bad_id,
+            content="State A",
+            source="state",
+            authority="project",
+            status="accepted",
+        )
+
+
+def test_item_id_appears_in_rendered_provenance() -> None:
+    data = NorthStarProjectionInput(
+        project_state=(
+            NorthStarProjectionItem(
+                id="state-item-123",
+                content="State A",
+                source="state",
+                authority="project",
+                status="accepted",
+            ),
+        ),
+    )
+    rendered = render_northstar_projection(data)
+    assert "id: state-item-123" in rendered
+
+
+def test_changing_item_id_changes_fingerprint() -> None:
+    first = NorthStarProjectionInput(
+        project_state=(
+            NorthStarProjectionItem(
+                id="state-item-1",
+                content="State A",
+                source="state",
+                authority="project",
+                status="accepted",
+            ),
+        ),
+    )
+    second = NorthStarProjectionInput(
+        project_state=(
+            NorthStarProjectionItem(
+                id="state-item-2",
+                content="State A",
+                source="state",
+                authority="project",
+                status="accepted",
+            ),
+        ),
+    )
+    assert fingerprint_northstar_projection_input(first) != fingerprint_northstar_projection_input(
+        second
+    )
+
+
+def test_item_id_does_not_affect_item_ordering() -> None:
+    data = NorthStarProjectionInput(
+        project_state=(
+            NorthStarProjectionItem(
+                id="z-item",
+                content="First content",
+                source="state",
+                authority="project",
+                status="accepted",
+            ),
+            NorthStarProjectionItem(
+                id="a-item",
+                content="Second content",
+                source="state",
+                authority="project",
+                status="accepted",
+            ),
+        ),
+    )
+    rendered = render_northstar_projection(data)
+    assert rendered.index("1. First content") < rendered.index("2. Second content")
