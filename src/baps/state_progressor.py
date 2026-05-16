@@ -91,12 +91,23 @@ def render_state_progressor_prompt(input: StateProgressorInput) -> str:
         (
             "Required Output",
             (
-                "Provide:\n"
-                "- game proposal title\n"
-                "- game proposal description\n"
-                "- expected state delta\n"
-                "- risks\n"
-                "- rationale"
+                "Return only JSON.\n"
+                "No markdown.\n"
+                "No prose outside JSON.\n"
+                "No extra fields.\n"
+                "risks must be a list of strings.\n\n"
+                "Required JSON shape:\n"
+                "{\n"
+                '  "id": "...",\n'
+                '  "game_proposal": {\n'
+                '    "id": "...",\n'
+                '    "title": "...",\n'
+                '    "description": "...",\n'
+                '    "expected_state_delta": "...",\n'
+                '    "risks": ["..."]\n'
+                "  },\n"
+                '  "rationale": "..."\n'
+                "}"
             ),
         ),
     )

@@ -279,6 +279,40 @@ def test_render_state_progressor_prompt_repeated_calls_are_byte_identical() -> N
     assert first == second
 
 
+def test_render_state_progressor_prompt_required_output_contains_exact_json_field_names() -> None:
+    progressor_input = StateProgressorInput(
+        id="input-1",
+        northstar_view=_northstar_view(),
+        runtime_objective="Improve architecture clarity",
+    )
+
+    prompt = render_state_progressor_prompt(progressor_input)
+
+    assert '"id": "..."' in prompt
+    assert '"game_proposal": {' in prompt
+    assert '"title": "..."' in prompt
+    assert '"description": "..."' in prompt
+    assert '"expected_state_delta": "..."' in prompt
+    assert '"risks": ["..."]' in prompt
+    assert '"rationale": "..."' in prompt
+
+
+def test_render_state_progressor_prompt_forbids_markdown_and_prose_outside_json() -> None:
+    progressor_input = StateProgressorInput(
+        id="input-1",
+        northstar_view=_northstar_view(),
+        runtime_objective="Improve architecture clarity",
+    )
+
+    prompt = render_state_progressor_prompt(progressor_input)
+
+    assert "Return only JSON." in prompt
+    assert "No markdown." in prompt
+    assert "No prose outside JSON." in prompt
+    assert "No extra fields." in prompt
+    assert "risks must be a list of strings." in prompt
+
+
 def test_parse_state_progression_proposal_valid_json() -> None:
     text = """
     {
