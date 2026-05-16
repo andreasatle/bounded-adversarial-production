@@ -3,6 +3,7 @@ from pydantic import ValidationError
 
 from baps.state import NorthStar, State, StateArtifact
 from baps.northstar_projection import (
+    NorthStarProjectionRenderer,
     NorthStarProjectionInput,
     NorthStarProjectionItem,
     ProjectionArtifact,
@@ -266,3 +267,46 @@ def test_modifying_input_after_render_does_not_mutate_projection_artifact() -> N
 
     assert artifact.content == before_content
     assert artifact.input_fingerprint == before_fingerprint
+
+
+def test_northstar_projection_renderer_returns_projection_artifact() -> None:
+    renderer = NorthStarProjectionRenderer()
+    data = NorthStarProjectionInput(
+        project_state=(_item("State A", "state", "project", "accepted"),),
+    )
+
+    artifact = renderer.render(data)
+
+    assert isinstance(artifact, ProjectionArtifact)
+
+
+def test_northstar_projection_renderer_repeated_renders_are_byte_identical() -> None:
+    renderer = NorthStarProjectionRenderer()
+    data = NorthStarProjectionInput(
+        framework_policy=(_item("Policy A", "policy", "framework", "active"),),
+        project_state=(_item("State A", "state", "project", "accepted"),),
+        blackboard_history=(_item("History A", "history", "historical", "recorded"),),
+        runtime_context=(_item("Runtime A", "runtime", "temporary", "active"),),
+    )
+
+    first = renderer.render(data)
+    second = renderer.render(data)
+
+    assert first.model_dump_json() == second.model_dump_json()
+
+
+def test_northstar_projection_renderer_does_not_mutate_inputs() -> None:
+    renderer = NorthStarProjectionRenderer()
+    item = NorthStarProjectionItem(
+        content="State A",
+        source="state",
+        authority="project",
+        status="accepted",
+    )
+    data = NorthStarProjectionInput(project_state=(item,))
+    before = data.model_dump(mode="json")
+
+    _ = renderer.render(data)
+
+    after = data.model_dump(mode="json")
+    assert after == before

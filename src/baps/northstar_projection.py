@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from enum import Enum
+from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -51,6 +52,11 @@ class ProjectionArtifact(BaseModel):
     _validate_input_fingerprint = field_validator("input_fingerprint")(_require_non_empty)
 
 
+class ProjectionRenderer(Protocol):
+    def render(self, input_data: NorthStarProjectionInput) -> ProjectionArtifact:
+        ...
+
+
 def _render_section(title: str, items: tuple[NorthStarProjectionItem, ...]) -> str:
     lines = [f"## {title}"]
     if not items:
@@ -84,14 +90,19 @@ def fingerprint_northstar_projection_input(input_data: NorthStarProjectionInput)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+class NorthStarProjectionRenderer:
+    def render(self, input_data: NorthStarProjectionInput) -> ProjectionArtifact:
+        content = render_northstar_projection(input_data)
+        input_fingerprint = fingerprint_northstar_projection_input(input_data)
+        return ProjectionArtifact(
+            id=f"projection:northstar:{input_fingerprint}",
+            projection_type=ProjectionType.NORTH_STAR,
+            content=content,
+            input_fingerprint=input_fingerprint,
+        )
+
+
 def render_northstar_projection_artifact(
     input_data: NorthStarProjectionInput,
 ) -> ProjectionArtifact:
-    content = render_northstar_projection(input_data)
-    input_fingerprint = fingerprint_northstar_projection_input(input_data)
-    return ProjectionArtifact(
-        id=f"projection:northstar:{input_fingerprint}",
-        projection_type=ProjectionType.NORTH_STAR,
-        content=content,
-        input_fingerprint=input_fingerprint,
-    )
+    return NorthStarProjectionRenderer().render(input_data)
