@@ -63,3 +63,29 @@ class FakeStateProgressor:
             game_proposal=self.game_proposal.model_copy(deep=True),
             rationale=self.rationale,
         )
+
+
+def render_state_progressor_prompt(input: StateProgressorInput) -> str:
+    sections = (
+        (
+            "State Progressor Task",
+            (
+                "Propose one deterministic game candidate aligned to the runtime objective and "
+                "the provided North Star view."
+            ),
+        ),
+        ("Runtime Objective", input.runtime_objective),
+        ("North Star View", input.northstar_view.content),
+        (
+            "Required Output",
+            (
+                "Provide:\n"
+                "- game proposal title\n"
+                "- game proposal description\n"
+                "- expected state delta\n"
+                "- risks\n"
+                "- rationale"
+            ),
+        ),
+    )
+    return "\n\n".join(f"## {title}\n{content}" for title, content in sections)

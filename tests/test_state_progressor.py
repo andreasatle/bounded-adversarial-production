@@ -5,6 +5,7 @@ from baps.northstar_projection import NorthStarProjectionInput, NorthStarProject
 from baps.state_progressor import (
     FakeStateProgressor,
     GameProposal,
+    render_state_progressor_prompt,
     StateProgressionProposal,
     StateProgressorInput,
 )
@@ -218,3 +219,59 @@ def test_fake_state_progressor_does_not_mutate_inputs() -> None:
     after_game_proposal = game_proposal.model_dump(mode="json")
     assert after_input == before_input
     assert after_game_proposal == before_game_proposal
+
+
+def test_render_state_progressor_prompt_includes_required_sections_in_order() -> None:
+    progressor_input = StateProgressorInput(
+        id="input-1",
+        northstar_view=_northstar_view(),
+        runtime_objective="Improve architecture clarity",
+    )
+
+    prompt = render_state_progressor_prompt(progressor_input)
+
+    task_idx = prompt.index("## State Progressor Task")
+    objective_idx = prompt.index("## Runtime Objective")
+    view_idx = prompt.index("## North Star View")
+    output_idx = prompt.index("## Required Output")
+
+    assert task_idx < objective_idx < view_idx < output_idx
+
+
+def test_render_state_progressor_prompt_renders_runtime_objective_verbatim() -> None:
+    objective = "Objective line 1\nObjective line 2 with  spaces"
+    progressor_input = StateProgressorInput(
+        id="input-1",
+        northstar_view=_northstar_view(),
+        runtime_objective=objective,
+    )
+
+    prompt = render_state_progressor_prompt(progressor_input)
+
+    assert f"## Runtime Objective\n{objective}" in prompt
+
+
+def test_render_state_progressor_prompt_renders_northstar_view_content_verbatim() -> None:
+    view = _northstar_view()
+    progressor_input = StateProgressorInput(
+        id="input-1",
+        northstar_view=view,
+        runtime_objective="Improve architecture clarity",
+    )
+
+    prompt = render_state_progressor_prompt(progressor_input)
+
+    assert f"## North Star View\n{view.content}" in prompt
+
+
+def test_render_state_progressor_prompt_repeated_calls_are_byte_identical() -> None:
+    progressor_input = StateProgressorInput(
+        id="input-1",
+        northstar_view=_northstar_view(),
+        runtime_objective="Improve architecture clarity",
+    )
+
+    first = render_state_progressor_prompt(progressor_input)
+    second = render_state_progressor_prompt(progressor_input)
+
+    assert first == second
