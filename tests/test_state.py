@@ -6,6 +6,7 @@ from baps.state import (
     build_default_state_artifact_registry,
     DocumentArtifactAdapter,
     find_state_artifact,
+    fingerprint_state,
     GitRepositoryArtifactAdapter,
     NorthStar,
     State,
@@ -280,6 +281,89 @@ def test_state_update_proposal_rejects_empty_base_state_fingerprint(
             summary="Summary",
             base_state_fingerprint=bad_fingerprint,
         )
+
+
+def test_fingerprint_state_is_deterministic_for_repeated_calls() -> None:
+    state = State(
+        northstar=NorthStar(
+            artifacts=(
+                StateArtifact(id="northstar-1", kind="document"),
+                StateArtifact(id="northstar-2", kind="git_repository"),
+            )
+        ),
+        artifacts=(
+            StateArtifact(id="state-1", kind="document"),
+            StateArtifact(id="state-2", kind="git_repository"),
+        ),
+    )
+
+    first = fingerprint_state(state)
+    second = fingerprint_state(state)
+
+    assert first == second
+
+
+def test_fingerprint_state_changes_when_artifact_order_changes() -> None:
+    first_state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
+        artifacts=(
+            StateArtifact(id="state-1", kind="document"),
+            StateArtifact(id="state-2", kind="git_repository"),
+        ),
+    )
+    second_state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
+        artifacts=(
+            StateArtifact(id="state-2", kind="git_repository"),
+            StateArtifact(id="state-1", kind="document"),
+        ),
+    )
+
+    assert fingerprint_state(first_state) != fingerprint_state(second_state)
+
+
+def test_fingerprint_state_changes_when_artifact_id_changes() -> None:
+    first_state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
+        artifacts=(StateArtifact(id="state-1", kind="document"),),
+    )
+    second_state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
+        artifacts=(StateArtifact(id="state-2", kind="document"),),
+    )
+
+    assert fingerprint_state(first_state) != fingerprint_state(second_state)
+
+
+def test_fingerprint_state_changes_when_artifact_kind_changes() -> None:
+    first_state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
+        artifacts=(StateArtifact(id="state-1", kind="document"),),
+    )
+    second_state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
+        artifacts=(StateArtifact(id="state-1", kind="git_repository"),),
+    )
+
+    assert fingerprint_state(first_state) != fingerprint_state(second_state)
+
+
+def test_fingerprint_state_changes_when_northstar_artifacts_change() -> None:
+    first_state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
+        artifacts=(StateArtifact(id="state-1", kind="document"),),
+    )
+    second_state = State(
+        northstar=NorthStar(
+            artifacts=(
+                StateArtifact(id="northstar-1", kind="document"),
+                StateArtifact(id="northstar-2", kind="git_repository"),
+            )
+        ),
+        artifacts=(StateArtifact(id="state-1", kind="document"),),
+    )
+
+    assert fingerprint_state(first_state) != fingerprint_state(second_state)
 
 
 def test_find_state_artifact_finds_northstar_artifact() -> None:

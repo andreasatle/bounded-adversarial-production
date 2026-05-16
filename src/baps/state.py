@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Protocol
 
 from pydantic import BaseModel, Field, model_validator, field_validator
@@ -95,6 +97,15 @@ class StateUpdateProposal(BaseModel):
 class StateProjection(BaseModel):
     northstar: tuple[str, ...] = ()
     artifacts: tuple[str, ...] = ()
+
+
+def fingerprint_state(state: State) -> str:
+    canonical = json.dumps(
+        state.model_dump(mode="json"),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def find_state_artifact(state: State, artifact_id: str) -> StateArtifact:
