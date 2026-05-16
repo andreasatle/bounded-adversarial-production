@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Protocol
 
 from pydantic import BaseModel, Field, field_validator
@@ -89,3 +90,48 @@ def render_state_progressor_prompt(input: StateProgressorInput) -> str:
         ),
     )
     return "\n\n".join(f"## {title}\n{content}" for title, content in sections)
+
+
+def parse_state_progression_proposal(text: str, input_id: str) -> StateProgressionProposal:
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError("state progression proposal must be valid JSON") from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError("state progression proposal must be a JSON object")
+
+    allowed_top_level = {"id", "game_proposal", "rationale"}
+    top_level_keys = set(parsed.keys())
+    if top_level_keys != allowed_top_level:
+        raise ValueError(
+            "state progression proposal must contain exactly keys: id, game_proposal, rationale"
+        )
+
+    game_proposal = parsed.get("game_proposal")
+    if not isinstance(game_proposal, dict):
+        raise ValueError("game_proposal must be a JSON object")
+
+    allowed_game_proposal = {"id", "title", "description", "expected_state_delta", "risks"}
+    game_proposal_keys = set(game_proposal.keys())
+    if game_proposal_keys != allowed_game_proposal:
+        raise ValueError(
+            "game_proposal must contain exactly keys: id, title, description, "
+            "expected_state_delta, risks"
+        )
+
+    risks = game_proposal.get("risks")
+    if not isinstance(risks, list) or any(not isinstance(item, str) for item in risks):
+        raise ValueError("game_proposal.risks must be a list[str]")
+
+    try:
+        return StateProgressionProposal.model_validate(
+            {
+                "id": parsed["id"],
+                "input_id": input_id,
+                "game_proposal": game_proposal,
+                "rationale": parsed["rationale"],
+            }
+        )
+    except Exception as exc:
+        raise ValueError("state progression proposal failed schema validation") from exc

@@ -5,6 +5,7 @@ from baps.northstar_projection import NorthStarProjectionInput, NorthStarProject
 from baps.state_progressor import (
     FakeStateProgressor,
     GameProposal,
+    parse_state_progression_proposal,
     render_state_progressor_prompt,
     StateProgressionProposal,
     StateProgressorInput,
@@ -275,3 +276,142 @@ def test_render_state_progressor_prompt_repeated_calls_are_byte_identical() -> N
     second = render_state_progressor_prompt(progressor_input)
 
     assert first == second
+
+
+def test_parse_state_progression_proposal_valid_json() -> None:
+    text = """
+    {
+      "id": "progression-1",
+      "game_proposal": {
+        "id": "game-1",
+        "title": "Refine docs",
+        "description": "Run documentation refinement game",
+        "expected_state_delta": "Clearer docs",
+        "risks": ["minor drift"]
+      },
+      "rationale": "Bounded improvement with low risk"
+    }
+    """
+
+    parsed = parse_state_progression_proposal(text=text, input_id="input-1")
+
+    assert isinstance(parsed, StateProgressionProposal)
+    assert parsed.id == "progression-1"
+    assert parsed.input_id == "input-1"
+    assert parsed.game_proposal.id == "game-1"
+    assert parsed.game_proposal.risks == ["minor drift"]
+
+
+def test_parse_state_progression_proposal_uses_function_input_id_not_json() -> None:
+    text = """
+    {
+      "id": "progression-1",
+      "game_proposal": {
+        "id": "game-1",
+        "title": "Refine docs",
+        "description": "Run documentation refinement game",
+        "expected_state_delta": "Clearer docs",
+        "risks": []
+      },
+      "rationale": "Bounded improvement"
+    }
+    """
+
+    parsed = parse_state_progression_proposal(text=text, input_id="input-from-function")
+
+    assert parsed.input_id == "input-from-function"
+
+
+@pytest.mark.parametrize("bad_text", ["{", "[]", "\"string\"", "123"])
+def test_parse_state_progression_proposal_rejects_invalid_json(bad_text: str) -> None:
+    with pytest.raises(ValueError):
+        parse_state_progression_proposal(text=bad_text, input_id="input-1")
+
+
+@pytest.mark.parametrize(
+    "missing_top_level_key",
+    ["id", "game_proposal", "rationale"],
+)
+def test_parse_state_progression_proposal_rejects_missing_required_top_level_field(
+    missing_top_level_key: str,
+) -> None:
+    payload = {
+        "id": "progression-1",
+        "game_proposal": {
+            "id": "game-1",
+            "title": "Refine docs",
+            "description": "Run documentation refinement game",
+            "expected_state_delta": "Clearer docs",
+            "risks": [],
+        },
+        "rationale": "Bounded improvement",
+    }
+    del payload[missing_top_level_key]
+
+    with pytest.raises(ValueError):
+        parse_state_progression_proposal(text=str(payload).replace("'", '"'), input_id="input-1")
+
+
+def test_parse_state_progression_proposal_rejects_extra_top_level_field() -> None:
+    text = """
+    {
+      "id": "progression-1",
+      "game_proposal": {
+        "id": "game-1",
+        "title": "Refine docs",
+        "description": "Run documentation refinement game",
+        "expected_state_delta": "Clearer docs",
+        "risks": []
+      },
+      "rationale": "Bounded improvement",
+      "extra": "not-allowed"
+    }
+    """
+    with pytest.raises(ValueError):
+        parse_state_progression_proposal(text=text, input_id="input-1")
+
+
+def test_parse_state_progression_proposal_rejects_extra_game_proposal_field() -> None:
+    text = """
+    {
+      "id": "progression-1",
+      "game_proposal": {
+        "id": "game-1",
+        "title": "Refine docs",
+        "description": "Run documentation refinement game",
+        "expected_state_delta": "Clearer docs",
+        "risks": [],
+        "extra": "not-allowed"
+      },
+      "rationale": "Bounded improvement"
+    }
+    """
+    with pytest.raises(ValueError):
+        parse_state_progression_proposal(text=text, input_id="input-1")
+
+
+@pytest.mark.parametrize(
+    "bad_risks",
+    [
+        "\"not-a-list\"",
+        "123",
+        "[1, 2]",
+        "[\"ok\", 3]",
+    ],
+)
+def test_parse_state_progression_proposal_rejects_non_list_string_risks(bad_risks: str) -> None:
+    text = f"""
+    {{
+      "id": "progression-1",
+      "game_proposal": {{
+        "id": "game-1",
+        "title": "Refine docs",
+        "description": "Run documentation refinement game",
+        "expected_state_delta": "Clearer docs",
+        "risks": {bad_risks}
+      }},
+      "rationale": "Bounded improvement"
+    }}
+    """
+    with pytest.raises(ValueError):
+        parse_state_progression_proposal(text=text, input_id="input-1")
