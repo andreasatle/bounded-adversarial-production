@@ -47,7 +47,7 @@ class ProjectionType(str, Enum):
     NORTH_STAR = "north_star"
 
 
-class ProjectionArtifact(BaseModel):
+class StateView(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     id: str
@@ -63,7 +63,7 @@ class ProjectionArtifact(BaseModel):
 
 
 class ProjectionRenderer(Protocol):
-    def render(self, input_data: NorthStarProjectionInput) -> ProjectionArtifact:
+    def render(self, input_data: NorthStarProjectionInput) -> StateView:
         ...
 
 
@@ -107,10 +107,10 @@ def fingerprint_northstar_projection_input(input_data: NorthStarProjectionInput)
 
 
 class NorthStarProjectionRenderer:
-    def render(self, input_data: NorthStarProjectionInput) -> ProjectionArtifact:
+    def render(self, input_data: NorthStarProjectionInput) -> "NorthStarView":
         content = render_northstar_projection(input_data)
         input_fingerprint = fingerprint_northstar_projection_input(input_data)
-        return ProjectionArtifact(
+        return NorthStarView(
             id=f"projection:northstar:{input_fingerprint}",
             projection_type=ProjectionType.NORTH_STAR,
             content=content,
@@ -118,7 +118,10 @@ class NorthStarProjectionRenderer:
         )
 
 
-def render_northstar_projection_artifact(
+NorthStarView = StateView
+
+
+def render_northstar_view(
     input_data: NorthStarProjectionInput,
-) -> ProjectionArtifact:
+) -> NorthStarView:
     return NorthStarProjectionRenderer().render(input_data)

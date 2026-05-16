@@ -3,14 +3,15 @@ from pydantic import ValidationError
 
 from baps.state import NorthStar, State, StateArtifact
 from baps.northstar_projection import (
+    NorthStarView,
     NorthStarProjectionRenderer,
     NorthStarProjectionInput,
     NorthStarProjectionItem,
-    ProjectionArtifact,
     ProjectionPolicy,
     ProjectionType,
+    StateView,
     fingerprint_northstar_projection_input,
-    render_northstar_projection_artifact,
+    render_northstar_view,
     render_northstar_projection,
 )
 
@@ -160,17 +161,17 @@ def test_projection_artifact_rejects_empty_required_strings(field_name: str, val
     }
     payload[field_name] = value
     with pytest.raises(ValidationError):
-        ProjectionArtifact.model_validate(payload)
+        StateView.model_validate(payload)
 
 
 def test_projection_artifact_metadata_defaults_are_isolated_per_instance() -> None:
-    first = ProjectionArtifact(
+    first = StateView(
         id="projection-1",
         projection_type=ProjectionType.NORTH_STAR,
         content="content-1",
         input_fingerprint="fp-1",
     )
-    second = ProjectionArtifact(
+    second = StateView(
         id="projection-2",
         projection_type=ProjectionType.NORTH_STAR,
         content="content-2",
@@ -184,7 +185,7 @@ def test_projection_artifact_metadata_defaults_are_isolated_per_instance() -> No
 
 def test_projection_artifact_rejects_invalid_projection_type() -> None:
     with pytest.raises(ValidationError):
-        ProjectionArtifact(
+        StateView(
             id="projection-1",
             projection_type="invalid_type",
             content="content",
@@ -193,7 +194,7 @@ def test_projection_artifact_rejects_invalid_projection_type() -> None:
 
 
 def test_projection_artifact_accepts_north_star_projection_type() -> None:
-    artifact = ProjectionArtifact(
+    artifact = StateView(
         id="projection-1",
         projection_type=ProjectionType.NORTH_STAR,
         content="content",
@@ -202,7 +203,7 @@ def test_projection_artifact_accepts_north_star_projection_type() -> None:
     assert artifact.projection_type is ProjectionType.NORTH_STAR
 
 
-def test_render_northstar_projection_artifact_preserves_markdown_content() -> None:
+def test_render_northstar_view_preserves_markdown_content() -> None:
     data = NorthStarProjectionInput(
         framework_policy=(_item("Policy A", "policy", "framework", "active"),),
         project_state=(_item("State A", "state", "project", "accepted"),),
@@ -211,7 +212,7 @@ def test_render_northstar_projection_artifact_preserves_markdown_content() -> No
     )
     expected_markdown = render_northstar_projection(data)
 
-    artifact = render_northstar_projection_artifact(data)
+    artifact = render_northstar_view(data)
 
     assert artifact.content == expected_markdown
     assert artifact.projection_type is ProjectionType.NORTH_STAR
@@ -259,7 +260,7 @@ def test_projection_artifact_is_distinct_from_state_and_does_not_mutate_state() 
         project_state=(_item("State A", "state", "project", "accepted"),),
     )
 
-    artifact = render_northstar_projection_artifact(projection_input)
+    artifact = render_northstar_view(projection_input)
 
     assert not isinstance(artifact, State)
     assert state.model_dump(mode="json") == before
@@ -271,8 +272,8 @@ def test_repeated_artifact_generation_with_identical_input_is_byte_identical() -
         project_state=(_item("State A", "state", "project", "accepted"),),
     )
 
-    first = render_northstar_projection_artifact(projection_input)
-    second = render_northstar_projection_artifact(projection_input)
+    first = render_northstar_view(projection_input)
+    second = render_northstar_view(projection_input)
 
     assert first.model_dump_json() == second.model_dump_json()
 
@@ -286,7 +287,7 @@ def test_modifying_input_after_render_does_not_mutate_projection_artifact() -> N
         status="accepted",
     )
     projection_input = NorthStarProjectionInput(project_state=(item,))
-    artifact = render_northstar_projection_artifact(projection_input)
+    artifact = render_northstar_view(projection_input)
     before_content = artifact.content
     before_fingerprint = artifact.input_fingerprint
 
@@ -331,7 +332,8 @@ def test_northstar_projection_renderer_returns_projection_artifact() -> None:
 
     artifact = renderer.render(data)
 
-    assert isinstance(artifact, ProjectionArtifact)
+    assert isinstance(artifact, StateView)
+    assert isinstance(artifact, NorthStarView)
 
 
 def test_northstar_projection_renderer_repeated_renders_are_byte_identical() -> None:
