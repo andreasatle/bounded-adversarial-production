@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Protocol
 
+from baps.models import ModelClient
 from pydantic import BaseModel, Field, field_validator
 
 from baps.northstar_projection import NorthStarView
@@ -64,6 +65,16 @@ class FakeStateProgressor:
             game_proposal=self.game_proposal.model_copy(deep=True),
             rationale=self.rationale,
         )
+
+
+class ModelStateProgressor:
+    def __init__(self, model_client: ModelClient):
+        self.model_client = model_client
+
+    def progress(self, input: StateProgressorInput) -> StateProgressionProposal:
+        prompt = render_state_progressor_prompt(input)
+        generated = self.model_client.generate(prompt)
+        return parse_state_progression_proposal(generated, input_id=input.id)
 
 
 def render_state_progressor_prompt(input: StateProgressorInput) -> str:

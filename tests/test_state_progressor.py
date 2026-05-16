@@ -5,6 +5,7 @@ from baps.northstar_projection import NorthStarProjectionInput, NorthStarProject
 from baps.state_progressor import (
     FakeStateProgressor,
     GameProposal,
+    ModelStateProgressor,
     parse_state_progression_proposal,
     render_state_progressor_prompt,
     StateProgressionProposal,
@@ -415,3 +416,110 @@ def test_parse_state_progression_proposal_rejects_non_list_string_risks(bad_risk
     """
     with pytest.raises(ValueError):
         parse_state_progression_proposal(text=text, input_id="input-1")
+
+
+class _FakeModelClient:
+    def __init__(self, output: str):
+        self.output = output
+        self.prompts: list[str] = []
+
+    def generate(self, prompt: str) -> str:
+        self.prompts.append(prompt)
+        return self.output
+
+
+def test_model_state_progressor_sends_rendered_prompt_to_model_client() -> None:
+    output = """
+    {
+      "id": "progression-1",
+      "game_proposal": {
+        "id": "game-1",
+        "title": "Refine docs",
+        "description": "Run documentation refinement game",
+        "expected_state_delta": "Clearer docs",
+        "risks": []
+      },
+      "rationale": "Bounded improvement"
+    }
+    """
+    model = _FakeModelClient(output=output)
+    progressor = ModelStateProgressor(model_client=model)
+    progressor_input = StateProgressorInput(
+        id="input-1",
+        northstar_view=_northstar_view(),
+        runtime_objective="Improve clarity",
+    )
+    expected_prompt = render_state_progressor_prompt(progressor_input)
+
+    _ = progressor.progress(progressor_input)
+
+    assert model.prompts == [expected_prompt]
+
+
+def test_model_state_progressor_valid_json_returns_state_progression_proposal() -> None:
+    output = """
+    {
+      "id": "progression-1",
+      "game_proposal": {
+        "id": "game-1",
+        "title": "Refine docs",
+        "description": "Run documentation refinement game",
+        "expected_state_delta": "Clearer docs",
+        "risks": ["minor drift"]
+      },
+      "rationale": "Bounded improvement"
+    }
+    """
+    model = _FakeModelClient(output=output)
+    progressor = ModelStateProgressor(model_client=model)
+    progressor_input = StateProgressorInput(
+        id="input-1",
+        northstar_view=_northstar_view(),
+        runtime_objective="Improve clarity",
+    )
+
+    result = progressor.progress(progressor_input)
+
+    assert isinstance(result, StateProgressionProposal)
+    assert result.id == "progression-1"
+    assert result.game_proposal.id == "game-1"
+
+
+def test_model_state_progressor_proposal_input_id_comes_from_progressor_input() -> None:
+    output = """
+    {
+      "id": "progression-1",
+      "game_proposal": {
+        "id": "game-1",
+        "title": "Refine docs",
+        "description": "Run documentation refinement game",
+        "expected_state_delta": "Clearer docs",
+        "risks": []
+      },
+      "rationale": "Bounded improvement"
+    }
+    """
+    model = _FakeModelClient(output=output)
+    progressor = ModelStateProgressor(model_client=model)
+    progressor_input = StateProgressorInput(
+        id="input-from-state-progressor-input",
+        northstar_view=_northstar_view(),
+        runtime_objective="Improve clarity",
+    )
+
+    result = progressor.progress(progressor_input)
+
+    assert result.input_id == "input-from-state-progressor-input"
+
+
+def test_model_state_progressor_invalid_model_output_raises_value_error() -> None:
+    model = _FakeModelClient(output="not-json")
+    progressor = ModelStateProgressor(model_client=model)
+    progressor_input = StateProgressorInput(
+        id="input-1",
+        northstar_view=_northstar_view(),
+        runtime_objective="Improve clarity",
+    )
+
+    with pytest.raises(ValueError):
+        progressor.progress(progressor_input)
