@@ -108,6 +108,12 @@ def fingerprint_state(state: State) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def validate_update_base_state(state: State, proposal: StateUpdateProposal) -> bool:
+    if proposal.base_state_fingerprint is None:
+        return True
+    return proposal.base_state_fingerprint == fingerprint_state(state)
+
+
 def find_state_artifact(state: State, artifact_id: str) -> StateArtifact:
     resolved_artifact_id = _require_non_empty(artifact_id)
     for artifact in state.northstar.artifacts:

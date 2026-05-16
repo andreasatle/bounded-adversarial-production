@@ -16,6 +16,7 @@ from baps.state import (
     StateUpdateProposal,
     StateUpdateTarget,
     project_state,
+    validate_update_base_state,
     validate_state_artifacts,
 )
 
@@ -364,6 +365,68 @@ def test_fingerprint_state_changes_when_northstar_artifacts_change() -> None:
     )
 
     assert fingerprint_state(first_state) != fingerprint_state(second_state)
+
+
+def test_validate_update_base_state_without_fingerprint_returns_true() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)),
+    )
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="ns-1"),
+        summary="Summary",
+    )
+
+    assert validate_update_base_state(state, proposal) is True
+
+
+def test_validate_update_base_state_with_matching_fingerprint_returns_true() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)),
+    )
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="ns-1"),
+        summary="Summary",
+        base_state_fingerprint=fingerprint_state(state),
+    )
+
+    assert validate_update_base_state(state, proposal) is True
+
+
+def test_validate_update_base_state_with_non_matching_fingerprint_returns_false() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)),
+    )
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="ns-1"),
+        summary="Summary",
+        base_state_fingerprint="not-a-matching-fingerprint",
+    )
+
+    assert validate_update_base_state(state, proposal) is False
+
+
+def test_validate_update_base_state_does_not_mutate_inputs() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)),
+        artifacts=(StateArtifact(id="artifact-1", kind="git_repository"),),
+    )
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="ns-1"),
+        summary="Summary",
+        base_state_fingerprint=fingerprint_state(state),
+        payload={"operation": "replace_artifact"},
+    )
+    state_before = state.model_dump(mode="json")
+    proposal_before = proposal.model_dump(mode="json")
+
+    _ = validate_update_base_state(state, proposal)
+
+    assert state.model_dump(mode="json") == state_before
+    assert proposal.model_dump(mode="json") == proposal_before
 
 
 def test_find_state_artifact_finds_northstar_artifact() -> None:
