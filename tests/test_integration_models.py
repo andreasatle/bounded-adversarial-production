@@ -289,6 +289,26 @@ def test_derive_state_update_from_decision_does_not_mutate_input_decision() -> N
     assert after == before
 
 
+def test_derive_state_update_from_decision_sets_base_state_fingerprint_to_none() -> None:
+    decision = IntegrationDecision(
+        id="decision-1",
+        state_change=StateChange(
+            id="artifact-1",
+            execution_result_id="result-1",
+            summary="Summary 1",
+            applied_delta="Delta 1",
+            risks=[],
+        ),
+        accepted=True,
+        rationale="Accepted",
+    )
+
+    proposal = derive_state_update_from_decision(decision)
+
+    assert proposal is not None
+    assert proposal.base_state_fingerprint is None
+
+
 def test_apply_decision_update_rejected_returns_none_and_does_not_call_service() -> None:
     decision = IntegrationDecision(
         id="decision-1",

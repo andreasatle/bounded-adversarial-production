@@ -250,6 +250,38 @@ def test_state_update_proposal_payload_default_is_isolated_per_instance() -> Non
     assert second.payload == {}
 
 
+def test_state_update_proposal_accepts_omitted_base_state_fingerprint() -> None:
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="artifact-1"),
+        summary="Summary",
+    )
+    assert proposal.base_state_fingerprint is None
+
+
+def test_state_update_proposal_accepts_non_empty_base_state_fingerprint() -> None:
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="artifact-1"),
+        summary="Summary",
+        base_state_fingerprint="state-fingerprint-123",
+    )
+    assert proposal.base_state_fingerprint == "state-fingerprint-123"
+
+
+@pytest.mark.parametrize("bad_fingerprint", ["", "   ", "\n\t"])
+def test_state_update_proposal_rejects_empty_base_state_fingerprint(
+    bad_fingerprint: str,
+) -> None:
+    with pytest.raises(ValidationError):
+        StateUpdateProposal(
+            id="proposal-1",
+            target=StateUpdateTarget(artifact_id="artifact-1"),
+            summary="Summary",
+            base_state_fingerprint=bad_fingerprint,
+        )
+
+
 def test_find_state_artifact_finds_northstar_artifact() -> None:
     state = State(
         northstar=NorthStar(

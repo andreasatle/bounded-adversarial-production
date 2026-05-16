@@ -79,9 +79,17 @@ class StateUpdateProposal(BaseModel):
     target: StateUpdateTarget
     summary: str
     payload: dict[str, object] = Field(default_factory=dict)
+    base_state_fingerprint: str | None = None
 
     _validate_id = field_validator("id")(_require_non_empty)
     _validate_summary = field_validator("summary")(_require_non_empty)
+
+    @field_validator("base_state_fingerprint")
+    @classmethod
+    def _validate_optional_base_state_fingerprint(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _require_non_empty(value)
 
 
 class StateProjection(BaseModel):

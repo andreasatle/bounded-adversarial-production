@@ -75,6 +75,7 @@ def derive_state_update_from_decision(
         id=f"state-update:{decision.id}",
         target=StateUpdateTarget(artifact_id=decision.state_change.id),
         summary=decision.state_change.summary,
+        base_state_fingerprint=None,
         payload={
             "applied_delta": decision.state_change.applied_delta,
             "execution_result_id": decision.state_change.execution_result_id,
