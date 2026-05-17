@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 from baps.game_executor import GameExecutionResult
 from baps.integration import IntegrationDecision, IntegrationSatisfaction, StateChange
@@ -16,6 +20,79 @@ SECTION_BODY = (
     "Introduction: This short report summarizes the current state of the workspace output.\n\n"
     "Conclusion: The report now includes both an introduction and a conclusion in one section.\n"
 )
+
+
+def _require_non_empty(value: str, field_name: str) -> str:
+    if value.strip() == "":
+        raise ValueError(f"{field_name} must be non-empty")
+    return value
+
+
+def _load_spec(spec_path: Path) -> dict[str, Any]:
+    if not spec_path.exists():
+        raise ValueError(f"spec file not found: {spec_path}")
+
+    loaded = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+    if loaded is None:
+        return {}
+    if not isinstance(loaded, dict):
+        raise ValueError("spec file must contain a YAML mapping/object at top level")
+    return loaded
+
+
+def _resolve_output_path(workspace: Path, output_value: str) -> Path:
+    output_candidate = Path(output_value)
+    if output_candidate.is_absolute():
+        return output_candidate
+    return workspace / output_candidate
+
+
+def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
+    spec_data: dict[str, Any] = {}
+    if args.spec:
+        spec_path = Path(args.spec)
+        spec_data = _load_spec(spec_path)
+    else:
+        spec_path = None
+
+    workspace_raw = (
+        args.workspace
+        if args.workspace is not None
+        else spec_data.get("workspace", ".baps-workspace")
+    )
+    goal_raw = args.goal if args.goal is not None else spec_data.get("goal", REQUEST)
+    output_raw = args.output if args.output is not None else spec_data.get("output")
+    max_iterations_raw = (
+        args.max_iterations
+        if args.max_iterations is not None
+        else spec_data.get("max_iterations", 2)
+    )
+
+    workspace_str = _require_non_empty(str(workspace_raw), "workspace")
+    goal = _require_non_empty(str(goal_raw), "goal")
+    workspace = Path(workspace_str)
+
+    if output_raw is None:
+        output_path = workspace / "output" / "report.md"
+    else:
+        output_str = _require_non_empty(str(output_raw), "output")
+        output_path = _resolve_output_path(workspace, output_str)
+
+    try:
+        max_iterations = int(max_iterations_raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("max_iterations must be an integer >= 1") from exc
+
+    if max_iterations < 1:
+        raise ValueError("max_iterations must be >= 1")
+
+    return {
+        "workspace": workspace,
+        "goal": goal,
+        "output_path": output_path,
+        "max_iterations": max_iterations,
+        "spec_path": spec_path,
+    }
 
 
 class _ReportStateProgressor:
@@ -84,33 +161,39 @@ class _ReportIntegrator:
         )
 
 
-def _build_view_content(request: str, current_document: str) -> str:
+def _build_view_content(goal: str, current_document: str) -> str:
     document_preview = current_document[-400:]
     return (
         "Request:\n"
-        f"{request}\n\n"
+        f"{goal}\n\n"
         "Current report tail:\n"
         f"{document_preview}"
     )
 
 
-def _build_input(iteration: int, current_document: str) -> StateProgressorInput:
+def _build_input(iteration: int, current_document: str, goal: str) -> StateProgressorInput:
     view = NorthStarView(
         id=f"northstar-view:run:{iteration}",
         projection_type=ProjectionType.NORTH_STAR,
-        content=_build_view_content(REQUEST, current_document),
+        content=_build_view_content(goal, current_document),
         input_fingerprint=f"run:{iteration}:{len(current_document)}",
         metadata={},
     )
     return StateProgressorInput(
         id=f"run-input:{iteration}",
         northstar_view=view,
-        runtime_objective=REQUEST,
+        runtime_objective=goal,
     )
 
 
-def run_baps_loop(workspace: Path) -> dict[str, object]:
-    output_path = workspace / "output" / "report.md"
+def run_baps_loop(
+    workspace: Path,
+    goal: str = REQUEST,
+    output_path: Path | None = None,
+    max_iterations: int = 2,
+) -> dict[str, object]:
+    if output_path is None:
+        output_path = workspace / "output" / "report.md"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if not output_path.exists():
         output_path.write_text("", encoding="utf-8")
@@ -120,14 +203,14 @@ def run_baps_loop(workspace: Path) -> dict[str, object]:
     executor = _ReportGameExecutor()
     integrator = _ReportIntegrator()
 
-    for iteration in (1, 2):
+    for iteration in range(1, max_iterations + 1):
         before = output_path.read_text(encoding="utf-8")
         progressor.set_section_exists(SECTION_MARKER in before)
         loop_result = run_loop(
             progressor=progressor,
             executor=executor,
             integrator=integrator,
-            input=_build_input(iteration=iteration, current_document=before),
+            input=_build_input(iteration=iteration, current_document=before, goal=goal),
         )
 
         accepted = loop_result.decision.accepted
@@ -160,7 +243,7 @@ def run_baps_loop(workspace: Path) -> dict[str, object]:
         if not accepted:
             break
 
-    if len(iterations) == 1:
+    if len(iterations) == 1 and max_iterations >= 2:
         iterations.append(
             {
                 "iteration": 2,
@@ -177,26 +260,60 @@ def run_baps_loop(workspace: Path) -> dict[str, object]:
 
     return {
         "workspace": workspace,
+        "goal": goal,
         "output_path": output_path,
+        "max_iterations": max_iterations,
         "iterations": iterations,
     }
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run one hardened deterministic baps loop.")
+    parser.add_argument("--spec", default=None, help="YAML spec path.")
     parser.add_argument(
         "--workspace",
-        default=".baps-workspace",
+        default=None,
         help="Workspace directory for runtime outputs.",
+    )
+    parser.add_argument(
+        "--goal",
+        default=None,
+        help="Runtime goal text.",
+    )
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="Output markdown path (relative paths are resolved under workspace).",
+    )
+    parser.add_argument(
+        "--max-iterations",
+        type=int,
+        default=None,
+        help="Maximum loop iterations (must be >= 1).",
     )
     args = parser.parse_args()
 
-    result = run_baps_loop(Path(args.workspace))
-    workspace = result["workspace"]
-    output_path = result["output_path"]
+    try:
+        config = resolve_run_config(args)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
+
+    result = run_baps_loop(
+        workspace=config["workspace"],
+        goal=config["goal"],
+        output_path=config["output_path"],
+        max_iterations=config["max_iterations"],
+    )
+    workspace = config["workspace"]
+    goal = config["goal"]
+    output_path = config["output_path"]
+    max_iterations = config["max_iterations"]
 
     print(f"workspace={workspace}")
+    print(f"goal={goal}")
     print(f"output_path={output_path}")
+    print(f"max_iterations={max_iterations}")
     for record in result["iterations"]:
         print(f"iteration={record['iteration']}")
         print(f"state_derived={record['state_derived']}")

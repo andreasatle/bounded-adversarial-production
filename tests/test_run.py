@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from baps.run import SECTION_MARKER, main, run_baps_loop
 
 
@@ -54,7 +56,9 @@ def test_main_prints_required_loop_fields(monkeypatch, capsys, tmp_path: Path) -
     out = capsys.readouterr().out
 
     assert f"workspace={workspace}" in out
+    assert "goal=Write a short report with an introduction and conclusion." in out
     assert f"output_path={workspace / 'output' / 'report.md'}" in out
+    assert "max_iterations=2" in out
     assert "iteration=1" in out
     assert "iteration=2" in out
     assert "state_derived=True" in out
@@ -73,8 +77,8 @@ def test_duplicate_detection_uses_authoritative_document_not_view_content(tmp_pa
 
     original_build_input = run_module._build_input
 
-    def _misleading_build_input(iteration: int, current_document: str):
-        input_obj = original_build_input(iteration=iteration, current_document=current_document)
+    def _misleading_build_input(iteration: int, current_document: str, goal: str):
+        input_obj = original_build_input(iteration=iteration, current_document=current_document, goal=goal)
         if iteration == 2:
             input_obj.northstar_view = input_obj.northstar_view.model_copy(
                 update={
@@ -89,3 +93,144 @@ def test_duplicate_detection_uses_authoritative_document_not_view_content(tmp_pa
 
     content = (workspace / "output" / "report.md").read_text(encoding="utf-8")
     assert content.count(SECTION_MARKER) == 1
+
+
+def test_main_cli_config_resolves_and_prints(monkeypatch, capsys, tmp_path: Path) -> None:
+    workspace = tmp_path / "custom-ws"
+    output = "custom/report.md"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace",
+            str(workspace),
+            "--goal",
+            "Custom goal",
+            "--output",
+            output,
+            "--max-iterations",
+            "3",
+        ],
+    )
+
+    main()
+    out = capsys.readouterr().out
+
+    assert f"workspace={workspace}" in out
+    assert "goal=Custom goal" in out
+    assert f"output_path={workspace / output}" in out
+    assert "max_iterations=3" in out
+
+
+def test_main_yaml_spec_resolves_and_prints(monkeypatch, capsys, tmp_path: Path) -> None:
+    workspace = tmp_path / "ws-from-spec"
+    spec = tmp_path / "config.yaml"
+    spec.write_text(
+        "\n".join(
+            [
+                f"workspace: {workspace}",
+                "goal: Spec goal",
+                "output: out/spec-report.md",
+                "max_iterations: 3",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("sys.argv", ["baps-run", "--spec", str(spec)])
+    main()
+    out = capsys.readouterr().out
+
+    assert f"workspace={workspace}" in out
+    assert "goal=Spec goal" in out
+    assert f"output_path={workspace / 'out/spec-report.md'}" in out
+    assert "max_iterations=3" in out
+
+
+def test_main_cli_overrides_yaml(monkeypatch, capsys, tmp_path: Path) -> None:
+    spec = tmp_path / "config.yaml"
+    spec.write_text(
+        "\n".join(
+            [
+                "workspace: from-spec",
+                "goal: Spec goal",
+                "output: from-spec.md",
+                "max_iterations: 7",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    cli_workspace = tmp_path / "from-cli"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--spec",
+            str(spec),
+            "--workspace",
+            str(cli_workspace),
+            "--goal",
+            "CLI goal",
+            "--output",
+            "from-cli.md",
+            "--max-iterations",
+            "2",
+        ],
+    )
+
+    main()
+    out = capsys.readouterr().out
+
+    assert f"workspace={cli_workspace}" in out
+    assert "goal=CLI goal" in out
+    assert f"output_path={cli_workspace / 'from-cli.md'}" in out
+    assert "max_iterations=2" in out
+
+
+def test_output_path_absolute_remains_absolute(monkeypatch, capsys, tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    absolute_output = tmp_path / "abs" / "report.md"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace",
+            str(workspace),
+            "--output",
+            str(absolute_output),
+        ],
+    )
+
+    main()
+    out = capsys.readouterr().out
+    assert f"output_path={absolute_output}" in out
+
+
+def test_spec_relative_path_resolves_from_cwd(monkeypatch, capsys, tmp_path: Path) -> None:
+    spec = tmp_path / "config.yaml"
+    workspace = tmp_path / "from-relative-spec"
+    spec.write_text(f"workspace: {workspace}\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("sys.argv", ["baps-run", "--spec", "config.yaml"])
+
+    main()
+    out = capsys.readouterr().out
+    assert f"workspace={workspace}" in out
+
+
+@pytest.mark.parametrize(
+    ("argv", "error_substring"),
+    [
+        (["baps-run", "--max-iterations", "0"], "max_iterations must be >= 1"),
+        (["baps-run", "--goal", "   "], "goal must be non-empty"),
+        (["baps-run", "--workspace", "   "], "workspace must be non-empty"),
+        (["baps-run", "--output", "   "], "output must be non-empty"),
+    ],
+)
+def test_invalid_config_fails_cleanly(monkeypatch, capsys, argv: list[str], error_substring: str) -> None:
+    monkeypatch.setattr("sys.argv", argv)
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert error_substring in err
