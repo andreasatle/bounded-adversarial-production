@@ -44,12 +44,13 @@ def _ensure_state_file(store: JsonStateStore) -> None:
 
 def run_state_loop_demo(
     *,
-    state_path: Path,
+    workspace: Path,
     runtime_objective: str,
 ) -> tuple[
     tuple[LoopResult, NorthStarView, StateUpdateProposal | None, State | None, str, str],
     tuple[LoopResult, NorthStarView, StateUpdateProposal | None, State | None, str, str],
 ]:
+    state_path = workspace / "state" / "demo-state.json"
     store = JsonStateStore(state_path)
     _ensure_state_file(store)
 
@@ -111,9 +112,9 @@ def run_state_loop_demo(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run one deterministic state loop pass.")
     parser.add_argument(
-        "--state-path",
-        default="state/demo-state.json",
-        help="Path to JSON state file (created if missing).",
+        "--workspace",
+        default=".baps-workspace",
+        help="Workspace directory for runtime outputs.",
     )
     parser.add_argument(
         "--runtime-objective",
@@ -121,9 +122,11 @@ def main() -> None:
         help="Runtime objective passed to StateProgressorInput.",
     )
     args = parser.parse_args()
+    workspace = Path(args.workspace)
+    state_path = workspace / "state" / "demo-state.json"
 
     iteration_1, iteration_2 = run_state_loop_demo(
-        state_path=Path(args.state_path),
+        workspace=workspace,
         runtime_objective=args.runtime_objective,
     )
     loop_result_1, _northstar_view_1, proposal_1, updated_state_1, before_1, after_1 = iteration_1
@@ -147,4 +150,6 @@ def main() -> None:
     print(f"state_fingerprint_before={before_2}")
     print(f"state_fingerprint_after={after_2}")
 
-    print(f"state_path={Path(args.state_path)}")
+    print(f"workspace={workspace}")
+    print(f"state_path={state_path}")
+    state_path = Path(args.workspace) / "state" / "demo-state.json"

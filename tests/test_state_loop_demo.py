@@ -6,10 +6,11 @@ from baps.state_store import JsonStateStore
 
 
 def test_run_state_loop_demo_creates_state_file_and_runs_once(tmp_path: Path) -> None:
-    state_path = tmp_path / "state" / "demo-state.json"
+    workspace = tmp_path / "workspace-a"
+    state_path = workspace / "state" / "demo-state.json"
 
     iteration_1, iteration_2 = run_state_loop_demo(
-        state_path=state_path,
+        workspace=workspace,
         runtime_objective="Run deterministic state loop demo",
     )
     loop_result_1, northstar_view_1, proposal_1, updated_state_1, before_1, after_1 = iteration_1
@@ -33,14 +34,15 @@ def test_run_state_loop_demo_creates_state_file_and_runs_once(tmp_path: Path) ->
     assert after_2 != ""
 
 
-def test_state_loop_demo_main_prints_expected_fields(monkeypatch, capsys, tmp_path: Path) -> None:
-    state_path = tmp_path / "state" / "demo-state.json"
+def test_state_loop_demo_main_uses_custom_workspace(monkeypatch, capsys, tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace-custom"
+    state_path = workspace / "state" / "demo-state.json"
     monkeypatch.setattr(
         "sys.argv",
         [
             "baps-state-loop-demo",
-            "--state-path",
-            str(state_path),
+            "--workspace",
+            str(workspace),
             "--runtime-objective",
             "Deterministic objective",
         ],
@@ -58,4 +60,29 @@ def test_state_loop_demo_main_prints_expected_fields(monkeypatch, capsys, tmp_pa
     assert "state_changed=True" in out
     assert "state_fingerprint_before=" in out
     assert "state_fingerprint_after=" in out
+    assert f"workspace={workspace}" in out
     assert f"state_path={state_path}" in out
+
+
+def test_state_loop_demo_main_uses_default_workspace_and_not_repo_state(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-state-loop-demo",
+            "--runtime-objective",
+            "Deterministic objective",
+        ],
+    )
+
+    main()
+    out = capsys.readouterr().out
+
+    expected_workspace = Path(".baps-workspace")
+    expected_state_path = expected_workspace / "state" / "demo-state.json"
+    assert expected_state_path.exists()
+    assert not Path("state/demo-state.json").exists()
+    assert f"workspace={expected_workspace}" in out
+    assert f"state_path={expected_state_path}" in out
