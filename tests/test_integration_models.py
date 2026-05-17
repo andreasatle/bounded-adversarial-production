@@ -42,6 +42,30 @@ def test_state_change_rejects_empty_required_strings(field_name: str, bad_value:
         StateChange.model_validate(payload)
 
 
+@pytest.mark.parametrize("materiality", ["none", "partial", "full"])
+def test_state_change_accepts_allowed_materiality_values(materiality: str) -> None:
+    state_change = StateChange(
+        id="change-1",
+        execution_result_id="result-1",
+        summary="Summary",
+        applied_delta="Applied delta",
+        materiality=materiality,
+    )
+
+    assert state_change.materiality == materiality
+
+
+def test_state_change_rejects_invalid_materiality_value() -> None:
+    with pytest.raises(ValidationError):
+        StateChange(
+            id="change-1",
+            execution_result_id="result-1",
+            summary="Summary",
+            applied_delta="Applied delta",
+            materiality="invalid",
+        )
+
+
 @pytest.mark.parametrize("field_name", ["id", "rationale"])
 @pytest.mark.parametrize("bad_value", ["", "   ", "\n\t"])
 def test_integration_decision_rejects_empty_required_strings(field_name: str, bad_value: str) -> None:
@@ -151,6 +175,7 @@ def test_fake_integrator_defaults_satisfaction_to_full() -> None:
     decision = integrator.integrate(result)
 
     assert decision.satisfaction == IntegrationSatisfaction.FULL
+    assert decision.state_change.materiality == "full"
 
 
 def test_fake_integrator_preserves_explicit_satisfaction() -> None:
@@ -172,6 +197,27 @@ def test_fake_integrator_preserves_explicit_satisfaction() -> None:
     decision = integrator.integrate(result)
 
     assert decision.satisfaction == IntegrationSatisfaction.PARTIAL
+
+
+def test_fake_integrator_preserves_explicit_materiality() -> None:
+    integrator = FakeIntegrator(
+        accepted=True,
+        rationale="Deterministic rationale",
+        applied_delta="Applied delta",
+        materiality="partial",
+    )
+    result = GameExecutionResult(
+        id="result-1",
+        game_proposal_id="game-1",
+        status="completed",
+        summary="Execution summary",
+        state_delta="State delta",
+        risks=[],
+    )
+
+    decision = integrator.integrate(result)
+
+    assert decision.state_change.materiality == "partial"
 
 
 def test_integration_decision_accepts_true_with_partial_satisfaction() -> None:

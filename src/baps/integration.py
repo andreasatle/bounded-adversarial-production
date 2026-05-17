@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Protocol
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -21,6 +21,7 @@ class StateChange(BaseModel):
     execution_result_id: str
     summary: str
     applied_delta: str
+    materiality: Literal["none", "partial", "full"] = "full"
     risks: list[str] = Field(default_factory=list)
 
     _validate_id = field_validator("id")(_require_non_empty)
@@ -58,11 +59,13 @@ class FakeIntegrator:
         rationale: str,
         applied_delta: str,
         satisfaction: IntegrationSatisfaction = IntegrationSatisfaction.FULL,
+        materiality: str = "full",
     ):
         self.accepted = accepted
         self.rationale = _require_non_empty(rationale)
         self.applied_delta = _require_non_empty(applied_delta)
         self.satisfaction = satisfaction
+        self.materiality = materiality
 
     def integrate(self, result: GameExecutionResult) -> IntegrationDecision:
         state_change = StateChange(
@@ -70,6 +73,7 @@ class FakeIntegrator:
             execution_result_id=result.id,
             summary=result.summary,
             applied_delta=self.applied_delta,
+            materiality=self.materiality,
             risks=list(result.risks),
         )
         return IntegrationDecision(
