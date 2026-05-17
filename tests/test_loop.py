@@ -423,9 +423,10 @@ def test_run_state_loop_once_applies_update_when_decision_is_accepted() -> None:
         integrator=integrator,
         runtime_objective="Improve state",
     )
+    _, _, state_update_proposal, updated_state = result
 
-    assert result.state_update_proposal is not None
-    assert result.updated_state is not None
+    assert state_update_proposal is not None
+    assert updated_state is not None
     assert store.save_calls == 1
 
 
@@ -469,9 +470,10 @@ def test_run_state_loop_once_skips_update_when_decision_is_rejected() -> None:
         integrator=integrator,
         runtime_objective="Improve state",
     )
+    _, _, state_update_proposal, updated_state = result
 
-    assert result.state_update_proposal is None
-    assert result.updated_state is None
+    assert state_update_proposal is None
+    assert updated_state is None
     assert store.save_calls == 0
 
 

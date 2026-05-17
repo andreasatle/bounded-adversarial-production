@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from pydantic import BaseModel
 
 from baps.blackboard import Blackboard
@@ -29,14 +27,6 @@ class LoopResult(BaseModel):
     proposal: StateProgressionProposal
     execution_result: GameExecutionResult
     decision: IntegrationDecision
-
-
-@dataclass
-class StateLoopRunResult:
-    loop_result: LoopResult
-    northstar_view: NorthStarView
-    state_update_proposal: StateUpdateProposal | None
-    updated_state: State | None
 
 
 def _build_northstar_view_from_state(state: State) -> NorthStarView:
@@ -77,7 +67,7 @@ def run_state_loop_once(
     executor: GameExecutor,
     integrator: Integrator,
     runtime_objective: str,
-) -> StateLoopRunResult:
+) -> tuple[LoopResult, NorthStarView, StateUpdateProposal | None, State | None]:
     current_state = service.load_state()
     northstar_view = _build_northstar_view_from_state(current_state)
     progress_input = StateProgressorInput(
@@ -114,11 +104,11 @@ def run_state_loop_once(
             )
         updated_state = service.apply_update(proposal_for_apply)
 
-    return StateLoopRunResult(
-        loop_result=loop_result,
-        northstar_view=northstar_view,
-        state_update_proposal=proposal,
-        updated_state=updated_state,
+    return (
+        loop_result,
+        northstar_view,
+        proposal,
+        updated_state,
     )
 
 
