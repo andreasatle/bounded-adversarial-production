@@ -3,10 +3,17 @@ from pathlib import Path
 from baps.blackboard import Blackboard
 from baps.game_executor import FakeGameExecutor, GameExecutionResult
 from baps.integration import FakeIntegrator
-from baps.loop import LoopResult, apply_loop_decision_update, record_loop_result, run_loop
+from baps.loop import (
+    LoopResult,
+    apply_loop_decision_update,
+    record_loop_result,
+    run_loop,
+    run_state_loop_once,
+)
 from baps.northstar_projection import NorthStarProjectionInput, NorthStarProjectionItem, render_northstar_view
 from baps.state import NorthStar, State, StateArtifact, StateUpdateProposal
 from baps.state_progressor import FakeStateProgressor, GameProposal, StateProgressionProposal, StateProgressorInput
+from baps.state_service import StateService
 
 
 class _RecordingProgressor:
@@ -47,6 +54,19 @@ class _RecordingStateService:
     def apply_update(self, proposal: StateUpdateProposal) -> State:
         self.calls.append(proposal)
         return self.updated_state
+
+
+class _LoopInMemoryStateStore:
+    def __init__(self, state: State):
+        self.state = state
+        self.save_calls = 0
+
+    def load(self) -> State:
+        return self.state
+
+    def save(self, state: State) -> None:
+        self.save_calls += 1
+        self.state = state
 
 
 def _input() -> StateProgressorInput:
@@ -361,3 +381,122 @@ def test_run_loop_still_does_not_apply_state_updates() -> None:
     _ = run_loop(progressor=progressor, executor=executor, integrator=integrator, input=_input())
 
     assert service.calls == []
+
+
+def test_run_state_loop_once_applies_update_when_decision_is_accepted() -> None:
+    initial_state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)),
+        artifacts=(StateArtifact(id="state-change:result-1", kind="document"),),
+    )
+    store = _LoopInMemoryStateStore(initial_state)
+    registry = _registry_with_document_and_git_adapters()
+    service = StateService(store=store, registry=registry)
+    progressor = FakeStateProgressor(
+        game_proposal=GameProposal(
+            id="game-1",
+            title="Title",
+            description="Description",
+            expected_state_delta="Delta",
+        ),
+        rationale="Progressor rationale",
+    )
+    executor = FakeGameExecutor(
+        result=GameExecutionResult(
+            id="result-1",
+            game_proposal_id="template",
+            status="completed",
+            summary="Execution summary",
+            state_delta="State delta",
+            risks=[],
+        )
+    )
+    integrator = FakeIntegrator(
+        accepted=True,
+        rationale="Accepted rationale",
+        applied_delta="Applied delta",
+    )
+
+    result = run_state_loop_once(
+        service=service,
+        progressor=progressor,
+        executor=executor,
+        integrator=integrator,
+        runtime_objective="Improve state",
+    )
+
+    assert result.state_update_proposal is not None
+    assert result.updated_state is not None
+    assert store.save_calls == 1
+
+
+def test_run_state_loop_once_skips_update_when_decision_is_rejected() -> None:
+    initial_state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)),
+        artifacts=(StateArtifact(id="state-change:result-1", kind="document"),),
+    )
+    store = _LoopInMemoryStateStore(initial_state)
+    registry = _registry_with_document_and_git_adapters()
+    service = StateService(store=store, registry=registry)
+    progressor = FakeStateProgressor(
+        game_proposal=GameProposal(
+            id="game-1",
+            title="Title",
+            description="Description",
+            expected_state_delta="Delta",
+        ),
+        rationale="Progressor rationale",
+    )
+    executor = FakeGameExecutor(
+        result=GameExecutionResult(
+            id="result-1",
+            game_proposal_id="template",
+            status="completed",
+            summary="Execution summary",
+            state_delta="State delta",
+            risks=[],
+        )
+    )
+    integrator = FakeIntegrator(
+        accepted=False,
+        rationale="Rejected rationale",
+        applied_delta="Applied delta",
+    )
+
+    result = run_state_loop_once(
+        service=service,
+        progressor=progressor,
+        executor=executor,
+        integrator=integrator,
+        runtime_objective="Improve state",
+    )
+
+    assert result.state_update_proposal is None
+    assert result.updated_state is None
+    assert store.save_calls == 0
+
+
+def _registry_with_document_and_git_adapters():
+    from baps.state import StateArtifactRegistry
+
+    class DocumentAdapter:
+        kind = "document"
+
+        def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
+            return artifact
+
+        def project_artifact(self, artifact: StateArtifact) -> str:
+            return f"document artifact: {artifact.id}"
+
+    class GitAdapter:
+        kind = "git_repository"
+
+        def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
+            return artifact
+
+        def project_artifact(self, artifact: StateArtifact) -> str:
+            return f"git repository artifact: {artifact.id}"
+
+    registry = StateArtifactRegistry()
+    registry.register(DocumentAdapter())
+    registry.register(GitAdapter())
+    return registry
