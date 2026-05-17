@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from baps.blackboard import Blackboard
-from baps.integrator import (
+from baps.runtime_integration import (
     DefaultIntegrationPolicy,
     DefaultMultiCandidateIntegrationPolicy,
     IntegrationPolicy,

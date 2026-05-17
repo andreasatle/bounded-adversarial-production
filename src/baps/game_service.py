@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from baps.blackboard import Blackboard
 from baps.game_types import GameDefinition, build_game_definition
-from baps.integrator import integrate_response
+from baps.runtime_integration import integrate_response
 from baps.models import ModelClient
 from baps.prompt_roles import (
     build_prompt_roles,
