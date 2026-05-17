@@ -13,6 +13,7 @@ from baps.state import (
     StateArtifact,
     StateUpdateProposal,
     build_default_state_artifact_registry,
+    fingerprint_state,
 )
 from baps.state_progressor import FakeStateProgressor, GameProposal
 from baps.state_service import StateService
@@ -45,7 +46,10 @@ def run_state_loop_demo(
     *,
     state_path: Path,
     runtime_objective: str,
-) -> tuple[LoopResult, NorthStarView, StateUpdateProposal | None, State | None]:
+) -> tuple[
+    tuple[LoopResult, NorthStarView, StateUpdateProposal | None, State | None, str, str],
+    tuple[LoopResult, NorthStarView, StateUpdateProposal | None, State | None, str, str],
+]:
     store = JsonStateStore(state_path)
     _ensure_state_file(store)
 
@@ -78,12 +82,29 @@ def run_state_loop_demo(
         applied_delta="Deterministic applied delta",
     )
 
-    return run_state_loop_once(
+    before_1 = fingerprint_state(store.load())
+    loop_result_1, northstar_view_1, proposal_1, updated_state_1 = run_state_loop_once(
         service=service,
         progressor=progressor,
         executor=executor,
         integrator=integrator,
         runtime_objective=runtime_objective,
+    )
+    after_1 = fingerprint_state(store.load())
+
+    before_2 = fingerprint_state(store.load())
+    loop_result_2, northstar_view_2, proposal_2, updated_state_2 = run_state_loop_once(
+        service=service,
+        progressor=progressor,
+        executor=executor,
+        integrator=integrator,
+        runtime_objective=runtime_objective,
+    )
+    after_2 = fingerprint_state(store.load())
+
+    return (
+        (loop_result_1, northstar_view_1, proposal_1, updated_state_1, before_1, after_1),
+        (loop_result_2, northstar_view_2, proposal_2, updated_state_2, before_2, after_2),
     )
 
 
@@ -101,14 +122,27 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    loop_result, _northstar_view, proposal, updated_state = run_state_loop_demo(
+    iteration_1, iteration_2 = run_state_loop_demo(
         state_path=Path(args.state_path),
         runtime_objective=args.runtime_objective,
     )
+    loop_result_1, _northstar_view_1, proposal_1, updated_state_1, before_1, after_1 = iteration_1
+    loop_result_2, _northstar_view_2, proposal_2, updated_state_2, before_2, after_2 = iteration_2
 
-    print(f"loop_proposal_id={loop_result.proposal.id}")
-    print(f"loop_execution_result_id={loop_result.execution_result.id}")
-    print(f"loop_integration_decision_id={loop_result.decision.id}")
-    print(f"update_proposal_produced={proposal is not None}")
-    print(f"state_updated={updated_state is not None}")
+    print("iteration=1")
+    print(f"proposal_id={loop_result_1.proposal.id}")
+    print(f"decision_id={loop_result_1.decision.id}")
+    print(f"state_updated={updated_state_1 is not None}")
+    print(f"state_fingerprint_before={before_1}")
+    print(f"state_fingerprint_after={after_1}")
+
+    print("iteration=2")
+    print(f"proposal_id={loop_result_2.proposal.id}")
+    print(f"decision_id={loop_result_2.decision.id}")
+    print(f"state_updated={updated_state_2 is not None}")
+    print(f"state_fingerprint_before={before_2}")
+    print(f"state_fingerprint_after={after_2}")
+
+    print(f"update_proposal_produced={proposal_1 is not None}")
+    print(f"update_proposal_produced_iteration2={proposal_2 is not None}")
     print(f"state_path={Path(args.state_path)}")
