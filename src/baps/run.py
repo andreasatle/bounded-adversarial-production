@@ -19,9 +19,15 @@ SECTION_BODY = (
 
 
 class _ReportStateProgressor:
+    def __init__(self) -> None:
+        self._section_exists = False
+
+    def set_section_exists(self, section_exists: bool) -> None:
+        self._section_exists = section_exists
+
     def progress(self, input: StateProgressorInput) -> StateProgressionProposal:
         proposal_id = f"proposal:{input.id}"
-        if SECTION_MARKER in input.northstar_view.content:
+        if self._section_exists:
             game_proposal = GameProposal(
                 id=proposal_id,
                 title="report_section_exists",
@@ -116,6 +122,7 @@ def run_baps_loop(workspace: Path) -> dict[str, object]:
 
     for iteration in (1, 2):
         before = output_path.read_text(encoding="utf-8")
+        progressor.set_section_exists(SECTION_MARKER in before)
         loop_result = run_loop(
             progressor=progressor,
             executor=executor,

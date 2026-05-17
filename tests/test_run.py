@@ -65,3 +65,27 @@ def test_main_prints_required_loop_fields(monkeypatch, capsys, tmp_path: Path) -
     assert "update_applied=True" in out
     assert "document_changed=True" in out
     assert "stop_reason=section_already_exists" in out
+
+
+def test_duplicate_detection_uses_authoritative_document_not_view_content(tmp_path: Path, monkeypatch) -> None:
+    workspace = tmp_path / "ws"
+    import baps.run as run_module
+
+    original_build_input = run_module._build_input
+
+    def _misleading_build_input(iteration: int, current_document: str):
+        input_obj = original_build_input(iteration=iteration, current_document=current_document)
+        if iteration == 2:
+            input_obj.northstar_view = input_obj.northstar_view.model_copy(
+                update={
+                    "content": "Request:\nWrite a short report with an introduction and conclusion.\n\nCurrent report tail:\n"
+                }
+            )
+        return input_obj
+
+    monkeypatch.setattr(run_module, "_build_input", _misleading_build_input)
+
+    run_module.run_baps_loop(workspace)
+
+    content = (workspace / "output" / "report.md").read_text(encoding="utf-8")
+    assert content.count(SECTION_MARKER) == 1
