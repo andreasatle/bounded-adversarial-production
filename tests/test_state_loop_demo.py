@@ -25,6 +25,8 @@ def test_run_state_loop_demo_creates_state_file_and_runs_once(tmp_path: Path) ->
     assert updated_state_1 is not None
     assert updated_state_2 is not None
     assert before_2 == after_1
+    assert (before_1 != after_1) is False
+    assert (before_2 != after_2) is False
 
     loaded = JsonStateStore(state_path).load()
     assert isinstance(loaded, State)
@@ -52,8 +54,8 @@ def test_state_loop_demo_main_prints_expected_fields(monkeypatch, capsys, tmp_pa
     assert "proposal_id=" in out
     assert "decision_id=" in out
     assert "update_proposal_produced=True" in out
-    assert "update_proposal_produced_iteration2=True" in out
-    assert "state_updated=True" in out
+    assert "update_applied=True" in out
+    assert "state_changed=False" in out
     assert "state_fingerprint_before=" in out
     assert "state_fingerprint_after=" in out
     assert f"state_path={state_path}" in out
