@@ -20,7 +20,7 @@ Observed from implementation and tests:
 ### Current architectural direction
 Code is layered but currently dual-path:
 
-- legacy/established runtime path: `runtime.py`, `game_service.py`, `roles.py`, prompt/model modules, `integrator.py`, `projections.py`.
+- legacy/established runtime path: `runtime.py`, `game_service.py`, `roles.py`, prompt/model modules, `runtime_integration.py`, `projections.py`.
 - state-centric path: `state.py`, `state_store.py`, `state_service.py`, `northstar_projection.py`, `project_intake.py`, `state_progressor.py`, `game_executor.py`, `integration.py`, `loop.py`.
 
 ### What “bounded adversarial production” means in practice
@@ -241,7 +241,7 @@ src/baps/
   prompts.py
   models.py
   blackboard.py
-  integrator.py
+  runtime_integration.py
   projections.py
   artifacts.py
 
@@ -285,7 +285,7 @@ Important module boundaries:
 - `state_service.py`: service boundary orchestration and fingerprint validation enforcement.
 - `integration.py`: state-centric integration semantics and decision->proposal bridges.
 - `loop.py`: minimal orchestrator and explicit recording/application helpers.
-- `integrator.py`: runtime-path integration policy and blackboard append behavior.
+- `runtime_integration.py`: runtime-path integration policy and blackboard append behavior.
 
 ## 4. Core Runtime Flow
 
@@ -556,7 +556,7 @@ Document artifact versions and proposals are stored under per-artifact directori
 ### Conceptual/future direction
 
 - deeper runtime-to-state integration,
-- unified integration semantics across `integrator.py` and `integration.py`,
+- unified integration semantics across `runtime_integration.py` and `integration.py`,
 - richer adversarial loop with tool boundaries and potentially multi-role expansion,
 - tighter projection/view alignment.
 
@@ -622,7 +622,7 @@ uv run pytest
 ## Observations and Ambiguities
 
 1. Two integration surfaces coexist:
-   - runtime path (`integrator.py` + `schemas.IntegrationDecision`),
+   - runtime path (`runtime_integration.py` + `schemas.IntegrationDecision`),
    - state-centric path (`integration.py` + `integration.IntegrationDecision`).
 2. Two projection surfaces coexist:
    - replay projection (`projections.py`),

@@ -36,7 +36,7 @@ Primary modules:
 
 - `src/baps/blackboard.py`
 - `src/baps/projections.py`
-- `src/baps/integrator.py`
+- `src/baps/runtime_integration.py`
 - `src/baps/schemas.py` (event/governance records)
 
 Core concepts:
@@ -180,7 +180,7 @@ Runtime lifecycle ownership:
 
 Process-memory lifecycle ownership:
 
-- owner modules: `blackboard.py`, `projections.py`, `integrator.py`.
+- owner modules: `blackboard.py`, `projections.py`, `runtime_integration.py`.
 - responsibility: append durable events and reconstruct replay/read models from event history.
 
 State-centric loop lifecycle ownership:
@@ -217,7 +217,7 @@ Merge targets are documentation/planning targets only, not implemented changes.
 ### Target A: Integration Semantics Unification
 Current split:
 
-- runtime-path integration (`src/baps/integrator.py` + `schemas.IntegrationDecision`)
+- runtime-path integration (`src/baps/runtime_integration.py` + `schemas.IntegrationDecision`)
 - state-centric integration (`src/baps/integration.py` + `integration.IntegrationDecision`)
 
 Merge target:
@@ -289,7 +289,7 @@ Candidate direction:
 ### Candidate Group 4: Integrator Naming
 Potential ambiguity:
 
-- `integrator.py` and `integration.py` represent different layers.
+- `runtime_integration.py` and `integration.py` represent different layers.
 
 Candidate direction:
 
