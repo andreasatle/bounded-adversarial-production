@@ -536,6 +536,92 @@ def test_apply_state_update_replace_artifact_updates_ordinary_artifact() -> None
     assert [artifact.id for artifact in updated.artifacts] == ["state-1", "state-2"]
 
 
+def test_apply_state_update_add_artifact_appends_one_ordinary_artifact() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
+        artifacts=(StateArtifact(id="state-1", kind="document"),),
+    )
+    proposal = StateUpdateProposal(
+        id="proposal-add-1",
+        target=StateUpdateTarget(artifact_id="state-1"),
+        summary="Add one ordinary artifact",
+        payload={
+            "operation": "add_artifact",
+            "artifact": {"id": "state-2", "kind": "git_repository"},
+        },
+    )
+
+    updated = apply_state_update(state, proposal)
+
+    assert [artifact.id for artifact in updated.northstar.artifacts] == ["northstar-1"]
+    assert [artifact.id for artifact in updated.artifacts] == ["state-1", "state-2"]
+
+
+def test_apply_state_update_add_artifact_rejects_duplicate_ordinary_artifact_id() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
+        artifacts=(StateArtifact(id="state-1", kind="document"),),
+    )
+    proposal = StateUpdateProposal(
+        id="proposal-add-dup",
+        target=StateUpdateTarget(artifact_id="state-1"),
+        summary="Attempt duplicate ordinary id",
+        payload={
+            "operation": "add_artifact",
+            "artifact": {"id": "state-1", "kind": "git_repository"},
+        },
+    )
+
+    with pytest.raises(ValidationError, match="state artifact ids must be unique"):
+        apply_state_update(state, proposal)
+
+
+def test_apply_state_update_add_artifact_rejects_northstar_overlap_id() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
+        artifacts=(StateArtifact(id="state-1", kind="document"),),
+    )
+    proposal = StateUpdateProposal(
+        id="proposal-add-overlap",
+        target=StateUpdateTarget(artifact_id="state-1"),
+        summary="Attempt northstar overlap id",
+        payload={
+            "operation": "add_artifact",
+            "artifact": {"id": "northstar-1", "kind": "git_repository"},
+        },
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="northstar and state artifacts must not share ids",
+    ):
+        apply_state_update(state, proposal)
+
+
+def test_apply_state_update_replace_artifact_remains_pure_replace() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
+        artifacts=(
+            StateArtifact(id="state-1", kind="document"),
+            StateArtifact(id="state-2", kind="git_repository"),
+        ),
+    )
+    proposal = StateUpdateProposal(
+        id="proposal-replace-pure",
+        target=StateUpdateTarget(artifact_id="state-1"),
+        summary="Replace only target artifact",
+        payload={
+            "operation": "replace_artifact",
+            "artifact": {"id": "state-1", "kind": "document"},
+        },
+    )
+
+    updated = apply_state_update(state, proposal)
+
+    assert len(updated.artifacts) == 2
+    assert [artifact.id for artifact in updated.artifacts] == ["state-1", "state-2"]
+
+
 def test_apply_state_update_replacement_preserves_ordering() -> None:
     state = State(
         northstar=NorthStar(

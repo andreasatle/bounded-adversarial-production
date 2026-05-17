@@ -18,7 +18,7 @@ from baps.northstar_projection import (
     render_northstar_view,
 )
 from baps.schemas import Event
-from baps.state import State, StateUpdateProposal, find_state_artifact
+from baps.state import State, StateUpdateProposal, fingerprint_state
 from baps.state_progressor import StateProgressionProposal, StateProgressor, StateProgressorInput
 from baps.state_service import StateService
 
@@ -87,7 +87,7 @@ def run_state_loop_once(
     if proposal is not None:
         proposal_for_apply = proposal
         if "operation" not in proposal.payload:
-            target_artifact = find_state_artifact(current_state, proposal.target.artifact_id)
+            current_fingerprint = fingerprint_state(current_state)
             proposal_for_apply = StateUpdateProposal(
                 id=proposal.id,
                 target=proposal.target.model_copy(deep=True),
@@ -95,10 +95,10 @@ def run_state_loop_once(
                 base_state_fingerprint=proposal.base_state_fingerprint,
                 payload={
                     **proposal.payload,
-                    "operation": "replace_artifact",
+                    "operation": "add_artifact",
                     "artifact": {
-                        "id": target_artifact.id,
-                        "kind": target_artifact.kind,
+                        "id": f"demo-added:{proposal.id}:{current_fingerprint[:8]}",
+                        "kind": "document",
                     },
                 },
             )

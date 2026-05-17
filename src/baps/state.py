@@ -126,13 +126,23 @@ def find_state_artifact(state: State, artifact_id: str) -> StateArtifact:
 
 
 def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
+    operation = proposal.payload.get("operation")
+    if operation == "add_artifact":
+        if "artifact" not in proposal.payload:
+            raise ValueError("add_artifact operation requires payload['artifact']")
+        added_artifact = StateArtifact.model_validate(proposal.payload["artifact"])
+        return State(
+            northstar=state.northstar,
+            artifacts=(*state.artifacts, added_artifact),
+        )
+
     target_artifact_id = proposal.target.artifact_id
     existing = find_state_artifact(state, target_artifact_id)
 
-    operation = proposal.payload.get("operation")
     if operation != "replace_artifact":
         raise NotImplementedError(
-            f"unsupported state update operation: {operation!r}; supported: 'replace_artifact'"
+            "unsupported state update operation: "
+            f"{operation!r}; supported: 'replace_artifact', 'add_artifact'"
         )
 
     if "artifact" not in proposal.payload:
