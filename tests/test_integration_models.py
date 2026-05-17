@@ -5,6 +5,7 @@ from baps.game_executor import GameExecutionResult
 from baps.integration import (
     FakeIntegrator,
     IntegrationDecision,
+    IntegrationSatisfaction,
     StateChange,
     apply_decision_update,
     derive_state_update_from_decision_for_state,
@@ -62,6 +63,34 @@ def test_integration_decision_rejects_empty_required_strings(field_name: str, ba
         IntegrationDecision.model_validate(payload)
 
 
+@pytest.mark.parametrize(
+    "satisfaction",
+    [
+        IntegrationSatisfaction.NONE,
+        IntegrationSatisfaction.PARTIAL,
+        IntegrationSatisfaction.FULL,
+    ],
+)
+def test_integration_decision_accepts_all_satisfaction_values(
+    satisfaction: IntegrationSatisfaction,
+) -> None:
+    decision = IntegrationDecision(
+        id="decision-1",
+        state_change=StateChange(
+            id="change-1",
+            execution_result_id="result-1",
+            summary="Summary",
+            applied_delta="Applied delta",
+            risks=[],
+        ),
+        accepted=True,
+        satisfaction=satisfaction,
+        rationale="Rationale",
+    )
+
+    assert decision.satisfaction == satisfaction
+
+
 def test_state_change_risks_default_isolated_per_instance() -> None:
     first = StateChange(
         id="change-1",
@@ -100,7 +129,87 @@ def test_fake_integrator_returns_valid_integration_decision() -> None:
 
     assert isinstance(decision, IntegrationDecision)
     assert decision.accepted is True
+    assert decision.satisfaction == IntegrationSatisfaction.FULL
     assert decision.rationale == "Deterministic rationale"
+
+
+def test_fake_integrator_defaults_satisfaction_to_full() -> None:
+    integrator = FakeIntegrator(
+        accepted=True,
+        rationale="Deterministic rationale",
+        applied_delta="Applied delta",
+    )
+    result = GameExecutionResult(
+        id="result-1",
+        game_proposal_id="game-1",
+        status="completed",
+        summary="Execution summary",
+        state_delta="State delta",
+        risks=[],
+    )
+
+    decision = integrator.integrate(result)
+
+    assert decision.satisfaction == IntegrationSatisfaction.FULL
+
+
+def test_fake_integrator_preserves_explicit_satisfaction() -> None:
+    integrator = FakeIntegrator(
+        accepted=True,
+        rationale="Deterministic rationale",
+        applied_delta="Applied delta",
+        satisfaction=IntegrationSatisfaction.PARTIAL,
+    )
+    result = GameExecutionResult(
+        id="result-1",
+        game_proposal_id="game-1",
+        status="completed",
+        summary="Execution summary",
+        state_delta="State delta",
+        risks=[],
+    )
+
+    decision = integrator.integrate(result)
+
+    assert decision.satisfaction == IntegrationSatisfaction.PARTIAL
+
+
+def test_integration_decision_accepts_true_with_partial_satisfaction() -> None:
+    decision = IntegrationDecision(
+        id="decision-1",
+        state_change=StateChange(
+            id="change-1",
+            execution_result_id="result-1",
+            summary="Summary",
+            applied_delta="Applied delta",
+            risks=[],
+        ),
+        accepted=True,
+        satisfaction=IntegrationSatisfaction.PARTIAL,
+        rationale="Rationale",
+    )
+
+    assert decision.accepted is True
+    assert decision.satisfaction == IntegrationSatisfaction.PARTIAL
+
+
+def test_integration_decision_accepts_false_with_full_satisfaction() -> None:
+    decision = IntegrationDecision(
+        id="decision-1",
+        state_change=StateChange(
+            id="change-1",
+            execution_result_id="result-1",
+            summary="Summary",
+            applied_delta="Applied delta",
+            risks=[],
+        ),
+        accepted=False,
+        satisfaction=IntegrationSatisfaction.FULL,
+        rationale="Rationale",
+    )
+
+    assert decision.accepted is False
+    assert decision.satisfaction == IntegrationSatisfaction.FULL
 
 
 def test_fake_integrator_preserves_execution_result_id_linkage() -> None:
