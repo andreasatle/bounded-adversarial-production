@@ -3,6 +3,12 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from baps.game_executor import GameExecutionResult
+from baps.integration import IntegrationDecision, IntegrationSatisfaction, StateChange
+from baps.loop import run_loop
+from baps.northstar_projection import NorthStarView, ProjectionType
+from baps.state_progressor import GameProposal, StateProgressionProposal, StateProgressorInput
+
 REQUEST = "Write a short report with an introduction and conclusion."
 SECTION_MARKER = "## Introduction and Conclusion"
 SECTION_BODY = (
@@ -12,33 +18,89 @@ SECTION_BODY = (
 )
 
 
-def _derive_state(request: str, current_document: str) -> dict[str, str]:
-    return {
-        "request": request,
-        "document": current_document,
-    }
+class _ReportStateProgressor:
+    def progress(self, input: StateProgressorInput) -> StateProgressionProposal:
+        proposal_id = f"proposal:{input.id}"
+        if SECTION_MARKER in input.northstar_view.content:
+            game_proposal = GameProposal(
+                id=proposal_id,
+                title="report_section_exists",
+                description=SECTION_BODY,
+                expected_state_delta="none",
+                risks=[],
+            )
+        else:
+            game_proposal = GameProposal(
+                id=proposal_id,
+                title="append_report_section",
+                description=SECTION_BODY,
+                expected_state_delta="append_section",
+                risks=[],
+            )
+
+        return StateProgressionProposal(
+            id=f"state-progression:{input.id}",
+            input_id=input.id,
+            game_proposal=game_proposal,
+            rationale="deterministic report proposal",
+        )
 
 
-def _build_view(state: dict[str, str]) -> str:
-    document_preview = state["document"][-400:]
+class _ReportGameExecutor:
+    def execute(self, game: GameProposal) -> GameExecutionResult:
+        is_duplicate = game.title == "report_section_exists"
+        return GameExecutionResult(
+            id=f"game-result:{game.id}",
+            game_proposal_id=game.id,
+            status="rejected" if is_duplicate else "accepted",
+            summary="section_already_exists" if is_duplicate else "accepted_append_only",
+            state_delta="none" if is_duplicate else "append_section",
+            risks=[],
+        )
+
+
+class _ReportIntegrator:
+    def integrate(self, result: GameExecutionResult) -> IntegrationDecision:
+        accepted = result.status == "accepted"
+        return IntegrationDecision(
+            id=f"integration-decision:{result.id}",
+            accepted=accepted,
+            satisfaction=IntegrationSatisfaction.FULL,
+            rationale=result.summary,
+            state_change=StateChange(
+                id=f"state-change:{result.id}",
+                execution_result_id=result.id,
+                summary=result.summary,
+                applied_delta=result.state_delta,
+                materiality="full" if accepted else "none",
+                risks=[],
+            ),
+        )
+
+
+def _build_view_content(request: str, current_document: str) -> str:
+    document_preview = current_document[-400:]
     return (
         "Request:\n"
-        f"{state['request']}\n\n"
+        f"{request}\n\n"
         "Current report tail:\n"
         f"{document_preview}"
     )
 
 
-def _propose_section(_view: str) -> str:
-    return SECTION_BODY
-
-
-def _evaluate_append_only_non_duplicate(current_document: str, proposal: str) -> tuple[bool, str]:
-    if SECTION_MARKER in current_document:
-        return False, "section_already_exists"
-    if proposal.strip() == "":
-        return False, "empty_proposal"
-    return True, "accepted_append_only"
+def _build_input(iteration: int, current_document: str) -> StateProgressorInput:
+    view = NorthStarView(
+        id=f"northstar-view:run:{iteration}",
+        projection_type=ProjectionType.NORTH_STAR,
+        content=_build_view_content(REQUEST, current_document),
+        input_fingerprint=f"run:{iteration}:{len(current_document)}",
+        metadata={},
+    )
+    return StateProgressorInput(
+        id=f"run-input:{iteration}",
+        northstar_view=view,
+        runtime_objective=REQUEST,
+    )
 
 
 def run_baps_loop(workspace: Path) -> dict[str, object]:
@@ -48,26 +110,31 @@ def run_baps_loop(workspace: Path) -> dict[str, object]:
         output_path.write_text("", encoding="utf-8")
 
     iterations: list[dict[str, object]] = []
+    progressor = _ReportStateProgressor()
+    executor = _ReportGameExecutor()
+    integrator = _ReportIntegrator()
 
     for iteration in (1, 2):
         before = output_path.read_text(encoding="utf-8")
-        state = _derive_state(REQUEST, before)
-        view = _build_view(state)
-        proposal = _propose_section(view)
-        accepted, decision_reason = _evaluate_append_only_non_duplicate(before, proposal)
+        loop_result = run_loop(
+            progressor=progressor,
+            executor=executor,
+            integrator=integrator,
+            input=_build_input(iteration=iteration, current_document=before),
+        )
+
+        accepted = loop_result.decision.accepted
+        decision_reason = loop_result.decision.rationale
 
         update_applied = False
         document_changed = False
-        stop_reason = ""
 
         if accepted:
-            output_path.write_text(before + proposal, encoding="utf-8")
+            proposal_content = loop_result.proposal.game_proposal.description
+            output_path.write_text(before + proposal_content, encoding="utf-8")
             after = output_path.read_text(encoding="utf-8")
             update_applied = True
             document_changed = after != before
-            stop_reason = "continue"
-        else:
-            stop_reason = decision_reason
 
         iterations.append(
             {
@@ -79,7 +146,7 @@ def run_baps_loop(workspace: Path) -> dict[str, object]:
                 "decision": decision_reason,
                 "update_applied": update_applied,
                 "document_changed": document_changed,
-                "stop_reason": stop_reason,
+                "stop_reason": "continue" if accepted else decision_reason,
             }
         )
 
@@ -87,7 +154,6 @@ def run_baps_loop(workspace: Path) -> dict[str, object]:
             break
 
     if len(iterations) == 1:
-        # Keep the two-pass contract explicit for output/tests.
         iterations.append(
             {
                 "iteration": 2,
