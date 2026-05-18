@@ -280,6 +280,7 @@ def test_project_type_document_creates_state_and_logs_when_debug_enabled(
     assert "[DEBUG] create_state.input:" in out
     assert "  project_type: document" in out
     assert "[DEBUG] create_state.output:" in out
+    assert "[DEBUG] create_game.input:" in out
     assert "  state:" in out
     assert "    northstar:" in out
     assert "    artifacts: ()" not in out
@@ -303,6 +304,39 @@ def test_document_type_is_not_stored_in_state_output(monkeypatch, capsys, tmp_pa
     out = capsys.readouterr().out
     create_state_block = out.split("[DEBUG] create_state.output:")[1].split("\n\n", 1)[0]
     assert "project_type" not in create_state_block
+
+
+def test_create_state_output_flows_into_next_stage(monkeypatch, tmp_path: Path) -> None:
+    workspace = tmp_path / "flow-ws"
+    import baps.run as run_module
+
+    captured: dict[str, object] = {}
+    original_run_baps_loop = run_module.run_baps_loop
+
+    def _capturing_run_baps_loop(*args, **kwargs):
+        captured["state"] = kwargs.get("state")
+        return original_run_baps_loop(*args, **kwargs)
+
+    monkeypatch.setattr(run_module, "run_baps_loop", _capturing_run_baps_loop)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "document",
+        ],
+    )
+
+    run_module.main()
+
+    forwarded_state = captured.get("state")
+    assert forwarded_state is not None
+    assert forwarded_state.model_dump(mode="json") == {
+        "northstar": {"artifacts": []},
+        "artifacts": [],
+    }
 
 
 def test_spec_relative_path_resolves_from_cwd(monkeypatch, capsys, tmp_path: Path) -> None:

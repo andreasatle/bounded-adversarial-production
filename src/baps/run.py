@@ -95,6 +95,18 @@ def _debug_print_create_state(config: dict[str, Any], state: State) -> None:
     print()
 
 
+def _debug_print_create_game_input(state: State) -> None:
+    if not _debug_enabled():
+        return
+    print("[DEBUG] create_game.input:")
+    input_payload = {
+        "state": state.model_dump(mode="json"),
+    }
+    for line in _format_debug_yaml_like(input_payload, indent=2):
+        print(line)
+    print()
+
+
 def _require_non_empty(value: str, field_name: str) -> str:
     if value.strip() == "":
         raise ValueError(f"{field_name} must be non-empty")
@@ -289,7 +301,15 @@ def run_baps_loop(
     goal: str = REQUEST,
     output_path: Path | None = None,
     max_iterations: int = 2,
+    state: State | None = None,
 ) -> dict[str, object]:
+    if state is None:
+        state = State(
+            northstar=NorthStar(artifacts=()),
+            artifacts=(),
+        )
+    _debug_print_create_game_input(state)
+
     if output_path is None:
         output_path = workspace / "output" / "report.md"
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -408,7 +428,7 @@ def main() -> None:
     output_path = config["output_path"]
     max_iterations = config["max_iterations"]
     try:
-        _ = create_state(config)
+        created_state = create_state(config)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
@@ -418,6 +438,7 @@ def main() -> None:
         goal=goal,
         output_path=output_path,
         max_iterations=max_iterations,
+        state=created_state,
     )
 
     print(f"workspace={workspace}")
