@@ -50,12 +50,16 @@ def test_run_baps_loop_writes_only_under_workspace(tmp_path: Path, monkeypatch) 
 
 def test_main_prints_required_loop_fields(monkeypatch, capsys, tmp_path: Path) -> None:
     workspace = tmp_path / "w"
-    monkeypatch.setattr("sys.argv", ["baps-run", "--workspace", str(workspace)])
+    monkeypatch.setattr(
+        "sys.argv",
+        ["baps-run", "--workspace", str(workspace), "--project-type", "document"],
+    )
 
     main()
     out = capsys.readouterr().out
 
     assert f"workspace={workspace}" in out
+    assert "project_type=document" in out
     assert "goal=Write a short report with an introduction and conclusion." in out
     assert f"output_path={workspace / 'output' / 'report.md'}" in out
     assert "max_iterations=2" in out
@@ -105,6 +109,8 @@ def test_main_cli_config_resolves_and_prints(monkeypatch, capsys, tmp_path: Path
             "baps-run",
             "--workspace",
             str(workspace),
+            "--project-type",
+            "document",
             "--goal",
             "Custom goal",
             "--output",
@@ -118,6 +124,7 @@ def test_main_cli_config_resolves_and_prints(monkeypatch, capsys, tmp_path: Path
     out = capsys.readouterr().out
 
     assert f"workspace={workspace}" in out
+    assert "project_type=document" in out
     assert "goal=Custom goal" in out
     assert f"output_path={workspace / output}" in out
     assert "max_iterations=3" in out
@@ -130,6 +137,7 @@ def test_main_yaml_spec_resolves_and_prints(monkeypatch, capsys, tmp_path: Path)
         "\n".join(
             [
                 f"workspace: {workspace}",
+                "project_type: document",
                 "goal: Spec goal",
                 "output: out/spec-report.md",
                 "max_iterations: 3",
@@ -143,6 +151,7 @@ def test_main_yaml_spec_resolves_and_prints(monkeypatch, capsys, tmp_path: Path)
     out = capsys.readouterr().out
 
     assert f"workspace={workspace}" in out
+    assert "project_type=document" in out
     assert "goal=Spec goal" in out
     assert f"output_path={workspace / 'out/spec-report.md'}" in out
     assert "max_iterations=3" in out
@@ -154,6 +163,7 @@ def test_main_cli_overrides_yaml(monkeypatch, capsys, tmp_path: Path) -> None:
         "\n".join(
             [
                 "workspace: from-spec",
+                "project_type: document",
                 "goal: Spec goal",
                 "output: from-spec.md",
                 "max_iterations: 7",
@@ -170,6 +180,8 @@ def test_main_cli_overrides_yaml(monkeypatch, capsys, tmp_path: Path) -> None:
             str(spec),
             "--workspace",
             str(cli_workspace),
+            "--project-type",
+            "document",
             "--goal",
             "CLI goal",
             "--output",
@@ -183,6 +195,7 @@ def test_main_cli_overrides_yaml(monkeypatch, capsys, tmp_path: Path) -> None:
     out = capsys.readouterr().out
 
     assert f"workspace={cli_workspace}" in out
+    assert "project_type=document" in out
     assert "goal=CLI goal" in out
     assert f"output_path={cli_workspace / 'from-cli.md'}" in out
     assert "max_iterations=2" in out
@@ -197,6 +210,8 @@ def test_output_path_absolute_remains_absolute(monkeypatch, capsys, tmp_path: Pa
             "baps-run",
             "--workspace",
             str(workspace),
+            "--project-type",
+            "document",
             "--output",
             str(absolute_output),
         ],
@@ -207,25 +222,14 @@ def test_output_path_absolute_remains_absolute(monkeypatch, capsys, tmp_path: Pa
     assert f"output_path={absolute_output}" in out
 
 
-def test_spec_relative_path_resolves_from_cwd(monkeypatch, capsys, tmp_path: Path) -> None:
-    spec = tmp_path / "config.yaml"
-    workspace = tmp_path / "from-relative-spec"
-    spec.write_text(f"workspace: {workspace}\n", encoding="utf-8")
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("sys.argv", ["baps-run", "--spec", "config.yaml"])
-
-    main()
-    out = capsys.readouterr().out
-    assert f"workspace={workspace}" in out
-
-
 @pytest.mark.parametrize(
     ("argv", "error_substring"),
     [
-        (["baps-run", "--max-iterations", "0"], "max_iterations must be >= 1"),
-        (["baps-run", "--goal", "   "], "goal must be non-empty"),
-        (["baps-run", "--workspace", "   "], "workspace must be non-empty"),
-        (["baps-run", "--output", "   "], "output must be non-empty"),
+        (["baps-run", "--project-type", "document", "--max-iterations", "0"], "max_iterations must be >= 1"),
+        (["baps-run"], "project_type must be non-empty"),
+        (["baps-run", "--project-type", "document", "--goal", "   "], "goal must be non-empty"),
+        (["baps-run", "--project-type", "document", "--workspace", "   "], "workspace must be non-empty"),
+        (["baps-run", "--project-type", "document", "--output", "   "], "output must be non-empty"),
     ],
 )
 def test_invalid_config_fails_cleanly(monkeypatch, capsys, argv: list[str], error_substring: str) -> None:
@@ -237,6 +241,82 @@ def test_invalid_config_fails_cleanly(monkeypatch, capsys, argv: list[str], erro
     assert error_substring in err
 
 
+@pytest.mark.parametrize(
+    ("argv", "error_substring"),
+    [
+        (["baps-run", "--project-type", "git"], "project_type 'git' is not implemented"),
+        (["baps-run", "--project-type", "unknown"], "unknown project_type: unknown"),
+    ],
+)
+def test_invalid_project_type_fails_cleanly(
+    monkeypatch, capsys, argv: list[str], error_substring: str
+) -> None:
+    monkeypatch.setattr("sys.argv", argv)
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert error_substring in err
+
+
+def test_project_type_document_creates_state_and_logs_when_debug_enabled(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "debug-doc-ws"
+    monkeypatch.setenv("BAPS_DEBUG", "1")
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "document",
+        ],
+    )
+
+    main()
+    out = capsys.readouterr().out
+    assert "[DEBUG] create_state.input:" in out
+    assert "  project_type: document" in out
+    assert "[DEBUG] create_state.output:" in out
+    assert "  state:" in out
+    assert "    northstar:" in out
+    assert "    artifacts: ()" not in out
+
+
+def test_document_type_is_not_stored_in_state_output(monkeypatch, capsys, tmp_path: Path) -> None:
+    workspace = tmp_path / "doc-ws"
+    monkeypatch.setenv("BAPS_DEBUG", "1")
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "document",
+        ],
+    )
+
+    main()
+    out = capsys.readouterr().out
+    create_state_block = out.split("[DEBUG] create_state.output:")[1].split("\n\n", 1)[0]
+    assert "project_type" not in create_state_block
+
+
+def test_spec_relative_path_resolves_from_cwd(monkeypatch, capsys, tmp_path: Path) -> None:
+    spec = tmp_path / "config.yaml"
+    workspace = tmp_path / "from-relative-spec"
+    spec.write_text("project_type: document\n" f"workspace: {workspace}\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("sys.argv", ["baps-run", "--spec", "config.yaml"])
+
+    main()
+    out = capsys.readouterr().out
+    assert f"workspace={workspace}" in out
+
+
 def test_debug_enabled_prints_read_config_input_output(monkeypatch, capsys, tmp_path: Path) -> None:
     workspace = tmp_path / "debug-ws"
     spec = tmp_path / "debug-config.yaml"
@@ -244,6 +324,7 @@ def test_debug_enabled_prints_read_config_input_output(monkeypatch, capsys, tmp_
         "\n".join(
             [
                 f"workspace: {workspace}",
+                "project_type: document",
                 "goal: Debug spec goal",
                 "output: out/debug.md",
                 "max_iterations: 2",

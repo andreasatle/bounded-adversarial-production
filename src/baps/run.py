@@ -12,6 +12,7 @@ from baps.game_executor import GameExecutionResult
 from baps.integration import IntegrationDecision, IntegrationSatisfaction, StateChange
 from baps.loop import run_loop
 from baps.northstar_projection import NorthStarView, ProjectionType
+from baps.state import NorthStar, State
 from baps.state_progressor import GameProposal, StateProgressionProposal, StateProgressorInput
 
 REQUEST = "Write a short report with an introduction and conclusion."
@@ -71,6 +72,29 @@ def _debug_print_read_config(args: argparse.Namespace, spec_data: dict[str, Any]
     print()
 
 
+def _debug_print_create_state(config: dict[str, Any], state: State) -> None:
+    if not _debug_enabled():
+        return
+    print("[DEBUG] create_state.input:")
+    input_payload = {
+        "project_type": config["project_type"],
+        "workspace": str(config["workspace"]),
+        "goal": config["goal"],
+        "output_path": str(config["output_path"]),
+        "max_iterations": config["max_iterations"],
+    }
+    for line in _format_debug_yaml_like(input_payload, indent=2):
+        print(line)
+    print()
+    print("[DEBUG] create_state.output:")
+    output_payload = {
+        "state": state.model_dump(mode="json"),
+    }
+    for line in _format_debug_yaml_like(output_payload, indent=2):
+        print(line)
+    print()
+
+
 def _require_non_empty(value: str, field_name: str) -> str:
     if value.strip() == "":
         raise ValueError(f"{field_name} must be non-empty")
@@ -109,6 +133,11 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
         if args.workspace is not None
         else spec_data.get("workspace", ".baps-workspace")
     )
+    project_type_raw = (
+        args.project_type
+        if args.project_type is not None
+        else spec_data.get("project_type")
+    )
     goal_raw = args.goal if args.goal is not None else spec_data.get("goal", REQUEST)
     output_raw = args.output if args.output is not None else spec_data.get("output")
     max_iterations_raw = (
@@ -118,6 +147,9 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
     )
 
     workspace_str = _require_non_empty(str(workspace_raw), "workspace")
+    if project_type_raw is None:
+        raise ValueError("project_type must be non-empty")
+    project_type = _require_non_empty(str(project_type_raw), "project_type")
     goal = _require_non_empty(str(goal_raw), "goal")
     workspace = Path(workspace_str)
 
@@ -137,6 +169,7 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
 
     config = {
         "workspace": workspace,
+        "project_type": project_type,
         "goal": goal,
         "output_path": output_path,
         "max_iterations": max_iterations,
@@ -144,6 +177,20 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
     }
     _debug_print_read_config(args=args, spec_data=spec_data, config=config)
     return config
+
+
+def create_state(config: dict[str, Any]) -> State:
+    project_type = config["project_type"]
+    if project_type == "document":
+        state = State(
+            northstar=NorthStar(artifacts=()),
+            artifacts=(),
+        )
+        _debug_print_create_state(config=config, state=state)
+        return state
+    if project_type == "git":
+        raise ValueError("project_type 'git' is not implemented")
+    raise ValueError(f"unknown project_type: {project_type}")
 
 
 class _ReportStateProgressor:
@@ -327,6 +374,11 @@ def main() -> None:
         help="Workspace directory for runtime outputs.",
     )
     parser.add_argument(
+        "--project-type",
+        default=None,
+        help="Project type (currently supported: document).",
+    )
+    parser.add_argument(
         "--goal",
         default=None,
         help="Runtime goal text.",
@@ -351,9 +403,15 @@ def main() -> None:
         raise SystemExit(2) from exc
 
     workspace = config["workspace"]
+    project_type = config["project_type"]
     goal = config["goal"]
     output_path = config["output_path"]
     max_iterations = config["max_iterations"]
+    try:
+        _ = create_state(config)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
 
     result = run_baps_loop(
         workspace=workspace,
@@ -363,6 +421,7 @@ def main() -> None:
     )
 
     print(f"workspace={workspace}")
+    print(f"project_type={project_type}")
     print(f"goal={goal}")
     print(f"output_path={output_path}")
     print(f"max_iterations={max_iterations}")
