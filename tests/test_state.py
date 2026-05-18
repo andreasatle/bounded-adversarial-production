@@ -5,6 +5,7 @@ from baps.state import (
     apply_state_update,
     AppendSectionDelta,
     build_default_state_artifact_registry,
+    DeltaState,
     DeltaDocumentState,
     DocumentArtifact,
     DocumentArtifactAdapter,
@@ -124,6 +125,16 @@ def test_delta_document_state_does_not_mutate_state() -> None:
     )
     after = state.model_dump(mode="json")
     assert after == before
+
+
+def test_delta_document_state_is_subclass_and_instance_of_delta_state() -> None:
+    delta = DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=AppendSectionDelta(section=Section(title="Intro", body="Body text")),
+    )
+    assert isinstance(delta, DeltaState)
+    assert issubclass(DeltaDocumentState, DeltaState)
 
 
 def test_document_artifact_is_subclass_and_instance_of_state_artifact() -> None:
