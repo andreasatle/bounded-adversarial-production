@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Protocol
+from typing import Literal, Protocol
 
-from pydantic import BaseModel, Field, model_validator, field_validator
+from pydantic import BaseModel, Field, SerializeAsAny, model_validator, field_validator
 
 
 def _require_non_empty(value: str) -> str:
@@ -29,11 +29,9 @@ class Section(BaseModel):
     _validate_body = field_validator("body")(_require_non_empty)
 
 
-class DocumentArtifact(BaseModel):
-    id: str
+class DocumentArtifact(StateArtifact):
+    kind: Literal["document"] = "document"
     sections: tuple[Section, ...] = ()
-
-    _validate_id = field_validator("id")(_require_non_empty)
 
 
 class NorthStar(BaseModel):
@@ -52,13 +50,13 @@ class NorthStar(BaseModel):
 
 class State(BaseModel):
     northstar: NorthStar
-    artifacts: tuple[StateArtifact | DocumentArtifact, ...] = ()
+    artifacts: tuple[SerializeAsAny[StateArtifact], ...] = ()
 
     @field_validator("artifacts")
     @classmethod
     def _validate_unique_artifact_ids(
-        cls, artifacts: tuple[StateArtifact | DocumentArtifact, ...]
-    ) -> tuple[StateArtifact | DocumentArtifact, ...]:
+        cls, artifacts: tuple[SerializeAsAny[StateArtifact], ...]
+    ) -> tuple[SerializeAsAny[StateArtifact], ...]:
         ids = [artifact.id for artifact in artifacts]
         if len(ids) != len(set(ids)):
             raise ValueError("state artifact ids must be unique")
@@ -129,7 +127,7 @@ def validate_update_base_state(state: State, proposal: StateUpdateProposal) -> b
     return proposal.base_state_fingerprint == fingerprint_state(state)
 
 
-def find_state_artifact(state: State, artifact_id: str) -> StateArtifact | DocumentArtifact:
+def find_state_artifact(state: State, artifact_id: str) -> StateArtifact:
     resolved_artifact_id = _require_non_empty(artifact_id)
     for artifact in state.northstar.artifacts:
         if artifact.id == resolved_artifact_id:
@@ -210,9 +208,7 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
 
 
 def validate_state_artifacts(state: State, registry: StateArtifactRegistry) -> State:
-    def _validate_one(
-        artifact: StateArtifact | DocumentArtifact,
-    ) -> StateArtifact | DocumentArtifact:
+    def _validate_one(artifact: StateArtifact) -> StateArtifact:
         if isinstance(artifact, DocumentArtifact):
             return artifact
         adapter = registry.resolve(artifact.kind)
@@ -240,7 +236,7 @@ def validate_state_artifacts(state: State, registry: StateArtifactRegistry) -> S
 
 
 def project_state(state: State, registry: StateArtifactRegistry) -> StateProjection:
-    def _project_one(artifact: StateArtifact | DocumentArtifact) -> str:
+    def _project_one(artifact: StateArtifact) -> str:
         if isinstance(artifact, DocumentArtifact):
             titles = ", ".join(section.title for section in artifact.sections) or "no sections"
             projection = f"document artifact: {artifact.id} ({titles})"

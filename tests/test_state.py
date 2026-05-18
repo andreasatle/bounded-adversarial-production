@@ -44,6 +44,7 @@ def test_state_artifact_rejects_empty_or_whitespace_kind(bad_kind: str) -> None:
 def test_document_artifact_accepts_main_document_with_empty_sections() -> None:
     artifact = DocumentArtifact(id="main-document", sections=())
     assert artifact.id == "main-document"
+    assert artifact.kind == "document"
     assert artifact.sections == ()
 
 
@@ -54,6 +55,21 @@ def test_document_artifact_sections_accepts_section_instances() -> None:
     )
     assert artifact.sections[0].title == "Intro"
     assert artifact.sections[0].body == "Hello"
+
+
+def test_document_artifact_is_subclass_and_instance_of_state_artifact() -> None:
+    artifact = DocumentArtifact(id="main-document", sections=())
+    assert isinstance(artifact, StateArtifact)
+    assert issubclass(DocumentArtifact, StateArtifact)
+
+
+def test_state_accepts_document_artifact_in_artifacts() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=()),
+        artifacts=(DocumentArtifact(id="main-document", sections=()),),
+    )
+    assert len(state.artifacts) == 1
+    assert state.artifacts[0].id == "main-document"
 
 
 def test_northstar_contains_state_artifact_instances() -> None:
@@ -165,6 +181,17 @@ def test_state_rejects_duplicate_ordinary_artifact_ids() -> None:
             artifacts=(
                 StateArtifact(id="dup", kind="document"),
                 StateArtifact(id="dup", kind="git_repository"),
+            ),
+        )
+
+
+def test_state_rejects_duplicate_ids_with_document_artifact() -> None:
+    with pytest.raises(ValidationError, match="state artifact ids must be unique"):
+        State(
+            northstar=NorthStar(artifacts=()),
+            artifacts=(
+                DocumentArtifact(id="main-document", sections=()),
+                StateArtifact(id="main-document", kind="document"),
             ),
         )
 

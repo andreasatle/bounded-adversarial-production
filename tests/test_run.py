@@ -335,7 +335,7 @@ def test_create_state_output_flows_into_next_stage(monkeypatch, tmp_path: Path) 
     assert forwarded_state is not None
     assert forwarded_state.model_dump(mode="json") == {
         "northstar": {"artifacts": []},
-        "artifacts": [{"id": "main-document", "sections": []}],
+        "artifacts": [{"id": "main-document", "kind": "document", "sections": []}],
     }
 
 
