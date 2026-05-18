@@ -21,6 +21,21 @@ class StateArtifact(BaseModel):
     _validate_kind = field_validator("kind")(_require_non_empty)
 
 
+class Section(BaseModel):
+    title: str
+    body: str
+
+    _validate_title = field_validator("title")(_require_non_empty)
+    _validate_body = field_validator("body")(_require_non_empty)
+
+
+class DocumentArtifact(BaseModel):
+    id: str
+    sections: tuple[Section, ...] = ()
+
+    _validate_id = field_validator("id")(_require_non_empty)
+
+
 class NorthStar(BaseModel):
     artifacts: tuple[StateArtifact, ...]
 
@@ -37,13 +52,13 @@ class NorthStar(BaseModel):
 
 class State(BaseModel):
     northstar: NorthStar
-    artifacts: tuple[StateArtifact, ...] = ()
+    artifacts: tuple[StateArtifact | DocumentArtifact, ...] = ()
 
     @field_validator("artifacts")
     @classmethod
     def _validate_unique_artifact_ids(
-        cls, artifacts: tuple[StateArtifact, ...]
-    ) -> tuple[StateArtifact, ...]:
+        cls, artifacts: tuple[StateArtifact | DocumentArtifact, ...]
+    ) -> tuple[StateArtifact | DocumentArtifact, ...]:
         ids = [artifact.id for artifact in artifacts]
         if len(ids) != len(set(ids)):
             raise ValueError("state artifact ids must be unique")
@@ -114,7 +129,7 @@ def validate_update_base_state(state: State, proposal: StateUpdateProposal) -> b
     return proposal.base_state_fingerprint == fingerprint_state(state)
 
 
-def find_state_artifact(state: State, artifact_id: str) -> StateArtifact:
+def find_state_artifact(state: State, artifact_id: str) -> StateArtifact | DocumentArtifact:
     resolved_artifact_id = _require_non_empty(artifact_id)
     for artifact in state.northstar.artifacts:
         if artifact.id == resolved_artifact_id:
@@ -130,7 +145,11 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
     if operation == "add_artifact":
         if "artifact" not in proposal.payload:
             raise ValueError("add_artifact operation requires payload['artifact']")
-        added_artifact = StateArtifact.model_validate(proposal.payload["artifact"])
+        artifact_payload = proposal.payload["artifact"]
+        if isinstance(artifact_payload, dict) and "sections" in artifact_payload:
+            added_artifact = DocumentArtifact.model_validate(artifact_payload)
+        else:
+            added_artifact = StateArtifact.model_validate(artifact_payload)
         return State(
             northstar=state.northstar,
             artifacts=(*state.artifacts, added_artifact),
@@ -148,6 +167,8 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
     if "artifact" not in proposal.payload:
         raise ValueError("replace_artifact operation requires payload['artifact']")
     replacement = StateArtifact.model_validate(proposal.payload["artifact"])
+    if not isinstance(existing, StateArtifact):
+        raise ValueError("replace_artifact only supports StateArtifact targets")
 
     if replacement.id != target_artifact_id:
         raise ValueError(
@@ -189,7 +210,11 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
 
 
 def validate_state_artifacts(state: State, registry: StateArtifactRegistry) -> State:
-    def _validate_one(artifact: StateArtifact) -> StateArtifact:
+    def _validate_one(
+        artifact: StateArtifact | DocumentArtifact,
+    ) -> StateArtifact | DocumentArtifact:
+        if isinstance(artifact, DocumentArtifact):
+            return artifact
         adapter = registry.resolve(artifact.kind)
         validated = adapter.validate_artifact(artifact)
         if validated.id != artifact.id:
@@ -215,7 +240,15 @@ def validate_state_artifacts(state: State, registry: StateArtifactRegistry) -> S
 
 
 def project_state(state: State, registry: StateArtifactRegistry) -> StateProjection:
-    def _project_one(artifact: StateArtifact) -> str:
+    def _project_one(artifact: StateArtifact | DocumentArtifact) -> str:
+        if isinstance(artifact, DocumentArtifact):
+            titles = ", ".join(section.title for section in artifact.sections) or "no sections"
+            projection = f"document artifact: {artifact.id} ({titles})"
+            if not projection.strip():
+                raise ValueError(
+                    f"artifact projection must be a non-empty string for artifact id: {artifact.id}"
+                )
+            return projection
         adapter = registry.resolve(artifact.kind)
         projection = adapter.project_artifact(artifact)
         if not projection.strip():

@@ -4,11 +4,13 @@ from pydantic import ValidationError
 from baps.state import (
     apply_state_update,
     build_default_state_artifact_registry,
+    DocumentArtifact,
     DocumentArtifactAdapter,
     find_state_artifact,
     fingerprint_state,
     GitRepositoryArtifactAdapter,
     NorthStar,
+    Section,
     State,
     StateArtifact,
     StateArtifactRegistry,
@@ -37,6 +39,21 @@ def test_state_artifact_rejects_empty_or_whitespace_id(bad_id: str) -> None:
 def test_state_artifact_rejects_empty_or_whitespace_kind(bad_kind: str) -> None:
     with pytest.raises(ValidationError):
         StateArtifact(id="artifact-1", kind=bad_kind)
+
+
+def test_document_artifact_accepts_main_document_with_empty_sections() -> None:
+    artifact = DocumentArtifact(id="main-document", sections=())
+    assert artifact.id == "main-document"
+    assert artifact.sections == ()
+
+
+def test_document_artifact_sections_accepts_section_instances() -> None:
+    artifact = DocumentArtifact(
+        id="main-document",
+        sections=(Section(title="Intro", body="Hello"),),
+    )
+    assert artifact.sections[0].title == "Intro"
+    assert artifact.sections[0].body == "Hello"
 
 
 def test_northstar_contains_state_artifact_instances() -> None:

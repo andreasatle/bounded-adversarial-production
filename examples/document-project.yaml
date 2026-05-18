@@ -1,0 +1,5 @@
+project_type: document
+workspace: .baps-workspace/document-project
+goal: "Write a short report with an introduction and conclusion."
+output: output/report.md
+max_iterations: 2

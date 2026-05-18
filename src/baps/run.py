@@ -12,7 +12,7 @@ from baps.game_executor import GameExecutionResult
 from baps.integration import IntegrationDecision, IntegrationSatisfaction, StateChange
 from baps.loop import run_loop
 from baps.northstar_projection import NorthStarView, ProjectionType
-from baps.state import NorthStar, State
+from baps.state import DocumentArtifact, NorthStar, State
 from baps.state_progressor import GameProposal, StateProgressionProposal, StateProgressorInput
 
 REQUEST = "Write a short report with an introduction and conclusion."
@@ -196,7 +196,7 @@ def create_state(config: dict[str, Any]) -> State:
     if project_type == "document":
         state = State(
             northstar=NorthStar(artifacts=()),
-            artifacts=(),
+            artifacts=(DocumentArtifact(id="main-document", sections=()),),
         )
         _debug_print_create_state(config=config, state=state)
         return state
