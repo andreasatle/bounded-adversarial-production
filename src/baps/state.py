@@ -34,6 +34,18 @@ class DocumentArtifact(StateArtifact):
     sections: tuple[Section, ...] = ()
 
 
+class AppendSectionDelta(BaseModel):
+    section: Section
+
+
+class DeltaDocumentState(BaseModel):
+    artifact_id: str
+    operation: Literal["append_section"]
+    payload: AppendSectionDelta
+
+    _validate_artifact_id = field_validator("artifact_id")(_require_non_empty)
+
+
 class NorthStar(BaseModel):
     artifacts: tuple[StateArtifact, ...]
 

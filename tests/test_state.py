@@ -3,7 +3,9 @@ from pydantic import ValidationError
 
 from baps.state import (
     apply_state_update,
+    AppendSectionDelta,
     build_default_state_artifact_registry,
+    DeltaDocumentState,
     DocumentArtifact,
     DocumentArtifactAdapter,
     find_state_artifact,
@@ -55,6 +57,73 @@ def test_document_artifact_sections_accepts_section_instances() -> None:
     )
     assert artifact.sections[0].title == "Intro"
     assert artifact.sections[0].body == "Hello"
+
+
+def test_delta_document_state_append_section_constructs_valid_model() -> None:
+    delta = DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=AppendSectionDelta(section=Section(title="Intro", body="Body text")),
+    )
+    assert delta.artifact_id == "main-document"
+    assert delta.operation == "append_section"
+    assert delta.payload.section.title == "Intro"
+
+
+@pytest.mark.parametrize("bad_artifact_id", ["", "   ", "\n\t"])
+def test_delta_document_state_rejects_empty_artifact_id(bad_artifact_id: str) -> None:
+    with pytest.raises(ValidationError):
+        DeltaDocumentState(
+            artifact_id=bad_artifact_id,
+            operation="append_section",
+            payload=AppendSectionDelta(section=Section(title="Intro", body="Body text")),
+        )
+
+
+@pytest.mark.parametrize("bad_title", ["", "   ", "\n\t"])
+def test_delta_document_state_rejects_empty_section_title(bad_title: str) -> None:
+    with pytest.raises(ValidationError):
+        DeltaDocumentState(
+            artifact_id="main-document",
+            operation="append_section",
+            payload=AppendSectionDelta(section=Section(title=bad_title, body="Body text")),
+        )
+
+
+@pytest.mark.parametrize("bad_body", ["", "   ", "\n\t"])
+def test_delta_document_state_rejects_empty_section_body(bad_body: str) -> None:
+    with pytest.raises(ValidationError):
+        DeltaDocumentState(
+            artifact_id="main-document",
+            operation="append_section",
+            payload=AppendSectionDelta(section=Section(title="Intro", body=bad_body)),
+        )
+
+
+def test_delta_document_state_serialization_is_deterministic() -> None:
+    delta = DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=AppendSectionDelta(section=Section(title="Intro", body="Body text")),
+    )
+    first = delta.model_dump(mode="json")
+    second = delta.model_dump(mode="json")
+    assert first == second
+
+
+def test_delta_document_state_does_not_mutate_state() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=()),
+        artifacts=(DocumentArtifact(id="main-document", sections=()),),
+    )
+    before = state.model_dump(mode="json")
+    _ = DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=AppendSectionDelta(section=Section(title="Intro", body="Body text")),
+    )
+    after = state.model_dump(mode="json")
+    assert after == before
 
 
 def test_document_artifact_is_subclass_and_instance_of_state_artifact() -> None:
