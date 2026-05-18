@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,54 @@ SECTION_BODY = (
     "Introduction: This short report summarizes the current state of the workspace output.\n\n"
     "Conclusion: The report now includes both an introduction and a conclusion in one section.\n"
 )
+
+
+def _debug_enabled() -> bool:
+    return os.getenv("BAPS_DEBUG") == "1"
+
+
+def _format_debug_yaml_like(value: Any, indent: int = 0) -> list[str]:
+    prefix = " " * indent
+    if isinstance(value, dict):
+        lines: list[str] = []
+        for key in sorted(value.keys()):
+            item = value[key]
+            if isinstance(item, dict):
+                lines.append(f"{prefix}{key}:")
+                lines.extend(_format_debug_yaml_like(item, indent + 2))
+            else:
+                lines.append(f"{prefix}{key}: {item}")
+        return lines
+    return [f"{prefix}{value}"]
+
+
+def _debug_print_read_config(args: argparse.Namespace, spec_data: dict[str, Any], config: dict[str, Any]) -> None:
+    if not _debug_enabled():
+        return
+    print("[DEBUG] read_config.input:")
+    input_payload = {
+        "cli_args": {
+            "workspace": args.workspace,
+            "goal": args.goal,
+            "output": args.output,
+            "max_iterations": args.max_iterations,
+            "spec": args.spec,
+        },
+        "yaml_values": spec_data,
+    }
+    for line in _format_debug_yaml_like(input_payload, indent=2):
+        print(line)
+    print()
+    print("[DEBUG] read_config.output:")
+    output_payload = {
+        "workspace": str(config["workspace"]),
+        "goal": config["goal"],
+        "output_path": str(config["output_path"]),
+        "max_iterations": config["max_iterations"],
+    }
+    for line in _format_debug_yaml_like(output_payload, indent=2):
+        print(line)
+    print()
 
 
 def _require_non_empty(value: str, field_name: str) -> str:
@@ -86,13 +135,15 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
     if max_iterations < 1:
         raise ValueError("max_iterations must be >= 1")
 
-    return {
+    config = {
         "workspace": workspace,
         "goal": goal,
         "output_path": output_path,
         "max_iterations": max_iterations,
         "spec_path": spec_path,
     }
+    _debug_print_read_config(args=args, spec_data=spec_data, config=config)
+    return config
 
 
 class _ReportStateProgressor:
@@ -299,16 +350,17 @@ def main() -> None:
         print(f"error: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
 
-    result = run_baps_loop(
-        workspace=config["workspace"],
-        goal=config["goal"],
-        output_path=config["output_path"],
-        max_iterations=config["max_iterations"],
-    )
     workspace = config["workspace"]
     goal = config["goal"]
     output_path = config["output_path"]
     max_iterations = config["max_iterations"]
+
+    result = run_baps_loop(
+        workspace=workspace,
+        goal=goal,
+        output_path=output_path,
+        max_iterations=max_iterations,
+    )
 
     print(f"workspace={workspace}")
     print(f"goal={goal}")

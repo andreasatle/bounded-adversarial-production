@@ -69,6 +69,7 @@ def test_main_prints_required_loop_fields(monkeypatch, capsys, tmp_path: Path) -
     assert "update_applied=True" in out
     assert "document_changed=True" in out
     assert "stop_reason=section_already_exists" in out
+    assert "[DEBUG]" not in out
 
 
 def test_duplicate_detection_uses_authoritative_document_not_view_content(tmp_path: Path, monkeypatch) -> None:
@@ -234,3 +235,39 @@ def test_invalid_config_fails_cleanly(monkeypatch, capsys, argv: list[str], erro
     assert exc.value.code == 2
     err = capsys.readouterr().err
     assert error_substring in err
+
+
+def test_debug_enabled_prints_read_config_input_output(monkeypatch, capsys, tmp_path: Path) -> None:
+    workspace = tmp_path / "debug-ws"
+    spec = tmp_path / "debug-config.yaml"
+    spec.write_text(
+        "\n".join(
+            [
+                f"workspace: {workspace}",
+                "goal: Debug spec goal",
+                "output: out/debug.md",
+                "max_iterations: 2",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("BAPS_DEBUG", "1")
+    monkeypatch.setattr("sys.argv", ["baps-run", "--spec", str(spec)])
+
+    main()
+    out = capsys.readouterr().out
+
+    assert "[DEBUG] read_config.input:" in out
+    assert "  cli_args:" in out
+    assert "  yaml_values:" in out
+    assert f"    workspace: {workspace}" in out
+    assert "    goal: Debug spec goal" in out
+    assert "    output: out/debug.md" in out
+    assert "    max_iterations: 2" in out
+    assert "[DEBUG] read_config.output:" in out
+    assert f"  workspace: {workspace}" in out
+    assert "  goal: Debug spec goal" in out
+    assert f"  output_path: {workspace / 'out/debug.md'}" in out
+    assert "  max_iterations: 2" in out
+    assert "{'cli_args':" not in out
