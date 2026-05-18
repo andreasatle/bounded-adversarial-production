@@ -283,7 +283,10 @@ def test_project_type_document_creates_state_and_logs_when_debug_enabled(
     assert "[DEBUG] create_game.input:" in out
     assert "  state:" in out
     assert "    northstar:" in out
-    assert "    artifacts: ()" not in out
+    assert "    artifacts:" in out
+    assert "      - id: main-document" in out
+    assert "        kind: document" in out
+    assert "        sections: []" in out
 
 
 def test_document_type_is_not_stored_in_state_output(monkeypatch, capsys, tmp_path: Path) -> None:
@@ -386,3 +389,48 @@ def test_debug_enabled_prints_read_config_input_output(monkeypatch, capsys, tmp_
     assert f"  output_path: {workspace / 'out/debug.md'}" in out
     assert "  max_iterations: 2" in out
     assert "{'cli_args':" not in out
+
+
+def test_debug_formatter_renders_nested_list_of_dicts_without_python_repr(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "debug-structure-ws"
+    monkeypatch.setenv("BAPS_DEBUG", "1")
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "document",
+        ],
+    )
+
+    main()
+    out = capsys.readouterr().out
+    assert "artifacts: [{'id':" not in out
+    assert "artifacts:\n      - id: main-document" in out
+    assert "sections: []" in out
+
+
+def test_debug_formatter_renders_tuple_as_yaml_list_and_empty_as_brackets(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "debug-tuple-ws"
+    monkeypatch.setenv("BAPS_DEBUG", "1")
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "document",
+        ],
+    )
+
+    main()
+    out = capsys.readouterr().out
+    assert "northstar:\n      artifacts: []" in out
+    assert "sections: []" in out

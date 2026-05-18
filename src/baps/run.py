@@ -31,14 +31,63 @@ def _debug_enabled() -> bool:
 def _format_debug_yaml_like(value: Any, indent: int = 0) -> list[str]:
     prefix = " " * indent
     if isinstance(value, dict):
+        if not value:
+            return [f"{prefix}{{}}"]
         lines: list[str] = []
         for key in sorted(value.keys()):
             item = value[key]
             if isinstance(item, dict):
-                lines.append(f"{prefix}{key}:")
-                lines.extend(_format_debug_yaml_like(item, indent + 2))
+                if not item:
+                    lines.append(f"{prefix}{key}: {{}}")
+                else:
+                    lines.append(f"{prefix}{key}:")
+                    lines.extend(_format_debug_yaml_like(item, indent + 2))
+            elif isinstance(item, (list, tuple)):
+                if len(item) == 0:
+                    lines.append(f"{prefix}{key}: []")
+                else:
+                    lines.append(f"{prefix}{key}:")
+                    lines.extend(_format_debug_yaml_like(item, indent + 2))
             else:
                 lines.append(f"{prefix}{key}: {item}")
+        return lines
+    if isinstance(value, (list, tuple)):
+        if len(value) == 0:
+            return [f"{prefix}[]"]
+        lines = []
+        for item in value:
+            if isinstance(item, dict):
+                if not item:
+                    lines.append(f"{prefix}- {{}}")
+                    continue
+                keys = sorted(item.keys())
+                first_key = keys[0]
+                first_value = item[first_key]
+                if isinstance(first_value, (dict, list, tuple)):
+                    lines.append(f"{prefix}- {first_key}:")
+                    lines.extend(_format_debug_yaml_like(first_value, indent + 4))
+                else:
+                    lines.append(f"{prefix}- {first_key}: {first_value}")
+                for key in keys[1:]:
+                    nested = item[key]
+                    if isinstance(nested, (dict, list, tuple)):
+                        if isinstance(nested, dict) and not nested:
+                            lines.append(f"{prefix}  {key}: {{}}")
+                        elif isinstance(nested, (list, tuple)) and len(nested) == 0:
+                            lines.append(f"{prefix}  {key}: []")
+                        else:
+                            lines.append(f"{prefix}  {key}:")
+                            lines.extend(_format_debug_yaml_like(nested, indent + 4))
+                    else:
+                        lines.append(f"{prefix}  {key}: {nested}")
+            elif isinstance(item, (list, tuple)):
+                if len(item) == 0:
+                    lines.append(f"{prefix}- []")
+                else:
+                    lines.append(f"{prefix}-")
+                    lines.extend(_format_debug_yaml_like(item, indent + 2))
+            else:
+                lines.append(f"{prefix}- {item}")
         return lines
     return [f"{prefix}{value}"]
 
