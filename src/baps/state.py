@@ -61,6 +61,50 @@ class GameSpec(BaseModel):
     _validate_success_condition = field_validator("success_condition")(_require_non_empty)
 
 
+class RedFinding(BaseModel):
+    disposition: Literal["accept", "revise", "reject"]
+    rationale: str
+
+    _validate_rationale = field_validator("rationale")(_require_non_empty)
+
+
+class RefereeDecision(BaseModel):
+    disposition: Literal["accept", "revise", "reject"]
+    rationale: str
+
+    _validate_rationale = field_validator("rationale")(_require_non_empty)
+
+
+class PlayGameRuntime(BaseModel):
+    current_best_delta: SerializeAsAny[DeltaState] | None = None
+
+
+def apply_referee_decision_to_runtime(
+    runtime: PlayGameRuntime,
+    candidate_delta: DeltaState,
+    decision: RefereeDecision,
+) -> PlayGameRuntime:
+    if decision.disposition == "accept":
+        return PlayGameRuntime(current_best_delta=candidate_delta.model_copy(deep=True))
+    if decision.disposition == "revise":
+        return PlayGameRuntime(
+            current_best_delta=(
+                runtime.current_best_delta.model_copy(deep=True)
+                if runtime.current_best_delta is not None
+                else None
+            )
+        )
+    if decision.disposition == "reject":
+        return PlayGameRuntime(
+            current_best_delta=(
+                runtime.current_best_delta.model_copy(deep=True)
+                if runtime.current_best_delta is not None
+                else None
+            )
+        )
+    raise ValueError(f"unsupported referee disposition: {decision.disposition}")
+
+
 class NorthStar(BaseModel):
     artifacts: tuple[StateArtifact, ...]
 

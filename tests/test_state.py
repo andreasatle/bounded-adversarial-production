@@ -3,6 +3,7 @@ from pydantic import ValidationError
 
 from baps.state import (
     apply_state_update,
+    apply_referee_decision_to_runtime,
     AppendSectionDelta,
     build_default_state_artifact_registry,
     DeltaState,
@@ -12,6 +13,9 @@ from baps.state import (
     find_state_artifact,
     fingerprint_state,
     GameSpec,
+    PlayGameRuntime,
+    RedFinding,
+    RefereeDecision,
     GitRepositoryArtifactAdapter,
     NorthStar,
     Section,
@@ -171,6 +175,65 @@ def test_game_spec_rejects_empty_required_fields(field_name: str, value: str) ->
     payload[field_name] = value
     with pytest.raises(ValidationError):
         GameSpec.model_validate(payload)
+
+
+@pytest.mark.parametrize("disposition", ["accept", "revise", "reject"])
+def test_red_finding_accepts_valid_dispositions(disposition: str) -> None:
+    finding = RedFinding(disposition=disposition, rationale="Reason")
+    assert finding.disposition == disposition
+
+
+@pytest.mark.parametrize("disposition", ["accept", "revise", "reject"])
+def test_referee_decision_accepts_valid_dispositions(disposition: str) -> None:
+    decision = RefereeDecision(disposition=disposition, rationale="Reason")
+    assert decision.disposition == disposition
+
+
+@pytest.mark.parametrize("bad_rationale", ["", "   ", "\n\t"])
+def test_red_finding_rejects_empty_rationale(bad_rationale: str) -> None:
+    with pytest.raises(ValidationError):
+        RedFinding(disposition="accept", rationale=bad_rationale)
+
+
+@pytest.mark.parametrize("bad_rationale", ["", "   ", "\n\t"])
+def test_referee_decision_rejects_empty_rationale(bad_rationale: str) -> None:
+    with pytest.raises(ValidationError):
+        RefereeDecision(disposition="accept", rationale=bad_rationale)
+
+
+def test_play_game_runtime_defaults_current_best_delta_to_none() -> None:
+    runtime = PlayGameRuntime()
+    assert runtime.current_best_delta is None
+
+
+def test_play_game_runtime_preserves_earlier_accepted_delta_when_later_candidate_rejected() -> None:
+    accepted_delta = DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=AppendSectionDelta(section=Section(title="Intro", body="Body text")),
+    )
+    runtime = PlayGameRuntime()
+    runtime = apply_referee_decision_to_runtime(
+        runtime=runtime,
+        candidate_delta=accepted_delta,
+        decision=RefereeDecision(disposition="accept", rationale="Good candidate"),
+    )
+
+    later_candidate = DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=AppendSectionDelta(section=Section(title="Conclusion", body="Body text")),
+    )
+    runtime_after_reject = apply_referee_decision_to_runtime(
+        runtime=runtime,
+        candidate_delta=later_candidate,
+        decision=RefereeDecision(disposition="reject", rationale="Reject later candidate"),
+    )
+
+    assert runtime_after_reject.current_best_delta is not None
+    assert runtime_after_reject.current_best_delta.model_dump(mode="json") == accepted_delta.model_dump(
+        mode="json"
+    )
 
 
 def test_document_artifact_is_subclass_and_instance_of_state_artifact() -> None:
