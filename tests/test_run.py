@@ -503,6 +503,29 @@ def test_create_game_target_artifact_not_in_state_fails_cleanly() -> None:
         )
 
 
+def test_create_game_prompt_forbids_markdown_fences_and_lists_required_shape() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "goal": "Write a short report with an introduction and conclusion.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    prompt = run_module._render_create_game_prompt(config, state)
+
+    assert "Return only a JSON object" in prompt
+    assert "Do not wrap output in markdown" in prompt
+    assert "Do not use triple-backtick fences" in prompt
+    assert '"objective"' in prompt
+    assert '"target_artifact_id"' in prompt
+    assert '"allowed_delta_type"' in prompt
+    assert '"success_condition"' in prompt
+
+
 def test_spec_relative_path_resolves_from_cwd(monkeypatch, capsys, tmp_path: Path) -> None:
     spec = tmp_path / "config.yaml"
     workspace = tmp_path / "from-relative-spec"
