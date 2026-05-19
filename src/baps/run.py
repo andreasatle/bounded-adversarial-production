@@ -633,7 +633,9 @@ def _parse_blue_delta_json(text: str) -> DeltaDocumentState:
     try:
         return DeltaDocumentState.model_validate(parsed)
     except Exception as exc:
-        raise ValueError("blue model output failed DeltaDocumentState validation") from exc
+        raise ValueError(
+            f"blue model output failed DeltaDocumentState validation: {exc}"
+        ) from exc
 
 
 def _parse_red_finding_json(text: str) -> RedFinding:
@@ -855,14 +857,15 @@ def play_game(
         blue_generated = client.generate(blue_prompt)
         try:
             candidate_delta = _parse_blue_delta_json(blue_generated)
-        except ValueError:
+        except ValueError as exc:
             _debug_print_blue_raw_model_output(blue_generated)
-            reason = "blue output failed DeltaState validation"
+            reason = f"blue output failed DeltaState validation: {exc}"
             _debug_print_attempt_rejected(attempt, reason)
             previous_feedback = {
                 "attempt_rejection": {
                     "stage": "blue",
                     "reason": reason,
+                    "validation_error": str(exc),
                 }
             }
             continue

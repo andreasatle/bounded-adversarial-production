@@ -1777,6 +1777,11 @@ def test_play_game_invalid_blue_first_attempt_retries_second_attempt() -> None:
     assert delta is not None
     assert delta.payload.section.body == "second"
     assert len(blue_client.prompts) == 2
+    second_prompt = blue_client.prompts[1]
+    assert "previous_feedback_json:" in second_prompt
+    assert '"stage": "blue"' in second_prompt
+    assert "payload.section.body" in second_prompt
+    assert "must be a non-empty string" in second_prompt
 
 
 def test_play_game_invalid_blue_all_attempts_returns_none() -> None:
@@ -1857,7 +1862,9 @@ def test_play_game_invalid_blue_debug_and_non_debug_output(monkeypatch, capsys) 
     debug_out = capsys.readouterr().out
     assert "[DEBUG] blue.raw_model_output:" in debug_out
     assert "[DEBUG] play_game.attempt_rejected:" in debug_out
-    assert "reason: blue output failed DeltaState validation" in debug_out
+    assert "reason: blue output failed DeltaState validation:" in debug_out
+    assert "payload.section.body" in debug_out
+    assert "must be a non-empty string" in debug_out
 
 
 def test_runtime_preserves_accepted_delta_after_later_reject_in_helper_flow() -> None:
