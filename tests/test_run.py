@@ -18,6 +18,7 @@ def _patch_create_game_model_client(monkeypatch):
         '"payload":{"section":{"title":"Introduction","body":"Advance goal"}}}'
     )
     red_response = '{"disposition":"accept","rationale":"deterministic test path"}'
+    referee_response = '{"disposition":"accept","rationale":"deterministic test path"}'
 
     def _fake_create_game_builder():
         return FakeModelClient([create_game_response])
@@ -28,9 +29,13 @@ def _patch_create_game_model_client(monkeypatch):
     def _fake_red_builder():
         return FakeModelClient([red_response])
 
+    def _fake_referee_builder():
+        return FakeModelClient([referee_response])
+
     monkeypatch.setattr("baps.run._build_create_game_model_client", _fake_create_game_builder)
     monkeypatch.setattr("baps.run._build_blue_model_client", _fake_blue_builder)
     monkeypatch.setattr("baps.run._build_red_model_client", _fake_red_builder)
+    monkeypatch.setattr("baps.run._build_referee_model_client", _fake_referee_builder)
 
 
 def test_run_baps_loop_creates_report_and_appends_once(tmp_path: Path) -> None:
@@ -907,6 +912,175 @@ def test_play_game_invalid_red_json_rejected() -> None:
         )
 
 
+def test_play_game_valid_referee_json_parses() -> None:
+    import baps.run as run_module
+
+    decision = run_module._parse_referee_decision_json(
+        '{"disposition":"accept","rationale":"looks good"}'
+    )
+    assert decision.disposition == "accept"
+    assert decision.rationale == "looks good"
+
+
+def test_play_game_fenced_referee_json_accepted() -> None:
+    import baps.run as run_module
+
+    decision = run_module._parse_referee_decision_json(
+        "```json\n"
+        '{"disposition":"revise","rationale":"tighten acceptance criteria"}\n'
+        "```"
+    )
+    assert decision.disposition == "revise"
+
+
+def test_play_game_invalid_referee_json_rejected() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
+    )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    with pytest.raises(ValueError, match="referee model output must be valid JSON"):
+        play_game(
+            state,
+            spec,
+            model_client=FakeModelClient(
+                [
+                    '{"artifact_id":"main-document","operation":"append_section",'
+                    '"payload":{"section":{"title":"Introduction","body":"Any objective"}}}'
+                ]
+            ),
+            red_model_client=FakeModelClient(
+                ['{"disposition":"accept","rationale":"deterministic test path"}']
+            ),
+            referee_model_client=FakeModelClient(["not-json"]),
+        )
+
+
+def test_play_game_referee_receives_gamespec_state_view_delta_and_red(monkeypatch) -> None:
+    import baps.run as run_module
+
+    captured: dict[str, object] = {}
+
+    def _capture_referee_input(state_view, game_spec, delta_state, red_finding):
+        captured["state_view"] = state_view
+        captured["game_spec"] = game_spec
+        captured["delta_state"] = delta_state
+        captured["red_finding"] = red_finding
+
+    monkeypatch.setattr(run_module, "_debug_print_referee_input", _capture_referee_input)
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
+    )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    delta = play_game(state, spec)
+    assert delta is not None
+    assert captured["game_spec"] is spec
+    assert captured["state_view"] is not None
+    assert captured["delta_state"] is not None
+    assert captured["red_finding"] is not None
+
+
+def test_play_game_referee_revise_prevents_current_best_delta() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
+    )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    delta = play_game(
+        state,
+        spec,
+        model_client=FakeModelClient(
+            [
+                '{"artifact_id":"main-document","operation":"append_section",'
+                '"payload":{"section":{"title":"Introduction","body":"Any objective"}}}'
+            ]
+        ),
+        red_model_client=FakeModelClient(
+            ['{"disposition":"accept","rationale":"deterministic test path"}']
+        ),
+        referee_model_client=FakeModelClient(
+            ['{"disposition":"revise","rationale":"needs changes"}']
+        ),
+    )
+    assert delta is None
+
+
+def test_play_game_referee_accept_sets_current_best_delta() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
+    )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    delta = play_game(
+        state,
+        spec,
+        model_client=FakeModelClient(
+            [
+                '{"artifact_id":"main-document","operation":"append_section",'
+                '"payload":{"section":{"title":"Introduction","body":"Any objective"}}}'
+            ]
+        ),
+        red_model_client=FakeModelClient(
+            ['{"disposition":"accept","rationale":"deterministic test path"}']
+        ),
+        referee_model_client=FakeModelClient(
+            ['{"disposition":"accept","rationale":"approved"}']
+        ),
+    )
+    assert delta is not None
+
+
 def test_play_game_red_receives_gamespec_state_view_and_delta_state(monkeypatch) -> None:
     import baps.run as run_module
 
@@ -1002,7 +1176,7 @@ def test_no_blueview_symbol_remains_in_run_or_run_tests() -> None:
     assert symbol not in test_source.replace(symbol, "")
 
 
-def test_play_game_returns_none_if_referee_rejects(monkeypatch) -> None:
+def test_play_game_returns_none_if_referee_rejects() -> None:
     import baps.run as run_module
 
     spec = run_module.GameSpec(
@@ -1012,11 +1186,6 @@ def test_play_game_returns_none_if_referee_rejects(monkeypatch) -> None:
         success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
     )
 
-    monkeypatch.setattr(
-        run_module,
-        "_deterministic_referee_decision",
-        lambda: run_module.RefereeDecision(disposition="reject", rationale="deterministic test path"),
-    )
     state = create_state(
         {
             "workspace": Path(".baps-workspace"),
@@ -1027,7 +1196,13 @@ def test_play_game_returns_none_if_referee_rejects(monkeypatch) -> None:
             "spec_path": None,
         }
     )
-    delta = play_game(state, spec)
+    delta = play_game(
+        state,
+        spec,
+        referee_model_client=FakeModelClient(
+            ['{"disposition":"reject","rationale":"deterministic test path"}']
+        ),
+    )
     assert delta is None
 
 
@@ -1057,6 +1232,8 @@ def test_play_game_debug_logs_appear(monkeypatch, capsys) -> None:
     assert "[DEBUG] blue.output:" in out
     assert "[DEBUG] red.input:" in out
     assert "[DEBUG] red.output:" in out
+    assert "[DEBUG] referee.input:" in out
+    assert "[DEBUG] referee.output:" in out
     assert "[DEBUG] play_game.input:" in out
     assert "[DEBUG] play_game.output:" in out
     blue_input_block = out.split("[DEBUG] blue.input:")[1].split("[DEBUG] blue.output:")[0]
@@ -1071,6 +1248,12 @@ def test_play_game_debug_logs_appear(monkeypatch, capsys) -> None:
     assert "delta_state:" in red_input_block
     assert "artifact_id: main-document" in red_input_block
     assert "red_finding:" in out
+    referee_input_block = out.split("[DEBUG] referee.input:")[1].split("[DEBUG] referee.output:")[0]
+    assert "game_spec:" in referee_input_block
+    assert "state_view:" in referee_input_block
+    assert "delta_state:" in referee_input_block
+    assert "red_finding:" in referee_input_block
+    assert "referee_decision:" in out
     assert "current_best_delta:" in out
 
 
