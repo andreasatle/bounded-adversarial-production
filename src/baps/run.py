@@ -170,6 +170,15 @@ def _debug_print_create_game_output(game_spec: GameSpec) -> None:
     print()
 
 
+def _debug_print_create_game_raw_model_output(raw_text: str) -> None:
+    if not _debug_enabled():
+        return
+    print("[DEBUG] create_game.raw_model_output:")
+    for line in raw_text.splitlines() or [""]:
+        print(f"  {line}")
+    print()
+
+
 def _build_create_game_model_client() -> ModelClient:
     model = os.getenv("BAPS_OLLAMA_MODEL", "llama3.2")
     base_url = os.getenv("BAPS_OLLAMA_BASE_URL", "http://localhost:11434")
@@ -332,7 +341,11 @@ def create_game(
     client = model_client if model_client is not None else _build_create_game_model_client()
     prompt = _render_create_game_prompt(config=config, state=state)
     generated = client.generate(prompt)
-    game_spec = _parse_game_spec_json(generated)
+    try:
+        game_spec = _parse_game_spec_json(generated)
+    except ValueError:
+        _debug_print_create_game_raw_model_output(generated)
+        raise
     target_exists = any(artifact.id == game_spec.target_artifact_id for artifact in state.artifacts)
     if not target_exists:
         raise ValueError(

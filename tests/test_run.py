@@ -423,6 +423,44 @@ def test_create_game_invalid_json_fails_cleanly() -> None:
         create_game(config, state, model_client=FakeModelClient(["not-json"]))
 
 
+def test_create_game_invalid_json_with_debug_prints_raw_model_output(
+    monkeypatch, capsys
+) -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "goal": "Write a short report with an introduction and conclusion.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    monkeypatch.setenv("BAPS_DEBUG", "1")
+
+    with pytest.raises(ValueError, match="must be valid JSON"):
+        create_game(config, state, model_client=FakeModelClient(["not-json-output"]))
+    out = capsys.readouterr().out
+    assert "[DEBUG] create_game.raw_model_output:" in out
+    assert "  not-json-output" in out
+
+
+def test_create_game_invalid_json_without_debug_does_not_print_raw_model_output(capsys) -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "goal": "Write a short report with an introduction and conclusion.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+
+    with pytest.raises(ValueError, match="must be valid JSON"):
+        create_game(config, state, model_client=FakeModelClient(["not-json-output"]))
+    out = capsys.readouterr().out
+    assert "[DEBUG] create_game.raw_model_output:" not in out
+
+
 def test_create_game_missing_gamespec_fields_fails_cleanly() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
