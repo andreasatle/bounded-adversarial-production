@@ -237,6 +237,38 @@ def _debug_print_blue_output(delta: DeltaDocumentState) -> None:
     print()
 
 
+def _debug_print_red_input(
+    state_view: StateView,
+    game_spec: GameSpec,
+    delta_state: DeltaDocumentState,
+) -> None:
+    if not _debug_enabled():
+        return
+    print("[DEBUG] red.input:")
+    state_view_summary = {
+        "target_artifact_id": state_view.metadata.get("target_artifact_id"),
+        "sections": state_view.metadata.get("sections", []),
+    }
+    payload = {
+        "game_spec": game_spec.model_dump(mode="json"),
+        "state_view": state_view_summary,
+        "delta_state": delta_state.model_dump(mode="json"),
+    }
+    for line in _format_debug_yaml_like(payload, indent=2):
+        print(line)
+    print()
+
+
+def _debug_print_red_output(red_finding: RedFinding) -> None:
+    if not _debug_enabled():
+        return
+    print("[DEBUG] red.output:")
+    payload = {"red_finding": red_finding.model_dump(mode="json")}
+    for line in _format_debug_yaml_like(payload, indent=2):
+        print(line)
+    print()
+
+
 def _debug_print_create_game_raw_model_output(raw_text: str) -> None:
     if not _debug_enabled():
         return
@@ -253,6 +285,12 @@ def _build_create_game_model_client() -> ModelClient:
 
 
 def _build_blue_model_client() -> ModelClient:
+    model = os.getenv("BAPS_OLLAMA_MODEL", "llama3.2")
+    base_url = os.getenv("BAPS_OLLAMA_BASE_URL", "http://localhost:11434")
+    return OllamaClient(model=model, base_url=base_url)
+
+
+def _build_red_model_client() -> ModelClient:
     model = os.getenv("BAPS_OLLAMA_MODEL", "llama3.2")
     base_url = os.getenv("BAPS_OLLAMA_BASE_URL", "http://localhost:11434")
     return OllamaClient(model=model, base_url=base_url)
@@ -475,6 +513,28 @@ def _parse_blue_delta_json(text: str) -> DeltaDocumentState:
         raise ValueError("blue model output failed DeltaDocumentState validation") from exc
 
 
+def _parse_red_finding_json(text: str) -> RedFinding:
+    normalized = _normalize_json_candidate(text)
+    try:
+        parsed = json.loads(normalized)
+    except json.JSONDecodeError as exc:
+        raise ValueError("red model output must be valid JSON") from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError("red model output must be a JSON object")
+
+    required_keys = {"disposition", "rationale"}
+    if set(parsed.keys()) != required_keys:
+        raise ValueError(
+            "red model output must contain exactly keys: disposition, rationale"
+        )
+
+    try:
+        return RedFinding.model_validate(parsed)
+    except Exception as exc:
+        raise ValueError("red model output failed RedFinding validation") from exc
+
+
 def create_game(
     config: dict[str, Any],
     state: State,
@@ -537,10 +597,41 @@ def _render_blue_prompt(state_view: StateView, game_spec: GameSpec) -> str:
     )
 
 
+def _render_red_prompt(
+    state_view: StateView,
+    game_spec: GameSpec,
+    delta_state: DeltaDocumentState,
+) -> str:
+    state_view_json = json.dumps(state_view.model_dump(mode="json"), sort_keys=True)
+    delta_state_json = json.dumps(delta_state.model_dump(mode="json"), sort_keys=True)
+    return (
+        "Evaluate the candidate DeltaDocumentState and return a RedFinding JSON object.\n\n"
+        "Input:\n"
+        f"- state_view_json: {state_view_json}\n"
+        f"- delta_state_json: {delta_state_json}\n"
+        f"- objective: {game_spec.objective}\n"
+        f"- target_artifact_id: {game_spec.target_artifact_id}\n"
+        f"- allowed_delta_type: {game_spec.allowed_delta_type}\n"
+        f"- success_condition: {game_spec.success_condition}\n\n"
+        "Return only a JSON object.\n"
+        "Do not wrap output in markdown.\n"
+        "Do not use triple-backtick fences.\n"
+        "Do not include prose before JSON.\n"
+        "Do not include prose after JSON.\n"
+        "No extra fields.\n"
+        "Required JSON shape:\n"
+        "{\n"
+        '  "disposition": "accept" | "revise" | "reject",\n'
+        '  "rationale": "..."\n'
+        "}"
+    )
+
+
 def play_game(
     state: State,
     game_spec: GameSpec,
     model_client: ModelClient | None = None,
+    red_model_client: ModelClient | None = None,
 ) -> DeltaState | None:
     _debug_print_play_game_input(state, game_spec)
     runtime = PlayGameRuntime()
@@ -552,7 +643,14 @@ def play_game(
     candidate_delta = _parse_blue_delta_json(blue_generated)
     _debug_print_blue_output(candidate_delta)
 
-    _ = _deterministic_red_finding()
+    red_client = (
+        red_model_client if red_model_client is not None else _build_red_model_client()
+    )
+    _debug_print_red_input(state_view, game_spec, candidate_delta)
+    red_prompt = _render_red_prompt(state_view, game_spec, candidate_delta)
+    red_generated = red_client.generate(red_prompt)
+    red_finding = _parse_red_finding_json(red_generated)
+    _debug_print_red_output(red_finding)
     referee_decision = _deterministic_referee_decision()
 
     runtime = apply_referee_decision_to_runtime(

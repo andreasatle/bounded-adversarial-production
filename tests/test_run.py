@@ -17,6 +17,7 @@ def _patch_create_game_model_client(monkeypatch):
         '{"artifact_id":"main-document","operation":"append_section",'
         '"payload":{"section":{"title":"Introduction","body":"Advance goal"}}}'
     )
+    red_response = '{"disposition":"accept","rationale":"deterministic test path"}'
 
     def _fake_create_game_builder():
         return FakeModelClient([create_game_response])
@@ -24,8 +25,12 @@ def _patch_create_game_model_client(monkeypatch):
     def _fake_blue_builder():
         return FakeModelClient([blue_response])
 
+    def _fake_red_builder():
+        return FakeModelClient([red_response])
+
     monkeypatch.setattr("baps.run._build_create_game_model_client", _fake_create_game_builder)
     monkeypatch.setattr("baps.run._build_blue_model_client", _fake_blue_builder)
+    monkeypatch.setattr("baps.run._build_red_model_client", _fake_red_builder)
 
 
 def test_run_baps_loop_creates_report_and_appends_once(tmp_path: Path) -> None:
@@ -848,6 +853,94 @@ def test_play_game_fenced_blue_json_accepted() -> None:
     assert delta.model_dump(mode="json")["operation"] == "append_section"
 
 
+def test_play_game_valid_red_json_parses() -> None:
+    import baps.run as run_module
+
+    red = run_module._parse_red_finding_json(
+        '{"disposition":"accept","rationale":"looks good"}'
+    )
+    assert red.disposition == "accept"
+    assert red.rationale == "looks good"
+
+
+def test_play_game_fenced_red_json_accepted() -> None:
+    import baps.run as run_module
+
+    red = run_module._parse_red_finding_json(
+        "```json\n"
+        '{"disposition":"revise","rationale":"tighten section body"}\n'
+        "```"
+    )
+    assert red.disposition == "revise"
+
+
+def test_play_game_invalid_red_json_rejected() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
+    )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    with pytest.raises(ValueError, match="red model output must be valid JSON"):
+        play_game(
+            state,
+            spec,
+            model_client=FakeModelClient(
+                [
+                    '{"artifact_id":"main-document","operation":"append_section",'
+                    '"payload":{"section":{"title":"Introduction","body":"Any objective"}}}'
+                ]
+            ),
+            red_model_client=FakeModelClient(["not-json"]),
+        )
+
+
+def test_play_game_red_receives_gamespec_state_view_and_delta_state(monkeypatch) -> None:
+    import baps.run as run_module
+
+    captured: dict[str, object] = {}
+
+    def _capture_red_input(state_view, game_spec, delta_state):
+        captured["state_view"] = state_view
+        captured["game_spec"] = game_spec
+        captured["delta_state"] = delta_state
+
+    monkeypatch.setattr(run_module, "_debug_print_red_input", _capture_red_input)
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
+    )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    delta = play_game(state, spec)
+    assert delta is not None
+    assert captured["game_spec"] is spec
+    assert captured["state_view"] is not None
+    assert captured["delta_state"] is not None
+
+
 def test_blue_prompt_includes_state_view_and_gamespec() -> None:
     import baps.run as run_module
 
@@ -962,6 +1055,8 @@ def test_play_game_debug_logs_appear(monkeypatch, capsys) -> None:
     out = capsys.readouterr().out
     assert "[DEBUG] blue.input:" in out
     assert "[DEBUG] blue.output:" in out
+    assert "[DEBUG] red.input:" in out
+    assert "[DEBUG] red.output:" in out
     assert "[DEBUG] play_game.input:" in out
     assert "[DEBUG] play_game.output:" in out
     blue_input_block = out.split("[DEBUG] blue.input:")[1].split("[DEBUG] blue.output:")[0]
@@ -970,6 +1065,12 @@ def test_play_game_debug_logs_appear(monkeypatch, capsys) -> None:
     assert "sections: []" in blue_input_block
     assert "state:" not in blue_input_block
     assert "game_spec:" in blue_input_block
+    red_input_block = out.split("[DEBUG] red.input:")[1].split("[DEBUG] red.output:")[0]
+    assert "game_spec:" in red_input_block
+    assert "state_view:" in red_input_block
+    assert "delta_state:" in red_input_block
+    assert "artifact_id: main-document" in red_input_block
+    assert "red_finding:" in out
     assert "current_best_delta:" in out
 
 
