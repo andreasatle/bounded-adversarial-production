@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -11,6 +12,7 @@ import yaml
 from baps.game_executor import GameExecutionResult
 from baps.integration import IntegrationDecision, IntegrationSatisfaction, StateChange
 from baps.loop import run_loop
+from baps.models import ModelClient, OllamaClient
 from baps.northstar_projection import NorthStarView, ProjectionType
 from baps.state import DocumentArtifact, GameSpec, NorthStar, State
 from baps.state_progressor import GameProposal, StateProgressionProposal, StateProgressorInput
@@ -168,6 +170,12 @@ def _debug_print_create_game_output(game_spec: GameSpec) -> None:
     print()
 
 
+def _build_create_game_model_client() -> ModelClient:
+    model = os.getenv("BAPS_OLLAMA_MODEL", "llama3.2")
+    base_url = os.getenv("BAPS_OLLAMA_BASE_URL", "http://localhost:11434")
+    return OllamaClient(model=model, base_url=base_url)
+
+
 def _require_non_empty(value: str, field_name: str) -> str:
     if value.strip() == "":
         raise ValueError(f"{field_name} must be non-empty")
@@ -266,23 +274,71 @@ def create_state(config: dict[str, Any]) -> State:
     raise ValueError(f"unknown project_type: {project_type}")
 
 
-def create_game(config: dict[str, Any], state: State) -> GameSpec:
-    _debug_print_create_game_input(state)
-    target_artifact_id = "main-document"
-    target_exists = any(artifact.id == target_artifact_id for artifact in state.artifacts)
-    if not target_exists:
+def _render_create_game_prompt(config: dict[str, Any], state: State) -> str:
+    state_json = json.dumps(state.model_dump(mode="json"), sort_keys=True)
+    return (
+        "Create a GameSpec JSON object for the given project state.\n\n"
+        "Input:\n"
+        f"- goal: {config['goal']}\n"
+        f"- state_json: {state_json}\n\n"
+        "Return only JSON.\n"
+        "No markdown.\n"
+        "No prose outside JSON.\n"
+        "No extra fields.\n"
+        "Required JSON shape:\n"
+        "{\n"
+        '  "objective": "...",\n'
+        '  "target_artifact_id": "...",\n'
+        '  "allowed_delta_type": "...",\n'
+        '  "success_condition": "..."\n'
+        "}\n\n"
+        "For the current document path, allowed_delta_type must be DeltaDocumentState."
+    )
+
+
+def _parse_game_spec_json(text: str) -> GameSpec:
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError("create_game model output must be valid JSON") from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError("create_game model output must be a JSON object")
+
+    required_keys = {
+        "objective",
+        "target_artifact_id",
+        "allowed_delta_type",
+        "success_condition",
+    }
+    if set(parsed.keys()) != required_keys:
         raise ValueError(
-            f"create_game target artifact not found in state: {target_artifact_id}"
+            "create_game model output must contain exactly keys: "
+            "objective, target_artifact_id, allowed_delta_type, success_condition"
         )
 
-    game_spec = GameSpec(
-        objective=f"Advance goal: {config['goal']}",
-        target_artifact_id=target_artifact_id,
-        allowed_delta_type="DeltaDocumentState",
-        success_condition=(
-            "PlayGame must return a valid DeltaDocumentState targeting main-document."
-        ),
-    )
+    try:
+        return GameSpec.model_validate(parsed)
+    except Exception as exc:
+        raise ValueError("create_game model output failed GameSpec validation") from exc
+
+
+def create_game(
+    config: dict[str, Any],
+    state: State,
+    model_client: ModelClient | None = None,
+) -> GameSpec:
+    _debug_print_create_game_input(state)
+    client = model_client if model_client is not None else _build_create_game_model_client()
+    prompt = _render_create_game_prompt(config=config, state=state)
+    generated = client.generate(prompt)
+    game_spec = _parse_game_spec_json(generated)
+    target_exists = any(artifact.id == game_spec.target_artifact_id for artifact in state.artifacts)
+    if not target_exists:
+        raise ValueError(
+            "create_game target artifact not found in state: "
+            f"{game_spec.target_artifact_id}"
+        )
     _debug_print_create_game_output(game_spec)
     return game_spec
 

@@ -2,7 +2,22 @@ from pathlib import Path
 
 import pytest
 
+from baps.models import FakeModelClient
 from baps.run import SECTION_MARKER, create_game, create_state, main, run_baps_loop
+
+
+@pytest.fixture(autouse=True)
+def _patch_create_game_model_client(monkeypatch):
+    response = (
+        '{"objective":"Advance goal","target_artifact_id":"main-document",'
+        '"allowed_delta_type":"DeltaDocumentState",'
+        '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}'
+    )
+
+    def _fake_builder():
+        return FakeModelClient([response])
+
+    monkeypatch.setattr("baps.run._build_create_game_model_client", _fake_builder)
 
 
 def test_run_baps_loop_creates_report_and_appends_once(tmp_path: Path) -> None:
@@ -353,7 +368,17 @@ def test_create_game_receives_input_and_state_and_outputs_game_spec() -> None:
         "spec_path": None,
     }
     state = create_state(config)
-    game_spec = create_game(config, state)
+    game_spec = create_game(
+        config,
+        state,
+        model_client=FakeModelClient(
+            [
+                '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+                '"allowed_delta_type":"DeltaDocumentState",'
+                '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}'
+            ]
+        ),
+    )
 
     assert game_spec.target_artifact_id == "main-document"
     assert game_spec.allowed_delta_type == "DeltaDocumentState"
@@ -370,8 +395,74 @@ def test_create_game_target_artifact_exists_in_state() -> None:
         "spec_path": None,
     }
     state = create_state(config)
-    game_spec = create_game(config, state)
+    game_spec = create_game(
+        config,
+        state,
+        model_client=FakeModelClient(
+            [
+                '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+                '"allowed_delta_type":"DeltaDocumentState",'
+                '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}'
+            ]
+        ),
+    )
     assert any(artifact.id == game_spec.target_artifact_id for artifact in state.artifacts)
+
+
+def test_create_game_invalid_json_fails_cleanly() -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "goal": "Write a short report with an introduction and conclusion.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    with pytest.raises(ValueError, match="must be valid JSON"):
+        create_game(config, state, model_client=FakeModelClient(["not-json"]))
+
+
+def test_create_game_missing_gamespec_fields_fails_cleanly() -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "goal": "Write a short report with an introduction and conclusion.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    with pytest.raises(ValueError, match="must contain exactly keys"):
+        create_game(
+            config,
+            state,
+            model_client=FakeModelClient(['{"objective":"only-objective"}']),
+        )
+
+
+def test_create_game_target_artifact_not_in_state_fails_cleanly() -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "goal": "Write a short report with an introduction and conclusion.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    with pytest.raises(ValueError, match="target artifact not found in state"):
+        create_game(
+            config,
+            state,
+            model_client=FakeModelClient(
+                [
+                    '{"objective":"Advance report objective","target_artifact_id":"missing-document",'
+                    '"allowed_delta_type":"DeltaDocumentState",'
+                    '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting missing-document."}'
+                ]
+            ),
+        )
 
 
 def test_spec_relative_path_resolves_from_cwd(monkeypatch, capsys, tmp_path: Path) -> None:
