@@ -15,7 +15,20 @@ from baps.integration import IntegrationDecision, IntegrationSatisfaction, State
 from baps.loop import run_loop
 from baps.models import ModelClient, OllamaClient
 from baps.northstar_projection import NorthStarView, ProjectionType
-from baps.state import DocumentArtifact, GameSpec, NorthStar, State
+from baps.state import (
+    AppendSectionDelta,
+    DeltaDocumentState,
+    DeltaState,
+    DocumentArtifact,
+    GameSpec,
+    NorthStar,
+    PlayGameRuntime,
+    RedFinding,
+    RefereeDecision,
+    Section,
+    State,
+    apply_referee_decision_to_runtime,
+)
 from baps.state_progressor import GameProposal, StateProgressionProposal, StateProgressorInput
 
 REQUEST = "Write a short report with an introduction and conclusion."
@@ -167,6 +180,28 @@ def _debug_print_create_game_output(game_spec: GameSpec) -> None:
         "game_spec": game_spec.model_dump(mode="json"),
     }
     for line in _format_debug_yaml_like(output_payload, indent=2):
+        print(line)
+    print()
+
+
+def _debug_print_play_game_input(game_spec: GameSpec) -> None:
+    if not _debug_enabled():
+        return
+    print("[DEBUG] play_game.input:")
+    payload = {"game_spec": game_spec.model_dump(mode="json")}
+    for line in _format_debug_yaml_like(payload, indent=2):
+        print(line)
+    print()
+
+
+def _debug_print_play_game_output(delta: DeltaState | None) -> None:
+    if not _debug_enabled():
+        return
+    print("[DEBUG] play_game.output:")
+    payload = {
+        "current_best_delta": None if delta is None else delta.model_dump(mode="json"),
+    }
+    for line in _format_debug_yaml_like(payload, indent=2):
         print(line)
     print()
 
@@ -366,6 +401,40 @@ def create_game(
         )
     _debug_print_create_game_output(game_spec)
     return game_spec
+
+
+def _deterministic_red_finding() -> RedFinding:
+    return RedFinding(disposition="accept", rationale="deterministic test path")
+
+
+def _deterministic_referee_decision() -> RefereeDecision:
+    return RefereeDecision(disposition="accept", rationale="deterministic test path")
+
+
+def play_game(game_spec: GameSpec) -> DeltaState | None:
+    _debug_print_play_game_input(game_spec)
+    runtime = PlayGameRuntime()
+
+    candidate_delta = DeltaDocumentState(
+        artifact_id=game_spec.target_artifact_id,
+        operation="append_section",
+        payload=AppendSectionDelta(
+            section=Section(
+                title="Introduction",
+                body=game_spec.objective,
+            )
+        ),
+    )
+    _ = _deterministic_red_finding()
+    referee_decision = _deterministic_referee_decision()
+
+    runtime = apply_referee_decision_to_runtime(
+        runtime=runtime,
+        candidate_delta=candidate_delta,
+        decision=referee_decision,
+    )
+    _debug_print_play_game_output(runtime.current_best_delta)
+    return runtime.current_best_delta
 
 
 class _ReportStateProgressor:

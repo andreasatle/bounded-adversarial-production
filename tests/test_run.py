@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from baps.models import FakeModelClient
-from baps.run import SECTION_MARKER, create_game, create_state, main, run_baps_loop
+from baps.run import SECTION_MARKER, create_game, create_state, main, play_game, run_baps_loop
 
 
 @pytest.fixture(autouse=True)
@@ -696,6 +696,73 @@ def test_create_game_prompt_forbids_markdown_fences_and_lists_required_shape() -
     assert '"target_artifact_id"' in prompt
     assert '"allowed_delta_type"' in prompt
     assert '"success_condition"' in prompt
+
+
+def test_play_game_returns_delta_document_state() -> None:
+    game_spec = {
+        "objective": "Write an introduction section",
+        "target_artifact_id": "main-document",
+        "allowed_delta_type": "DeltaDocumentState",
+        "success_condition": "PlayGame must return a valid DeltaDocumentState targeting main-document.",
+    }
+    import baps.run as run_module
+
+    delta = play_game(run_module.GameSpec.model_validate(game_spec))
+    assert delta is not None
+    assert delta.model_dump(mode="json")["operation"] == "append_section"
+    assert delta.model_dump(mode="json")["artifact_id"] == "main-document"
+
+
+def test_play_game_accepted_candidate_becomes_current_best_delta() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Write an introduction section",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
+    )
+    delta = play_game(spec)
+    assert delta is not None
+    dumped = delta.model_dump(mode="json")
+    assert dumped["payload"]["section"]["title"] == "Introduction"
+    assert dumped["payload"]["section"]["body"] == "Write an introduction section"
+
+
+def test_play_game_returns_none_if_referee_rejects(monkeypatch) -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Write an introduction section",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
+    )
+
+    monkeypatch.setattr(
+        run_module,
+        "_deterministic_referee_decision",
+        lambda: run_module.RefereeDecision(disposition="reject", rationale="deterministic test path"),
+    )
+    delta = play_game(spec)
+    assert delta is None
+
+
+def test_play_game_debug_logs_appear(monkeypatch, capsys) -> None:
+    import baps.run as run_module
+
+    monkeypatch.setenv("BAPS_DEBUG", "1")
+    spec = run_module.GameSpec(
+        objective="Write an introduction section",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
+    )
+    _ = play_game(spec)
+    out = capsys.readouterr().out
+    assert "[DEBUG] play_game.input:" in out
+    assert "[DEBUG] play_game.output:" in out
+    assert "current_best_delta:" in out
 
 
 def test_spec_relative_path_resolves_from_cwd(monkeypatch, capsys, tmp_path: Path) -> None:
