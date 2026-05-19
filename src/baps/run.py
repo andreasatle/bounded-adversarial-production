@@ -519,6 +519,13 @@ def _render_create_game_prompt(config: dict[str, Any], state: State) -> str:
         "Do not include prose before JSON.\n"
         "Do not include prose after JSON.\n"
         "No extra fields.\n"
+        "GameSpec must be atomic:\n"
+        "- target exactly one artifact.\n"
+        "- permit exactly one delta type.\n"
+        "- require exactly one coherent state change.\n"
+        "- success_condition must be checkable from that one change.\n"
+        "- do not bundle independent features/tasks in one GameSpec.\n"
+        "- if goal needs multiple changes, select only the next missing atomic change.\n"
         "Required JSON shape:\n"
         "{\n"
         '  "objective": "...",\n'
@@ -556,6 +563,43 @@ def _parse_game_spec_json(text: str) -> GameSpec:
         return GameSpec.model_validate(parsed)
     except Exception as exc:
         raise ValueError("create_game model output failed GameSpec validation") from exc
+
+
+def _is_bundled_change_text(text: str) -> bool:
+    lowered = text.lower().strip()
+    if not lowered:
+        return False
+
+    bundled_markers = (" and ", ", and ", ",", " plus ")
+    has_bundle_joiner = any(marker in lowered for marker in bundled_markers)
+    if not has_bundle_joiner:
+        return False
+
+    feature_tokens = {
+        "introduction",
+        "conclusion",
+        "parser",
+        "tests",
+        "state",
+        "blackboard",
+        "export",
+        "runtime",
+        "integration",
+        "artifact",
+    }
+    hit_count = sum(1 for token in feature_tokens if token in lowered)
+    return hit_count >= 2
+
+
+def _validate_atomic_game_spec(game_spec: GameSpec) -> None:
+    if _is_bundled_change_text(game_spec.objective):
+        raise ValueError(
+            "create_game model output must describe exactly one atomic change in objective"
+        )
+    if _is_bundled_change_text(game_spec.success_condition):
+        raise ValueError(
+            "create_game model output success_condition must describe only the selected atomic change"
+        )
 
 
 def _normalize_json_candidate(text: str) -> str:
@@ -650,6 +694,7 @@ def create_game(
     except ValueError:
         _debug_print_create_game_raw_model_output(generated)
         raise
+    _validate_atomic_game_spec(game_spec)
     target_exists = any(artifact.id == game_spec.target_artifact_id for artifact in state.artifacts)
     if not target_exists:
         raise ValueError(

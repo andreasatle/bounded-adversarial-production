@@ -714,6 +714,84 @@ def test_create_game_prompt_forbids_markdown_fences_and_lists_required_shape() -
     assert '"target_artifact_id"' in prompt
     assert '"allowed_delta_type"' in prompt
     assert '"success_condition"' in prompt
+    assert "GameSpec must be atomic" in prompt
+    assert "select only the next missing atomic change" in prompt
+
+
+def test_create_game_broad_goal_accepts_decomposed_atomic_gamespec() -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "goal": "add introduction and conclusion",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    game_spec = create_game(
+        config,
+        state,
+        model_client=FakeModelClient(
+            [
+                '{"objective":"add introduction section",'
+                '"target_artifact_id":"main-document",'
+                '"allowed_delta_type":"DeltaDocumentState",'
+                '"success_condition":"Introduction section exists in main-document."}'
+            ]
+        ),
+    )
+    assert game_spec.objective == "add introduction section"
+    assert game_spec.success_condition == "Introduction section exists in main-document."
+
+
+def test_create_game_rejects_bundled_objective_and_success_condition() -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "goal": "add introduction and conclusion",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    with pytest.raises(ValueError, match="exactly one atomic change"):
+        create_game(
+            config,
+            state,
+            model_client=FakeModelClient(
+                [
+                    '{"objective":"add introduction and conclusion",'
+                    '"target_artifact_id":"main-document",'
+                    '"allowed_delta_type":"DeltaDocumentState",'
+                    '"success_condition":"Introduction and conclusion sections both exist."}'
+                ]
+            ),
+        )
+
+
+def test_create_game_rejects_broad_multi_feature_gamespec() -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "goal": "implement parser and tests",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    with pytest.raises(ValueError, match="exactly one atomic change"):
+        create_game(
+            config,
+            state,
+            model_client=FakeModelClient(
+                [
+                    '{"objective":"implement parser and tests",'
+                    '"target_artifact_id":"main-document",'
+                    '"allowed_delta_type":"DeltaDocumentState",'
+                    '"success_condition":"Parser and tests are implemented."}'
+                ]
+            ),
+        )
 
 
 def test_play_game_returns_delta_document_state() -> None:
