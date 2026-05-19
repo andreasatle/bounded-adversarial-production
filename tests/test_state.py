@@ -11,6 +11,7 @@ from baps.state import (
     DocumentArtifactAdapter,
     find_state_artifact,
     fingerprint_state,
+    GameSpec,
     GitRepositoryArtifactAdapter,
     NorthStar,
     Section,
@@ -135,6 +136,41 @@ def test_delta_document_state_is_subclass_and_instance_of_delta_state() -> None:
     )
     assert isinstance(delta, DeltaState)
     assert issubclass(DeltaDocumentState, DeltaState)
+
+
+def test_game_spec_accepts_valid_values() -> None:
+    spec = GameSpec(
+        objective="Advance report quality",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="PlayGame must return valid DeltaDocumentState",
+    )
+    assert spec.target_artifact_id == "main-document"
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    [
+        ("objective", ""),
+        ("objective", "   "),
+        ("target_artifact_id", ""),
+        ("target_artifact_id", "   "),
+        ("allowed_delta_type", ""),
+        ("allowed_delta_type", "   "),
+        ("success_condition", ""),
+        ("success_condition", "   "),
+    ],
+)
+def test_game_spec_rejects_empty_required_fields(field_name: str, value: str) -> None:
+    payload = {
+        "objective": "Advance report quality",
+        "target_artifact_id": "main-document",
+        "allowed_delta_type": "DeltaDocumentState",
+        "success_condition": "PlayGame must return valid DeltaDocumentState",
+    }
+    payload[field_name] = value
+    with pytest.raises(ValidationError):
+        GameSpec.model_validate(payload)
 
 
 def test_document_artifact_is_subclass_and_instance_of_state_artifact() -> None:

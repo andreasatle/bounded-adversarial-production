@@ -12,7 +12,7 @@ from baps.game_executor import GameExecutionResult
 from baps.integration import IntegrationDecision, IntegrationSatisfaction, StateChange
 from baps.loop import run_loop
 from baps.northstar_projection import NorthStarView, ProjectionType
-from baps.state import DocumentArtifact, NorthStar, State
+from baps.state import DocumentArtifact, GameSpec, NorthStar, State
 from baps.state_progressor import GameProposal, StateProgressionProposal, StateProgressorInput
 
 REQUEST = "Write a short report with an introduction and conclusion."
@@ -156,6 +156,18 @@ def _debug_print_create_game_input(state: State) -> None:
     print()
 
 
+def _debug_print_create_game_output(game_spec: GameSpec) -> None:
+    if not _debug_enabled():
+        return
+    print("[DEBUG] create_game.output:")
+    output_payload = {
+        "game_spec": game_spec.model_dump(mode="json"),
+    }
+    for line in _format_debug_yaml_like(output_payload, indent=2):
+        print(line)
+    print()
+
+
 def _require_non_empty(value: str, field_name: str) -> str:
     if value.strip() == "":
         raise ValueError(f"{field_name} must be non-empty")
@@ -252,6 +264,27 @@ def create_state(config: dict[str, Any]) -> State:
     if project_type == "git":
         raise ValueError("project_type 'git' is not implemented")
     raise ValueError(f"unknown project_type: {project_type}")
+
+
+def create_game(config: dict[str, Any], state: State) -> GameSpec:
+    _debug_print_create_game_input(state)
+    target_artifact_id = "main-document"
+    target_exists = any(artifact.id == target_artifact_id for artifact in state.artifacts)
+    if not target_exists:
+        raise ValueError(
+            f"create_game target artifact not found in state: {target_artifact_id}"
+        )
+
+    game_spec = GameSpec(
+        objective=f"Advance goal: {config['goal']}",
+        target_artifact_id=target_artifact_id,
+        allowed_delta_type="DeltaDocumentState",
+        success_condition=(
+            "PlayGame must return a valid DeltaDocumentState targeting main-document."
+        ),
+    )
+    _debug_print_create_game_output(game_spec)
+    return game_spec
 
 
 class _ReportStateProgressor:
@@ -357,7 +390,6 @@ def run_baps_loop(
             northstar=NorthStar(artifacts=()),
             artifacts=(),
         )
-    _debug_print_create_game_input(state)
 
     if output_path is None:
         output_path = workspace / "output" / "report.md"
@@ -478,6 +510,11 @@ def main() -> None:
     max_iterations = config["max_iterations"]
     try:
         created_state = create_state(config)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
+    try:
+        _ = create_game(config, created_state)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc

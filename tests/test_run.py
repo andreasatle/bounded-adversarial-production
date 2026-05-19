@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from baps.run import SECTION_MARKER, main, run_baps_loop
+from baps.run import SECTION_MARKER, create_game, create_state, main, run_baps_loop
 
 
 def test_run_baps_loop_creates_report_and_appends_once(tmp_path: Path) -> None:
@@ -281,6 +281,7 @@ def test_project_type_document_creates_state_and_logs_when_debug_enabled(
     assert "  project_type: document" in out
     assert "[DEBUG] create_state.output:" in out
     assert "[DEBUG] create_game.input:" in out
+    assert "[DEBUG] create_game.output:" in out
     assert "  state:" in out
     assert "    northstar:" in out
     assert "    artifacts:" in out
@@ -340,6 +341,37 @@ def test_create_state_output_flows_into_next_stage(monkeypatch, tmp_path: Path) 
         "northstar": {"artifacts": []},
         "artifacts": [{"id": "main-document", "kind": "document", "sections": []}],
     }
+
+
+def test_create_game_receives_input_and_state_and_outputs_game_spec() -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "goal": "Write a short report with an introduction and conclusion.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    game_spec = create_game(config, state)
+
+    assert game_spec.target_artifact_id == "main-document"
+    assert game_spec.allowed_delta_type == "DeltaDocumentState"
+    assert "DeltaDocumentState" in game_spec.success_condition
+
+
+def test_create_game_target_artifact_exists_in_state() -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "goal": "Write a short report with an introduction and conclusion.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    game_spec = create_game(config, state)
+    assert any(artifact.id == game_spec.target_artifact_id for artifact in state.artifacts)
 
 
 def test_spec_relative_path_resolves_from_cwd(monkeypatch, capsys, tmp_path: Path) -> None:

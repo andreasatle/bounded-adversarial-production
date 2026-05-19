@@ -49,6 +49,18 @@ class DeltaDocumentState(DeltaState):
     payload: AppendSectionDelta
 
 
+class GameSpec(BaseModel):
+    objective: str
+    target_artifact_id: str
+    allowed_delta_type: str
+    success_condition: str
+
+    _validate_objective = field_validator("objective")(_require_non_empty)
+    _validate_target_artifact_id = field_validator("target_artifact_id")(_require_non_empty)
+    _validate_allowed_delta_type = field_validator("allowed_delta_type")(_require_non_empty)
+    _validate_success_condition = field_validator("success_condition")(_require_non_empty)
+
+
 class NorthStar(BaseModel):
     artifacts: tuple[StateArtifact, ...]
 
