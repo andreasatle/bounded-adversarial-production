@@ -848,7 +848,7 @@ def test_play_game_fenced_blue_json_accepted() -> None:
     assert delta.model_dump(mode="json")["operation"] == "append_section"
 
 
-def test_blue_prompt_includes_state_and_gamespec() -> None:
+def test_blue_prompt_includes_state_view_and_gamespec() -> None:
     import baps.run as run_module
 
     spec = run_module.GameSpec(
@@ -867,17 +867,18 @@ def test_blue_prompt_includes_state_and_gamespec() -> None:
             "spec_path": None,
         }
     )
-    blue_view = run_module._build_blue_view(state, spec)
-    prompt = run_module._render_blue_prompt(blue_view, spec)
-    assert "blue_view_json:" in prompt
+    state_view = run_module._build_blue_state_view(state, spec)
+    prompt = run_module._render_blue_prompt(state_view, spec)
+    assert "state_view_json:" in prompt
     assert "objective:" in prompt
     assert "target_artifact_id:" in prompt
     assert "allowed_delta_type:" in prompt
     assert "success_condition:" in prompt
+    assert "blue_view_json:" not in prompt
     assert "state_json:" not in prompt
 
 
-def test_blue_view_is_derived_from_state_and_gamespec_with_existing_sections() -> None:
+def test_state_view_is_derived_from_state_and_gamespec_with_existing_sections() -> None:
     import baps.run as run_module
 
     spec = run_module.GameSpec(
@@ -895,9 +896,17 @@ def test_blue_view_is_derived_from_state_and_gamespec_with_existing_sections() -
             ),
         ),
     )
-    blue_view = run_module._build_blue_view(state, spec)
-    assert blue_view.target_artifact_id == "main-document"
-    assert blue_view.sections == [{"title": "Existing", "body": "Already here"}]
+    state_view = run_module._build_blue_state_view(state, spec)
+    assert state_view.metadata["target_artifact_id"] == "main-document"
+    assert state_view.metadata["sections"] == [{"title": "Existing", "body": "Already here"}]
+
+
+def test_no_blueview_symbol_remains_in_run_or_run_tests() -> None:
+    run_source = Path("src/baps/run.py").read_text(encoding="utf-8")
+    test_source = Path("tests/test_run.py").read_text(encoding="utf-8")
+    symbol = "Blue" + "View"
+    assert symbol not in run_source
+    assert symbol not in test_source.replace(symbol, "")
 
 
 def test_play_game_returns_none_if_referee_rejects(monkeypatch) -> None:
@@ -956,7 +965,7 @@ def test_play_game_debug_logs_appear(monkeypatch, capsys) -> None:
     assert "[DEBUG] play_game.input:" in out
     assert "[DEBUG] play_game.output:" in out
     blue_input_block = out.split("[DEBUG] blue.input:")[1].split("[DEBUG] blue.output:")[0]
-    assert "blue_view:" in blue_input_block
+    assert "state_view:" in blue_input_block
     assert "target_artifact_id: main-document" in blue_input_block
     assert "sections: []" in blue_input_block
     assert "state:" not in blue_input_block

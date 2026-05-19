@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -9,13 +10,12 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, field_validator
 
 from baps.game_executor import GameExecutionResult
 from baps.integration import IntegrationDecision, IntegrationSatisfaction, StateChange
 from baps.loop import run_loop
 from baps.models import ModelClient, OllamaClient
-from baps.northstar_projection import NorthStarView, ProjectionType
+from baps.northstar_projection import NorthStarView, ProjectionType, StateView
 from baps.state import (
     AppendSectionDelta,
     DeltaDocumentState,
@@ -210,13 +210,17 @@ def _debug_print_play_game_output(delta: DeltaState | None) -> None:
     print()
 
 
-def _debug_print_blue_input(blue_view: "BlueView", game_spec: GameSpec) -> None:
+def _debug_print_blue_input(state_view: StateView, game_spec: GameSpec) -> None:
     if not _debug_enabled():
         return
     print("[DEBUG] blue.input:")
+    state_view_summary = {
+        "target_artifact_id": state_view.metadata.get("target_artifact_id"),
+        "sections": state_view.metadata.get("sections", []),
+    }
     payload = {
         "game_spec": game_spec.model_dump(mode="json"),
-        "blue_view": blue_view.model_dump(mode="json"),
+        "state_view": state_view_summary,
     }
     for line in _format_debug_yaml_like(payload, indent=2):
         print(line)
@@ -260,35 +264,36 @@ def _require_non_empty(value: str, field_name: str) -> str:
     return value
 
 
-class BlueView(BaseModel):
-    target_artifact_id: str
-    sections: list[dict[str, str]]
-
-    _validate_target_artifact_id = field_validator("target_artifact_id")(
-        lambda value: _require_non_empty(value, "target_artifact_id")
-    )
-
-
-def _build_blue_view(state: State, game_spec: GameSpec) -> BlueView:
+def _build_blue_state_view(state: State, game_spec: GameSpec) -> StateView:
     target_artifact = next(
         (artifact for artifact in state.artifacts if artifact.id == game_spec.target_artifact_id),
         None,
     )
     if target_artifact is None:
         raise ValueError(
-            f"blue_view target artifact not found in state: {game_spec.target_artifact_id}"
+            f"state_view target artifact not found in state: {game_spec.target_artifact_id}"
         )
     if not isinstance(target_artifact, DocumentArtifact):
         raise ValueError(
-            "blue_view only supports document artifact targets; "
+            "state_view only supports document artifact targets; "
             f"got: {target_artifact.kind}"
         )
-    return BlueView(
-        target_artifact_id=target_artifact.id,
-        sections=[
-            {"title": section.title, "body": section.body}
-            for section in target_artifact.sections
-        ],
+    sections = [
+        {"title": section.title, "body": section.body}
+        for section in target_artifact.sections
+    ]
+    metadata = {
+        "target_artifact_id": target_artifact.id,
+        "sections": sections,
+    }
+    content = json.dumps(metadata, sort_keys=True)
+    input_fingerprint = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    return StateView(
+        id=f"state-view:blue:{target_artifact.id}:{input_fingerprint[:12]}",
+        projection_type=ProjectionType.NORTH_STAR,
+        content=content,
+        input_fingerprint=input_fingerprint,
+        metadata=metadata,
     )
 
 
@@ -502,12 +507,12 @@ def _deterministic_referee_decision() -> RefereeDecision:
     return RefereeDecision(disposition="accept", rationale="deterministic test path")
 
 
-def _render_blue_prompt(blue_view: BlueView, game_spec: GameSpec) -> str:
-    blue_view_json = json.dumps(blue_view.model_dump(mode="json"), sort_keys=True)
+def _render_blue_prompt(state_view: StateView, game_spec: GameSpec) -> str:
+    state_view_json = json.dumps(state_view.model_dump(mode="json"), sort_keys=True)
     return (
-        "Produce a DeltaDocumentState JSON object for the provided GameSpec.\n\n"
+        "Produce a DeltaDocumentState JSON object for the provided StateView and GameSpec.\n\n"
         "Input:\n"
-        f"- blue_view_json: {blue_view_json}\n"
+        f"- state_view_json: {state_view_json}\n"
         f"- objective: {game_spec.objective}\n"
         f"- target_artifact_id: {game_spec.target_artifact_id}\n"
         f"- allowed_delta_type: {game_spec.allowed_delta_type}\n"
@@ -539,10 +544,10 @@ def play_game(
 ) -> DeltaState | None:
     _debug_print_play_game_input(state, game_spec)
     runtime = PlayGameRuntime()
-    blue_view = _build_blue_view(state, game_spec)
-    _debug_print_blue_input(blue_view, game_spec)
+    state_view = _build_blue_state_view(state, game_spec)
+    _debug_print_blue_input(state_view, game_spec)
     client = model_client if model_client is not None else _build_blue_model_client()
-    blue_prompt = _render_blue_prompt(blue_view, game_spec)
+    blue_prompt = _render_blue_prompt(state_view, game_spec)
     blue_generated = client.generate(blue_prompt)
     candidate_delta = _parse_blue_delta_json(blue_generated)
     _debug_print_blue_output(candidate_delta)
