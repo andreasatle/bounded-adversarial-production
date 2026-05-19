@@ -220,6 +220,28 @@ def _debug_print_play_game_attempt(attempt: int) -> None:
     print()
 
 
+def _debug_print_blue_raw_model_output(raw_text: str) -> None:
+    if not _debug_enabled():
+        return
+    print("[DEBUG] blue.raw_model_output:")
+    for line in raw_text.splitlines() or [""]:
+        print(f"  {line}")
+    print()
+
+
+def _debug_print_attempt_rejected(attempt: int, reason: str) -> None:
+    if not _debug_enabled():
+        return
+    print("[DEBUG] play_game.attempt_rejected:")
+    payload = {
+        "attempt": attempt,
+        "reason": reason,
+    }
+    for line in _format_debug_yaml_like(payload, indent=2):
+        print(line)
+    print()
+
+
 def _debug_print_blue_input(
     state_view: StateView,
     game_spec: GameSpec,
@@ -772,7 +794,19 @@ def play_game(
             previous_feedback=previous_feedback,
         )
         blue_generated = client.generate(blue_prompt)
-        candidate_delta = _parse_blue_delta_json(blue_generated)
+        try:
+            candidate_delta = _parse_blue_delta_json(blue_generated)
+        except ValueError:
+            _debug_print_blue_raw_model_output(blue_generated)
+            reason = "blue output failed DeltaState validation"
+            _debug_print_attempt_rejected(attempt, reason)
+            previous_feedback = {
+                "attempt_rejection": {
+                    "stage": "blue",
+                    "reason": reason,
+                }
+            }
+            continue
         _debug_print_blue_output(candidate_delta)
 
         _debug_print_red_input(state_view, game_spec, candidate_delta)
