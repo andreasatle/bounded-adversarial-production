@@ -1039,6 +1039,7 @@ def test_play_game_referee_revise_prevents_current_best_delta() -> None:
         referee_model_client=FakeModelClient(
             ['{"disposition":"revise","rationale":"needs changes"}']
         ),
+        max_attempts=1,
     )
     assert delta is None
 
@@ -1135,8 +1136,15 @@ def test_blue_prompt_includes_state_view_and_gamespec() -> None:
         }
     )
     state_view = run_module._build_blue_state_view(state, spec)
-    prompt = run_module._render_blue_prompt(state_view, spec)
+    prompt = run_module._render_blue_prompt(
+        state_view=state_view,
+        game_spec=spec,
+        attempt_number=1,
+        previous_feedback=None,
+    )
     assert "state_view_json:" in prompt
+    assert "attempt_number: 1" in prompt
+    assert "previous_feedback_json: null" in prompt
     assert "objective:" in prompt
     assert "target_artifact_id:" in prompt
     assert "allowed_delta_type:" in prompt
@@ -1202,8 +1210,296 @@ def test_play_game_returns_none_if_referee_rejects() -> None:
         referee_model_client=FakeModelClient(
             ['{"disposition":"reject","rationale":"deterministic test path"}']
         ),
+        max_attempts=1,
     )
     assert delta is None
+
+
+def test_play_game_accept_first_attempt_returns_immediately() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
+    )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    blue_client = FakeModelClient(
+        [
+            '{"artifact_id":"main-document","operation":"append_section",'
+            '"payload":{"section":{"title":"Introduction","body":"first"}}}',
+            '{"artifact_id":"main-document","operation":"append_section",'
+            '"payload":{"section":{"title":"Introduction","body":"second"}}}',
+        ]
+    )
+    red_client = FakeModelClient(
+        [
+            '{"disposition":"accept","rationale":"ok"}',
+            '{"disposition":"accept","rationale":"ok"}',
+        ]
+    )
+    referee_client = FakeModelClient(
+        [
+            '{"disposition":"accept","rationale":"approved"}',
+            '{"disposition":"accept","rationale":"approved"}',
+        ]
+    )
+    delta = play_game(
+        state,
+        spec,
+        model_client=blue_client,
+        red_model_client=red_client,
+        referee_model_client=referee_client,
+        max_attempts=3,
+    )
+    assert delta is not None
+    assert len(blue_client.prompts) == 1
+    assert len(red_client.prompts) == 1
+    assert len(referee_client.prompts) == 1
+
+
+def test_play_game_revise_then_accept_uses_second_attempt() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
+    )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    blue_client = FakeModelClient(
+        [
+            '{"artifact_id":"main-document","operation":"append_section",'
+            '"payload":{"section":{"title":"Introduction","body":"first"}}}',
+            '{"artifact_id":"main-document","operation":"append_section",'
+            '"payload":{"section":{"title":"Introduction","body":"second"}}}',
+        ]
+    )
+    delta = play_game(
+        state,
+        spec,
+        model_client=blue_client,
+        red_model_client=FakeModelClient(
+            [
+                '{"disposition":"accept","rationale":"ok"}',
+                '{"disposition":"accept","rationale":"ok"}',
+            ]
+        ),
+        referee_model_client=FakeModelClient(
+            [
+                '{"disposition":"revise","rationale":"needs revision"}',
+                '{"disposition":"accept","rationale":"approved"}',
+            ]
+        ),
+        max_attempts=3,
+    )
+    assert delta is not None
+    assert delta.model_dump(mode="json")["payload"]["section"]["body"] == "second"
+    assert len(blue_client.prompts) == 2
+
+
+def test_play_game_reject_then_accept_uses_second_attempt() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
+    )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    blue_client = FakeModelClient(
+        [
+            '{"artifact_id":"main-document","operation":"append_section",'
+            '"payload":{"section":{"title":"Introduction","body":"first"}}}',
+            '{"artifact_id":"main-document","operation":"append_section",'
+            '"payload":{"section":{"title":"Introduction","body":"second"}}}',
+        ]
+    )
+    delta = play_game(
+        state,
+        spec,
+        model_client=blue_client,
+        red_model_client=FakeModelClient(
+            [
+                '{"disposition":"accept","rationale":"ok"}',
+                '{"disposition":"accept","rationale":"ok"}',
+            ]
+        ),
+        referee_model_client=FakeModelClient(
+            [
+                '{"disposition":"reject","rationale":"no"}',
+                '{"disposition":"accept","rationale":"approved"}',
+            ]
+        ),
+        max_attempts=3,
+    )
+    assert delta is not None
+    assert delta.model_dump(mode="json")["payload"]["section"]["body"] == "second"
+    assert len(blue_client.prompts) == 2
+
+
+def test_play_game_attempts_exhausted_returns_none() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
+    )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    delta = play_game(
+        state,
+        spec,
+        model_client=FakeModelClient(
+            [
+                '{"artifact_id":"main-document","operation":"append_section",'
+                '"payload":{"section":{"title":"Introduction","body":"first"}}}',
+                '{"artifact_id":"main-document","operation":"append_section",'
+                '"payload":{"section":{"title":"Introduction","body":"second"}}}',
+            ]
+        ),
+        red_model_client=FakeModelClient(
+            [
+                '{"disposition":"accept","rationale":"ok"}',
+                '{"disposition":"accept","rationale":"ok"}',
+            ]
+        ),
+        referee_model_client=FakeModelClient(
+            [
+                '{"disposition":"reject","rationale":"no"}',
+                '{"disposition":"revise","rationale":"needs work"}',
+            ]
+        ),
+        max_attempts=2,
+    )
+    assert delta is None
+
+
+def test_play_game_previous_feedback_passed_to_later_blue_prompt() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
+    )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    blue_client = FakeModelClient(
+        [
+            '{"artifact_id":"main-document","operation":"append_section",'
+            '"payload":{"section":{"title":"Introduction","body":"first"}}}',
+            '{"artifact_id":"main-document","operation":"append_section",'
+            '"payload":{"section":{"title":"Introduction","body":"second"}}}',
+        ]
+    )
+    _ = play_game(
+        state,
+        spec,
+        model_client=blue_client,
+        red_model_client=FakeModelClient(
+            [
+                '{"disposition":"accept","rationale":"ok"}',
+                '{"disposition":"accept","rationale":"ok"}',
+            ]
+        ),
+        referee_model_client=FakeModelClient(
+            [
+                '{"disposition":"revise","rationale":"needs revision"}',
+                '{"disposition":"accept","rationale":"approved"}',
+            ]
+        ),
+        max_attempts=2,
+    )
+    assert len(blue_client.prompts) == 2
+    second_prompt = blue_client.prompts[1]
+    assert "previous_feedback_json:" in second_prompt
+    assert '"red_finding": {"disposition": "accept", "rationale": "ok"}' in second_prompt
+    assert (
+        '"referee_decision": {"disposition": "revise", "rationale": "needs revision"}'
+        in second_prompt
+    )
+
+
+def test_runtime_preserves_accepted_delta_after_later_reject_in_helper_flow() -> None:
+    import baps.run as run_module
+
+    first_delta = run_module.DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=run_module.AppendSectionDelta(
+            section=run_module.Section(title="Introduction", body="first")
+        ),
+    )
+    second_delta = run_module.DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=run_module.AppendSectionDelta(
+            section=run_module.Section(title="Introduction", body="second")
+        ),
+    )
+    runtime = run_module.PlayGameRuntime()
+    runtime = run_module.apply_referee_decision_to_runtime(
+        runtime=runtime,
+        candidate_delta=first_delta,
+        decision=run_module.RefereeDecision(disposition="accept", rationale="ok"),
+    )
+    runtime = run_module.apply_referee_decision_to_runtime(
+        runtime=runtime,
+        candidate_delta=second_delta,
+        decision=run_module.RefereeDecision(disposition="reject", rationale="no"),
+    )
+    assert runtime.current_best_delta is not None
+    assert runtime.current_best_delta.payload.section.body == "first"
 
 
 def test_play_game_debug_logs_appear(monkeypatch, capsys) -> None:
@@ -1235,13 +1531,17 @@ def test_play_game_debug_logs_appear(monkeypatch, capsys) -> None:
     assert "[DEBUG] referee.input:" in out
     assert "[DEBUG] referee.output:" in out
     assert "[DEBUG] play_game.input:" in out
+    assert "[DEBUG] play_game.attempt:" in out
     assert "[DEBUG] play_game.output:" in out
+    assert "  attempt: 1" in out
     blue_input_block = out.split("[DEBUG] blue.input:")[1].split("[DEBUG] blue.output:")[0]
     assert "state_view:" in blue_input_block
     assert "target_artifact_id: main-document" in blue_input_block
     assert "sections: []" in blue_input_block
     assert "state:" not in blue_input_block
     assert "game_spec:" in blue_input_block
+    assert "attempt_number: 1" in blue_input_block
+    assert "previous_feedback: None" in blue_input_block
     red_input_block = out.split("[DEBUG] red.input:")[1].split("[DEBUG] red.output:")[0]
     assert "game_spec:" in red_input_block
     assert "state_view:" in red_input_block

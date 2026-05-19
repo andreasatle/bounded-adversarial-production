@@ -210,7 +210,22 @@ def _debug_print_play_game_output(delta: DeltaState | None) -> None:
     print()
 
 
-def _debug_print_blue_input(state_view: StateView, game_spec: GameSpec) -> None:
+def _debug_print_play_game_attempt(attempt: int) -> None:
+    if not _debug_enabled():
+        return
+    print("[DEBUG] play_game.attempt:")
+    payload = {"attempt": attempt}
+    for line in _format_debug_yaml_like(payload, indent=2):
+        print(line)
+    print()
+
+
+def _debug_print_blue_input(
+    state_view: StateView,
+    game_spec: GameSpec,
+    attempt_number: int,
+    previous_feedback: dict[str, Any] | None,
+) -> None:
     if not _debug_enabled():
         return
     print("[DEBUG] blue.input:")
@@ -221,6 +236,8 @@ def _debug_print_blue_input(state_view: StateView, game_spec: GameSpec) -> None:
     payload = {
         "game_spec": game_spec.model_dump(mode="json"),
         "state_view": state_view_summary,
+        "attempt_number": attempt_number,
+        "previous_feedback": previous_feedback,
     }
     for line in _format_debug_yaml_like(payload, indent=2):
         print(line)
@@ -621,12 +638,20 @@ def create_game(
     return game_spec
 
 
-def _render_blue_prompt(state_view: StateView, game_spec: GameSpec) -> str:
+def _render_blue_prompt(
+    state_view: StateView,
+    game_spec: GameSpec,
+    attempt_number: int,
+    previous_feedback: dict[str, Any] | None,
+) -> str:
     state_view_json = json.dumps(state_view.model_dump(mode="json"), sort_keys=True)
+    previous_feedback_json = json.dumps(previous_feedback, sort_keys=True)
     return (
         "Produce a DeltaDocumentState JSON object for the provided StateView and GameSpec.\n\n"
         "Input:\n"
         f"- state_view_json: {state_view_json}\n"
+        f"- attempt_number: {attempt_number}\n"
+        f"- previous_feedback_json: {previous_feedback_json}\n"
         f"- objective: {game_spec.objective}\n"
         f"- target_artifact_id: {game_spec.target_artifact_id}\n"
         f"- allowed_delta_type: {game_spec.allowed_delta_type}\n"
@@ -720,43 +745,62 @@ def play_game(
     model_client: ModelClient | None = None,
     red_model_client: ModelClient | None = None,
     referee_model_client: ModelClient | None = None,
+    max_attempts: int = 3,
 ) -> DeltaState | None:
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be >= 1")
     _debug_print_play_game_input(state, game_spec)
-    runtime = PlayGameRuntime()
     state_view = _build_blue_state_view(state, game_spec)
-    _debug_print_blue_input(state_view, game_spec)
+    runtime = PlayGameRuntime()
+    previous_feedback: dict[str, Any] | None = None
     client = model_client if model_client is not None else _build_blue_model_client()
-    blue_prompt = _render_blue_prompt(state_view, game_spec)
-    blue_generated = client.generate(blue_prompt)
-    candidate_delta = _parse_blue_delta_json(blue_generated)
-    _debug_print_blue_output(candidate_delta)
-
     red_client = (
         red_model_client if red_model_client is not None else _build_red_model_client()
     )
-    _debug_print_red_input(state_view, game_spec, candidate_delta)
-    red_prompt = _render_red_prompt(state_view, game_spec, candidate_delta)
-    red_generated = red_client.generate(red_prompt)
-    red_finding = _parse_red_finding_json(red_generated)
-    _debug_print_red_output(red_finding)
     referee_client = (
         referee_model_client
         if referee_model_client is not None
         else _build_referee_model_client()
     )
-    _debug_print_referee_input(state_view, game_spec, candidate_delta, red_finding)
-    referee_prompt = _render_referee_prompt(
-        state_view, game_spec, candidate_delta, red_finding
-    )
-    referee_generated = referee_client.generate(referee_prompt)
-    referee_decision = _parse_referee_decision_json(referee_generated)
-    _debug_print_referee_output(referee_decision)
+    for attempt in range(1, max_attempts + 1):
+        _debug_print_play_game_attempt(attempt)
+        _debug_print_blue_input(state_view, game_spec, attempt, previous_feedback)
+        blue_prompt = _render_blue_prompt(
+            state_view=state_view,
+            game_spec=game_spec,
+            attempt_number=attempt,
+            previous_feedback=previous_feedback,
+        )
+        blue_generated = client.generate(blue_prompt)
+        candidate_delta = _parse_blue_delta_json(blue_generated)
+        _debug_print_blue_output(candidate_delta)
 
-    runtime = apply_referee_decision_to_runtime(
-        runtime=runtime,
-        candidate_delta=candidate_delta,
-        decision=referee_decision,
-    )
+        _debug_print_red_input(state_view, game_spec, candidate_delta)
+        red_prompt = _render_red_prompt(state_view, game_spec, candidate_delta)
+        red_generated = red_client.generate(red_prompt)
+        red_finding = _parse_red_finding_json(red_generated)
+        _debug_print_red_output(red_finding)
+
+        _debug_print_referee_input(state_view, game_spec, candidate_delta, red_finding)
+        referee_prompt = _render_referee_prompt(
+            state_view, game_spec, candidate_delta, red_finding
+        )
+        referee_generated = referee_client.generate(referee_prompt)
+        referee_decision = _parse_referee_decision_json(referee_generated)
+        _debug_print_referee_output(referee_decision)
+
+        runtime = apply_referee_decision_to_runtime(
+            runtime=runtime,
+            candidate_delta=candidate_delta,
+            decision=referee_decision,
+        )
+        if referee_decision.disposition == "accept":
+            _debug_print_play_game_output(runtime.current_best_delta)
+            return runtime.current_best_delta
+        previous_feedback = {
+            "red_finding": red_finding.model_dump(mode="json"),
+            "referee_decision": referee_decision.model_dump(mode="json"),
+        }
     _debug_print_play_game_output(runtime.current_best_delta)
     return runtime.current_best_delta
 
