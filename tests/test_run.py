@@ -765,6 +765,67 @@ def test_play_game_debug_logs_appear(monkeypatch, capsys) -> None:
     assert "current_best_delta:" in out
 
 
+def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    captured: dict[str, object] = {}
+    expected = run_module.GameSpec(
+        objective="O",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="S",
+    )
+
+    monkeypatch.setattr(run_module, "create_game", lambda config, state: expected)
+
+    def _capture_play_game(spec):
+        captured["spec"] = spec
+        return run_module.DeltaDocumentState(
+            artifact_id=spec.target_artifact_id,
+            operation="append_section",
+            payload=run_module.AppendSectionDelta(
+                section=run_module.Section(title="Introduction", body=spec.objective)
+            ),
+        )
+
+    monkeypatch.setattr(run_module, "play_game", _capture_play_game)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace",
+            str(tmp_path / "ws-main-play"),
+            "--project-type",
+            "document",
+        ],
+    )
+
+    run_module.main()
+
+    assert captured["spec"] is expected
+
+
+def test_main_exits_cleanly_if_play_game_returns_none(monkeypatch, capsys, tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    monkeypatch.setattr(run_module, "play_game", lambda _spec: None)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace",
+            str(tmp_path / "ws-play-none"),
+            "--project-type",
+            "document",
+        ],
+    )
+    with pytest.raises(SystemExit) as exc:
+        run_module.main()
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert "error: play_game produced no DeltaState" in err
+
+
 def test_spec_relative_path_resolves_from_cwd(monkeypatch, capsys, tmp_path: Path) -> None:
     spec = tmp_path / "config.yaml"
     workspace = tmp_path / "from-relative-spec"

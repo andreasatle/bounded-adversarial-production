@@ -664,10 +664,14 @@ def main() -> None:
         print(f"error: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
     try:
-        _ = create_game(config, created_state)
+        game_spec = create_game(config, created_state)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
+    delta_state = play_game(game_spec)
+    if delta_state is None:
+        print("error: play_game produced no DeltaState", file=sys.stderr)
+        raise SystemExit(2)
 
     result = run_baps_loop(
         workspace=workspace,
