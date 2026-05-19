@@ -1224,10 +1224,82 @@ def test_referee_prompt_intro_and_conclusion_guides_accept_policy() -> None:
     )
     red = run_module.RedFinding(disposition="accept", rationale="satisfies success condition")
     prompt = run_module._render_referee_prompt(state_view, spec, delta, red)
-    assert "accept: candidate sufficiently satisfies objective and success_condition." in prompt
-    assert "revise: candidate is promising but incomplete for objective/success_condition." in prompt
-    assert "reject: candidate is wrong, harmful, or inconsistent" in prompt
+    assert (
+        "accept: objective/success_condition are satisfied enough for this game AND Red has no unresolved material findings."
+        in prompt
+    )
+    assert (
+        "revise: objective/success_condition are only partially satisfied OR Red has unresolved improvements that should be addressed."
+        in prompt
+    )
+    assert "reject: candidate is invalid, harmful, incoherent, or wrong direction." in prompt
     assert "Do NOT choose revise merely because state changed." in prompt
+
+
+def test_referee_prompt_declares_game_local_authority_and_not_final_integration() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="Any success condition.",
+    )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    state_view = run_module._build_blue_state_view(state, spec)
+    delta = run_module.DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=run_module.AppendSectionDelta(
+            section=run_module.Section(title="Introduction", body="Body")
+        ),
+    )
+    red = run_module.RedFinding(disposition="accept", rationale="ok")
+    prompt = run_module._render_referee_prompt(state_view, spec, delta, red)
+    assert "You are the game-local authority for this PlayGame decision." in prompt
+    assert "You do NOT decide final State integration; integration is decided later by Integrator." in prompt
+
+
+def test_referee_prompt_uses_red_material_findings_in_decision_policy() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="Any success condition.",
+    )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    state_view = run_module._build_blue_state_view(state, spec)
+    delta = run_module.DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=run_module.AppendSectionDelta(
+            section=run_module.Section(title="Introduction", body="Body")
+        ),
+    )
+    red = run_module.RedFinding(disposition="revise", rationale="missing conclusion")
+    prompt = run_module._render_referee_prompt(state_view, spec, delta, red)
+    assert "Red has no unresolved material findings" in prompt
+    assert "Red has unresolved improvements that should be addressed." in prompt
 
 
 def test_red_and_referee_prompts_do_not_treat_state_mutation_alone_as_failure() -> None:
