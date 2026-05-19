@@ -184,11 +184,14 @@ def _debug_print_create_game_output(game_spec: GameSpec) -> None:
     print()
 
 
-def _debug_print_play_game_input(game_spec: GameSpec) -> None:
+def _debug_print_play_game_input(state: State, game_spec: GameSpec) -> None:
     if not _debug_enabled():
         return
     print("[DEBUG] play_game.input:")
-    payload = {"game_spec": game_spec.model_dump(mode="json")}
+    payload = {
+        "state": state.model_dump(mode="json"),
+        "game_spec": game_spec.model_dump(mode="json"),
+    }
     for line in _format_debug_yaml_like(payload, indent=2):
         print(line)
     print()
@@ -206,11 +209,14 @@ def _debug_print_play_game_output(delta: DeltaState | None) -> None:
     print()
 
 
-def _debug_print_blue_input(game_spec: GameSpec) -> None:
+def _debug_print_blue_input(state: State, game_spec: GameSpec) -> None:
     if not _debug_enabled():
         return
     print("[DEBUG] blue.input:")
-    payload = {"game_spec": game_spec.model_dump(mode="json")}
+    payload = {
+        "state": state.model_dump(mode="json"),
+        "game_spec": game_spec.model_dump(mode="json"),
+    }
     for line in _format_debug_yaml_like(payload, indent=2):
         print(line)
     print()
@@ -463,10 +469,12 @@ def _deterministic_referee_decision() -> RefereeDecision:
     return RefereeDecision(disposition="accept", rationale="deterministic test path")
 
 
-def _render_blue_prompt(game_spec: GameSpec) -> str:
+def _render_blue_prompt(state: State, game_spec: GameSpec) -> str:
+    state_json = json.dumps(state.model_dump(mode="json"), sort_keys=True)
     return (
         "Produce a DeltaDocumentState JSON object for the provided GameSpec.\n\n"
         "Input:\n"
+        f"- state_json: {state_json}\n"
         f"- objective: {game_spec.objective}\n"
         f"- target_artifact_id: {game_spec.target_artifact_id}\n"
         f"- allowed_delta_type: {game_spec.allowed_delta_type}\n"
@@ -492,14 +500,15 @@ def _render_blue_prompt(game_spec: GameSpec) -> str:
 
 
 def play_game(
+    state: State,
     game_spec: GameSpec,
     model_client: ModelClient | None = None,
 ) -> DeltaState | None:
-    _debug_print_play_game_input(game_spec)
+    _debug_print_play_game_input(state, game_spec)
     runtime = PlayGameRuntime()
-    _debug_print_blue_input(game_spec)
+    _debug_print_blue_input(state, game_spec)
     client = model_client if model_client is not None else _build_blue_model_client()
-    blue_prompt = _render_blue_prompt(game_spec)
+    blue_prompt = _render_blue_prompt(state, game_spec)
     blue_generated = client.generate(blue_prompt)
     candidate_delta = _parse_blue_delta_json(blue_generated)
     _debug_print_blue_output(candidate_delta)
@@ -747,7 +756,7 @@ def main() -> None:
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
-    delta_state = play_game(game_spec)
+    delta_state = play_game(created_state, game_spec)
     if delta_state is None:
         print("error: play_game produced no DeltaState", file=sys.stderr)
         raise SystemExit(2)

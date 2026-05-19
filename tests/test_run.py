@@ -715,7 +715,17 @@ def test_play_game_returns_delta_document_state() -> None:
     }
     import baps.run as run_module
 
-    delta = play_game(run_module.GameSpec.model_validate(game_spec))
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    delta = play_game(state, run_module.GameSpec.model_validate(game_spec))
     assert delta is not None
     assert delta.model_dump(mode="json")["operation"] == "append_section"
     assert delta.model_dump(mode="json")["artifact_id"] == "main-document"
@@ -730,7 +740,17 @@ def test_play_game_accepted_candidate_becomes_current_best_delta() -> None:
         allowed_delta_type="DeltaDocumentState",
         success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
     )
-    delta = play_game(spec)
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    delta = play_game(state, spec)
     assert delta is not None
     dumped = delta.model_dump(mode="json")
     assert dumped["payload"]["section"]["title"] == "Introduction"
@@ -746,7 +766,18 @@ def test_play_game_valid_blue_json_returns_delta() -> None:
         allowed_delta_type="DeltaDocumentState",
         success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
     )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
     delta = play_game(
+        state,
         spec,
         model_client=FakeModelClient(
             [
@@ -768,8 +799,18 @@ def test_play_game_invalid_blue_json_rejected() -> None:
         allowed_delta_type="DeltaDocumentState",
         success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
     )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
     with pytest.raises(ValueError, match="blue model output must be valid JSON"):
-        play_game(spec, model_client=FakeModelClient(["not-json"]))
+        play_game(state, spec, model_client=FakeModelClient(["not-json"]))
 
 
 def test_play_game_fenced_blue_json_accepted() -> None:
@@ -781,7 +822,18 @@ def test_play_game_fenced_blue_json_accepted() -> None:
         allowed_delta_type="DeltaDocumentState",
         success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
     )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
     delta = play_game(
+        state,
         spec,
         model_client=FakeModelClient(
             [
@@ -794,6 +846,33 @@ def test_play_game_fenced_blue_json_accepted() -> None:
     )
     assert delta is not None
     assert delta.model_dump(mode="json")["operation"] == "append_section"
+
+
+def test_blue_prompt_includes_state_and_gamespec() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
+    )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    prompt = run_module._render_blue_prompt(state, spec)
+    assert "state_json:" in prompt
+    assert "objective:" in prompt
+    assert "target_artifact_id:" in prompt
+    assert "allowed_delta_type:" in prompt
+    assert "success_condition:" in prompt
 
 
 def test_play_game_returns_none_if_referee_rejects(monkeypatch) -> None:
@@ -811,7 +890,17 @@ def test_play_game_returns_none_if_referee_rejects(monkeypatch) -> None:
         "_deterministic_referee_decision",
         lambda: run_module.RefereeDecision(disposition="reject", rationale="deterministic test path"),
     )
-    delta = play_game(spec)
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    delta = play_game(state, spec)
     assert delta is None
 
 
@@ -825,12 +914,24 @@ def test_play_game_debug_logs_appear(monkeypatch, capsys) -> None:
         allowed_delta_type="DeltaDocumentState",
         success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
     )
-    _ = play_game(spec)
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    _ = play_game(state, spec)
     out = capsys.readouterr().out
     assert "[DEBUG] blue.input:" in out
     assert "[DEBUG] blue.output:" in out
     assert "[DEBUG] play_game.input:" in out
     assert "[DEBUG] play_game.output:" in out
+    assert "state:" in out
+    assert "game_spec:" in out
     assert "current_best_delta:" in out
 
 
@@ -847,7 +948,8 @@ def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_pa
 
     monkeypatch.setattr(run_module, "create_game", lambda config, state: expected)
 
-    def _capture_play_game(spec):
+    def _capture_play_game(state, spec):
+        captured["state"] = state
         captured["spec"] = spec
         return run_module.DeltaDocumentState(
             artifact_id=spec.target_artifact_id,
@@ -872,12 +974,13 @@ def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_pa
     run_module.main()
 
     assert captured["spec"] is expected
+    assert captured["state"] is not None
 
 
 def test_main_exits_cleanly_if_play_game_returns_none(monkeypatch, capsys, tmp_path: Path) -> None:
     import baps.run as run_module
 
-    monkeypatch.setattr(run_module, "play_game", lambda _spec: None)
+    monkeypatch.setattr(run_module, "play_game", lambda _state, _spec: None)
     monkeypatch.setattr(
         "sys.argv",
         [
