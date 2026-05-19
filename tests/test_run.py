@@ -8,16 +8,24 @@ from baps.run import SECTION_MARKER, create_game, create_state, main, play_game,
 
 @pytest.fixture(autouse=True)
 def _patch_create_game_model_client(monkeypatch):
-    response = (
+    create_game_response = (
         '{"objective":"Advance goal","target_artifact_id":"main-document",'
         '"allowed_delta_type":"DeltaDocumentState",'
         '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}'
     )
+    blue_response = (
+        '{"artifact_id":"main-document","operation":"append_section",'
+        '"payload":{"section":{"title":"Introduction","body":"Advance goal"}}}'
+    )
 
-    def _fake_builder():
-        return FakeModelClient([response])
+    def _fake_create_game_builder():
+        return FakeModelClient([create_game_response])
 
-    monkeypatch.setattr("baps.run._build_create_game_model_client", _fake_builder)
+    def _fake_blue_builder():
+        return FakeModelClient([blue_response])
+
+    monkeypatch.setattr("baps.run._build_create_game_model_client", _fake_create_game_builder)
+    monkeypatch.setattr("baps.run._build_blue_model_client", _fake_blue_builder)
 
 
 def test_run_baps_loop_creates_report_and_appends_once(tmp_path: Path) -> None:
@@ -726,7 +734,66 @@ def test_play_game_accepted_candidate_becomes_current_best_delta() -> None:
     assert delta is not None
     dumped = delta.model_dump(mode="json")
     assert dumped["payload"]["section"]["title"] == "Introduction"
-    assert dumped["payload"]["section"]["body"] == "Write an introduction section"
+    assert dumped["payload"]["section"]["body"] == "Advance goal"
+
+
+def test_play_game_valid_blue_json_returns_delta() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
+    )
+    delta = play_game(
+        spec,
+        model_client=FakeModelClient(
+            [
+                '{"artifact_id":"main-document","operation":"append_section",'
+                '"payload":{"section":{"title":"Introduction","body":"Any objective"}}}'
+            ]
+        ),
+    )
+    assert delta is not None
+    assert delta.model_dump(mode="json")["artifact_id"] == "main-document"
+
+
+def test_play_game_invalid_blue_json_rejected() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
+    )
+    with pytest.raises(ValueError, match="blue model output must be valid JSON"):
+        play_game(spec, model_client=FakeModelClient(["not-json"]))
+
+
+def test_play_game_fenced_blue_json_accepted() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
+    )
+    delta = play_game(
+        spec,
+        model_client=FakeModelClient(
+            [
+                "```json\n"
+                '{"artifact_id":"main-document","operation":"append_section",'
+                '"payload":{"section":{"title":"Introduction","body":"Any objective"}}}\n'
+                "```"
+            ]
+        ),
+    )
+    assert delta is not None
+    assert delta.model_dump(mode="json")["operation"] == "append_section"
 
 
 def test_play_game_returns_none_if_referee_rejects(monkeypatch) -> None:
@@ -760,6 +827,8 @@ def test_play_game_debug_logs_appear(monkeypatch, capsys) -> None:
     )
     _ = play_game(spec)
     out = capsys.readouterr().out
+    assert "[DEBUG] blue.input:" in out
+    assert "[DEBUG] blue.output:" in out
     assert "[DEBUG] play_game.input:" in out
     assert "[DEBUG] play_game.output:" in out
     assert "current_best_delta:" in out

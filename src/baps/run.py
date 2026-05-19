@@ -206,6 +206,26 @@ def _debug_print_play_game_output(delta: DeltaState | None) -> None:
     print()
 
 
+def _debug_print_blue_input(game_spec: GameSpec) -> None:
+    if not _debug_enabled():
+        return
+    print("[DEBUG] blue.input:")
+    payload = {"game_spec": game_spec.model_dump(mode="json")}
+    for line in _format_debug_yaml_like(payload, indent=2):
+        print(line)
+    print()
+
+
+def _debug_print_blue_output(delta: DeltaDocumentState) -> None:
+    if not _debug_enabled():
+        return
+    print("[DEBUG] blue.output:")
+    payload = {"delta_state": delta.model_dump(mode="json")}
+    for line in _format_debug_yaml_like(payload, indent=2):
+        print(line)
+    print()
+
+
 def _debug_print_create_game_raw_model_output(raw_text: str) -> None:
     if not _debug_enabled():
         return
@@ -216,6 +236,12 @@ def _debug_print_create_game_raw_model_output(raw_text: str) -> None:
 
 
 def _build_create_game_model_client() -> ModelClient:
+    model = os.getenv("BAPS_OLLAMA_MODEL", "llama3.2")
+    base_url = os.getenv("BAPS_OLLAMA_BASE_URL", "http://localhost:11434")
+    return OllamaClient(model=model, base_url=base_url)
+
+
+def _build_blue_model_client() -> ModelClient:
     model = os.getenv("BAPS_OLLAMA_MODEL", "llama3.2")
     base_url = os.getenv("BAPS_OLLAMA_BASE_URL", "http://localhost:11434")
     return OllamaClient(model=model, base_url=base_url)
@@ -344,15 +370,7 @@ def _render_create_game_prompt(config: dict[str, Any], state: State) -> str:
 
 
 def _parse_game_spec_json(text: str) -> GameSpec:
-    normalized = text.strip()
-    fence_pattern = re.compile(
-        r"\A```(?:json)?[ \t]*\n(?P<body>[\s\S]*?)\n```[ \t]*\Z",
-        re.IGNORECASE,
-    )
-    fence_match = fence_pattern.match(normalized)
-    if fence_match is not None:
-        normalized = fence_match.group("body").strip()
-
+    normalized = _normalize_json_candidate(text)
     try:
         parsed = json.loads(normalized)
     except json.JSONDecodeError as exc:
@@ -377,6 +395,40 @@ def _parse_game_spec_json(text: str) -> GameSpec:
         return GameSpec.model_validate(parsed)
     except Exception as exc:
         raise ValueError("create_game model output failed GameSpec validation") from exc
+
+
+def _normalize_json_candidate(text: str) -> str:
+    normalized = text.strip()
+    fence_pattern = re.compile(
+        r"\A```(?:json)?[ \t]*\n(?P<body>[\s\S]*?)\n```[ \t]*\Z",
+        re.IGNORECASE,
+    )
+    fence_match = fence_pattern.match(normalized)
+    if fence_match is not None:
+        normalized = fence_match.group("body").strip()
+    return normalized
+
+
+def _parse_blue_delta_json(text: str) -> DeltaDocumentState:
+    normalized = _normalize_json_candidate(text)
+    try:
+        parsed = json.loads(normalized)
+    except json.JSONDecodeError as exc:
+        raise ValueError("blue model output must be valid JSON") from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError("blue model output must be a JSON object")
+
+    required_keys = {"artifact_id", "operation", "payload"}
+    if set(parsed.keys()) != required_keys:
+        raise ValueError(
+            "blue model output must contain exactly keys: artifact_id, operation, payload"
+        )
+
+    try:
+        return DeltaDocumentState.model_validate(parsed)
+    except Exception as exc:
+        raise ValueError("blue model output failed DeltaDocumentState validation") from exc
 
 
 def create_game(
@@ -411,20 +463,47 @@ def _deterministic_referee_decision() -> RefereeDecision:
     return RefereeDecision(disposition="accept", rationale="deterministic test path")
 
 
-def play_game(game_spec: GameSpec) -> DeltaState | None:
+def _render_blue_prompt(game_spec: GameSpec) -> str:
+    return (
+        "Produce a DeltaDocumentState JSON object for the provided GameSpec.\n\n"
+        "Input:\n"
+        f"- objective: {game_spec.objective}\n"
+        f"- target_artifact_id: {game_spec.target_artifact_id}\n"
+        f"- allowed_delta_type: {game_spec.allowed_delta_type}\n"
+        f"- success_condition: {game_spec.success_condition}\n\n"
+        "Return only a JSON object.\n"
+        "Do not wrap output in markdown.\n"
+        "Do not use triple-backtick fences.\n"
+        "Do not include prose before JSON.\n"
+        "Do not include prose after JSON.\n"
+        "No extra fields.\n"
+        "Required JSON shape:\n"
+        "{\n"
+        '  "artifact_id": "...",\n'
+        '  "operation": "append_section",\n'
+        '  "payload": {\n'
+        '    "section": {\n'
+        '      "title": "Introduction",\n'
+        '      "body": "..."\n'
+        "    }\n"
+        "  }\n"
+        "}"
+    )
+
+
+def play_game(
+    game_spec: GameSpec,
+    model_client: ModelClient | None = None,
+) -> DeltaState | None:
     _debug_print_play_game_input(game_spec)
     runtime = PlayGameRuntime()
+    _debug_print_blue_input(game_spec)
+    client = model_client if model_client is not None else _build_blue_model_client()
+    blue_prompt = _render_blue_prompt(game_spec)
+    blue_generated = client.generate(blue_prompt)
+    candidate_delta = _parse_blue_delta_json(blue_generated)
+    _debug_print_blue_output(candidate_delta)
 
-    candidate_delta = DeltaDocumentState(
-        artifact_id=game_spec.target_artifact_id,
-        operation="append_section",
-        payload=AppendSectionDelta(
-            section=Section(
-                title="Introduction",
-                body=game_spec.objective,
-            )
-        ),
-    )
     _ = _deterministic_red_finding()
     referee_decision = _deterministic_referee_decision()
 
