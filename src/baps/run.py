@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -308,8 +309,17 @@ def _render_create_game_prompt(config: dict[str, Any], state: State) -> str:
 
 
 def _parse_game_spec_json(text: str) -> GameSpec:
+    normalized = text.strip()
+    fence_pattern = re.compile(
+        r"\A```(?:json)?[ \t]*\n(?P<body>[\s\S]*?)\n```[ \t]*\Z",
+        re.IGNORECASE,
+    )
+    fence_match = fence_pattern.match(normalized)
+    if fence_match is not None:
+        normalized = fence_match.group("body").strip()
+
     try:
-        parsed = json.loads(text)
+        parsed = json.loads(normalized)
     except json.JSONDecodeError as exc:
         raise ValueError("create_game model output must be valid JSON") from exc
 

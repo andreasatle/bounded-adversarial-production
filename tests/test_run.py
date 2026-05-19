@@ -461,6 +461,178 @@ def test_create_game_invalid_json_without_debug_does_not_print_raw_model_output(
     assert "[DEBUG] create_game.raw_model_output:" not in out
 
 
+def test_create_game_raw_json_still_accepted() -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "goal": "Write a short report with an introduction and conclusion.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    game_spec = create_game(
+        config,
+        state,
+        model_client=FakeModelClient(
+            [
+                '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+                '"allowed_delta_type":"DeltaDocumentState",'
+                '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}'
+            ]
+        ),
+    )
+    assert game_spec.target_artifact_id == "main-document"
+
+
+def test_create_game_exact_json_fence_accepted() -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "goal": "Write a short report with an introduction and conclusion.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    game_spec = create_game(
+        config,
+        state,
+        model_client=FakeModelClient(
+            [
+                "```json\n"
+                '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+                '"allowed_delta_type":"DeltaDocumentState",'
+                '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}\n'
+                "```"
+            ]
+        ),
+    )
+    assert game_spec.target_artifact_id == "main-document"
+
+
+def test_create_game_exact_plain_fence_accepted() -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "goal": "Write a short report with an introduction and conclusion.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    game_spec = create_game(
+        config,
+        state,
+        model_client=FakeModelClient(
+            [
+                "```\n"
+                '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+                '"allowed_delta_type":"DeltaDocumentState",'
+                '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}\n'
+                "```"
+            ]
+        ),
+    )
+    assert game_spec.target_artifact_id == "main-document"
+
+
+def test_create_game_prose_before_fence_rejected() -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "goal": "Write a short report with an introduction and conclusion.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    with pytest.raises(ValueError, match="must be valid JSON"):
+        create_game(
+            config,
+            state,
+            model_client=FakeModelClient(
+                [
+                    "Here is the result:\n```json\n"
+                    '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+                    '"allowed_delta_type":"DeltaDocumentState",'
+                    '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}\n'
+                    "```"
+                ]
+            ),
+        )
+
+
+def test_create_game_prose_after_fence_rejected() -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "goal": "Write a short report with an introduction and conclusion.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    with pytest.raises(ValueError, match="must be valid JSON"):
+        create_game(
+            config,
+            state,
+            model_client=FakeModelClient(
+                [
+                    "```json\n"
+                    '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+                    '"allowed_delta_type":"DeltaDocumentState",'
+                    '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}\n'
+                    "```\nDone."
+                ]
+            ),
+        )
+
+
+def test_create_game_multiple_fenced_blocks_rejected() -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "goal": "Write a short report with an introduction and conclusion.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    with pytest.raises(ValueError, match="must be valid JSON"):
+        create_game(
+            config,
+            state,
+            model_client=FakeModelClient(
+                [
+                    "```json\n"
+                    '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+                    '"allowed_delta_type":"DeltaDocumentState",'
+                    '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}\n'
+                    "```\n```json\n{}\n```"
+                ]
+            ),
+        )
+
+
+def test_create_game_invalid_json_inside_fence_rejected() -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "goal": "Write a short report with an introduction and conclusion.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    with pytest.raises(ValueError, match="must be valid JSON"):
+        create_game(
+            config,
+            state,
+            model_client=FakeModelClient(["```json\n{not valid json}\n```"]),
+        )
+
+
 def test_create_game_missing_gamespec_fields_fails_cleanly() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
