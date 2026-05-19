@@ -1158,6 +1158,116 @@ def test_blue_prompt_includes_state_view_and_gamespec() -> None:
     assert "state_json:" not in prompt
 
 
+def test_red_prompt_intro_only_guides_revise_for_intro_and_conclusion_success_condition() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Write a short report with an introduction and conclusion.",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="Document must include both an Introduction section and a Conclusion section.",
+    )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    state_view = run_module._build_blue_state_view(state, spec)
+    delta = run_module.DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=run_module.AppendSectionDelta(
+            section=run_module.Section(title="Introduction", body="Intro only")
+        ),
+    )
+    prompt = run_module._render_red_prompt(state_view, spec, delta)
+    assert "success_condition:" in prompt
+    assert "Document must include both an Introduction section and a Conclusion section." in prompt
+    assert "Use revise only when the candidate is promising but needs improvement" in prompt
+    assert "Do NOT reject or revise merely because state differs from the original state." in prompt
+
+
+def test_referee_prompt_intro_and_conclusion_guides_accept_policy() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Write a short report with an introduction and conclusion.",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="Document must include both an Introduction section and a Conclusion section.",
+    )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    state_view = run_module._build_blue_state_view(state, spec)
+    delta = run_module.DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=run_module.AppendSectionDelta(
+            section=run_module.Section(
+                title="Introduction and Conclusion",
+                body="Introduction... Conclusion...",
+            )
+        ),
+    )
+    red = run_module.RedFinding(disposition="accept", rationale="satisfies success condition")
+    prompt = run_module._render_referee_prompt(state_view, spec, delta, red)
+    assert "accept: candidate sufficiently satisfies objective and success_condition." in prompt
+    assert "revise: candidate is promising but incomplete for objective/success_condition." in prompt
+    assert "reject: candidate is wrong, harmful, or inconsistent" in prompt
+    assert "Do NOT choose revise merely because state changed." in prompt
+
+
+def test_red_and_referee_prompts_do_not_treat_state_mutation_alone_as_failure() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="Any success condition.",
+    )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "goal": "Write a short report with an introduction and conclusion.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    state_view = run_module._build_blue_state_view(state, spec)
+    delta = run_module.DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=run_module.AppendSectionDelta(
+            section=run_module.Section(title="Introduction", body="Body")
+        ),
+    )
+    red_prompt = run_module._render_red_prompt(state_view, spec, delta)
+    referee_prompt = run_module._render_referee_prompt(
+        state_view,
+        spec,
+        delta,
+        run_module.RedFinding(disposition="accept", rationale="ok"),
+    )
+    assert "Do NOT reject or revise merely because state differs from the original state." in red_prompt
+    assert "Do NOT choose revise merely because state changed." in referee_prompt
+
+
 def test_state_view_is_derived_from_state_and_gamespec_with_existing_sections() -> None:
     import baps.run as run_module
 
