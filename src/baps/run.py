@@ -624,11 +624,6 @@ def create_game(
 def _deterministic_red_finding() -> RedFinding:
     return RedFinding(disposition="accept", rationale="deterministic test path")
 
-
-def _deterministic_referee_decision() -> RefereeDecision:
-    return RefereeDecision(disposition="accept", rationale="deterministic test path")
-
-
 def _render_blue_prompt(state_view: StateView, game_spec: GameSpec) -> str:
     state_view_json = json.dumps(state_view.model_dump(mode="json"), sort_keys=True)
     return (
