@@ -867,12 +867,37 @@ def test_blue_prompt_includes_state_and_gamespec() -> None:
             "spec_path": None,
         }
     )
-    prompt = run_module._render_blue_prompt(state, spec)
-    assert "state_json:" in prompt
+    blue_view = run_module._build_blue_view(state, spec)
+    prompt = run_module._render_blue_prompt(blue_view, spec)
+    assert "blue_view_json:" in prompt
     assert "objective:" in prompt
     assert "target_artifact_id:" in prompt
     assert "allowed_delta_type:" in prompt
     assert "success_condition:" in prompt
+    assert "state_json:" not in prompt
+
+
+def test_blue_view_is_derived_from_state_and_gamespec_with_existing_sections() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
+    )
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(
+            run_module.DocumentArtifact(
+                id="main-document",
+                sections=(run_module.Section(title="Existing", body="Already here"),),
+            ),
+        ),
+    )
+    blue_view = run_module._build_blue_view(state, spec)
+    assert blue_view.target_artifact_id == "main-document"
+    assert blue_view.sections == [{"title": "Existing", "body": "Already here"}]
 
 
 def test_play_game_returns_none_if_referee_rejects(monkeypatch) -> None:
@@ -930,8 +955,12 @@ def test_play_game_debug_logs_appear(monkeypatch, capsys) -> None:
     assert "[DEBUG] blue.output:" in out
     assert "[DEBUG] play_game.input:" in out
     assert "[DEBUG] play_game.output:" in out
-    assert "state:" in out
-    assert "game_spec:" in out
+    blue_input_block = out.split("[DEBUG] blue.input:")[1].split("[DEBUG] blue.output:")[0]
+    assert "blue_view:" in blue_input_block
+    assert "target_artifact_id: main-document" in blue_input_block
+    assert "sections: []" in blue_input_block
+    assert "state:" not in blue_input_block
+    assert "game_spec:" in blue_input_block
     assert "current_best_delta:" in out
 
 
