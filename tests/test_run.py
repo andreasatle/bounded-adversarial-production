@@ -1908,6 +1908,74 @@ def test_state_view_is_derived_from_state_and_gamespec_with_existing_sections() 
     assert state_view.metadata["sections"] == [{"title": "Existing", "body": "Already here"}]
 
 
+def test_create_game_state_view_content_is_markdown_for_empty_document() -> None:
+    import baps.run as run_module
+
+    state = run_module.State(
+        northstar=run_module.NorthStar(
+            artifacts=(
+                run_module.DocumentArtifact(
+                    id="northstar:abc",
+                    sections=(
+                        run_module.Section(
+                            title="NorthStar",
+                            body="# Goal\n\nWrite a short report about bounded adversarial evaluation.",
+                        ),
+                    ),
+                ),
+            )
+        ),
+        artifacts=(run_module.DocumentArtifact(id="main-document", sections=()),),
+    )
+
+    state_view = run_module._build_create_game_state_view(state, "main-document")
+    content = state_view.content
+    assert content.startswith("# StateView")
+    assert "## NorthStar" in content
+    assert "Write a short report about bounded adversarial evaluation." in content
+    assert "## Target Artifact" in content
+    assert "id: main-document" in content
+    assert "No sections." in content
+    assert "northstar_content" not in content
+    assert "target_artifact" not in content
+    assert not content.lstrip().startswith("{")
+
+
+def test_create_game_state_view_content_includes_sections_as_markdown() -> None:
+    import baps.run as run_module
+
+    state = run_module.State(
+        northstar=run_module.NorthStar(
+            artifacts=(
+                run_module.DocumentArtifact(
+                    id="northstar:def",
+                    sections=(
+                        run_module.Section(
+                            title="NorthStar",
+                            body="# Goal\n\nWrite a short report about bounded adversarial evaluation.",
+                        ),
+                    ),
+                ),
+            )
+        ),
+        artifacts=(
+            run_module.DocumentArtifact(
+                id="main-document",
+                sections=(run_module.Section(title="Introduction", body="Intro body text."),),
+            ),
+        ),
+    )
+
+    state_view = run_module._build_create_game_state_view(state, "main-document")
+    content = state_view.content
+    assert "## Current Sections" in content
+    assert "### Introduction" in content
+    assert "Intro body text." in content
+    assert "northstar_content" not in content
+    assert "target_artifact" not in content
+    assert not content.lstrip().startswith("{")
+
+
 def test_no_blueview_symbol_remains_in_run_or_run_tests() -> None:
     run_source = Path("src/baps/run.py").read_text(encoding="utf-8")
     test_source = Path("tests/test_run.py").read_text(encoding="utf-8")

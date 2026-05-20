@@ -203,7 +203,30 @@ def _build_create_game_state_view(state: State, artifact_id: str) -> StateView:
             "artifact_ids": [artifact.id for artifact in state.artifacts],
         },
     }
-    content = json.dumps(metadata, sort_keys=True)
+    section_lines: list[str] = []
+    if target_artifact.sections:
+        for section in target_artifact.sections:
+            section_lines.append(f"### {section.title}")
+            section_lines.append(section.body)
+            section_lines.append("")
+    else:
+        section_lines.append("No sections.")
+
+    content = "\n".join(
+        [
+            "# StateView",
+            "",
+            "## NorthStar",
+            northstar_content if northstar_content else "No NorthStar content.",
+            "",
+            "## Target Artifact",
+            f"id: {target_artifact.id}",
+            f"kind: {target_artifact.kind}",
+            "",
+            "## Current Sections",
+            *section_lines,
+        ]
+    ).rstrip()
     input_fingerprint = hashlib.sha256(content.encode("utf-8")).hexdigest()
     return StateView(
         id=f"state-view:create-game:{target_artifact.id}:{input_fingerprint[:12]}",
