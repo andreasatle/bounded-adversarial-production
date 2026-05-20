@@ -226,6 +226,15 @@ def _debug_print_create_game_output(game_spec: GameSpec) -> None:
     print()
 
 
+def _debug_print_create_game_prompt(prompt: str) -> None:
+    if not _debug_enabled():
+        return
+    print("[DEBUG] create_game.prompt:")
+    for line in prompt.splitlines() or [""]:
+        print(f"  {line}")
+    print()
+
+
 def _debug_print_play_game_input(state: State, game_spec: GameSpec) -> None:
     if not _debug_enabled():
         return
@@ -911,11 +920,12 @@ def create_game(
     prompt = _render_create_game_prompt(
         config=config, state=state, adapter=resolved_adapter
     )
+    _debug_print_create_game_prompt(prompt)
     generated = client.generate(prompt)
+    _debug_print_create_game_raw_model_output(generated)
     try:
         game_spec = _parse_create_game_output(generated)
     except (ValueError, NoNewAtomicGameError):
-        _debug_print_create_game_raw_model_output(generated)
         raise
     _validate_atomic_game_spec(game_spec)
     expected_artifact_id = _config_artifact_id(config)

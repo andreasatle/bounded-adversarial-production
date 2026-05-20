@@ -535,6 +535,7 @@ def test_create_game_invalid_json_with_debug_prints_raw_model_output(
     with pytest.raises(ValueError, match="must be valid JSON"):
         create_game(config, state, model_client=FakeModelClient(["not-json-output"]))
     out = capsys.readouterr().out
+    assert "[DEBUG] create_game.prompt:" in out
     assert "[DEBUG] create_game.raw_model_output:" in out
     assert "  not-json-output" in out
 
@@ -555,7 +556,36 @@ def test_create_game_invalid_json_without_debug_does_not_print_raw_model_output(
     with pytest.raises(ValueError, match="must be valid JSON"):
         create_game(config, state, model_client=FakeModelClient(["not-json-output"]))
     out = capsys.readouterr().out
+    assert "[DEBUG] create_game.prompt:" not in out
     assert "[DEBUG] create_game.raw_model_output:" not in out
+
+
+def test_create_game_atomicity_failure_debug_prints_raw_output_before_failure(
+    monkeypatch, capsys
+) -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "goal": "Write a short report.",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    monkeypatch.setenv("BAPS_DEBUG", "1")
+    payload = (
+        '{"objective":"Add introduction and conclusion","target_artifact_id":"main-document",'
+        '"allowed_delta_type":"DeltaDocumentState",'
+        '"success_condition":"Add introduction and conclusion"}'
+    )
+    with pytest.raises(ValueError, match="exactly one atomic change"):
+        create_game(config, state, model_client=FakeModelClient([payload]))
+    out = capsys.readouterr().out
+    assert "[DEBUG] create_game.prompt:" in out
+    assert "[DEBUG] create_game.raw_model_output:" in out
+    assert payload in out
 
 
 def test_create_game_raw_json_still_accepted() -> None:
