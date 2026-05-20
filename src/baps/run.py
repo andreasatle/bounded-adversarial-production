@@ -418,6 +418,41 @@ def _debug_print_create_game_raw_model_output(raw_text: str) -> None:
     print()
 
 
+def _debug_print_create_game_validation_input(game_spec: GameSpec) -> None:
+    if not _debug_enabled():
+        return
+    print("[DEBUG] create_game.validation_input:")
+    print(f"objective={game_spec.objective}")
+    print(f"success_condition={game_spec.success_condition}")
+    print(f"target_artifact_id={game_spec.target_artifact_id}")
+    print(f"allowed_delta_type={game_spec.allowed_delta_type}")
+    print()
+
+
+def _debug_print_create_game_validation_analysis(analysis: dict[str, Any]) -> None:
+    if not _debug_enabled():
+        return
+    print("[DEBUG] create_game.validation_analysis:")
+    for key in (
+        "normalized_objective",
+        "clauses",
+        "detected_tasks",
+        "independent_tasks",
+        "reason",
+    ):
+        if key in analysis:
+            print(f"{key}={analysis[key]}")
+    print()
+
+
+def _debug_print_create_game_validation_failure(message: str) -> None:
+    if not _debug_enabled():
+        return
+    print("[DEBUG] create_game.validation_failure:")
+    print(f"message={message}")
+    print()
+
+
 def _build_create_game_model_client() -> ModelClient:
     model = os.getenv("BAPS_OLLAMA_MODEL", "llama3.2")
     base_url = os.getenv("BAPS_OLLAMA_BASE_URL", "http://localhost:11434")
@@ -714,7 +749,7 @@ def _render_create_game_prompt(
     state_view = _build_create_game_state_view(state, _config_artifact_id(config))
     return (
         "Create a GameSpec JSON object for the given project state.\n\n"
-        "Derive the next atomic game from projected state context, including NorthStar intent.\n"
+        "Derive the next coherent game task from projected state context, including NorthStar intent.\n"
         "CreateGame is State/NorthStar-aware.\n"
         "PlayGame is GameSpec-bound.\n\n"
         "Input:\n"
@@ -731,7 +766,7 @@ def _render_create_game_prompt(
         "Do not include prose before JSON.\n"
         "Do not include prose after JSON.\n"
         "No extra fields.\n"
-        "If no new atomic game exists for current state+northstar, return exactly:\n"
+        "If no useful coherent game task remains for current state+northstar, return exactly:\n"
         '{\"no_new_atomic_game\": true, \"reason\": \"...\"}\n'
         "GameSpec must be self-contained for PlayGame execution without independently reading full NorthStar.\n"
         "The objective must describe BOTH:\n"
@@ -746,13 +781,19 @@ def _render_create_game_prompt(
         "GOOD objective: Add Introduction section introducing bounded adversarial evaluation and its role in improving software projects.\n"
         "BAD success_condition: document contains Introduction.\n"
         "GOOD success_condition: artifact contains an Introduction section explaining bounded adversarial evaluation and framing the report purpose.\n"
-        "GameSpec must be atomic:\n"
+        "GameSpec should represent one coherent task:\n"
         "- target exactly one artifact.\n"
         "- permit exactly one delta type.\n"
         "- require exactly one coherent state change.\n"
         "- success_condition must be checkable from that one change.\n"
-        "- do not bundle independent features/tasks in one GameSpec.\n"
-        "- if goal needs multiple changes, select only the next missing atomic change.\n"
+        "- structural change, local content intent, and semantic purpose may coexist when they belong to the same artifact update.\n"
+        "- reject only when multiple independent tasks/features are bundled.\n"
+        "Examples:\n"
+        "- VALID: Add Introduction section introducing bounded adversarial evaluation.\n"
+        "- VALID: Add Conclusion section summarizing the report findings.\n"
+        "- INVALID: Add Introduction and Conclusion sections.\n"
+        "- INVALID: Add Introduction section and export report.\n"
+        "- INVALID: Update report and create appendix.\n"
         "Required JSON shape:\n"
         "{\n"
         '  "objective": "...",\n'
@@ -844,14 +885,41 @@ def _is_bundled_change_text(text: str) -> bool:
     return any(marker in lowered for marker in bundled_markers)
 
 
+def _analyze_coherent_task_text(text: str) -> dict[str, Any]:
+    normalized = " ".join(text.lower().split())
+    split_parts = re.split(r"\s+and\s+|\s+plus\s+|,\s*", normalized)
+    clauses = [part.strip() for part in split_parts if part.strip()]
+    detected_tasks = clauses
+    independent_tasks = len(detected_tasks) > 1
+    reason = (
+        "multiple independent clauses detected"
+        if independent_tasks
+        else "single coherent clause"
+    )
+    return {
+        "normalized_objective": normalized,
+        "clauses": clauses,
+        "detected_tasks": detected_tasks,
+        "independent_tasks": independent_tasks,
+        "reason": reason,
+    }
+
+
 def _validate_atomic_game_spec(game_spec: GameSpec) -> None:
+    _debug_print_create_game_validation_input(game_spec)
+    _debug_print_create_game_validation_analysis(
+        _analyze_coherent_task_text(game_spec.objective)
+    )
     if _is_bundled_change_text(game_spec.objective):
         raise ValueError(
-            "create_game model output must describe exactly one atomic change in objective"
+            "create_game model output must describe one coherent task in objective"
         )
+    _debug_print_create_game_validation_analysis(
+        _analyze_coherent_task_text(game_spec.success_condition)
+    )
     if _is_bundled_change_text(game_spec.success_condition):
         raise ValueError(
-            "create_game model output success_condition must describe only the selected atomic change"
+            "create_game model output success_condition must describe only the selected coherent task"
         )
 
 
@@ -958,7 +1026,11 @@ def create_game(
         game_spec = _parse_create_game_output(generated)
     except (ValueError, NoNewAtomicGameError):
         raise
-    _validate_atomic_game_spec(game_spec)
+    try:
+        _validate_atomic_game_spec(game_spec)
+    except ValueError as exc:
+        _debug_print_create_game_validation_failure(str(exc))
+        raise
     expected_artifact_id = _config_artifact_id(config)
     if game_spec.target_artifact_id != expected_artifact_id:
         raise ValueError(

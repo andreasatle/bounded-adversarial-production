@@ -580,12 +580,79 @@ def test_create_game_atomicity_failure_debug_prints_raw_output_before_failure(
         '"allowed_delta_type":"DeltaDocumentState",'
         '"success_condition":"Add introduction and conclusion"}'
     )
-    with pytest.raises(ValueError, match="exactly one atomic change"):
+    with pytest.raises(ValueError, match="one coherent task"):
         create_game(config, state, model_client=FakeModelClient([payload]))
     out = capsys.readouterr().out
     assert "[DEBUG] create_game.prompt:" in out
     assert "[DEBUG] create_game.raw_model_output:" in out
+    assert "[DEBUG] create_game.validation_input:" in out
+    assert "[DEBUG] create_game.validation_analysis:" in out
+    assert "[DEBUG] create_game.validation_failure:" in out
+    assert "message=create_game model output must describe one coherent task in objective" in out
     assert payload in out
+
+
+def test_create_game_validation_input_debug_enabled(monkeypatch, capsys) -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "goal": "Write a short report.",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    monkeypatch.setenv("BAPS_DEBUG", "1")
+
+    create_game(
+        config,
+        state,
+        model_client=FakeModelClient(
+            [
+                '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+                '"allowed_delta_type":"DeltaDocumentState",'
+                '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}'
+            ]
+        ),
+    )
+    out = capsys.readouterr().out
+    assert "[DEBUG] create_game.validation_input:" in out
+    assert "objective=Advance report objective" in out
+    assert "success_condition=PlayGame must return a valid DeltaDocumentState targeting main-document." in out
+    assert "target_artifact_id=main-document" in out
+    assert "allowed_delta_type=DeltaDocumentState" in out
+
+
+def test_create_game_validation_debug_disabled_prints_nothing(capsys) -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "goal": "Write a short report.",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+
+    create_game(
+        config,
+        state,
+        model_client=FakeModelClient(
+            [
+                '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+                '"allowed_delta_type":"DeltaDocumentState",'
+                '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}'
+            ]
+        ),
+    )
+    out = capsys.readouterr().out
+    assert "[DEBUG] create_game.validation_input:" not in out
+    assert "[DEBUG] create_game.validation_analysis:" not in out
+    assert "[DEBUG] create_game.validation_failure:" not in out
 
 
 def test_create_game_raw_json_still_accepted() -> None:
@@ -843,8 +910,12 @@ def test_create_game_prompt_forbids_markdown_fences_and_lists_required_shape() -
     assert '"target_artifact_id"' in prompt
     assert '"allowed_delta_type"' in prompt
     assert '"success_condition"' in prompt
-    assert "GameSpec must be atomic" in prompt
-    assert "select only the next missing atomic change" in prompt
+    assert "GameSpec should represent one coherent task" in prompt
+    assert "structural change, local content intent, and semantic purpose may coexist" in prompt
+    assert "reject only when multiple independent tasks/features are bundled." in prompt
+    assert "VALID: Add Introduction section introducing bounded adversarial evaluation." in prompt
+    assert "VALID: Add Conclusion section summarizing the report findings." in prompt
+    assert "INVALID: Add Introduction and Conclusion sections." in prompt
 
 
 def test_create_game_broad_goal_accepts_decomposed_atomic_gamespec() -> None:
@@ -887,7 +958,7 @@ def test_create_game_rejects_bundled_objective_and_success_condition() -> None:
         "spec_path": None,
     }
     state = create_state(config)
-    with pytest.raises(ValueError, match="exactly one atomic change"):
+    with pytest.raises(ValueError, match="one coherent task"):
         create_game(
             config,
             state,
@@ -914,7 +985,7 @@ def test_create_game_rejects_broad_multi_feature_gamespec() -> None:
         "spec_path": None,
     }
     state = create_state(config)
-    with pytest.raises(ValueError, match="exactly one atomic change"):
+    with pytest.raises(ValueError, match="one coherent task"):
         create_game(
             config,
             state,
@@ -1656,7 +1727,7 @@ def test_create_game_prompt_includes_northstar_context() -> None:
     assert "northstar_content" not in prompt
     assert "state_view_json:" not in prompt
     assert "Use StateView NorthStar section as authoritative context." in prompt
-    assert "Derive the next atomic game from projected state context, including NorthStar intent." in prompt
+    assert "Derive the next coherent game task from projected state context, including NorthStar intent." in prompt
     assert "GameSpec must be self-contained for PlayGame execution without independently reading full NorthStar." in prompt
     assert "The objective must describe BOTH:" in prompt
     assert "1. structural change" in prompt
