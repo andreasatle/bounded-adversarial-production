@@ -331,7 +331,13 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
     assert forwarded_state.model_dump(mode="json") == {
         "northstar": {
             "artifacts": [
-                {"id": forwarded_state.northstar.artifacts[0].id, "kind": "document"}
+                {
+                    "id": forwarded_state.northstar.artifacts[0].id,
+                    "kind": "document",
+                    "sections": [
+                        {"title": "NorthStar", "body": "Write a short report."}
+                    ],
+                }
             ]
         },
         "artifacts": [{"id": "main-document", "kind": "document", "sections": []}],
@@ -1608,13 +1614,18 @@ def test_create_game_prompt_includes_northstar_context() -> None:
     }
     state = run_module.create_state(config)
     prompt = run_module._render_create_game_prompt(config, state)
-    assert "northstar_markdown:" in prompt
+    assert "state_view_json:" in prompt
+    assert "northstar_content" in prompt
     assert "must include these sections" in prompt
+    assert '"target_artifact"' in prompt
+    assert '"sections"' in prompt
+    assert "Use northstar_content from state_view_json as authoritative NorthStar text context." in prompt
     assert "Derive the next atomic game from projected state context, including NorthStar intent." in prompt
     assert "GameSpec must be self-contained for PlayGame execution without independently reading full NorthStar." in prompt
     assert "Fold relevant NorthStar intent into objective and success_condition." in prompt
     assert "Avoid purely structural objectives when NorthStar contains substantive intent." in prompt
     assert '{\"no_new_atomic_game\": true, \"reason\": \"...\"}' in prompt
+    assert "state_json:" not in prompt
     assert "mandatory_sections_json" not in prompt
     assert "next_missing_required_section" not in prompt
 
@@ -3114,6 +3125,11 @@ def test_init_from_spec_persists_northstar_artifact(monkeypatch, tmp_path: Path)
     northstar_artifact = persisted.northstar.artifacts[0]
     assert northstar_artifact.kind == "document"
     assert northstar_artifact.id.startswith("northstar:")
+    assert isinstance(northstar_artifact, run_module.DocumentArtifact)
+    assert len(northstar_artifact.sections) == 1
+    assert northstar_artifact.sections[0].body == (
+        "# Goal\n\nWrite a short report grounded in NorthStar intent."
+    )
 
 
 def test_debug_formatter_renders_nested_list_of_dicts_without_python_repr(

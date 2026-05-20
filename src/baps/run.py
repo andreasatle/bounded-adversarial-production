@@ -179,6 +179,41 @@ def _debug_print_create_game_input(state: State) -> None:
     print()
 
 
+def _build_create_game_state_view(state: State, artifact_id: str) -> StateView:
+    target_artifact = _document_artifact_from_state(state, artifact_id)
+    northstar_content_parts: list[str] = []
+    for artifact in state.northstar.artifacts:
+        if isinstance(artifact, DocumentArtifact):
+            for section in artifact.sections:
+                northstar_content_parts.append(f"{section.title}\n{section.body}")
+    northstar_content = "\n\n".join(northstar_content_parts).strip()
+    section_summaries = [
+        {"title": section.title, "body": section.body}
+        for section in target_artifact.sections
+    ]
+    metadata = {
+        "northstar_content": northstar_content,
+        "target_artifact": {
+            "id": target_artifact.id,
+            "kind": target_artifact.kind,
+            "sections": section_summaries,
+        },
+        "state_summary": {
+            "northstar_artifact_ids": [artifact.id for artifact in state.northstar.artifacts],
+            "artifact_ids": [artifact.id for artifact in state.artifacts],
+        },
+    }
+    content = json.dumps(metadata, sort_keys=True)
+    input_fingerprint = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    return StateView(
+        id=f"state-view:create-game:{target_artifact.id}:{input_fingerprint[:12]}",
+        projection_type=ProjectionType.NORTH_STAR,
+        content=content,
+        input_fingerprint=input_fingerprint,
+        metadata=metadata,
+    )
+
+
 def _debug_print_create_game_output(game_spec: GameSpec) -> None:
     if not _debug_enabled():
         return
@@ -387,9 +422,9 @@ def _config_northstar_markdown(config: dict[str, Any]) -> str:
 
 def _build_northstar_artifact_from_markdown(markdown: str) -> StateArtifact:
     fingerprint = hashlib.sha256(markdown.encode("utf-8")).hexdigest()[:12]
-    return StateArtifact(
+    return DocumentArtifact(
         id=f"northstar:{fingerprint}",
-        kind="document",
+        sections=(Section(title="NorthStar", body=markdown),),
     )
 
 
@@ -638,8 +673,8 @@ def _render_create_game_prompt(
         if adapter is not None
         else _resolve_project_type_adapter(config["project_type"])
     )
-    state_json = json.dumps(state.model_dump(mode="json"), sort_keys=True)
-    northstar_markdown = _config_northstar_markdown(config)
+    state_view = _build_create_game_state_view(state, _config_artifact_id(config))
+    state_view_json = json.dumps(state_view.model_dump(mode="json"), sort_keys=True)
     return (
         "Create a GameSpec JSON object for the given project state.\n\n"
         "Derive the next atomic game from projected state context, including NorthStar intent.\n"
@@ -647,9 +682,9 @@ def _render_create_game_prompt(
         "PlayGame is GameSpec-bound.\n\n"
         "Input:\n"
         f"- goal: {config['goal']}\n"
-        f"- state_json: {state_json}\n\n"
+        f"- state_view_json: {state_view_json}\n\n"
         f"- artifact_id: {_config_artifact_id(config)}\n"
-        f"- northstar_markdown: {northstar_markdown}\n\n"
+        "- Use northstar_content from state_view_json as authoritative NorthStar text context.\n\n"
         "Return only a JSON object.\n"
         "Do not wrap output in markdown.\n"
         "Do not use triple-backtick fences.\n"

@@ -118,11 +118,13 @@ def apply_referee_decision_to_runtime(
 
 
 class NorthStar(BaseModel):
-    artifacts: tuple[StateArtifact, ...]
+    artifacts: tuple[SerializeAsAny[StateArtifact], ...]
 
     @field_validator("artifacts", mode="before")
     @classmethod
-    def _coerce_artifact_types(cls, artifacts: object) -> tuple[StateArtifact, ...]:
+    def _coerce_artifact_types(
+        cls, artifacts: object
+    ) -> tuple[SerializeAsAny[StateArtifact], ...]:
         if not isinstance(artifacts, (list, tuple)):
             raise TypeError("northstar artifacts must be a list or tuple")
         return tuple(_coerce_state_artifact(artifact) for artifact in artifacts)
@@ -130,8 +132,8 @@ class NorthStar(BaseModel):
     @field_validator("artifacts")
     @classmethod
     def _validate_unique_artifact_ids(
-        cls, artifacts: tuple[StateArtifact, ...]
-    ) -> tuple[StateArtifact, ...]:
+        cls, artifacts: tuple[SerializeAsAny[StateArtifact], ...]
+    ) -> tuple[SerializeAsAny[StateArtifact], ...]:
         ids = [artifact.id for artifact in artifacts]
         if len(ids) != len(set(ids)):
             raise ValueError("northstar artifact ids must be unique")
