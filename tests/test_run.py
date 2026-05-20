@@ -625,6 +625,65 @@ def test_create_game_validation_input_debug_enabled(monkeypatch, capsys) -> None
     assert "allowed_delta_type=DeltaDocumentState" in out
 
 
+def test_create_game_semantic_refinement_objective_is_accepted(monkeypatch, capsys) -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "goal": "Write a short report.",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    monkeypatch.setenv("BAPS_DEBUG", "1")
+
+    game_spec = create_game(
+        config,
+        state,
+        model_client=FakeModelClient(
+            [
+                '{"objective":"Add Introduction section to artifact main-document, introducing bounded adversarial evaluation and its relevance to software project improvement.",'
+                '"target_artifact_id":"main-document",'
+                '"allowed_delta_type":"DeltaDocumentState",'
+                '"success_condition":"Artifact contains an Introduction section introducing bounded adversarial evaluation and its relevance to software project improvement."}'
+            ]
+        ),
+    )
+    assert game_spec.target_artifact_id == "main-document"
+    out = capsys.readouterr().out
+    assert "independent_tasks=False" in out
+    assert "reason=semantic refinement of single coherent task" in out
+
+
+def test_create_game_rejects_independent_task_verb_bundle() -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "goal": "Write a short report.",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    with pytest.raises(ValueError, match="one coherent task"):
+        create_game(
+            config,
+            state,
+            model_client=FakeModelClient(
+                [
+                    '{"objective":"Update report and create appendix",'
+                    '"target_artifact_id":"main-document",'
+                    '"allowed_delta_type":"DeltaDocumentState",'
+                    '"success_condition":"Report is updated and appendix is created."}'
+                ]
+            ),
+        )
+
+
 def test_create_game_validation_debug_disabled_prints_nothing(capsys) -> None:
     config = {
         "workspace": Path(".baps-workspace"),

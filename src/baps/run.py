@@ -876,26 +876,89 @@ def _parse_create_game_output(text: str) -> GameSpec:
     return _parse_game_spec_json(normalized)
 
 
-def _is_bundled_change_text(text: str) -> bool:
-    lowered = text.lower().strip()
-    if not lowered:
-        return False
+_MODIFIER_CLAUSE_WORDS = {
+    "introducing",
+    "describing",
+    "summarizing",
+    "explaining",
+    "framing",
+    "covering",
+    "discussing",
+    "highlighting",
+}
 
-    bundled_markers = (" and ", ", and ", ",", " plus ")
-    return any(marker in lowered for marker in bundled_markers)
+_INDEPENDENT_ACTION_WORDS = {
+    "add",
+    "update",
+    "create",
+    "modify",
+    "implement",
+    "export",
+}
 
 
 def _analyze_coherent_task_text(text: str) -> dict[str, Any]:
     normalized = " ".join(text.lower().split())
-    split_parts = re.split(r"\s+and\s+|\s+plus\s+|,\s*", normalized)
-    clauses = [part.strip() for part in split_parts if part.strip()]
-    detected_tasks = clauses
-    independent_tasks = len(detected_tasks) > 1
-    reason = (
-        "multiple independent clauses detected"
-        if independent_tasks
-        else "single coherent clause"
+    clauses = [part.strip() for part in re.split(r",\s*", normalized) if part.strip()]
+    action_matches = re.findall(
+        r"\b(add|update|create|modify|implement|export)\b", normalized
     )
+    independent_tasks = False
+    reason = "single coherent clause"
+    detected_tasks: list[str] = []
+
+    if len(set(action_matches)) > 1:
+        independent_tasks = True
+        reason = "multiple independent action verbs detected"
+        detected_tasks = action_matches
+    else:
+        coordinated_parts = [part.strip() for part in normalized.split(" and ") if part.strip()]
+        if len(coordinated_parts) > 1 and action_matches:
+            trailing_parts = coordinated_parts[1:]
+            refinement_starts = ("its ", "with ", "by ")
+            all_refinements = all(
+                part.split(" ", 1)[0] in _MODIFIER_CLAUSE_WORDS
+                or part.startswith(refinement_starts)
+                for part in trailing_parts
+            )
+            if not all_refinements:
+                independent_tasks = True
+                reason = "single action with bundled independent targets"
+                detected_tasks = coordinated_parts
+
+        base_clause = clauses[0] if clauses else normalized
+        refinement_clauses: list[str] = []
+        independent_clauses: list[str] = []
+        if not independent_tasks:
+            for clause in clauses[1:]:
+                first_token = clause.split(" ", 1)[0]
+                if (
+                    first_token in _MODIFIER_CLAUSE_WORDS
+                    or clause.startswith("and ")
+                    or clause.startswith("its ")
+                    or clause.startswith("with ")
+                ):
+                    refinement_clauses.append(clause)
+                elif any(
+                    re.search(rf"\b{verb}\b", clause)
+                    for verb in _INDEPENDENT_ACTION_WORDS
+                ):
+                    independent_clauses.append(clause)
+                else:
+                    refinement_clauses.append(clause)
+            if independent_clauses:
+                independent_tasks = True
+                reason = "multiple independent clauses detected"
+                detected_tasks = [base_clause, *independent_clauses]
+            else:
+                independent_tasks = False
+                reason = (
+                    "semantic refinement of single coherent task"
+                    if refinement_clauses
+                    else "single coherent clause"
+                )
+                detected_tasks = [base_clause, *refinement_clauses] if clauses else []
+
     return {
         "normalized_objective": normalized,
         "clauses": clauses,
@@ -903,6 +966,11 @@ def _analyze_coherent_task_text(text: str) -> dict[str, Any]:
         "independent_tasks": independent_tasks,
         "reason": reason,
     }
+
+
+def _is_bundled_change_text(text: str) -> bool:
+    analysis = _analyze_coherent_task_text(text)
+    return bool(analysis["independent_tasks"])
 
 
 def _validate_atomic_game_spec(game_spec: GameSpec) -> None:
