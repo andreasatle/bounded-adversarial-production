@@ -16,11 +16,15 @@ def _require_non_empty(value: str) -> str:
 def _coerce_state_artifact(value: object) -> StateArtifact:
     if isinstance(value, DocumentArtifact):
         return value
+    if isinstance(value, CodingArtifact):
+        return value
     if isinstance(value, StateArtifact):
         return value
     if isinstance(value, dict):
         if "sections" in value:
             return DocumentArtifact.model_validate(value)
+        if "files" in value:
+            return CodingArtifact.model_validate(value)
         return StateArtifact.model_validate(value)
     raise TypeError("artifact entries must be StateArtifact-compatible values")
 
@@ -46,8 +50,25 @@ class DocumentArtifact(StateArtifact):
     sections: tuple[Section, ...] = ()
 
 
+class CodeFile(BaseModel):
+    path: str
+    content: str
+
+    _validate_path = field_validator("path")(_require_non_empty)
+    _validate_content = field_validator("content")(_require_non_empty)
+
+
+class CodingArtifact(StateArtifact):
+    kind: Literal["coding"] = "coding"
+    files: tuple[CodeFile, ...] = ()
+
+
 class AppendSectionDelta(BaseModel):
     section: Section
+
+
+class WriteFileDelta(BaseModel):
+    file: CodeFile
 
 
 class DeltaState(BaseModel):
@@ -59,6 +80,11 @@ class DeltaState(BaseModel):
 class DeltaDocumentState(DeltaState):
     operation: Literal["append_section"]
     payload: AppendSectionDelta
+
+
+class DeltaCodingState(DeltaState):
+    operation: Literal["write_file"]
+    payload: WriteFileDelta
 
 
 class GameSpec(BaseModel):
@@ -241,6 +267,58 @@ def find_state_artifact(state: State, artifact_id: str) -> StateArtifact:
 
 def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
     operation = proposal.payload.get("operation")
+    if operation == "write_file":
+        target_artifact_id = proposal.target.artifact_id
+        existing = find_state_artifact(state, target_artifact_id)
+        if not isinstance(existing, CodingArtifact):
+            raise ValueError("write_file operation requires a CodingArtifact target")
+        if "file" not in proposal.payload:
+            raise ValueError("write_file operation requires payload['file']")
+        incoming_file = CodeFile.model_validate(proposal.payload["file"])
+
+        replaced = False
+        updated_files: list[CodeFile] = []
+        for existing_file in existing.files:
+            if existing_file.path == incoming_file.path:
+                updated_files.append(incoming_file)
+                replaced = True
+            else:
+                updated_files.append(existing_file)
+        if not replaced:
+            updated_files.append(incoming_file)
+
+        replacement = CodingArtifact(
+            id=existing.id,
+            files=tuple(updated_files),
+        )
+
+        northstar_replaced = False
+        new_northstar_artifacts: list[StateArtifact] = []
+        for artifact in state.northstar.artifacts:
+            if artifact.id == target_artifact_id:
+                new_northstar_artifacts.append(replacement)
+                northstar_replaced = True
+            else:
+                new_northstar_artifacts.append(artifact)
+
+        if northstar_replaced:
+            return State(
+                northstar=NorthStar(artifacts=tuple(new_northstar_artifacts)),
+                artifacts=state.artifacts,
+            )
+
+        new_state_artifacts: list[StateArtifact] = []
+        for artifact in state.artifacts:
+            if artifact.id == target_artifact_id:
+                new_state_artifacts.append(replacement)
+            else:
+                new_state_artifacts.append(artifact)
+
+        return State(
+            northstar=state.northstar,
+            artifacts=tuple(new_state_artifacts),
+        )
+
     if operation == "append_section":
         target_artifact_id = proposal.target.artifact_id
         existing = find_state_artifact(state, target_artifact_id)
@@ -287,6 +365,8 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
         artifact_payload = proposal.payload["artifact"]
         if isinstance(artifact_payload, dict) and "sections" in artifact_payload:
             added_artifact = DocumentArtifact.model_validate(artifact_payload)
+        elif isinstance(artifact_payload, dict) and "files" in artifact_payload:
+            added_artifact = CodingArtifact.model_validate(artifact_payload)
         else:
             added_artifact = StateArtifact.model_validate(artifact_payload)
         return State(
@@ -300,7 +380,7 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
     if operation != "replace_artifact":
         raise NotImplementedError(
             "unsupported state update operation: "
-            f"{operation!r}; supported: 'replace_artifact', 'add_artifact', 'append_section'"
+            f"{operation!r}; supported: 'replace_artifact', 'add_artifact', 'append_section', 'write_file'"
         )
 
     if "artifact" not in proposal.payload:
@@ -352,6 +432,8 @@ def validate_state_artifacts(state: State, registry: StateArtifactRegistry) -> S
     def _validate_one(artifact: StateArtifact) -> StateArtifact:
         if isinstance(artifact, DocumentArtifact):
             return artifact
+        if isinstance(artifact, CodingArtifact):
+            return artifact
         adapter = registry.resolve(artifact.kind)
         validated = adapter.validate_artifact(artifact)
         if validated.id != artifact.id:
@@ -381,6 +463,14 @@ def project_state(state: State, registry: StateArtifactRegistry) -> StateProject
         if isinstance(artifact, DocumentArtifact):
             titles = ", ".join(section.title for section in artifact.sections) or "no sections"
             projection = f"document artifact: {artifact.id} ({titles})"
+            if not projection.strip():
+                raise ValueError(
+                    f"artifact projection must be a non-empty string for artifact id: {artifact.id}"
+                )
+            return projection
+        if isinstance(artifact, CodingArtifact):
+            paths = ", ".join(file.path for file in artifact.files) or "no files"
+            projection = f"coding artifact: {artifact.id} ({paths})"
             if not projection.strip():
                 raise ValueError(
                     f"artifact projection must be a non-empty string for artifact id: {artifact.id}"
@@ -448,8 +538,19 @@ class GitRepositoryArtifactAdapter:
         return f"git repository artifact: {artifact.id}"
 
 
+class CodingArtifactAdapter:
+    kind = "coding"
+
+    def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
+        return artifact
+
+    def project_artifact(self, artifact: StateArtifact) -> str:
+        return f"coding artifact: {artifact.id}"
+
+
 def build_default_state_artifact_registry() -> StateArtifactRegistry:
     registry = StateArtifactRegistry()
     registry.register(DocumentArtifactAdapter())
+    registry.register(CodingArtifactAdapter())
     registry.register(GitRepositoryArtifactAdapter())
     return registry

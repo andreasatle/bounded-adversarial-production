@@ -3628,6 +3628,211 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
     assert "export_state" in adapter.calls
 
 
+def test_adapter_registry_includes_document_and_coding() -> None:
+    import baps.run as run_module
+
+    adapters = run_module._build_project_type_adapters()
+    assert "document" in adapters
+    assert "coding" in adapters
+
+
+def test_core_orchestration_does_not_reference_concrete_project_adapters() -> None:
+    import baps.run as run_module
+
+    for fn in (
+        run_module.create_game,
+        run_module._run_project_iterations,
+    ):
+        src = inspect.getsource(fn)
+        assert "DocumentProjectAdapter" not in src
+        assert "CodingProjectAdapter" not in src
+
+
+def test_coding_create_state_creates_coding_artifact() -> None:
+    import baps.run as run_module
+
+    state = run_module.create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "coding",
+            "artifact_id": "main-codebase",
+            "goal": "Implement Fibonacci",
+            "northstar_markdown": "# Goal\n\nImplement Fibonacci",
+            "output_path": Path(".baps-workspace/output/project"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    assert len(state.artifacts) == 1
+    artifact = state.artifacts[0]
+    assert isinstance(artifact, run_module.CodingArtifact)
+    assert artifact.id == "main-codebase"
+    assert artifact.files == ()
+
+
+def test_coding_create_game_state_view_is_textual_with_delimiters() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "coding",
+        "artifact_id": "main-codebase",
+        "goal": "Implement Fibonacci",
+        "northstar_markdown": "# Goal\n\nImplement Fibonacci",
+        "output_path": Path(".baps-workspace/output/project"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.create_state(config)
+    adapter = run_module.CodingProjectAdapter()
+    view = adapter.build_create_game_state_view(state, config)
+    assert view.content.startswith("=== StateView Start ===")
+    assert view.content.endswith("=== StateView End ===")
+    assert "--- NorthStar ---" in view.content
+    assert "--- State Artifacts ---" in view.content
+    assert "## Artifact: main-codebase" in view.content
+    assert "kind: coding" in view.content
+    assert "No files." in view.content
+
+
+def test_coding_adapter_maps_file_write_delta_to_state_update() -> None:
+    import baps.run as run_module
+
+    adapter = run_module.CodingProjectAdapter()
+    delta = run_module.DeltaCodingState(
+        artifact_id="main-codebase",
+        operation="write_file",
+        payload=run_module.WriteFileDelta(
+            file=run_module.CodeFile(
+                path="src/fibonacci.py",
+                content="def fibonacci(n):\n    return n\n",
+            )
+        ),
+    )
+    proposal = adapter.delta_to_state_update(delta)
+    assert proposal.payload["operation"] == "write_file"
+    assert proposal.payload["file"]["path"] == "src/fibonacci.py"
+
+
+def test_coding_adapter_export_writes_files(tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(
+            run_module.CodingArtifact(
+                id="main-codebase",
+                files=(
+                    run_module.CodeFile(
+                        path="src/fibonacci.py",
+                        content="def fibonacci(n):\n    return n\n",
+                    ),
+                    run_module.CodeFile(
+                        path="tests/test_fibonacci.py",
+                        content="def test_smoke():\n    assert True\n",
+                    ),
+                ),
+            ),
+        ),
+    )
+    adapter = run_module.CodingProjectAdapter()
+    changed = adapter.export_state(
+        state=state,
+        output_path=tmp_path / "project",
+        artifact_id="main-codebase",
+    )
+    assert changed is True
+    assert (tmp_path / "project" / "src" / "fibonacci.py").exists()
+    assert (tmp_path / "project" / "tests" / "test_fibonacci.py").exists()
+
+
+def test_coding_init_and_run_exports_fibonacci_files(monkeypatch, tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    workspace = tmp_path / "coding-workspace"
+    output_dir = workspace / "output" / "project"
+
+    monkeypatch.setattr(
+        run_module,
+        "create_game",
+        lambda *_args, **_kwargs: run_module.GameSpec(
+            objective="Write fibonacci implementation file",
+            target_artifact_id="main-codebase",
+            allowed_delta_type="DeltaCodingState",
+            success_condition="src/fibonacci.py and tests/test_fibonacci.py exist",
+        ),
+    )
+
+    call_counter = {"count": 0}
+
+    def _play_game(_state, _game_spec, adapter=None):
+        call_counter["count"] += 1
+        if call_counter["count"] == 1:
+            return run_module.DeltaCodingState(
+                artifact_id="main-codebase",
+                operation="write_file",
+                payload=run_module.WriteFileDelta(
+                    file=run_module.CodeFile(
+                        path="src/fibonacci.py",
+                        content=(
+                            "def fibonacci(n):\n"
+                            "    if n < 0:\n"
+                            "        raise ValueError('n must be >= 0')\n"
+                            "    if n < 2:\n"
+                            "        return n\n"
+                            "    a, b = 0, 1\n"
+                            "    for _ in range(2, n + 1):\n"
+                            "        a, b = b, a + b\n"
+                            "    return b\n"
+                        ),
+                    )
+                ),
+            )
+        if call_counter["count"] == 2:
+            return run_module.DeltaCodingState(
+                artifact_id="main-codebase",
+                operation="write_file",
+                payload=run_module.WriteFileDelta(
+                    file=run_module.CodeFile(
+                        path="tests/test_fibonacci.py",
+                        content=(
+                            "from src.fibonacci import fibonacci\n\n"
+                            "def test_fibonacci_base_cases():\n"
+                            "    assert fibonacci(0) == 0\n"
+                            "    assert fibonacci(1) == 1\n\n"
+                            "def test_fibonacci_sequence():\n"
+                            "    assert fibonacci(7) == 13\n"
+                        ),
+                    )
+                ),
+            )
+        return None
+
+    monkeypatch.setattr(run_module, "play_game", _play_game)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "init_and_run",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "coding",
+            "--artifact-id",
+            "main-codebase",
+            "--goal",
+            "Implement Fibonacci with tests.",
+            "--output",
+            str(output_dir),
+            "--max-iterations",
+            "2",
+        ],
+    )
+
+    run_module.main()
+    assert (output_dir / "src" / "fibonacci.py").exists()
+    assert (output_dir / "tests" / "test_fibonacci.py").exists()
+
 def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
     import baps.run as run_module
 

@@ -1,0 +1,10 @@
+project_type: coding
+artifact_id: main-codebase
+workspace: .baps-workspace/coding-project
+goal: "Implement a Fibonacci number generator with tests."
+output: output/project
+max_iterations: 2
+northstar_markdown: |
+  # Goal
+
+  Implement a Fibonacci number generator with tests.
