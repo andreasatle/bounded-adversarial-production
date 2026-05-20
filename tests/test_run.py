@@ -2038,6 +2038,47 @@ def test_state_view_is_derived_from_state_and_gamespec_with_existing_sections() 
     state_view = run_module._build_document_state_view(state, spec)
     assert state_view.metadata["target_artifact_id"] == "main-document"
     assert state_view.metadata["sections"] == [{"title": "Existing", "body": "Already here"}]
+    assert state_view.content.startswith("=== StateView Start ===")
+    assert state_view.content.endswith("=== StateView End ===")
+    assert "--- State Artifacts ---" in state_view.content
+    assert "## Artifact: main-document" in state_view.content
+    assert "kind: document" in state_view.content
+    assert "### Current Sections" in state_view.content
+    assert "### Existing" in state_view.content
+    assert "Already here" in state_view.content
+    assert '"sections"' not in state_view.content
+    assert "target_artifact_id" not in state_view.content
+    assert "metadata" not in state_view.content
+    assert "input_fingerprint" not in state_view.content
+
+
+def test_document_state_view_content_for_empty_document() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="Any success condition.",
+    )
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(run_module.DocumentArtifact(id="main-document", sections=()),),
+    )
+
+    state_view = run_module._build_document_state_view(state, spec)
+    content = state_view.content
+    assert content.startswith("=== StateView Start ===")
+    assert content.endswith("=== StateView End ===")
+    assert "--- State Artifacts ---" in content
+    assert "## Artifact: main-document" in content
+    assert "kind: document" in content
+    assert "### Current Sections" in content
+    assert "No sections." in content
+    assert '"sections"' not in content
+    assert "target_artifact_id" not in content
+    assert "metadata" not in content
+    assert "input_fingerprint" not in content
 
 
 def test_create_game_state_view_content_is_markdown_for_empty_document() -> None:
@@ -2643,8 +2684,12 @@ def test_play_game_debug_logs_appear(monkeypatch, capsys) -> None:
     assert "  attempt: 1" in out
     blue_input_block = out.split("[DEBUG] blue.input:")[1].split("[DEBUG] blue.output:")[0]
     assert "state_view:" in blue_input_block
-    assert "target_artifact_id: main-document" in blue_input_block
-    assert "sections: []" in blue_input_block
+    assert "content: === StateView Start ===" in blue_input_block
+    assert "--- State Artifacts ---" in blue_input_block
+    assert "## Artifact: main-document" in blue_input_block
+    assert "kind: document" in blue_input_block
+    assert "No sections." in blue_input_block
+    assert '"target_artifact_id"' not in blue_input_block
     assert "state:" not in blue_input_block
     assert "game_spec:" in blue_input_block
     assert "attempt_number: 1" in blue_input_block

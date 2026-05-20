@@ -507,7 +507,32 @@ def _build_document_state_view(state: State, game_spec: GameSpec) -> StateView:
         "target_artifact_id": target_artifact.id,
         "sections": sections,
     }
-    content = json.dumps(metadata, sort_keys=True)
+    section_lines: list[str] = []
+    if target_artifact.sections:
+        for section in target_artifact.sections:
+            section_lines.append(f"### {section.title}")
+            section_lines.append("")
+            section_lines.append(section.body)
+            section_lines.append("")
+    else:
+        section_lines.append("No sections.")
+
+    content = "\n".join(
+        [
+            "=== StateView Start ===",
+            "",
+            "--- State Artifacts ---",
+            "",
+            f"## Artifact: {target_artifact.id}",
+            "",
+            f"kind: {target_artifact.kind}",
+            "",
+            "### Current Sections",
+            "",
+            *section_lines,
+            "=== StateView End ===",
+        ]
+    ).rstrip()
     input_fingerprint = hashlib.sha256(content.encode("utf-8")).hexdigest()
     return StateView(
         id=f"state-view:blue:{target_artifact.id}:{input_fingerprint[:12]}",
