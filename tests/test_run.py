@@ -1646,8 +1646,8 @@ def test_create_game_prompt_includes_northstar_context() -> None:
     state_view = run_module._build_create_game_state_view(state, config["artifact_id"])
     prompt = run_module._render_create_game_prompt(config, state)
     assert "- state_view:" in prompt
-    assert "=== StateView Start ===" in prompt
-    assert "=== StateView End ===" in prompt
+    assert prompt.count("=== StateView Start ===") == 1
+    assert prompt.count("=== StateView End ===") == 1
     assert state_view.content in prompt
     assert "must include these sections" in prompt
     assert "metadata" not in prompt
@@ -1936,12 +1936,19 @@ def test_create_game_state_view_content_is_markdown_for_empty_document() -> None
 
     state_view = run_module._build_create_game_state_view(state, "main-document")
     content = state_view.content
-    assert content.startswith("# StateView")
-    assert "## NorthStar" in content
+    assert content.startswith("=== StateView Start ===")
+    assert content.endswith("=== StateView End ===")
+    assert "--- NorthStar ---" in content
+    assert "--- NorthStar ---\n\n# Goal" in content
     assert "Write a short report about bounded adversarial evaluation." in content
-    assert "## Target Artifact" in content
-    assert "id: main-document" in content
+    assert "--- State Artifacts ---" in content
+    assert "## Artifact: main-document" in content
+    assert "kind: document" in content
+    assert "### Current Sections" in content
     assert "No sections." in content
+    assert "# StateView" not in content
+    assert "## NorthStar" not in content
+    assert "## Target Artifact" not in content
     assert "northstar_content" not in content
     assert "target_artifact" not in content
     assert not content.lstrip().startswith("{")
@@ -1974,7 +1981,7 @@ def test_create_game_state_view_content_includes_sections_as_markdown() -> None:
 
     state_view = run_module._build_create_game_state_view(state, "main-document")
     content = state_view.content
-    assert "## Current Sections" in content
+    assert "### Current Sections" in content
     assert "### Introduction" in content
     assert "Intro body text." in content
     assert "northstar_content" not in content

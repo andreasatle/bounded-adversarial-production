@@ -185,7 +185,7 @@ def _build_create_game_state_view(state: State, artifact_id: str) -> StateView:
     for artifact in state.northstar.artifacts:
         if isinstance(artifact, DocumentArtifact):
             for section in artifact.sections:
-                northstar_content_parts.append(f"{section.title}\n{section.body}")
+                northstar_content_parts.append(section.body)
     northstar_content = "\n\n".join(northstar_content_parts).strip()
     section_summaries = [
         {"title": section.title, "body": section.body}
@@ -214,17 +214,23 @@ def _build_create_game_state_view(state: State, artifact_id: str) -> StateView:
 
     content = "\n".join(
         [
-            "# StateView",
+            "=== StateView Start ===",
             "",
-            "## NorthStar",
+            "--- NorthStar ---",
+            "",
             northstar_content if northstar_content else "No NorthStar content.",
             "",
-            "## Target Artifact",
-            f"id: {target_artifact.id}",
+            "--- State Artifacts ---",
+            "",
+            f"## Artifact: {target_artifact.id}",
+            "",
             f"kind: {target_artifact.kind}",
             "",
-            "## Current Sections",
+            "### Current Sections",
+            "",
             *section_lines,
+            "",
+            "=== StateView End ===",
         ]
     ).rstrip()
     input_fingerprint = hashlib.sha256(content.encode("utf-8")).hexdigest()
@@ -715,9 +721,7 @@ def _render_create_game_prompt(
         f"- goal: {config['goal']}\n"
         "- state_view:\n"
         "\n"
-        "=== StateView Start ===\n"
         f"{state_view.content}\n"
-        "=== StateView End ===\n"
         "\n"
         f"- artifact_id: {_config_artifact_id(config)}\n"
         "- Use StateView NorthStar section as authoritative context.\n\n"
