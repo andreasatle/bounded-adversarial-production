@@ -1,3 +1,5 @@
+import argparse
+import inspect
 from pathlib import Path
 
 import pytest
@@ -95,7 +97,7 @@ def test_main_prints_required_fields_and_no_legacy_iteration_output(
 
     assert f"workspace={workspace}" in out
     assert "project_type=document" in out
-    assert "goal=Write a short report with an introduction and conclusion." in out
+    assert "goal=Write a short report." in out
     assert f"output_path={workspace / 'output' / 'report.md'}" in out
     assert "max_iterations=2" in out
     assert "update_applied=True" in out
@@ -117,7 +119,7 @@ def test_duplicate_detection_uses_authoritative_document_not_view_content(tmp_pa
         if iteration == 2:
             input_obj.northstar_view = input_obj.northstar_view.model_copy(
                 update={
-                    "content": "Request:\nWrite a short report with an introduction and conclusion.\n\nCurrent report tail:\n"
+                    "content": "Request:\nWrite a short report.\n\nCurrent report tail:\n"
                 }
             )
         return input_obj
@@ -476,7 +478,7 @@ def test_create_game_receives_input_and_state_and_outputs_game_spec() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
-        "goal": "Write a short report with an introduction and conclusion.",
+        "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
         "spec_path": None,
@@ -503,7 +505,7 @@ def test_create_game_target_artifact_exists_in_state() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
-        "goal": "Write a short report with an introduction and conclusion.",
+        "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
         "spec_path": None,
@@ -527,7 +529,7 @@ def test_create_game_invalid_json_fails_cleanly() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
-        "goal": "Write a short report with an introduction and conclusion.",
+        "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
         "spec_path": None,
@@ -543,7 +545,7 @@ def test_create_game_invalid_json_with_debug_prints_raw_model_output(
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
-        "goal": "Write a short report with an introduction and conclusion.",
+        "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
         "spec_path": None,
@@ -562,7 +564,7 @@ def test_create_game_invalid_json_without_debug_does_not_print_raw_model_output(
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
-        "goal": "Write a short report with an introduction and conclusion.",
+        "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
         "spec_path": None,
@@ -579,7 +581,7 @@ def test_create_game_raw_json_still_accepted() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
-        "goal": "Write a short report with an introduction and conclusion.",
+        "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
         "spec_path": None,
@@ -603,7 +605,7 @@ def test_create_game_exact_json_fence_accepted() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
-        "goal": "Write a short report with an introduction and conclusion.",
+        "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
         "spec_path": None,
@@ -629,7 +631,7 @@ def test_create_game_exact_plain_fence_accepted() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
-        "goal": "Write a short report with an introduction and conclusion.",
+        "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
         "spec_path": None,
@@ -655,7 +657,7 @@ def test_create_game_prose_before_fence_rejected() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
-        "goal": "Write a short report with an introduction and conclusion.",
+        "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
         "spec_path": None,
@@ -681,7 +683,7 @@ def test_create_game_prose_after_fence_rejected() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
-        "goal": "Write a short report with an introduction and conclusion.",
+        "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
         "spec_path": None,
@@ -707,7 +709,7 @@ def test_create_game_multiple_fenced_blocks_rejected() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
-        "goal": "Write a short report with an introduction and conclusion.",
+        "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
         "spec_path": None,
@@ -733,7 +735,7 @@ def test_create_game_invalid_json_inside_fence_rejected() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
-        "goal": "Write a short report with an introduction and conclusion.",
+        "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
         "spec_path": None,
@@ -751,7 +753,7 @@ def test_create_game_missing_gamespec_fields_fails_cleanly() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
-        "goal": "Write a short report with an introduction and conclusion.",
+        "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
         "spec_path": None,
@@ -769,13 +771,13 @@ def test_create_game_target_artifact_not_in_state_fails_cleanly() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
-        "goal": "Write a short report with an introduction and conclusion.",
+        "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
         "spec_path": None,
     }
     state = create_state(config)
-    with pytest.raises(ValueError, match="target artifact not found in state"):
+    with pytest.raises(ValueError, match="target artifact must match configured artifact_id"):
         create_game(
             config,
             state,
@@ -795,7 +797,7 @@ def test_create_game_prompt_forbids_markdown_fences_and_lists_required_shape() -
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
-        "goal": "Write a short report with an introduction and conclusion.",
+        "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
         "spec_path": None,
@@ -903,7 +905,7 @@ def test_play_game_returns_delta_document_state() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -928,7 +930,7 @@ def test_play_game_accepted_candidate_becomes_current_best_delta() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -954,7 +956,7 @@ def test_play_game_valid_blue_json_returns_delta() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -987,7 +989,7 @@ def test_play_game_invalid_blue_json_rejected() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1015,7 +1017,7 @@ def test_play_game_fenced_blue_json_accepted() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1071,7 +1073,7 @@ def test_play_game_invalid_red_json_rejected() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1125,7 +1127,7 @@ def test_play_game_invalid_referee_json_rejected() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1170,7 +1172,7 @@ def test_play_game_referee_receives_gamespec_state_view_delta_and_red(monkeypatc
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1197,7 +1199,7 @@ def test_play_game_referee_revise_prevents_current_best_delta() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1236,7 +1238,7 @@ def test_play_game_referee_accept_sets_current_best_delta() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1282,7 +1284,7 @@ def test_play_game_red_receives_gamespec_state_view_and_delta_state(monkeypatch)
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1308,7 +1310,7 @@ def test_blue_prompt_includes_state_view_and_gamespec() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1339,9 +1341,9 @@ def test_blue_prompt_includes_state_view_and_gamespec() -> None:
         in prompt
     )
     assert 'Invalid example, do not output: "body": ""' in prompt
-    assert '"artifact_id": "main-document"' in prompt
+    assert '"artifact_id": "<game_spec.target_artifact_id>"' in prompt
     assert (
-        '"body": "This section introduces the report scope and purpose."'
+        '"body": "Concrete non-empty section body text."'
         in prompt
     )
     assert '"body": "...' not in prompt
@@ -1353,7 +1355,7 @@ def test_red_prompt_intro_only_guides_revise_for_intro_and_conclusion_success_co
     import baps.run as run_module
 
     spec = run_module.GameSpec(
-        objective="Write a short report with an introduction and conclusion.",
+        objective="Write a short report.",
         target_artifact_id="main-document",
         allowed_delta_type="DeltaDocumentState",
         success_condition="Document must include both an Introduction section and a Conclusion section.",
@@ -1362,7 +1364,7 @@ def test_red_prompt_intro_only_guides_revise_for_intro_and_conclusion_success_co
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1383,11 +1385,191 @@ def test_red_prompt_intro_only_guides_revise_for_intro_and_conclusion_success_co
     assert "Do NOT reject or revise merely because state differs from the original state." in prompt
 
 
+def test_resolve_config_reads_artifact_id_and_required_sections_and_create_state_uses_artifact_id(
+    tmp_path: Path,
+) -> None:
+    import baps.run as run_module
+
+    spec = tmp_path / "config.yaml"
+    spec.write_text(
+        "\n".join(
+            [
+                "project_type: document",
+                "artifact_id: doc-7",
+                "required_sections:",
+                "  - Introduction",
+                "  - Conclusion",
+                f"workspace: {tmp_path / 'ws'}",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    args = argparse.Namespace(
+        spec=str(spec),
+        workspace=None,
+        project_type=None,
+        goal=None,
+        output=None,
+        max_iterations=None,
+    )
+    config = run_module.resolve_run_config(args)
+    assert config["artifact_id"] == "doc-7"
+    assert config["required_sections"] == ("Introduction", "Conclusion")
+    state = run_module.create_state(config)
+    assert state.artifacts[0].id == "doc-7"
+
+
+def test_create_game_required_sections_empty_state_selects_introduction() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "required_sections": ("Introduction", "Conclusion"),
+        "goal": "Write a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.create_state(config)
+    game_spec = run_module.create_game(
+        config,
+        state,
+        model_client=FakeModelClient(
+            [
+                '{"objective":"Add Introduction section",'
+                '"target_artifact_id":"main-document",'
+                '"allowed_delta_type":"DeltaDocumentState",'
+                '"success_condition":"Introduction section exists."}'
+            ]
+        ),
+    )
+    assert "Introduction" in game_spec.objective
+
+
+def test_create_game_required_sections_with_introduction_selects_conclusion() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "required_sections": ("Introduction", "Conclusion"),
+        "goal": "Write a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(
+            run_module.DocumentArtifact(
+                id="main-document",
+                sections=(run_module.Section(title="Introduction", body="Intro"),),
+            ),
+        ),
+    )
+    game_spec = run_module.create_game(
+        config,
+        state,
+        model_client=FakeModelClient(
+            [
+                '{"objective":"Add Conclusion section",'
+                '"target_artifact_id":"main-document",'
+                '"allowed_delta_type":"DeltaDocumentState",'
+                '"success_condition":"Conclusion section exists."}'
+            ]
+        ),
+    )
+    assert "Conclusion" in game_spec.objective
+
+
+def test_create_game_required_sections_complete_fails_cleanly() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "required_sections": ("Introduction", "Conclusion"),
+        "goal": "Write a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(
+            run_module.DocumentArtifact(
+                id="main-document",
+                sections=(
+                    run_module.Section(title="Introduction", body="Intro"),
+                    run_module.Section(title="Conclusion", body="Outro"),
+                ),
+            ),
+        ),
+    )
+    with pytest.raises(ValueError, match="no new required sections"):
+        run_module.create_game(config, state, model_client=FakeModelClient(['{"objective":"x","target_artifact_id":"main-document","allowed_delta_type":"DeltaDocumentState","success_condition":"x"}']))
+
+
+def test_create_game_required_sections_rejects_arbitrary_section_titles() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "required_sections": ("Introduction", "Conclusion"),
+        "goal": "Write a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.create_state(config)
+    with pytest.raises(ValueError, match="next missing required section"):
+        run_module.create_game(
+            config,
+            state,
+            model_client=FakeModelClient(
+                [
+                    '{"objective":"Add Background section",'
+                    '"target_artifact_id":"main-document",'
+                    '"allowed_delta_type":"DeltaDocumentState",'
+                    '"success_condition":"Background section exists."}'
+                ]
+            ),
+        )
+
+
+def test_blue_prompt_and_source_do_not_hardcode_project_policy_literals() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Add Overview section",
+        target_artifact_id="doc-a",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="Overview section exists.",
+    )
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(run_module.DocumentArtifact(id="doc-a", sections=()),),
+    )
+    state_view = run_module._build_blue_state_view(state, spec)
+    prompt = run_module._render_blue_prompt(state_view, spec, 1, None)
+    assert '"artifact_id": "<game_spec.target_artifact_id>"' in prompt
+    assert '"title": "<section title>"' in prompt
+    src = inspect.getsource(run_module._render_blue_prompt)
+    assert '"artifact_id": "main-document"' not in src
+    assert '"title": "Introduction"' not in src
+
+
 def test_referee_prompt_intro_and_conclusion_guides_accept_policy() -> None:
     import baps.run as run_module
 
     spec = run_module.GameSpec(
-        objective="Write a short report with an introduction and conclusion.",
+        objective="Write a short report.",
         target_artifact_id="main-document",
         allowed_delta_type="DeltaDocumentState",
         success_condition="Document must include both an Introduction section and a Conclusion section.",
@@ -1396,7 +1578,7 @@ def test_referee_prompt_intro_and_conclusion_guides_accept_policy() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1440,7 +1622,7 @@ def test_referee_prompt_declares_game_local_authority_and_not_final_integration(
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1473,7 +1655,7 @@ def test_referee_prompt_uses_red_material_findings_in_decision_policy() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1506,7 +1688,7 @@ def test_red_and_referee_prompts_do_not_treat_state_mutation_alone_as_failure() 
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1576,7 +1758,7 @@ def test_play_game_returns_none_if_referee_rejects() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1606,7 +1788,7 @@ def test_play_game_accept_first_attempt_returns_immediately() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1659,7 +1841,7 @@ def test_play_game_revise_then_accept_uses_second_attempt() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1709,7 +1891,7 @@ def test_play_game_reject_then_accept_uses_second_attempt() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1759,7 +1941,7 @@ def test_play_game_attempts_exhausted_returns_none() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1806,7 +1988,7 @@ def test_play_game_previous_feedback_passed_to_later_blue_prompt() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1869,7 +2051,7 @@ def test_play_game_invalid_blue_first_attempt_retries_second_attempt() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1926,7 +2108,7 @@ def test_play_game_invalid_blue_all_attempts_returns_none() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -1961,7 +2143,7 @@ def test_play_game_invalid_blue_debug_and_non_debug_output(monkeypatch, capsys) 
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,
@@ -2042,7 +2224,7 @@ def test_play_game_debug_logs_appear(monkeypatch, capsys) -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
-            "goal": "Write a short report with an introduction and conclusion.",
+            "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
             "spec_path": None,

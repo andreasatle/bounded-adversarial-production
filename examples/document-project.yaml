@@ -1,4 +1,8 @@
 project_type: document
+artifact_id: main-document
+required_sections:
+  - Introduction
+  - Conclusion
 workspace: .baps-workspace/document-project
 goal: "Write a short report about why bounded adversarial evaluation helps software projects, with an introduction and conclusion."
 output: output/report.md
