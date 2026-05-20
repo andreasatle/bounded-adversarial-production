@@ -1606,6 +1606,11 @@ def test_create_game_prompt_includes_northstar_context() -> None:
     prompt = run_module._render_create_game_prompt(config, state)
     assert "northstar_markdown:" in prompt
     assert "must include these sections" in prompt
+    assert "Derive the next atomic game from projected state context, including NorthStar intent." in prompt
+    assert "GameSpec must be self-contained for PlayGame execution without independently reading full NorthStar." in prompt
+    assert "Fold relevant NorthStar intent into objective and success_condition." in prompt
+    assert "Avoid purely structural objectives when NorthStar contains substantive intent." in prompt
+    assert '{\"no_new_atomic_game\": true, \"reason\": \"...\"}' in prompt
     assert "mandatory_sections_json" not in prompt
     assert "next_missing_required_section" not in prompt
 

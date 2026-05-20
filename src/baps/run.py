@@ -631,6 +631,9 @@ def _render_create_game_prompt(
     northstar_markdown = _config_northstar_markdown(config)
     return (
         "Create a GameSpec JSON object for the given project state.\n\n"
+        "Derive the next atomic game from projected state context, including NorthStar intent.\n"
+        "CreateGame is State/NorthStar-aware.\n"
+        "PlayGame is GameSpec-bound.\n\n"
         "Input:\n"
         f"- goal: {config['goal']}\n"
         f"- state_json: {state_json}\n\n"
@@ -644,6 +647,9 @@ def _render_create_game_prompt(
         "No extra fields.\n"
         "If no new atomic game exists for current state+northstar, return exactly:\n"
         '{\"no_new_atomic_game\": true, \"reason\": \"...\"}\n'
+        "GameSpec must be self-contained for PlayGame execution without independently reading full NorthStar.\n"
+        "Fold relevant NorthStar intent into objective and success_condition.\n"
+        "Avoid purely structural objectives when NorthStar contains substantive intent.\n"
         "GameSpec must be atomic:\n"
         "- target exactly one artifact.\n"
         "- permit exactly one delta type.\n"
