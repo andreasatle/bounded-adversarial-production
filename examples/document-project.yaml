@@ -1,9 +1,17 @@
 project_type: document
 artifact_id: main-document
-required_sections:
-  - Introduction
-  - Conclusion
 workspace: .baps-workspace/document-project
 goal: "Write a short report about why bounded adversarial evaluation helps software projects, with an introduction and conclusion."
 output: output/report.md
 max_iterations: 2
+northstar_markdown: |
+  # Goal
+
+  Write a short report about why bounded adversarial evaluation helps software projects.
+
+  # Required structure
+
+  The report must include these sections, in order:
+
+  1. Introduction
+  2. Conclusion

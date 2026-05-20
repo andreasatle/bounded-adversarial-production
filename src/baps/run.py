@@ -137,7 +137,7 @@ def _debug_print_read_config(args: argparse.Namespace, spec_data: dict[str, Any]
     output_payload = {
         "workspace": str(config["workspace"]),
         "artifact_id": config["artifact_id"],
-        "required_sections": config["required_sections"],
+        "northstar_markdown": config["northstar_markdown"],
         "goal": config["goal"],
         "output_path": str(config["output_path"]),
         "max_iterations": config["max_iterations"],
@@ -154,7 +154,7 @@ def _debug_print_create_state(config: dict[str, Any], state: State) -> None:
     input_payload = {
         "project_type": config["project_type"],
         "artifact_id": _config_artifact_id(config),
-        "required_sections": _config_required_sections(config),
+        "northstar_markdown": _config_northstar_markdown(config),
         "workspace": str(config["workspace"]),
         "goal": config["goal"],
         "output_path": str(config["output_path"]),
@@ -398,15 +398,8 @@ def _config_artifact_id(config: dict[str, Any]) -> str:
     return _require_non_empty(str(config["artifact_id"]), "artifact_id")
 
 
-def _config_required_sections(config: dict[str, Any]) -> tuple[str, ...]:
-    raw = config.get("required_sections", ())
-    if isinstance(raw, tuple):
-        values = raw
-    elif isinstance(raw, list):
-        values = tuple(raw)
-    else:
-        raise ValueError("required_sections must be a list/tuple of non-empty strings")
-    return tuple(_require_non_empty(str(value), "required_sections item") for value in values)
+def _config_northstar_markdown(config: dict[str, Any]) -> str:
+    return _require_non_empty(str(config.get("northstar_markdown", "")), "northstar_markdown")
 
 
 def _build_blue_state_view(state: State, game_spec: GameSpec) -> StateView:
@@ -482,7 +475,19 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
     artifact_id_raw = spec_data.get("artifact_id")
     if args.artifact_id is not None:
         artifact_id_raw = args.artifact_id
-    required_sections_raw = spec_data.get("required_sections", [])
+    if "required_sections" in spec_data:
+        raise ValueError(
+            "required_sections is no longer supported; declare required structure in northstar_markdown"
+        )
+    northstar_markdown_raw = spec_data.get("northstar_markdown")
+    northstar_path_raw = spec_data.get("northstar_path")
+    if northstar_markdown_raw is None and northstar_path_raw is not None:
+        northstar_path = Path(str(northstar_path_raw))
+        if not northstar_path.is_absolute():
+            northstar_path = Path.cwd() / northstar_path
+        if not northstar_path.exists():
+            raise ValueError(f"northstar_path file not found: {northstar_path}")
+        northstar_markdown_raw = northstar_path.read_text(encoding="utf-8")
     goal_raw = args.goal if args.goal is not None else spec_data.get("goal", REQUEST)
     output_raw = args.output if args.output is not None else spec_data.get("output")
     max_iterations_raw = (
@@ -502,13 +507,11 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
     else:
         artifact_id = _require_non_empty(str(artifact_id_raw), "artifact_id")
     goal = _require_non_empty(str(goal_raw), "goal")
+    northstar_markdown = _require_non_empty(
+        str(northstar_markdown_raw) if northstar_markdown_raw is not None else goal,
+        "northstar_markdown",
+    )
     workspace = Path(workspace_str)
-
-    if not isinstance(required_sections_raw, list):
-        raise ValueError("required_sections must be a list of non-empty strings")
-    required_sections: list[str] = []
-    for item in required_sections_raw:
-        required_sections.append(_require_non_empty(str(item), "required_sections item"))
 
     if output_raw is None:
         output_path = workspace / "output" / "report.md"
@@ -528,7 +531,7 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
         "workspace": workspace,
         "project_type": project_type,
         "artifact_id": artifact_id,
-        "required_sections": tuple(required_sections),
+        "northstar_markdown": northstar_markdown,
         "goal": goal,
         "output_path": output_path,
         "max_iterations": max_iterations,
@@ -554,16 +557,14 @@ def create_state(config: dict[str, Any]) -> State:
 
 def _render_create_game_prompt(config: dict[str, Any], state: State) -> str:
     state_json = json.dumps(state.model_dump(mode="json"), sort_keys=True)
-    required_sections_json = json.dumps(_config_required_sections(config))
-    next_missing_required_section = _select_next_missing_required_section(config=config, state=state)
+    northstar_markdown = _config_northstar_markdown(config)
     return (
         "Create a GameSpec JSON object for the given project state.\n\n"
         "Input:\n"
         f"- goal: {config['goal']}\n"
         f"- state_json: {state_json}\n\n"
         f"- artifact_id: {_config_artifact_id(config)}\n"
-        f"- required_sections_json: {required_sections_json}\n"
-        f"- next_missing_required_section: {next_missing_required_section}\n\n"
+        f"- northstar_markdown: {northstar_markdown}\n\n"
         "Return only a JSON object.\n"
         "Do not wrap output in markdown.\n"
         "Do not use triple-backtick fences.\n"
@@ -577,8 +578,6 @@ def _render_create_game_prompt(config: dict[str, Any], state: State) -> str:
         "- success_condition must be checkable from that one change.\n"
         "- do not bundle independent features/tasks in one GameSpec.\n"
         "- if goal needs multiple changes, select only the next missing atomic change.\n"
-        "- if required_sections_json is non-empty, objective and success_condition must target exactly next_missing_required_section.\n"
-        "- if required_sections_json is non-empty, do not invent arbitrary section titles.\n"
         "Required JSON shape:\n"
         "{\n"
         '  "objective": "...",\n'
@@ -597,17 +596,6 @@ def _document_artifact_from_state(state: State, artifact_id: str) -> DocumentArt
     if not isinstance(artifact, DocumentArtifact):
         raise ValueError(f"create_game target artifact must be DocumentArtifact: {artifact_id}")
     return artifact
-
-
-def _select_next_missing_required_section(config: dict[str, Any], state: State) -> str | None:
-    required_sections = _config_required_sections(config)
-    if not required_sections:
-        return None
-    artifact = _document_artifact_from_state(state, _config_artifact_id(config))
-    existing = {section.title for section in artifact.sections}
-    for required in required_sections:
-        if required not in existing:
-            return required
     return None
 
 
@@ -645,24 +633,7 @@ def _is_bundled_change_text(text: str) -> bool:
         return False
 
     bundled_markers = (" and ", ", and ", ",", " plus ")
-    has_bundle_joiner = any(marker in lowered for marker in bundled_markers)
-    if not has_bundle_joiner:
-        return False
-
-    feature_tokens = {
-        "introduction",
-        "conclusion",
-        "parser",
-        "tests",
-        "state",
-        "blackboard",
-        "export",
-        "runtime",
-        "integration",
-        "artifact",
-    }
-    hit_count = sum(1 for token in feature_tokens if token in lowered)
-    return hit_count >= 2
+    return any(marker in lowered for marker in bundled_markers)
 
 
 def _validate_atomic_game_spec(game_spec: GameSpec) -> None:
@@ -762,10 +733,6 @@ def create_game(
     model_client: ModelClient | None = None,
 ) -> GameSpec:
     _debug_print_create_game_input(state)
-    required_sections = _config_required_sections(config)
-    next_missing_required_section = _select_next_missing_required_section(config=config, state=state)
-    if required_sections and next_missing_required_section is None:
-        raise ValueError("create_game no new required sections")
     client = model_client if model_client is not None else _build_create_game_model_client()
     prompt = _render_create_game_prompt(config=config, state=state)
     generated = client.generate(prompt)
@@ -782,22 +749,6 @@ def create_game(
             f"expected {expected_artifact_id}, got {game_spec.target_artifact_id}"
         )
     _ = _document_artifact_from_state(state, game_spec.target_artifact_id)
-    if required_sections and next_missing_required_section is not None:
-        objective = game_spec.objective.lower()
-        success = game_spec.success_condition.lower()
-        required_name = next_missing_required_section.lower()
-        if required_name not in objective or required_name not in success:
-            raise ValueError(
-                "create_game must target next missing required section in objective and success_condition"
-            )
-        for section_name in required_sections:
-            normalized = section_name.lower()
-            if normalized != required_name and (
-                normalized in objective or normalized in success
-            ):
-                raise ValueError(
-                    "create_game must not include other required sections when targeting next missing section"
-                )
     _debug_print_create_game_output(game_spec)
     return game_spec
 
