@@ -560,7 +560,7 @@ def test_create_game_invalid_json_without_debug_does_not_print_raw_model_output(
     assert "[DEBUG] create_game.raw_model_output:" not in out
 
 
-def test_create_game_atomicity_failure_debug_prints_raw_output_before_failure(
+def test_create_game_structural_validation_failure_debug_prints_raw_output(
     monkeypatch, capsys
 ) -> None:
     config = {
@@ -576,19 +576,17 @@ def test_create_game_atomicity_failure_debug_prints_raw_output_before_failure(
     state = create_state(config)
     monkeypatch.setenv("BAPS_DEBUG", "1")
     payload = (
-        '{"objective":"Add introduction and conclusion","target_artifact_id":"main-document",'
+        '{"objective":" ","target_artifact_id":"main-document",'
         '"allowed_delta_type":"DeltaDocumentState",'
         '"success_condition":"Add introduction and conclusion"}'
     )
-    with pytest.raises(ValueError, match="one coherent task"):
+    with pytest.raises(ValueError, match="create_game model output failed GameSpec validation"):
         create_game(config, state, model_client=FakeModelClient([payload]))
     out = capsys.readouterr().out
     assert "[DEBUG] create_game.prompt:" in out
     assert "[DEBUG] create_game.raw_model_output:" in out
-    assert "[DEBUG] create_game.validation_input:" in out
-    assert "[DEBUG] create_game.validation_analysis:" in out
-    assert "[DEBUG] create_game.validation_failure:" in out
-    assert "message=create_game model output must describe one coherent task in objective" in out
+    assert "[DEBUG] create_game.validation_input:" not in out
+    assert "[DEBUG] create_game.validation_failure:" not in out
     assert payload in out
 
 
@@ -644,20 +642,19 @@ def test_create_game_semantic_refinement_objective_is_accepted(monkeypatch, caps
         state,
         model_client=FakeModelClient(
             [
-                '{"objective":"Add Introduction section to artifact main-document, introducing bounded adversarial evaluation and its relevance to software project improvement.",'
+                '{"objective":"Add a Conclusion section to artifact main-document, summarizing bounded adversarial evaluation outcomes and reiterating relevance to software project improvement.",'
                 '"target_artifact_id":"main-document",'
                 '"allowed_delta_type":"DeltaDocumentState",'
-                '"success_condition":"Artifact contains an Introduction section introducing bounded adversarial evaluation and its relevance to software project improvement."}'
+                '"success_condition":"Artifact contains a Conclusion section summarizing bounded adversarial evaluation outcomes and reiterating relevance to software project improvement."}'
             ]
         ),
     )
     assert game_spec.target_artifact_id == "main-document"
     out = capsys.readouterr().out
-    assert "independent_tasks=False" in out
-    assert "reason=semantic refinement of single coherent task" in out
+    assert "[DEBUG] create_game.validation_input:" in out
 
 
-def test_create_game_rejects_independent_task_verb_bundle() -> None:
+def test_create_game_objective_with_multiple_tasks_is_accepted_by_structural_validation() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
@@ -669,19 +666,19 @@ def test_create_game_rejects_independent_task_verb_bundle() -> None:
         "spec_path": None,
     }
     state = create_state(config)
-    with pytest.raises(ValueError, match="one coherent task"):
-        create_game(
-            config,
-            state,
-            model_client=FakeModelClient(
-                [
-                    '{"objective":"Update report and create appendix",'
-                    '"target_artifact_id":"main-document",'
-                    '"allowed_delta_type":"DeltaDocumentState",'
-                    '"success_condition":"Report is updated and appendix is created."}'
-                ]
-            ),
-        )
+    game_spec = create_game(
+        config,
+        state,
+        model_client=FakeModelClient(
+            [
+                '{"objective":"Update report and create appendix",'
+                '"target_artifact_id":"main-document",'
+                '"allowed_delta_type":"DeltaDocumentState",'
+                '"success_condition":"Report is updated and appendix is created."}'
+            ]
+        ),
+    )
+    assert game_spec.objective == "Update report and create appendix"
 
 
 def test_create_game_validation_debug_disabled_prints_nothing(capsys) -> None:
@@ -710,7 +707,6 @@ def test_create_game_validation_debug_disabled_prints_nothing(capsys) -> None:
     )
     out = capsys.readouterr().out
     assert "[DEBUG] create_game.validation_input:" not in out
-    assert "[DEBUG] create_game.validation_analysis:" not in out
     assert "[DEBUG] create_game.validation_failure:" not in out
 
 
@@ -1005,7 +1001,7 @@ def test_create_game_broad_goal_accepts_decomposed_atomic_gamespec() -> None:
     assert game_spec.success_condition == "Introduction section exists in main-document."
 
 
-def test_create_game_rejects_bundled_objective_and_success_condition() -> None:
+def test_create_game_bundled_objective_and_success_condition_are_structurally_valid() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
@@ -1017,22 +1013,22 @@ def test_create_game_rejects_bundled_objective_and_success_condition() -> None:
         "spec_path": None,
     }
     state = create_state(config)
-    with pytest.raises(ValueError, match="one coherent task"):
-        create_game(
-            config,
-            state,
-            model_client=FakeModelClient(
-                [
-                    '{"objective":"add introduction and conclusion",'
-                    '"target_artifact_id":"main-document",'
-                    '"allowed_delta_type":"DeltaDocumentState",'
-                    '"success_condition":"Introduction and conclusion sections both exist."}'
-                ]
-            ),
-        )
+    game_spec = create_game(
+        config,
+        state,
+        model_client=FakeModelClient(
+            [
+                '{"objective":"add introduction and conclusion",'
+                '"target_artifact_id":"main-document",'
+                '"allowed_delta_type":"DeltaDocumentState",'
+                '"success_condition":"Introduction and conclusion sections both exist."}'
+            ]
+        ),
+    )
+    assert game_spec.objective == "add introduction and conclusion"
 
 
-def test_create_game_rejects_broad_multi_feature_gamespec() -> None:
+def test_create_game_multi_feature_wording_is_structurally_valid() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
@@ -1044,19 +1040,19 @@ def test_create_game_rejects_broad_multi_feature_gamespec() -> None:
         "spec_path": None,
     }
     state = create_state(config)
-    with pytest.raises(ValueError, match="one coherent task"):
-        create_game(
-            config,
-            state,
-            model_client=FakeModelClient(
-                [
-                    '{"objective":"implement parser and tests",'
-                    '"target_artifact_id":"main-document",'
-                    '"allowed_delta_type":"DeltaDocumentState",'
-                    '"success_condition":"Parser and tests are implemented."}'
-                ]
-            ),
-        )
+    game_spec = create_game(
+        config,
+        state,
+        model_client=FakeModelClient(
+            [
+                '{"objective":"implement parser and tests",'
+                '"target_artifact_id":"main-document",'
+                '"allowed_delta_type":"DeltaDocumentState",'
+                '"success_condition":"Parser and tests are implemented."}'
+            ]
+        ),
+    )
+    assert game_spec.objective == "implement parser and tests"
 
 
 def test_play_game_returns_delta_document_state() -> None:
