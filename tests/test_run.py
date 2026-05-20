@@ -1232,6 +1232,16 @@ def test_blue_prompt_includes_state_view_and_gamespec() -> None:
     assert "target_artifact_id:" in prompt
     assert "allowed_delta_type:" in prompt
     assert "success_condition:" in prompt
+    assert "section.title and section.body must be non-empty strings." in prompt
+    assert (
+        "If previous_feedback_json contains validation errors, repair those exact errors in this attempt."
+        in prompt
+    )
+    assert "Do not repeat outputs that fail previously reported validation constraints." in prompt
+    assert (
+        "When attempt_number > 1, treat previous_feedback_json as mandatory correction requirements."
+        in prompt
+    )
     assert "blue_view_json:" not in prompt
     assert "state_json:" not in prompt
 
@@ -1728,6 +1738,14 @@ def test_play_game_previous_feedback_passed_to_later_blue_prompt() -> None:
     assert len(blue_client.prompts) == 2
     second_prompt = blue_client.prompts[1]
     assert "previous_feedback_json:" in second_prompt
+    assert (
+        "When attempt_number > 1, treat previous_feedback_json as mandatory correction requirements."
+        in second_prompt
+    )
+    assert (
+        "If previous_feedback_json contains validation errors, repair those exact errors in this attempt."
+        in second_prompt
+    )
     assert '"red_finding": {"disposition": "accept", "rationale": "ok"}' in second_prompt
     assert (
         '"referee_decision": {"disposition": "revise", "rationale": "needs revision"}'
@@ -1779,6 +1797,14 @@ def test_play_game_invalid_blue_first_attempt_retries_second_attempt() -> None:
     assert len(blue_client.prompts) == 2
     second_prompt = blue_client.prompts[1]
     assert "previous_feedback_json:" in second_prompt
+    assert (
+        "When attempt_number > 1, treat previous_feedback_json as mandatory correction requirements."
+        in second_prompt
+    )
+    assert (
+        "If previous_feedback_json contains validation errors, repair those exact errors in this attempt."
+        in second_prompt
+    )
     assert '"stage": "blue"' in second_prompt
     assert "payload.section.body" in second_prompt
     assert "must be a non-empty string" in second_prompt
