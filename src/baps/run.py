@@ -736,14 +736,15 @@ def _render_blue_prompt(
         "Do not include prose before JSON.\n"
         "Do not include prose after JSON.\n"
         "No extra fields.\n"
+        'Invalid example, do not output: "body": ""\n'
         "Required JSON shape:\n"
         "{\n"
-        '  "artifact_id": "...",\n'
+        '  "artifact_id": "main-document",\n'
         '  "operation": "append_section",\n'
         '  "payload": {\n'
         '    "section": {\n'
         '      "title": "Introduction",\n'
-        '      "body": "..."\n'
+        '      "body": "This section introduces the report scope and purpose."\n'
         "    }\n"
         "  }\n"
         "}"

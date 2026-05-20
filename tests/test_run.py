@@ -1242,6 +1242,13 @@ def test_blue_prompt_includes_state_view_and_gamespec() -> None:
         "When attempt_number > 1, treat previous_feedback_json as mandatory correction requirements."
         in prompt
     )
+    assert 'Invalid example, do not output: "body": ""' in prompt
+    assert '"artifact_id": "main-document"' in prompt
+    assert (
+        '"body": "This section introduces the report scope and purpose."'
+        in prompt
+    )
+    assert '"body": "...' not in prompt
     assert "blue_view_json:" not in prompt
     assert "state_json:" not in prompt
 
