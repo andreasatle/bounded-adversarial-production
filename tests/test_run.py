@@ -2729,3 +2729,180 @@ def test_debug_formatter_renders_tuple_as_yaml_list_and_empty_as_brackets(
     out = capsys.readouterr().out
     assert "northstar:\n      artifacts: []" in out
     assert "sections: []" in out
+
+
+def test_main_uses_project_type_adapter_dispatch_for_document(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import baps.run as run_module
+
+    class _RecordingAdapter:
+        project_type = "document"
+        supported_delta_type = "DeltaDocumentState"
+
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+            self._delegate = run_module.DocumentProjectAdapter()
+
+        def create_initial_state(self, config):
+            self.calls.append("create_initial_state")
+            return self._delegate.create_initial_state(config)
+
+        def build_state_view(self, state, game_spec):
+            self.calls.append("build_state_view")
+            return self._delegate.build_state_view(state, game_spec)
+
+        def render_blue_prompt(self, state_view, game_spec, attempt_number, previous_feedback):
+            self.calls.append("render_blue_prompt")
+            return self._delegate.render_blue_prompt(
+                state_view, game_spec, attempt_number, previous_feedback
+            )
+
+        def parse_blue_delta(self, text):
+            self.calls.append("parse_blue_delta")
+            return self._delegate.parse_blue_delta(text)
+
+        def delta_to_state_update(self, delta_state):
+            self.calls.append("delta_to_state_update")
+            return self._delegate.delta_to_state_update(delta_state)
+
+    adapter = _RecordingAdapter()
+    monkeypatch.setattr(run_module, "_resolve_project_type_adapter", lambda _ptype: adapter)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace",
+            str(tmp_path / "ws-adapter-dispatch"),
+            "--project-type",
+            "document",
+            "--artifact-id",
+            "main-document",
+            "--max-iterations",
+            "1",
+        ],
+    )
+    run_module.main()
+    assert "create_initial_state" in adapter.calls
+    assert "build_state_view" in adapter.calls
+    assert "render_blue_prompt" in adapter.calls
+    assert "parse_blue_delta" in adapter.calls
+    assert "delta_to_state_update" in adapter.calls
+
+
+def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
+    import baps.run as run_module
+
+    class _PlayAdapter:
+        project_type = "document"
+        supported_delta_type = "DeltaDocumentState"
+
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def create_initial_state(self, _config):
+            raise NotImplementedError
+
+        def build_state_view(self, _state, _game_spec):
+            self.calls.append("build_state_view")
+            return run_module.StateView(
+                id="state-view:test",
+                projection_type=run_module.ProjectionType.NORTH_STAR,
+                content="{}",
+                input_fingerprint="x",
+                metadata={},
+            )
+
+        def render_blue_prompt(
+            self, _state_view, _game_spec, _attempt_number, _previous_feedback
+        ):
+            self.calls.append("render_blue_prompt")
+            return "blue-prompt"
+
+        def parse_blue_delta(self, _text):
+            self.calls.append("parse_blue_delta")
+            return run_module.DeltaDocumentState(
+                artifact_id="main-document",
+                operation="append_section",
+                payload=run_module.AppendSectionDelta(
+                    section=run_module.Section(title="Intro", body="Body")
+                ),
+            )
+
+        def delta_to_state_update(self, _delta_state):
+            raise NotImplementedError
+
+    adapter = _PlayAdapter()
+    spec = run_module.GameSpec(
+        objective="Add section",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="section exists",
+    )
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(run_module.DocumentArtifact(id="main-document", sections=()),),
+    )
+    delta = run_module.play_game(
+        state,
+        spec,
+        adapter=adapter,
+        model_client=FakeModelClient(["ignored"]),
+        red_model_client=FakeModelClient(['{"disposition":"accept","rationale":"ok"}']),
+        referee_model_client=FakeModelClient(['{"disposition":"accept","rationale":"ok"}']),
+    )
+    assert isinstance(delta, run_module.DeltaDocumentState)
+    assert adapter.calls == ["build_state_view", "render_blue_prompt", "parse_blue_delta"]
+
+
+def test_integration_uses_adapter_delta_to_update_mapper() -> None:
+    import baps.run as run_module
+
+    class _MapperAdapter:
+        project_type = "document"
+        supported_delta_type = "DeltaDocumentState"
+
+        def create_initial_state(self, _config):
+            raise NotImplementedError
+
+        def build_state_view(self, _state, _game_spec):
+            raise NotImplementedError
+
+        def render_blue_prompt(
+            self, _state_view, _game_spec, _attempt_number, _previous_feedback
+        ):
+            raise NotImplementedError
+
+        def parse_blue_delta(self, _text):
+            raise NotImplementedError
+
+        def delta_to_state_update(self, delta_state):
+            return run_module.StateUpdateProposal(
+                id="mapped",
+                target=run_module.StateUpdateTarget(artifact_id=delta_state.artifact_id),
+                summary="mapped",
+                payload={
+                    "operation": "replace_artifact",
+                    "artifact": {"id": delta_state.artifact_id, "kind": "document"},
+                },
+            )
+
+    delta = run_module.DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=run_module.AppendSectionDelta(
+            section=run_module.Section(title="T", body="B")
+        ),
+    )
+    proposal = run_module._derive_state_update_from_delta(delta, adapter=_MapperAdapter())
+    assert proposal.id == "mapped"
+
+
+def test_active_main_and_play_game_orchestration_have_no_direct_document_mechanics() -> None:
+    import baps.run as run_module
+
+    main_src = inspect.getsource(run_module.main)
+    play_src = inspect.getsource(run_module.play_game)
+    for token in ("DocumentArtifact", "DeltaDocumentState", "append_section", "sections"):
+        assert token not in main_src
+        assert token not in play_src

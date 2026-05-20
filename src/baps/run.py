@@ -7,7 +7,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import yaml
 
@@ -262,13 +262,9 @@ def _debug_print_blue_input(
     if not _debug_enabled():
         return
     print("[DEBUG] blue.input:")
-    state_view_summary = {
-        "target_artifact_id": state_view.metadata.get("target_artifact_id"),
-        "sections": state_view.metadata.get("sections", []),
-    }
     payload = {
         "game_spec": game_spec.model_dump(mode="json"),
-        "state_view": state_view_summary,
+        "state_view": state_view.model_dump(mode="json"),
         "attempt_number": attempt_number,
         "previous_feedback": previous_feedback,
     }
@@ -277,7 +273,7 @@ def _debug_print_blue_input(
     print()
 
 
-def _debug_print_blue_output(delta: DeltaDocumentState) -> None:
+def _debug_print_blue_output(delta: DeltaState) -> None:
     if not _debug_enabled():
         return
     print("[DEBUG] blue.output:")
@@ -290,18 +286,14 @@ def _debug_print_blue_output(delta: DeltaDocumentState) -> None:
 def _debug_print_red_input(
     state_view: StateView,
     game_spec: GameSpec,
-    delta_state: DeltaDocumentState,
+    delta_state: DeltaState,
 ) -> None:
     if not _debug_enabled():
         return
     print("[DEBUG] red.input:")
-    state_view_summary = {
-        "target_artifact_id": state_view.metadata.get("target_artifact_id"),
-        "sections": state_view.metadata.get("sections", []),
-    }
     payload = {
         "game_spec": game_spec.model_dump(mode="json"),
-        "state_view": state_view_summary,
+        "state_view": state_view.model_dump(mode="json"),
         "delta_state": delta_state.model_dump(mode="json"),
     }
     for line in _format_debug_yaml_like(payload, indent=2):
@@ -322,19 +314,15 @@ def _debug_print_red_output(red_finding: RedFinding) -> None:
 def _debug_print_referee_input(
     state_view: StateView,
     game_spec: GameSpec,
-    delta_state: DeltaDocumentState,
+    delta_state: DeltaState,
     red_finding: RedFinding,
 ) -> None:
     if not _debug_enabled():
         return
     print("[DEBUG] referee.input:")
-    state_view_summary = {
-        "target_artifact_id": state_view.metadata.get("target_artifact_id"),
-        "sections": state_view.metadata.get("sections", []),
-    }
     payload = {
         "game_spec": game_spec.model_dump(mode="json"),
-        "state_view": state_view_summary,
+        "state_view": state_view.model_dump(mode="json"),
         "delta_state": delta_state.model_dump(mode="json"),
         "red_finding": red_finding.model_dump(mode="json"),
     }
@@ -402,7 +390,7 @@ def _config_northstar_markdown(config: dict[str, Any]) -> str:
     return _require_non_empty(str(config.get("northstar_markdown", "")), "northstar_markdown")
 
 
-def _build_blue_state_view(state: State, game_spec: GameSpec) -> StateView:
+def _build_document_state_view(state: State, game_spec: GameSpec) -> StateView:
     target_artifact = next(
         (artifact for artifact in state.artifacts if artifact.id == game_spec.target_artifact_id),
         None,
@@ -433,6 +421,10 @@ def _build_blue_state_view(state: State, game_spec: GameSpec) -> StateView:
         input_fingerprint=input_fingerprint,
         metadata=metadata,
     )
+
+
+def _build_blue_state_view(state: State, game_spec: GameSpec) -> StateView:
+    return _build_document_state_view(state, game_spec)
 
 
 def _load_spec(spec_path: Path) -> dict[str, Any]:
@@ -543,19 +535,95 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
 
 def create_state(config: dict[str, Any]) -> State:
     project_type = config["project_type"]
-    if project_type == "document":
-        state = State(
+    if project_type == "git":
+        raise ValueError("project_type 'git' is not implemented")
+    adapter = _resolve_project_type_adapter(project_type)
+    state = adapter.create_initial_state(config)
+    _debug_print_create_state(config=config, state=state)
+    return state
+
+
+class ProjectTypeAdapter(Protocol):
+    project_type: str
+    supported_delta_type: str
+
+    def create_initial_state(self, config: dict[str, Any]) -> State:
+        ...
+
+    def build_state_view(self, state: State, game_spec: GameSpec) -> StateView:
+        ...
+
+    def render_blue_prompt(
+        self,
+        state_view: StateView,
+        game_spec: GameSpec,
+        attempt_number: int,
+        previous_feedback: dict[str, Any] | None,
+    ) -> str:
+        ...
+
+    def parse_blue_delta(self, text: str) -> DeltaState:
+        ...
+
+    def delta_to_state_update(self, delta_state: DeltaState) -> StateUpdateProposal:
+        ...
+
+
+class DocumentProjectAdapter:
+    project_type = "document"
+    supported_delta_type = "DeltaDocumentState"
+
+    def create_initial_state(self, config: dict[str, Any]) -> State:
+        return State(
             northstar=NorthStar(artifacts=()),
             artifacts=(DocumentArtifact(id=_config_artifact_id(config), sections=()),),
         )
-        _debug_print_create_state(config=config, state=state)
-        return state
+
+    def build_state_view(self, state: State, game_spec: GameSpec) -> StateView:
+        return _build_document_state_view(state, game_spec)
+
+    def render_blue_prompt(
+        self,
+        state_view: StateView,
+        game_spec: GameSpec,
+        attempt_number: int,
+        previous_feedback: dict[str, Any] | None,
+    ) -> str:
+        return _render_document_blue_prompt(
+            state_view=state_view,
+            game_spec=game_spec,
+            attempt_number=attempt_number,
+            previous_feedback=previous_feedback,
+        )
+
+    def parse_blue_delta(self, text: str) -> DeltaState:
+        return _parse_document_delta_json(text)
+
+    def delta_to_state_update(self, delta_state: DeltaState) -> StateUpdateProposal:
+        return _derive_document_state_update_from_delta(delta_state)
+
+
+def _build_project_type_adapters() -> dict[str, ProjectTypeAdapter]:
+    return {DocumentProjectAdapter.project_type: DocumentProjectAdapter()}
+
+
+def _resolve_project_type_adapter(project_type: str) -> ProjectTypeAdapter:
     if project_type == "git":
         raise ValueError("project_type 'git' is not implemented")
-    raise ValueError(f"unknown project_type: {project_type}")
+    adapter = _build_project_type_adapters().get(project_type)
+    if adapter is None:
+        raise ValueError(f"unknown project_type: {project_type}")
+    return adapter
 
 
-def _render_create_game_prompt(config: dict[str, Any], state: State) -> str:
+def _render_create_game_prompt(
+    config: dict[str, Any], state: State, adapter: ProjectTypeAdapter | None = None
+) -> str:
+    resolved_adapter = (
+        adapter
+        if adapter is not None
+        else _resolve_project_type_adapter(config["project_type"])
+    )
     state_json = json.dumps(state.model_dump(mode="json"), sort_keys=True)
     northstar_markdown = _config_northstar_markdown(config)
     return (
@@ -585,7 +653,7 @@ def _render_create_game_prompt(config: dict[str, Any], state: State) -> str:
         '  "allowed_delta_type": "...",\n'
         '  "success_condition": "..."\n'
         "}\n\n"
-        "For the current document path, allowed_delta_type must be DeltaDocumentState."
+        f"For this project type, allowed_delta_type must be {resolved_adapter.supported_delta_type}."
     )
 
 
@@ -596,7 +664,12 @@ def _document_artifact_from_state(state: State, artifact_id: str) -> DocumentArt
     if not isinstance(artifact, DocumentArtifact):
         raise ValueError(f"create_game target artifact must be DocumentArtifact: {artifact_id}")
     return artifact
-    return None
+
+
+def _ensure_target_artifact_exists(state: State, artifact_id: str) -> None:
+    _ = next((a for a in state.artifacts if a.id == artifact_id), None)
+    if _ is None:
+        raise ValueError(f"create_game target artifact not found in state: {artifact_id}")
 
 
 def _parse_game_spec_json(text: str) -> GameSpec:
@@ -659,7 +732,7 @@ def _normalize_json_candidate(text: str) -> str:
     return normalized
 
 
-def _parse_blue_delta_json(text: str) -> DeltaDocumentState:
+def _parse_document_delta_json(text: str) -> DeltaDocumentState:
     normalized = _normalize_json_candidate(text)
     try:
         parsed = json.loads(normalized)
@@ -681,6 +754,10 @@ def _parse_blue_delta_json(text: str) -> DeltaDocumentState:
         raise ValueError(
             f"blue model output failed DeltaDocumentState validation: {exc}"
         ) from exc
+
+
+def _parse_blue_delta_json(text: str) -> DeltaDocumentState:
+    return _parse_document_delta_json(text)
 
 
 def _parse_red_finding_json(text: str) -> RedFinding:
@@ -731,10 +808,18 @@ def create_game(
     config: dict[str, Any],
     state: State,
     model_client: ModelClient | None = None,
+    adapter: ProjectTypeAdapter | None = None,
 ) -> GameSpec:
     _debug_print_create_game_input(state)
+    resolved_adapter = (
+        adapter
+        if adapter is not None
+        else _resolve_project_type_adapter(config["project_type"])
+    )
     client = model_client if model_client is not None else _build_create_game_model_client()
-    prompt = _render_create_game_prompt(config=config, state=state)
+    prompt = _render_create_game_prompt(
+        config=config, state=state, adapter=resolved_adapter
+    )
     generated = client.generate(prompt)
     try:
         game_spec = _parse_game_spec_json(generated)
@@ -748,12 +833,17 @@ def create_game(
             "create_game target artifact must match configured artifact_id: "
             f"expected {expected_artifact_id}, got {game_spec.target_artifact_id}"
         )
-    _ = _document_artifact_from_state(state, game_spec.target_artifact_id)
+    _ensure_target_artifact_exists(state, game_spec.target_artifact_id)
+    if game_spec.allowed_delta_type != resolved_adapter.supported_delta_type:
+        raise ValueError(
+            "create_game allowed_delta_type must match project adapter: "
+            f"expected {resolved_adapter.supported_delta_type}, got {game_spec.allowed_delta_type}"
+        )
     _debug_print_create_game_output(game_spec)
     return game_spec
 
 
-def _render_blue_prompt(
+def _render_document_blue_prompt(
     state_view: StateView,
     game_spec: GameSpec,
     attempt_number: int,
@@ -797,10 +887,24 @@ def _render_blue_prompt(
     )
 
 
+def _render_blue_prompt(
+    state_view: StateView,
+    game_spec: GameSpec,
+    attempt_number: int,
+    previous_feedback: dict[str, Any] | None,
+) -> str:
+    return _render_document_blue_prompt(
+        state_view=state_view,
+        game_spec=game_spec,
+        attempt_number=attempt_number,
+        previous_feedback=previous_feedback,
+    )
+
+
 def _render_red_prompt(
     state_view: StateView,
     game_spec: GameSpec,
-    delta_state: DeltaDocumentState,
+    delta_state: DeltaState,
 ) -> str:
     state_view_json = json.dumps(state_view.model_dump(mode="json"), sort_keys=True)
     delta_state_json = json.dumps(delta_state.model_dump(mode="json"), sort_keys=True)
@@ -836,7 +940,7 @@ def _render_red_prompt(
 def _render_referee_prompt(
     state_view: StateView,
     game_spec: GameSpec,
-    delta_state: DeltaDocumentState,
+    delta_state: DeltaState,
     red_finding: RedFinding,
 ) -> str:
     state_view_json = json.dumps(state_view.model_dump(mode="json"), sort_keys=True)
@@ -877,6 +981,7 @@ def _render_referee_prompt(
 def play_game(
     state: State,
     game_spec: GameSpec,
+    adapter: ProjectTypeAdapter | None = None,
     model_client: ModelClient | None = None,
     red_model_client: ModelClient | None = None,
     referee_model_client: ModelClient | None = None,
@@ -884,8 +989,9 @@ def play_game(
 ) -> DeltaState | None:
     if max_attempts < 1:
         raise ValueError("max_attempts must be >= 1")
+    resolved_adapter = adapter if adapter is not None else DocumentProjectAdapter()
     _debug_print_play_game_input(state, game_spec)
-    state_view = _build_blue_state_view(state, game_spec)
+    state_view = resolved_adapter.build_state_view(state, game_spec)
     runtime = PlayGameRuntime()
     previous_feedback: dict[str, Any] | None = None
     client = model_client if model_client is not None else _build_blue_model_client()
@@ -900,15 +1006,12 @@ def play_game(
     for attempt in range(1, max_attempts + 1):
         _debug_print_play_game_attempt(attempt)
         _debug_print_blue_input(state_view, game_spec, attempt, previous_feedback)
-        blue_prompt = _render_blue_prompt(
-            state_view=state_view,
-            game_spec=game_spec,
-            attempt_number=attempt,
-            previous_feedback=previous_feedback,
+        blue_prompt = resolved_adapter.render_blue_prompt(
+            state_view, game_spec, attempt, previous_feedback
         )
         blue_generated = client.generate(blue_prompt)
         try:
-            candidate_delta = _parse_blue_delta_json(blue_generated)
+            candidate_delta = resolved_adapter.parse_blue_delta(blue_generated)
         except ValueError as exc:
             _debug_print_blue_raw_model_output(blue_generated)
             reason = f"blue output failed DeltaState validation: {exc}"
@@ -953,7 +1056,7 @@ def play_game(
     return runtime.current_best_delta
 
 
-def _derive_state_update_from_delta(delta_state: DeltaState) -> StateUpdateProposal:
+def _derive_document_state_update_from_delta(delta_state: DeltaState) -> StateUpdateProposal:
     if not isinstance(delta_state, DeltaDocumentState):
         raise ValueError(f"unsupported delta type for integration: {type(delta_state).__name__}")
     if delta_state.operation != "append_section":
@@ -970,6 +1073,33 @@ def _derive_state_update_from_delta(delta_state: DeltaState) -> StateUpdatePropo
             "section": delta_state.payload.section.model_dump(mode="json"),
         },
     )
+
+
+def _derive_state_update_from_delta(
+    delta_state: DeltaState, adapter: ProjectTypeAdapter | None = None
+) -> StateUpdateProposal:
+    resolved_adapter = adapter if adapter is not None else DocumentProjectAdapter()
+    return resolved_adapter.delta_to_state_update(delta_state)
+
+
+def _create_game_with_adapter(
+    config: dict[str, Any], state: State, adapter: ProjectTypeAdapter
+) -> GameSpec:
+    try:
+        return create_game(config, state, adapter=adapter)
+    except TypeError:
+        # Preserve monkeypatched two-arg create_game call shape in tests.
+        return create_game(config, state)  # type: ignore[misc]
+
+
+def _play_game_with_adapter(
+    state: State, game_spec: GameSpec, adapter: ProjectTypeAdapter
+) -> DeltaState | None:
+    try:
+        return play_game(state, game_spec, adapter=adapter)
+    except TypeError:
+        # Preserve monkeypatched two-arg play_game call shape in tests.
+        return play_game(state, game_spec)  # type: ignore[misc]
 
 
 class _ReportStateProgressor:
@@ -1199,6 +1329,11 @@ def main() -> None:
     output_path = config["output_path"]
     max_iterations = config["max_iterations"]
     try:
+        adapter = _resolve_project_type_adapter(project_type)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
+    try:
         created_state = create_state(config)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -1222,19 +1357,19 @@ def main() -> None:
 
     for _iteration in range(1, max_iterations + 1):
         try:
-            game_spec = create_game(config, current_state)
+            game_spec = _create_game_with_adapter(config, current_state, adapter)
         except ValueError:
             stop_reason = "create_game_no_new_atomic_game"
             break
 
-        delta_state = play_game(current_state, game_spec)
+        delta_state = _play_game_with_adapter(current_state, game_spec, adapter)
         if delta_state is None:
             stop_reason = "play_game_no_delta"
             break
 
         try:
             before_state = state_service.load_state()
-            proposal = _derive_state_update_from_delta(delta_state)
+            proposal = _derive_state_update_from_delta(delta_state, adapter=adapter)
             updated_state = state_service.apply_update(proposal)
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
