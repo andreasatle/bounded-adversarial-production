@@ -81,7 +81,9 @@ def test_run_baps_loop_writes_only_under_workspace(tmp_path: Path, monkeypatch) 
     assert not Path("state/demo-state.json").exists()
 
 
-def test_main_prints_required_loop_fields(monkeypatch, capsys, tmp_path: Path) -> None:
+def test_main_prints_required_fields_and_no_legacy_iteration_output(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
     workspace = tmp_path / "w"
     monkeypatch.setattr(
         "sys.argv",
@@ -96,16 +98,9 @@ def test_main_prints_required_loop_fields(monkeypatch, capsys, tmp_path: Path) -
     assert "goal=Write a short report with an introduction and conclusion." in out
     assert f"output_path={workspace / 'output' / 'report.md'}" in out
     assert "max_iterations=2" in out
-    assert "iteration=1" in out
-    assert "iteration=2" in out
-    assert "state_derived=True" in out
-    assert "view_built=True" in out
-    assert f"proposal={SECTION_MARKER}" in out
-    assert "game_result=accepted" in out
-    assert "decision=accepted_append_only" in out
-    assert "update_applied=True" in out
-    assert "document_changed=True" in out
-    assert "stop_reason=section_already_exists" in out
+    assert "iteration=" not in out
+    assert "proposal=" not in out
+    assert "section_already_exists" not in out
     assert "[DEBUG]" not in out
 
 
@@ -343,18 +338,18 @@ def test_document_type_is_not_stored_in_state_output(monkeypatch, capsys, tmp_pa
     assert "project_type" not in create_state_block
 
 
-def test_create_state_output_flows_into_next_stage(monkeypatch, tmp_path: Path) -> None:
+def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path) -> None:
     workspace = tmp_path / "flow-ws"
     import baps.run as run_module
 
     captured: dict[str, object] = {}
-    original_run_baps_loop = run_module.run_baps_loop
+    original_create_game = run_module.create_game
 
-    def _capturing_run_baps_loop(*args, **kwargs):
-        captured["state"] = kwargs.get("state")
-        return original_run_baps_loop(*args, **kwargs)
+    def _capturing_create_game(config, state):
+        captured["state"] = state
+        return original_create_game(config, state)
 
-    monkeypatch.setattr(run_module, "run_baps_loop", _capturing_run_baps_loop)
+    monkeypatch.setattr(run_module, "create_game", _capturing_create_game)
     monkeypatch.setattr(
         "sys.argv",
         [

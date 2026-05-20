@@ -1143,29 +1143,11 @@ def main() -> None:
         print("error: play_game produced no DeltaState", file=sys.stderr)
         raise SystemExit(2)
 
-    result = run_baps_loop(
-        workspace=workspace,
-        goal=goal,
-        output_path=output_path,
-        max_iterations=max_iterations,
-        state=created_state,
-    )
-
     print(f"workspace={workspace}")
     print(f"project_type={project_type}")
     print(f"goal={goal}")
     print(f"output_path={output_path}")
     print(f"max_iterations={max_iterations}")
-    for record in result["iterations"]:
-        print(f"iteration={record['iteration']}")
-        print(f"state_derived={record['state_derived']}")
-        print(f"view_built={record['view_built']}")
-        print(f"proposal={record['proposal']}")
-        print(f"game_result={record['game_result']}")
-        print(f"decision={record['decision']}")
-        print(f"update_applied={record['update_applied']}")
-        print(f"document_changed={record['document_changed']}")
-        print(f"stop_reason={record['stop_reason']}")
 
 
 if __name__ == "__main__":
