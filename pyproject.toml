@@ -13,11 +13,6 @@ dependencies = [
 ]
 
 [project.scripts]
-baps-demo = "baps.demo:main"
-baps-adversarial-demo = "baps.adversarial_demo:main"
-baps-ollama-adversarial-demo = "baps.ollama_adversarial_demo:main"
-baps-play-game = "baps.play_game:main"
-baps-state-loop-demo = "baps.state_loop_demo:main"
 baps-run = "baps.run:main"
 
 [build-system]
