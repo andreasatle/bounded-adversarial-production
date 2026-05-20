@@ -308,9 +308,9 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
     captured: dict[str, object] = {}
     original_create_game = run_module.create_game
 
-    def _capturing_create_game(config, state):
+    def _capturing_create_game(config, state, adapter=None):
         captured.setdefault("state", state)
-        return original_create_game(config, state)
+        return original_create_game(config, state, adapter=adapter)
 
     monkeypatch.setattr(run_module, "create_game", _capturing_create_game)
     monkeypatch.setattr(
@@ -344,7 +344,9 @@ def test_derive_state_update_from_delta_converts_append_section() -> None:
             section=run_module.Section(title="Introduction", body="Body text")
         ),
     )
-    proposal = run_module._derive_state_update_from_delta(delta)
+    proposal = run_module._derive_state_update_from_delta(
+        delta, adapter=run_module.DocumentProjectAdapter()
+    )
     assert proposal.target.artifact_id == "main-document"
     assert proposal.payload["operation"] == "append_section"
     assert proposal.payload["section"] == {
@@ -408,7 +410,7 @@ def test_main_unsupported_delta_operation_fails_explicitly(monkeypatch, capsys, 
     monkeypatch.setattr(
         run_module,
         "play_game",
-        lambda _state, _spec: run_module.DeltaDocumentState.model_construct(
+        lambda _state, _spec, adapter=None: run_module.DeltaDocumentState.model_construct(
             artifact_id="main-document",
             operation="unsupported_operation",
             payload=run_module.AppendSectionDelta(
@@ -1335,7 +1337,7 @@ def test_blue_prompt_includes_state_view_and_gamespec() -> None:
             "spec_path": None,
         }
     )
-    state_view = run_module._build_blue_state_view(state, spec)
+    state_view = run_module._build_document_state_view(state, spec)
     prompt = run_module._render_blue_prompt(
         state_view=state_view,
         game_spec=spec,
@@ -1391,7 +1393,7 @@ def test_red_prompt_intro_only_guides_revise_for_intro_and_conclusion_success_co
             "spec_path": None,
         }
     )
-    state_view = run_module._build_blue_state_view(state, spec)
+    state_view = run_module._build_document_state_view(state, spec)
     delta = run_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
@@ -1629,7 +1631,7 @@ def test_blue_prompt_and_source_do_not_hardcode_project_policy_literals() -> Non
         northstar=run_module.NorthStar(artifacts=()),
         artifacts=(run_module.DocumentArtifact(id="doc-a", sections=()),),
     )
-    state_view = run_module._build_blue_state_view(state, spec)
+    state_view = run_module._build_document_state_view(state, spec)
     prompt = run_module._render_blue_prompt(state_view, spec, 1, None)
     assert '"artifact_id": "<game_spec.target_artifact_id>"' in prompt
     assert '"title": "<section title>"' in prompt
@@ -1659,7 +1661,7 @@ def test_referee_prompt_intro_and_conclusion_guides_accept_policy() -> None:
             "spec_path": None,
         }
     )
-    state_view = run_module._build_blue_state_view(state, spec)
+    state_view = run_module._build_document_state_view(state, spec)
     delta = run_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
@@ -1705,7 +1707,7 @@ def test_referee_prompt_declares_game_local_authority_and_not_final_integration(
             "spec_path": None,
         }
     )
-    state_view = run_module._build_blue_state_view(state, spec)
+    state_view = run_module._build_document_state_view(state, spec)
     delta = run_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
@@ -1740,7 +1742,7 @@ def test_referee_prompt_uses_red_material_findings_in_decision_policy() -> None:
             "spec_path": None,
         }
     )
-    state_view = run_module._build_blue_state_view(state, spec)
+    state_view = run_module._build_document_state_view(state, spec)
     delta = run_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
@@ -1775,7 +1777,7 @@ def test_red_and_referee_prompts_do_not_treat_state_mutation_alone_as_failure() 
             "spec_path": None,
         }
     )
-    state_view = run_module._build_blue_state_view(state, spec)
+    state_view = run_module._build_document_state_view(state, spec)
     delta = run_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
@@ -1812,7 +1814,7 @@ def test_state_view_is_derived_from_state_and_gamespec_with_existing_sections() 
             ),
         ),
     )
-    state_view = run_module._build_blue_state_view(state, spec)
+    state_view = run_module._build_document_state_view(state, spec)
     assert state_view.metadata["target_artifact_id"] == "main-document"
     assert state_view.metadata["sections"] == [{"title": "Existing", "body": "Already here"}]
 
@@ -2377,9 +2379,9 @@ def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_pa
         success_condition="S",
     )
 
-    monkeypatch.setattr(run_module, "create_game", lambda config, state: expected)
+    monkeypatch.setattr(run_module, "create_game", lambda config, state, adapter=None: expected)
 
-    def _capture_play_game(state, spec):
+    def _capture_play_game(state, spec, adapter=None):
         captured["state"] = state
         captured["spec"] = spec
         return run_module.DeltaDocumentState(
@@ -2411,7 +2413,7 @@ def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_pa
 def test_main_exits_cleanly_if_play_game_returns_none(monkeypatch, capsys, tmp_path: Path) -> None:
     import baps.run as run_module
 
-    monkeypatch.setattr(run_module, "play_game", lambda _state, _spec: None)
+    monkeypatch.setattr(run_module, "play_game", lambda _state, _spec, adapter=None: None)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -2437,7 +2439,7 @@ def test_main_max_iterations_two_runs_two_iterations_with_state_carry_forward(
 
     create_game_seen_sections: list[list[str]] = []
 
-    def _create_game(config, state):
+    def _create_game(config, state, adapter=None):
         document = next(a for a in state.artifacts if a.id == "main-document")
         section_titles = [s.title for s in document.sections]
         create_game_seen_sections.append(section_titles)
@@ -2452,7 +2454,7 @@ def test_main_max_iterations_two_runs_two_iterations_with_state_carry_forward(
             success_condition=objective,
         )
 
-    def _play_game(_state, spec):
+    def _play_game(_state, spec, adapter=None):
         title = "Introduction" if "introduction" in spec.objective.lower() else "Conclusion"
         return run_module.DeltaDocumentState(
             artifact_id="main-document",
@@ -2526,7 +2528,7 @@ def test_main_stops_when_create_game_cannot_produce_new_atomic_game(
 
     calls = {"count": 0}
 
-    def _create_game(_config, _state):
+    def _create_game(_config, _state, adapter=None):
         calls["count"] += 1
         if calls["count"] == 1:
             return run_module.GameSpec(
@@ -2806,7 +2808,7 @@ def test_second_run_sees_previous_state(monkeypatch, tmp_path: Path) -> None:
     workspace = tmp_path / "ws-second-run-state"
     seen_titles: list[list[str]] = []
 
-    def _create_game(config, state):
+    def _create_game(config, state, adapter=None):
         doc = next(a for a in state.artifacts if a.id == "main-document")
         titles = [s.title for s in doc.sections]
         seen_titles.append(titles)
@@ -2821,7 +2823,7 @@ def test_second_run_sees_previous_state(monkeypatch, tmp_path: Path) -> None:
             success_condition=objective,
         )
 
-    def _play_game(_state, spec):
+    def _play_game(_state, spec, adapter=None):
         title = "Introduction" if "introduction" in spec.objective.lower() else "Conclusion"
         return run_module.DeltaDocumentState(
             artifact_id="main-document",
@@ -3201,6 +3203,17 @@ def test_integration_uses_adapter_delta_to_update_mapper() -> None:
     )
     proposal = run_module._derive_state_update_from_delta(delta, adapter=_MapperAdapter())
     assert proposal.id == "mapped"
+
+
+def test_run_module_has_no_legacy_compatibility_shim_wrappers() -> None:
+    import baps.run as run_module
+
+    assert not hasattr(run_module, "_build_blue_state_view")
+    assert not hasattr(run_module, "_parse_blue_delta_json")
+    assert not hasattr(run_module, "_create_game_with_adapter")
+    assert not hasattr(run_module, "_play_game_with_adapter")
+    src = inspect.getsource(run_module._run_project_iterations)
+    assert "TypeError" not in src
 
 
 def test_active_main_and_play_game_orchestration_have_no_direct_document_mechanics() -> None:

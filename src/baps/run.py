@@ -413,10 +413,6 @@ def _build_document_state_view(state: State, game_spec: GameSpec) -> StateView:
     )
 
 
-def _build_blue_state_view(state: State, game_spec: GameSpec) -> StateView:
-    return _build_document_state_view(state, game_spec)
-
-
 def _load_spec(spec_path: Path) -> dict[str, Any]:
     if not spec_path.exists():
         raise ValueError(f"spec file not found: {spec_path}")
@@ -764,10 +760,6 @@ def _parse_document_delta_json(text: str) -> DeltaDocumentState:
         ) from exc
 
 
-def _parse_blue_delta_json(text: str) -> DeltaDocumentState:
-    return _parse_document_delta_json(text)
-
-
 def _parse_red_finding_json(text: str) -> RedFinding:
     normalized = _normalize_json_candidate(text)
     try:
@@ -1084,30 +1076,9 @@ def _derive_document_state_update_from_delta(delta_state: DeltaState) -> StateUp
 
 
 def _derive_state_update_from_delta(
-    delta_state: DeltaState, adapter: ProjectTypeAdapter | None = None
+    delta_state: DeltaState, adapter: ProjectTypeAdapter
 ) -> StateUpdateProposal:
-    resolved_adapter = adapter if adapter is not None else DocumentProjectAdapter()
-    return resolved_adapter.delta_to_state_update(delta_state)
-
-
-def _create_game_with_adapter(
-    config: dict[str, Any], state: State, adapter: ProjectTypeAdapter
-) -> GameSpec:
-    try:
-        return create_game(config, state, adapter=adapter)
-    except TypeError:
-        # Preserve monkeypatched two-arg create_game call shape in tests.
-        return create_game(config, state)  # type: ignore[misc]
-
-
-def _play_game_with_adapter(
-    state: State, game_spec: GameSpec, adapter: ProjectTypeAdapter
-) -> DeltaState | None:
-    try:
-        return play_game(state, game_spec, adapter=adapter)
-    except TypeError:
-        # Preserve monkeypatched two-arg play_game call shape in tests.
-        return play_game(state, game_spec)  # type: ignore[misc]
+    return adapter.delta_to_state_update(delta_state)
 
 
 def _state_path_for_workspace(workspace: Path) -> Path:
@@ -1166,12 +1137,12 @@ def _run_project_iterations(
 
     for _iteration in range(1, max_iterations + 1):
         try:
-            game_spec = _create_game_with_adapter(config, current_state, adapter)
+            game_spec = create_game(config, current_state, adapter=adapter)
         except ValueError:
             stop_reason = "create_game_no_new_atomic_game"
             break
 
-        delta_state = _play_game_with_adapter(current_state, game_spec, adapter)
+        delta_state = play_game(current_state, game_spec, adapter=adapter)
         if delta_state is None:
             stop_reason = "play_game_no_delta"
             break
