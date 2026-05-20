@@ -243,6 +243,10 @@ def _build_create_game_state_view(state: State, artifact_id: str) -> StateView:
     )
 
 
+def _build_document_create_game_state_view(state: State, config: dict[str, Any]) -> StateView:
+    return _build_create_game_state_view(state, _config_artifact_id(config))
+
+
 def _debug_print_create_game_output(game_spec: GameSpec) -> None:
     if not _debug_enabled():
         return
@@ -666,6 +670,9 @@ class ProjectTypeAdapter(Protocol):
     def create_initial_state(self, config: dict[str, Any]) -> State:
         ...
 
+    def build_create_game_state_view(self, state: State, config: dict[str, Any]) -> StateView:
+        ...
+
     def build_state_view(self, state: State, game_spec: GameSpec) -> StateView:
         ...
 
@@ -699,6 +706,9 @@ class DocumentProjectAdapter:
             northstar=NorthStar(artifacts=(northstar_artifact,)),
             artifacts=(DocumentArtifact(id=_config_artifact_id(config), sections=()),),
         )
+
+    def build_create_game_state_view(self, state: State, config: dict[str, Any]) -> StateView:
+        return _build_document_create_game_state_view(state, config)
 
     def build_state_view(self, state: State, game_spec: GameSpec) -> StateView:
         return _build_document_state_view(state, game_spec)
@@ -748,14 +758,15 @@ def _resolve_project_type_adapter(project_type: str) -> ProjectTypeAdapter:
 
 
 def _render_create_game_prompt(
-    config: dict[str, Any], state: State, adapter: ProjectTypeAdapter | None = None
+    config: dict[str, Any],
+    state_view: StateView,
+    adapter: ProjectTypeAdapter | None = None,
 ) -> str:
     resolved_adapter = (
         adapter
         if adapter is not None
         else _resolve_project_type_adapter(config["project_type"])
     )
-    state_view = _build_create_game_state_view(state, _config_artifact_id(config))
     return (
         "Create a GameSpec JSON object for the given project state.\n\n"
         "Derive the next coherent game task from projected state context, including NorthStar intent.\n"
@@ -989,9 +1000,10 @@ def create_game(
         if adapter is not None
         else _resolve_project_type_adapter(config["project_type"])
     )
+    state_view = resolved_adapter.build_create_game_state_view(state, config)
     client = model_client if model_client is not None else _build_create_game_model_client()
     prompt = _render_create_game_prompt(
-        config=config, state=state, adapter=resolved_adapter
+        config=config, state_view=state_view, adapter=resolved_adapter
     )
     _debug_print_create_game_prompt(prompt)
     generated = client.generate(prompt)

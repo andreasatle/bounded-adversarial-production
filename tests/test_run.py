@@ -942,6 +942,54 @@ def test_create_game_target_artifact_not_in_state_fails_cleanly() -> None:
         )
 
 
+def test_create_game_uses_adapter_build_create_game_state_view(monkeypatch) -> None:
+    import baps.run as run_module
+
+    class _CapturingAdapter(run_module.DocumentProjectAdapter):
+        def __init__(self):
+            super().__init__()
+            self.called = False
+
+        def build_create_game_state_view(self, state, config):
+            self.called = True
+            return super().build_create_game_state_view(state, config)
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "goal": "Write a short report.",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    adapter = _CapturingAdapter()
+    _ = create_game(
+        config,
+        state,
+        adapter=adapter,
+        model_client=FakeModelClient(
+            [
+                '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+                '"allowed_delta_type":"DeltaDocumentState",'
+                '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}'
+            ]
+        ),
+    )
+    assert adapter.called is True
+
+
+def test_create_game_core_source_has_no_document_specific_refs() -> None:
+    import baps.run as run_module
+
+    src = inspect.getsource(run_module.create_game)
+    assert "DocumentArtifact" not in src
+    assert "_document_artifact_from_state" not in src
+    assert ".sections" not in src
+
+
 def test_create_game_prompt_forbids_markdown_fences_and_lists_required_shape() -> None:
     import baps.run as run_module
 
@@ -956,7 +1004,10 @@ def test_create_game_prompt_forbids_markdown_fences_and_lists_required_shape() -
         "spec_path": None,
     }
     state = create_state(config)
-    prompt = run_module._render_create_game_prompt(config, state)
+    prompt = run_module._render_create_game_prompt(
+        config,
+        run_module._build_create_game_state_view(state, config["artifact_id"]),
+    )
 
     assert "Return only a JSON object" in prompt
     assert "Do not wrap output in markdown" in prompt
@@ -1773,7 +1824,10 @@ def test_create_game_prompt_includes_northstar_context() -> None:
     }
     state = run_module.create_state(config)
     state_view = run_module._build_create_game_state_view(state, config["artifact_id"])
-    prompt = run_module._render_create_game_prompt(config, state)
+    prompt = run_module._render_create_game_prompt(
+        config,
+        run_module._build_create_game_state_view(state, config["artifact_id"]),
+    )
     assert "- state_view:" in prompt
     assert prompt.count("=== StateView Start ===") == 1
     assert prompt.count("=== StateView End ===") == 1
@@ -3522,6 +3576,10 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
             self.calls.append("create_initial_state")
             return self._delegate.create_initial_state(config)
 
+        def build_create_game_state_view(self, state, config):
+            self.calls.append("build_create_game_state_view")
+            return self._delegate.build_create_game_state_view(state, config)
+
         def build_state_view(self, state, game_spec):
             self.calls.append("build_state_view")
             return self._delegate.build_state_view(state, game_spec)
@@ -3562,6 +3620,7 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
     )
     run_module.main()
     assert "create_initial_state" in adapter.calls
+    assert "build_create_game_state_view" in adapter.calls
     assert "build_state_view" in adapter.calls
     assert "render_blue_prompt" in adapter.calls
     assert "parse_blue_delta" in adapter.calls
