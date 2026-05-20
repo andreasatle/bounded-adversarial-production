@@ -1120,6 +1120,100 @@ def _play_game_with_adapter(
         return play_game(state, game_spec)  # type: ignore[misc]
 
 
+def _state_path_for_workspace(workspace: Path) -> Path:
+    return workspace / "state" / "state.json"
+
+
+def _ensure_not_initialized(workspace: Path) -> None:
+    if _state_path_for_workspace(workspace).exists():
+        raise ValueError("project already initialized")
+
+
+def _ensure_initialized(workspace: Path) -> None:
+    if not _state_path_for_workspace(workspace).exists():
+        raise ValueError("project state not initialized")
+
+
+def _initialize_project(
+    config: dict[str, Any],
+) -> tuple[StateService, State]:
+    workspace = config["workspace"]
+    _ensure_not_initialized(workspace)
+    initial_state = create_state(config)
+    state_store = JsonStateStore(_state_path_for_workspace(workspace))
+    state_store.save(initial_state)
+    service = StateService(
+        store=state_store,
+        registry=build_default_state_artifact_registry(),
+    )
+    return service, initial_state
+
+
+def _load_project_service(workspace: Path) -> StateService:
+    _ensure_initialized(workspace)
+    return StateService(
+        store=JsonStateStore(_state_path_for_workspace(workspace)),
+        registry=build_default_state_artifact_registry(),
+    )
+
+
+def _run_project_iterations(
+    config: dict[str, Any],
+    adapter: ProjectTypeAdapter,
+    state_service: StateService,
+    initial_state: State,
+) -> dict[str, object]:
+    output_path = config["output_path"]
+    max_iterations = config["max_iterations"]
+    artifact_id = _config_artifact_id(config)
+
+    current_state = initial_state
+    update_applied = False
+    state_changed = False
+    output_exported = False
+    output_changed = False
+    stop_reason = "iteration_limit_reached"
+
+    for _iteration in range(1, max_iterations + 1):
+        try:
+            game_spec = _create_game_with_adapter(config, current_state, adapter)
+        except ValueError:
+            stop_reason = "create_game_no_new_atomic_game"
+            break
+
+        delta_state = _play_game_with_adapter(current_state, game_spec, adapter)
+        if delta_state is None:
+            stop_reason = "play_game_no_delta"
+            break
+
+        before_state = state_service.load_state()
+        proposal = _derive_state_update_from_delta(delta_state, adapter=adapter)
+        updated_state = state_service.apply_update(proposal)
+
+        changed_this_iteration = (
+            fingerprint_state(before_state) != fingerprint_state(updated_state)
+        )
+        update_applied = True
+        output_changed = adapter.export_state(updated_state, output_path, artifact_id)
+        output_exported = True
+        if changed_this_iteration:
+            state_changed = True
+            current_state = updated_state
+            continue
+
+        stop_reason = "no_state_change"
+        current_state = updated_state
+        break
+
+    return {
+        "update_applied": update_applied,
+        "state_changed": state_changed,
+        "output_exported": output_exported,
+        "output_changed": output_changed,
+        "stop_reason": stop_reason,
+    }
+
+
 class _ReportStateProgressor:
     def __init__(self) -> None:
         self._section_exists = False
@@ -1301,6 +1395,13 @@ def run_baps_loop(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run one hardened deterministic baps loop.")
+    parser.add_argument(
+        "command",
+        nargs="?",
+        choices=("init", "run", "init_and_run"),
+        default="init_and_run",
+        help="Lifecycle command.",
+    )
     parser.add_argument("--spec", default=None, help="YAML spec path.")
     parser.add_argument(
         "--workspace",
@@ -1341,6 +1442,7 @@ def main() -> None:
         print(f"error: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
 
+    command = args.command
     workspace = config["workspace"]
     project_type = config["project_type"]
     goal = config["goal"]
@@ -1351,72 +1453,57 @@ def main() -> None:
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
-    try:
-        created_state = create_state(config)
-    except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        raise SystemExit(2) from exc
-    try:
-        state_path = workspace / "state" / "state.json"
-        state_store = JsonStateStore(state_path)
-        state_store.save(created_state)
-        state_service = StateService(
-            store=state_store,
-            registry=build_default_state_artifact_registry(),
-        )
-    except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        raise SystemExit(2) from exc
-
-    current_state = created_state
     update_applied = False
     state_changed = False
     output_exported = False
     output_changed = False
-    stop_reason = "iteration_limit_reached"
+    stop_reason = "not_run"
+    initialized = False
 
-    for _iteration in range(1, max_iterations + 1):
-        try:
-            game_spec = _create_game_with_adapter(config, current_state, adapter)
-        except ValueError:
-            stop_reason = "create_game_no_new_atomic_game"
-            break
-
-        delta_state = _play_game_with_adapter(current_state, game_spec, adapter)
-        if delta_state is None:
-            stop_reason = "play_game_no_delta"
-            break
-
-        try:
-            before_state = state_service.load_state()
-            proposal = _derive_state_update_from_delta(delta_state, adapter=adapter)
-            updated_state = state_service.apply_update(proposal)
-        except ValueError as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            raise SystemExit(2) from exc
-
-        changed_this_iteration = (
-            fingerprint_state(before_state) != fingerprint_state(updated_state)
-        )
-        update_applied = True
-        output_changed = adapter.export_state(
-            updated_state, output_path, _config_artifact_id(config)
-        )
-        output_exported = True
-        if changed_this_iteration:
-            state_changed = True
-            current_state = updated_state
-            continue
-
-        stop_reason = "no_state_change"
-        current_state = updated_state
-        break
+    try:
+        if command == "init":
+            _initialize_project(config)
+            initialized = True
+            stop_reason = "initialized_only"
+        elif command == "run":
+            state_service = _load_project_service(workspace)
+            current_state = state_service.load_state()
+            results = _run_project_iterations(
+                config=config,
+                adapter=adapter,
+                state_service=state_service,
+                initial_state=current_state,
+            )
+            update_applied = bool(results["update_applied"])
+            state_changed = bool(results["state_changed"])
+            output_exported = bool(results["output_exported"])
+            output_changed = bool(results["output_changed"])
+            stop_reason = str(results["stop_reason"])
+        else:  # init_and_run
+            state_service, current_state = _initialize_project(config)
+            initialized = True
+            results = _run_project_iterations(
+                config=config,
+                adapter=adapter,
+                state_service=state_service,
+                initial_state=current_state,
+            )
+            update_applied = bool(results["update_applied"])
+            state_changed = bool(results["state_changed"])
+            output_exported = bool(results["output_exported"])
+            output_changed = bool(results["output_changed"])
+            stop_reason = str(results["stop_reason"])
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
 
     print(f"workspace={workspace}")
     print(f"project_type={project_type}")
+    print(f"command={command}")
     print(f"goal={goal}")
     print(f"output_path={output_path}")
     print(f"max_iterations={max_iterations}")
+    print(f"initialized={initialized}")
     print(f"update_applied={update_applied}")
     print(f"state_changed={state_changed}")
     print(f"output_exported={output_exported}")

@@ -2742,6 +2742,278 @@ def test_document_export_lives_behind_adapter_not_main_orchestration() -> None:
     assert "write_text" in adapter_src
 
 
+def test_baps_init_creates_state_file(monkeypatch, tmp_path: Path) -> None:
+    workspace = tmp_path / "ws-init"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "init",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "document",
+            "--artifact-id",
+            "main-document",
+        ],
+    )
+    main()
+    assert (workspace / "state" / "state.json").exists()
+
+
+def test_baps_init_twice_fails(monkeypatch, tmp_path: Path, capsys) -> None:
+    workspace = tmp_path / "ws-init-twice"
+    argv = [
+        "baps-run",
+        "init",
+        "--workspace",
+        str(workspace),
+        "--project-type",
+        "document",
+        "--artifact-id",
+        "main-document",
+    ]
+    monkeypatch.setattr("sys.argv", argv)
+    main()
+    monkeypatch.setattr("sys.argv", argv)
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
+    assert "project already initialized" in capsys.readouterr().err
+
+
+def test_baps_run_before_init_fails(monkeypatch, tmp_path: Path, capsys) -> None:
+    workspace = tmp_path / "ws-run-before-init"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "run",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "document",
+            "--artifact-id",
+            "main-document",
+        ],
+    )
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
+    assert "project state not initialized" in capsys.readouterr().err
+
+
+def test_baps_run_loads_existing_state_without_create_state(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import baps.run as run_module
+
+    workspace = tmp_path / "ws-run-load"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "init",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "document",
+            "--artifact-id",
+            "main-document",
+        ],
+    )
+    main()
+
+    monkeypatch.setattr(
+        run_module,
+        "create_state",
+        lambda _config: (_ for _ in ()).throw(AssertionError("create_state should not be called for run")),
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "run",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "document",
+            "--artifact-id",
+            "main-document",
+            "--max-iterations",
+            "1",
+        ],
+    )
+    main()
+
+
+def test_baps_init_and_run_works_once(monkeypatch, tmp_path: Path) -> None:
+    workspace = tmp_path / "ws-init-and-run"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "init_and_run",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "document",
+            "--artifact-id",
+            "main-document",
+            "--max-iterations",
+            "1",
+        ],
+    )
+    main()
+    assert (workspace / "state" / "state.json").exists()
+    assert (workspace / "output" / "report.md").exists()
+
+
+def test_baps_init_and_run_after_initialization_fails(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    workspace = tmp_path / "ws-init-and-run-fails"
+    argv = [
+        "baps-run",
+        "init_and_run",
+        "--workspace",
+        str(workspace),
+        "--project-type",
+        "document",
+        "--artifact-id",
+        "main-document",
+        "--max-iterations",
+        "1",
+    ]
+    monkeypatch.setattr("sys.argv", argv)
+    main()
+    monkeypatch.setattr("sys.argv", argv)
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
+    assert "project already initialized" in capsys.readouterr().err
+
+
+def test_second_run_sees_previous_state(monkeypatch, tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    workspace = tmp_path / "ws-second-run-state"
+    seen_titles: list[list[str]] = []
+
+    def _create_game(config, state):
+        doc = next(a for a in state.artifacts if a.id == "main-document")
+        titles = [s.title for s in doc.sections]
+        seen_titles.append(titles)
+        if "Introduction" not in titles:
+            objective = "Add introduction section"
+        else:
+            objective = "Add conclusion section"
+        return run_module.GameSpec(
+            objective=objective,
+            target_artifact_id="main-document",
+            allowed_delta_type="DeltaDocumentState",
+            success_condition=objective,
+        )
+
+    def _play_game(_state, spec):
+        title = "Introduction" if "introduction" in spec.objective.lower() else "Conclusion"
+        return run_module.DeltaDocumentState(
+            artifact_id="main-document",
+            operation="append_section",
+            payload=run_module.AppendSectionDelta(
+                section=run_module.Section(title=title, body=f"{title} body")
+            ),
+        )
+
+    monkeypatch.setattr(run_module, "create_game", _create_game)
+    monkeypatch.setattr(run_module, "play_game", _play_game)
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "init",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "document",
+            "--artifact-id",
+            "main-document",
+        ],
+    )
+    main()
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "run",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "document",
+            "--artifact-id",
+            "main-document",
+            "--max-iterations",
+            "1",
+        ],
+    )
+    main()
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "run",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "document",
+            "--artifact-id",
+            "main-document",
+            "--max-iterations",
+            "1",
+        ],
+    )
+    main()
+    assert seen_titles[0] == []
+    assert seen_titles[1] == ["Introduction"]
+
+
+def test_export_works_after_run_command(monkeypatch, tmp_path: Path) -> None:
+    workspace = tmp_path / "ws-export-after-run"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "init",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "document",
+            "--artifact-id",
+            "main-document",
+        ],
+    )
+    main()
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "run",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "document",
+            "--artifact-id",
+            "main-document",
+            "--max-iterations",
+            "1",
+        ],
+    )
+    main()
+    assert (workspace / "output" / "report.md").exists()
+
+
 def test_spec_relative_path_resolves_from_cwd(monkeypatch, capsys, tmp_path: Path) -> None:
     spec = tmp_path / "config.yaml"
     workspace = tmp_path / "from-relative-spec"
@@ -2797,7 +3069,7 @@ def test_debug_enabled_prints_read_config_input_output(monkeypatch, capsys, tmp_
 
 
 def test_examples_document_project_yaml_still_passes(monkeypatch, capsys) -> None:
-    monkeypatch.setattr("sys.argv", ["baps-run", "--spec", "examples/document-project.yaml"])
+    monkeypatch.setattr("sys.argv", ["baps-run", "run", "--spec", "examples/document-project.yaml"])
     main()
     out = capsys.readouterr().out
     assert "project_type=document" in out
