@@ -98,6 +98,8 @@ def test_main_prints_required_fields_and_no_legacy_iteration_output(
     assert "goal=Write a short report with an introduction and conclusion." in out
     assert f"output_path={workspace / 'output' / 'report.md'}" in out
     assert "max_iterations=2" in out
+    assert "update_applied=True" in out
+    assert "state_changed=True" in out
     assert "iteration=" not in out
     assert "proposal=" not in out
     assert "section_already_exists" not in out
@@ -369,6 +371,105 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
         "northstar": {"artifacts": []},
         "artifacts": [{"id": "main-document", "kind": "document", "sections": []}],
     }
+
+
+def test_derive_state_update_from_delta_converts_append_section() -> None:
+    import baps.run as run_module
+
+    delta = run_module.DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=run_module.AppendSectionDelta(
+            section=run_module.Section(title="Introduction", body="Body text")
+        ),
+    )
+    proposal = run_module._derive_state_update_from_delta(delta)
+    assert proposal.target.artifact_id == "main-document"
+    assert proposal.payload["operation"] == "append_section"
+    assert proposal.payload["section"] == {
+        "title": "Introduction",
+        "body": "Body text",
+    }
+
+
+def test_main_integration_uses_state_service_apply_update(monkeypatch, tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    called = {"value": False}
+    original_apply = run_module.StateService.apply_update
+
+    def _capture_apply(self, proposal):
+        called["value"] = True
+        return original_apply(self, proposal)
+
+    monkeypatch.setattr(run_module.StateService, "apply_update", _capture_apply)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace",
+            str(tmp_path / "ws-service"),
+            "--project-type",
+            "document",
+        ],
+    )
+    run_module.main()
+    assert called["value"] is True
+
+
+def test_main_persists_updated_state_with_appended_section(monkeypatch, tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    workspace = tmp_path / "ws-persist"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "document",
+        ],
+    )
+    run_module.main()
+
+    persisted = run_module.JsonStateStore(workspace / "state" / "state.json").load()
+    doc = next(a for a in persisted.artifacts if a.id == "main-document")
+    assert isinstance(doc, run_module.DocumentArtifact)
+    assert len(doc.sections) == 1
+    assert doc.sections[0].title == "Introduction"
+    assert doc.sections[0].body == "Advance goal"
+
+
+def test_main_unsupported_delta_operation_fails_explicitly(monkeypatch, capsys, tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    monkeypatch.setattr(
+        run_module,
+        "play_game",
+        lambda _state, _spec: run_module.DeltaDocumentState.model_construct(
+            artifact_id="main-document",
+            operation="unsupported_operation",
+            payload=run_module.AppendSectionDelta(
+                section=run_module.Section(title="Introduction", body="body")
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace",
+            str(tmp_path / "ws-unsupported-op"),
+            "--project-type",
+            "document",
+        ],
+    )
+    with pytest.raises(SystemExit) as exc:
+        run_module.main()
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert "unsupported delta operation for integration" in err
 
 
 def test_create_game_receives_input_and_state_and_outputs_game_spec() -> None:

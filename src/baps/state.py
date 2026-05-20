@@ -13,6 +13,18 @@ def _require_non_empty(value: str) -> str:
     return value
 
 
+def _coerce_state_artifact(value: object) -> StateArtifact:
+    if isinstance(value, DocumentArtifact):
+        return value
+    if isinstance(value, StateArtifact):
+        return value
+    if isinstance(value, dict):
+        if "sections" in value:
+            return DocumentArtifact.model_validate(value)
+        return StateArtifact.model_validate(value)
+    raise TypeError("artifact entries must be StateArtifact-compatible values")
+
+
 class StateArtifact(BaseModel):
     id: str
     kind: str
@@ -108,6 +120,13 @@ def apply_referee_decision_to_runtime(
 class NorthStar(BaseModel):
     artifacts: tuple[StateArtifact, ...]
 
+    @field_validator("artifacts", mode="before")
+    @classmethod
+    def _coerce_artifact_types(cls, artifacts: object) -> tuple[StateArtifact, ...]:
+        if not isinstance(artifacts, (list, tuple)):
+            raise TypeError("northstar artifacts must be a list or tuple")
+        return tuple(_coerce_state_artifact(artifact) for artifact in artifacts)
+
     @field_validator("artifacts")
     @classmethod
     def _validate_unique_artifact_ids(
@@ -122,6 +141,15 @@ class NorthStar(BaseModel):
 class State(BaseModel):
     northstar: NorthStar
     artifacts: tuple[SerializeAsAny[StateArtifact], ...] = ()
+
+    @field_validator("artifacts", mode="before")
+    @classmethod
+    def _coerce_artifact_types(
+        cls, artifacts: object
+    ) -> tuple[SerializeAsAny[StateArtifact], ...]:
+        if not isinstance(artifacts, (list, tuple)):
+            raise TypeError("state artifacts must be a list or tuple")
+        return tuple(_coerce_state_artifact(artifact) for artifact in artifacts)
 
     @field_validator("artifacts")
     @classmethod
@@ -211,6 +239,46 @@ def find_state_artifact(state: State, artifact_id: str) -> StateArtifact:
 
 def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
     operation = proposal.payload.get("operation")
+    if operation == "append_section":
+        target_artifact_id = proposal.target.artifact_id
+        existing = find_state_artifact(state, target_artifact_id)
+        if not isinstance(existing, DocumentArtifact):
+            raise ValueError("append_section operation requires a DocumentArtifact target")
+        if "section" not in proposal.payload:
+            raise ValueError("append_section operation requires payload['section']")
+        appended_section = Section.model_validate(proposal.payload["section"])
+        replacement = DocumentArtifact(
+            id=existing.id,
+            sections=(*existing.sections, appended_section),
+        )
+
+        northstar_replaced = False
+        new_northstar_artifacts: list[StateArtifact] = []
+        for artifact in state.northstar.artifacts:
+            if artifact.id == target_artifact_id:
+                new_northstar_artifacts.append(replacement)
+                northstar_replaced = True
+            else:
+                new_northstar_artifacts.append(artifact)
+
+        if northstar_replaced:
+            return State(
+                northstar=NorthStar(artifacts=tuple(new_northstar_artifacts)),
+                artifacts=state.artifacts,
+            )
+
+        new_state_artifacts: list[StateArtifact] = []
+        for artifact in state.artifacts:
+            if artifact.id == target_artifact_id:
+                new_state_artifacts.append(replacement)
+            else:
+                new_state_artifacts.append(artifact)
+
+        return State(
+            northstar=state.northstar,
+            artifacts=tuple(new_state_artifacts),
+        )
+
     if operation == "add_artifact":
         if "artifact" not in proposal.payload:
             raise ValueError("add_artifact operation requires payload['artifact']")
@@ -230,7 +298,7 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
     if operation != "replace_artifact":
         raise NotImplementedError(
             "unsupported state update operation: "
-            f"{operation!r}; supported: 'replace_artifact', 'add_artifact'"
+            f"{operation!r}; supported: 'replace_artifact', 'add_artifact', 'append_section'"
         )
 
     if "artifact" not in proposal.payload:

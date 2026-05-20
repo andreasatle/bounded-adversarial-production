@@ -28,8 +28,14 @@ from baps.state import (
     RefereeDecision,
     Section,
     State,
+    StateUpdateProposal,
+    StateUpdateTarget,
+    fingerprint_state,
     apply_referee_decision_to_runtime,
+    build_default_state_artifact_registry,
 )
+from baps.state_service import StateService
+from baps.state_store import JsonStateStore
 from baps.state_progressor import GameProposal, StateProgressionProposal, StateProgressorInput
 
 REQUEST = "Write a short report with an introduction and conclusion."
@@ -907,6 +913,25 @@ def play_game(
     return runtime.current_best_delta
 
 
+def _derive_state_update_from_delta(delta_state: DeltaState) -> StateUpdateProposal:
+    if not isinstance(delta_state, DeltaDocumentState):
+        raise ValueError(f"unsupported delta type for integration: {type(delta_state).__name__}")
+    if delta_state.operation != "append_section":
+        raise ValueError(f"unsupported delta operation for integration: {delta_state.operation}")
+    return StateUpdateProposal(
+        id=f"state-update:{delta_state.artifact_id}:append_section",
+        target=StateUpdateTarget(artifact_id=delta_state.artifact_id),
+        summary=(
+            f"Append section '{delta_state.payload.section.title}' "
+            f"to document artifact {delta_state.artifact_id}"
+        ),
+        payload={
+            "operation": "append_section",
+            "section": delta_state.payload.section.model_dump(mode="json"),
+        },
+    )
+
+
 class _ReportStateProgressor:
     def __init__(self) -> None:
         self._section_exists = False
@@ -1143,11 +1168,29 @@ def main() -> None:
         print("error: play_game produced no DeltaState", file=sys.stderr)
         raise SystemExit(2)
 
+    try:
+        state_path = workspace / "state" / "state.json"
+        state_store = JsonStateStore(state_path)
+        state_store.save(created_state)
+        state_service = StateService(
+            store=state_store,
+            registry=build_default_state_artifact_registry(),
+        )
+        before_state = state_service.load_state()
+        proposal = _derive_state_update_from_delta(delta_state)
+        updated_state = state_service.apply_update(proposal)
+        state_changed = fingerprint_state(before_state) != fingerprint_state(updated_state)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
+
     print(f"workspace={workspace}")
     print(f"project_type={project_type}")
     print(f"goal={goal}")
     print(f"output_path={output_path}")
     print(f"max_iterations={max_iterations}")
+    print("update_applied=True")
+    print(f"state_changed={state_changed}")
 
 
 if __name__ == "__main__":
