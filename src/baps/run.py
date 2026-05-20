@@ -37,6 +37,10 @@ from baps.state_store import JsonStateStore
 REQUEST = "Write a short report."
 
 
+class NoNewAtomicGameError(ValueError):
+    """Raised when the model explicitly indicates no new atomic game is available."""
+
+
 def _debug_enabled() -> bool:
     return os.getenv("BAPS_DEBUG") == "1"
 
@@ -638,6 +642,8 @@ def _render_create_game_prompt(
         "Do not include prose before JSON.\n"
         "Do not include prose after JSON.\n"
         "No extra fields.\n"
+        "If no new atomic game exists for current state+northstar, return exactly:\n"
+        '{\"no_new_atomic_game\": true, \"reason\": \"...\"}\n'
         "GameSpec must be atomic:\n"
         "- target exactly one artifact.\n"
         "- permit exactly one delta type.\n"
@@ -702,6 +708,29 @@ def _parse_game_spec_json(text: str) -> GameSpec:
         return GameSpec.model_validate(parsed)
     except Exception as exc:
         raise ValueError("create_game model output failed GameSpec validation") from exc
+
+
+def _parse_create_game_output(text: str) -> GameSpec:
+    normalized = _normalize_json_candidate(text)
+    try:
+        parsed = json.loads(normalized)
+    except json.JSONDecodeError as exc:
+        raise ValueError("create_game model output must be valid JSON") from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError("create_game model output must be a JSON object")
+
+    if set(parsed.keys()) == {"no_new_atomic_game", "reason"}:
+        if parsed["no_new_atomic_game"] is not True:
+            raise ValueError(
+                "create_game no-game response must set no_new_atomic_game=true"
+            )
+        reason = str(parsed["reason"]).strip()
+        if not reason:
+            raise ValueError("create_game no-game response reason must be non-empty")
+        raise NoNewAtomicGameError(reason)
+
+    return _parse_game_spec_json(normalized)
 
 
 def _is_bundled_change_text(text: str) -> bool:
@@ -822,8 +851,8 @@ def create_game(
     )
     generated = client.generate(prompt)
     try:
-        game_spec = _parse_game_spec_json(generated)
-    except ValueError:
+        game_spec = _parse_create_game_output(generated)
+    except (ValueError, NoNewAtomicGameError):
         _debug_print_create_game_raw_model_output(generated)
         raise
     _validate_atomic_game_spec(game_spec)
@@ -1138,7 +1167,7 @@ def _run_project_iterations(
     for _iteration in range(1, max_iterations + 1):
         try:
             game_spec = create_game(config, current_state, adapter=adapter)
-        except ValueError:
+        except NoNewAtomicGameError:
             stop_reason = "create_game_no_new_atomic_game"
             break
 

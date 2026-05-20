@@ -1559,6 +1559,30 @@ def test_create_game_engine_does_not_compute_next_missing_section() -> None:
     assert game_spec.objective == "Add Abstract section"
 
 
+def test_create_game_explicit_no_new_atomic_game_signal() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "goal": "Write a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.create_state(config)
+    with pytest.raises(run_module.NoNewAtomicGameError):
+        run_module.create_game(
+            config,
+            state,
+            model_client=FakeModelClient(
+                ['{"no_new_atomic_game": true, "reason": "all required sections already present"}']
+            ),
+        )
+
+
 def test_create_game_prompt_includes_northstar_context() -> None:
     import baps.run as run_module
 
@@ -2537,7 +2561,7 @@ def test_main_stops_when_create_game_cannot_produce_new_atomic_game(
                 allowed_delta_type="DeltaDocumentState",
                 success_condition="Introduction section exists",
             )
-        raise ValueError("no further atomic game")
+        raise run_module.NoNewAtomicGameError("no further atomic game")
 
     monkeypatch.setattr(run_module, "create_game", _create_game)
     monkeypatch.setattr(
@@ -2556,6 +2580,75 @@ def test_main_stops_when_create_game_cannot_produce_new_atomic_game(
     run_module.main()
     out = capsys.readouterr().out
     assert "stop_reason=create_game_no_new_atomic_game" in out
+
+
+def test_main_create_game_parse_error_is_not_swallowed_as_no_game(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    import baps.run as run_module
+
+    def _broken_create_game(_config, _state, adapter=None):
+        raise ValueError("create_game model output must be valid JSON")
+
+    monkeypatch.setattr(run_module, "create_game", _broken_create_game)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace",
+            str(tmp_path / "ws-create-game-error"),
+            "--project-type",
+            "document",
+            "--artifact-id",
+            "main-document",
+            "--max-iterations",
+            "2",
+        ],
+    )
+    with pytest.raises(SystemExit) as exc:
+        run_module.main()
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert "create_game model output must be valid JSON" in err
+
+
+def test_init_and_run_clean_workspace_creates_report_from_spec(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    workspace = tmp_path / "ws-doc"
+    spec = tmp_path / "document-project.yaml"
+    spec.write_text(
+        "\n".join(
+            [
+                "project_type: document",
+                "artifact_id: main-document",
+                f"workspace: {workspace}",
+                "goal: Write a short report about bounded adversarial evaluation.",
+                "output: output/report.md",
+                "max_iterations: 2",
+                "northstar_markdown: |",
+                "  # Goal",
+                "",
+                "  Write a short report about bounded adversarial evaluation.",
+                "",
+                "  # Required structure",
+                "",
+                "  The report must include these sections, in order:",
+                "",
+                "  1. Introduction",
+                "  2. Conclusion",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        ["baps-run", "init_and_run", "--spec", str(spec)],
+    )
+    main()
+    out = capsys.readouterr().out
+    assert (workspace / "output" / "report.md").exists()
+    assert "output_exported=True" in out
 
 
 def test_active_main_writes_output_path_from_state(tmp_path: Path, monkeypatch, capsys) -> None:
@@ -3214,6 +3307,22 @@ def test_run_module_has_no_legacy_compatibility_shim_wrappers() -> None:
     assert not hasattr(run_module, "_play_game_with_adapter")
     src = inspect.getsource(run_module._run_project_iterations)
     assert "TypeError" not in src
+
+
+def test_run_module_does_not_import_deleted_legacy_modules() -> None:
+    import baps.run as run_module
+
+    src = inspect.getsource(run_module)
+    forbidden = (
+        "baps.runtime",
+        "baps.game_service",
+        "baps.runtime_integration",
+        "baps.autonomous",
+        "baps.planner",
+        "baps.projections",
+    )
+    for item in forbidden:
+        assert item not in src
 
 
 def test_active_main_and_play_game_orchestration_have_no_direct_document_mechanics() -> None:
