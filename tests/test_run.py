@@ -102,6 +102,8 @@ def test_main_prints_required_fields_and_no_legacy_iteration_output(
     assert "max_iterations=2" in out
     assert "update_applied=True" in out
     assert "state_changed=True" in out
+    assert "output_exported=True" in out
+    assert "output_changed=True" in out
     assert "iteration=" not in out
     assert "proposal=" not in out
     assert "section_already_exists" not in out
@@ -2550,6 +2552,7 @@ def test_main_max_iterations_two_runs_two_iterations_with_state_carry_forward(
     assert create_game_seen_sections[1] == ["Introduction"]
     assert "update_applied=True" in out
     assert "state_changed=True" in out
+    assert "output_exported=True" in out
     persisted = run_module.JsonStateStore(tmp_path / "ws-multi-iter" / "state" / "state.json").load()
     doc = next(a for a in persisted.artifacts if a.id == "main-document")
     assert [section.title for section in doc.sections] == ["Introduction", "Conclusion"]
@@ -2618,6 +2621,125 @@ def test_main_stops_when_create_game_cannot_produce_new_atomic_game(
     run_module.main()
     out = capsys.readouterr().out
     assert "stop_reason=create_game_no_new_atomic_game" in out
+
+
+def test_active_main_writes_output_path_from_state(tmp_path: Path, monkeypatch, capsys) -> None:
+    workspace = tmp_path / "ws-export"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "document",
+            "--artifact-id",
+            "main-document",
+            "--max-iterations",
+            "1",
+        ],
+    )
+    main()
+    out = capsys.readouterr().out
+    output_path = workspace / "output" / "report.md"
+    assert output_path.exists()
+    assert "output_exported=True" in out
+    assert "output_changed=True" in out
+
+
+def test_document_export_markdown_contains_sections_in_order(tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    adapter = run_module.DocumentProjectAdapter()
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(
+            run_module.DocumentArtifact(
+                id="main-document",
+                sections=(
+                    run_module.Section(title="Introduction", body="Intro body"),
+                    run_module.Section(title="Conclusion", body="Conclusion body"),
+                ),
+            ),
+        ),
+    )
+    output_path = tmp_path / "nested" / "out" / "report.md"
+    changed = adapter.export_state(state, output_path, "main-document")
+    assert changed is True
+    assert output_path.exists()
+    assert output_path.read_text(encoding="utf-8") == (
+        "## Introduction\n\nIntro body\n\n## Conclusion\n\nConclusion body"
+    )
+
+
+def test_document_export_creates_parent_directories(tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    adapter = run_module.DocumentProjectAdapter()
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(run_module.DocumentArtifact(id="main-document", sections=()),),
+    )
+    output_path = tmp_path / "a" / "b" / "c" / "report.md"
+    adapter.export_state(state, output_path, "main-document")
+    assert output_path.parent.exists()
+
+
+def test_document_export_output_changed_false_when_unchanged(tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    adapter = run_module.DocumentProjectAdapter()
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(
+            run_module.DocumentArtifact(
+                id="main-document",
+                sections=(run_module.Section(title="Intro", body="Body"),),
+            ),
+        ),
+    )
+    output_path = tmp_path / "out" / "report.md"
+    first = adapter.export_state(state, output_path, "main-document")
+    second = adapter.export_state(state, output_path, "main-document")
+    assert first is True
+    assert second is False
+
+
+def test_main_export_not_driven_by_legacy_run_baps_loop(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    import baps.run as run_module
+
+    monkeypatch.setattr(
+        run_module, "run_baps_loop", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("legacy called"))
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace",
+            str(tmp_path / "ws-no-legacy"),
+            "--project-type",
+            "document",
+            "--artifact-id",
+            "main-document",
+            "--max-iterations",
+            "1",
+        ],
+    )
+    run_module.main()
+    out = capsys.readouterr().out
+    assert "output_exported=True" in out
+
+
+def test_document_export_lives_behind_adapter_not_main_orchestration() -> None:
+    import baps.run as run_module
+
+    main_src = inspect.getsource(run_module.main)
+    assert "output_path.write_text" not in main_src
+    assert "run_baps_loop(" not in main_src
+    adapter_src = inspect.getsource(run_module.DocumentProjectAdapter.export_state)
+    assert "write_text" in adapter_src
 
 
 def test_spec_relative_path_resolves_from_cwd(monkeypatch, capsys, tmp_path: Path) -> None:
@@ -2766,6 +2888,10 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
             self.calls.append("delta_to_state_update")
             return self._delegate.delta_to_state_update(delta_state)
 
+        def export_state(self, state, output_path, artifact_id):
+            self.calls.append("export_state")
+            return self._delegate.export_state(state, output_path, artifact_id)
+
     adapter = _RecordingAdapter()
     monkeypatch.setattr(run_module, "_resolve_project_type_adapter", lambda _ptype: adapter)
     monkeypatch.setattr(
@@ -2788,6 +2914,7 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
     assert "render_blue_prompt" in adapter.calls
     assert "parse_blue_delta" in adapter.calls
     assert "delta_to_state_update" in adapter.calls
+    assert "export_state" in adapter.calls
 
 
 def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:

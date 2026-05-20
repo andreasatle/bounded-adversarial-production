@@ -568,6 +568,9 @@ class ProjectTypeAdapter(Protocol):
     def delta_to_state_update(self, delta_state: DeltaState) -> StateUpdateProposal:
         ...
 
+    def export_state(self, state: State, output_path: Path, artifact_id: str) -> bool:
+        ...
+
 
 class DocumentProjectAdapter:
     project_type = "document"
@@ -601,6 +604,16 @@ class DocumentProjectAdapter:
 
     def delta_to_state_update(self, delta_state: DeltaState) -> StateUpdateProposal:
         return _derive_document_state_update_from_delta(delta_state)
+
+    def export_state(self, state: State, output_path: Path, artifact_id: str) -> bool:
+        artifact = _document_artifact_from_state(state, artifact_id)
+        rendered = _render_document_artifact_markdown(artifact)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        before = output_path.read_text(encoding="utf-8") if output_path.exists() else None
+        changed = before != rendered
+        if changed:
+            output_path.write_text(rendered, encoding="utf-8")
+        return changed
 
 
 def _build_project_type_adapters() -> dict[str, ProjectTypeAdapter]:
@@ -664,6 +677,11 @@ def _document_artifact_from_state(state: State, artifact_id: str) -> DocumentArt
     if not isinstance(artifact, DocumentArtifact):
         raise ValueError(f"create_game target artifact must be DocumentArtifact: {artifact_id}")
     return artifact
+
+
+def _render_document_artifact_markdown(artifact: DocumentArtifact) -> str:
+    sections = [f"## {section.title}\n\n{section.body}" for section in artifact.sections]
+    return "\n\n".join(sections)
 
 
 def _ensure_target_artifact_exists(state: State, artifact_id: str) -> None:
@@ -1353,6 +1371,8 @@ def main() -> None:
     current_state = created_state
     update_applied = False
     state_changed = False
+    output_exported = False
+    output_changed = False
     stop_reason = "iteration_limit_reached"
 
     for _iteration in range(1, max_iterations + 1):
@@ -1379,6 +1399,10 @@ def main() -> None:
             fingerprint_state(before_state) != fingerprint_state(updated_state)
         )
         update_applied = True
+        output_changed = adapter.export_state(
+            updated_state, output_path, _config_artifact_id(config)
+        )
+        output_exported = True
         if changed_this_iteration:
             state_changed = True
             current_state = updated_state
@@ -1395,6 +1419,8 @@ def main() -> None:
     print(f"max_iterations={max_iterations}")
     print(f"update_applied={update_applied}")
     print(f"state_changed={state_changed}")
+    print(f"output_exported={output_exported}")
+    print(f"output_changed={output_changed}")
     print(f"stop_reason={stop_reason}")
 
 
