@@ -1510,14 +1510,20 @@ def test_blue_prompt_includes_state_view_and_gamespec() -> None:
         attempt_number=1,
         previous_feedback=None,
     )
-    assert "state_view_json:" in prompt
+    assert "- state_view:" in prompt
+    assert "=== StateView Start ===" in prompt
+    assert "--- State Artifacts ---" in prompt
     assert "attempt_number: 1" in prompt
     assert "previous_feedback_json: null" in prompt
     assert "objective:" in prompt
     assert "target_artifact_id:" in prompt
     assert "allowed_delta_type:" in prompt
     assert "success_condition:" in prompt
-    assert "section.title and section.body must be non-empty strings." in prompt
+    assert "Produce exactly one delta JSON object allowed by GameSpec.allowed_delta_type." in prompt
+    assert "Use StateView as the current artifact context." in prompt
+    assert "Do not duplicate existing artifact content." in prompt
+    assert "Do not rewrite unrelated existing state." in prompt
+    assert "Do not emit placeholder or filler content." in prompt
     assert (
         "If previous_feedback_json contains validation errors, repair those exact errors in this attempt."
         in prompt
@@ -1527,13 +1533,10 @@ def test_blue_prompt_includes_state_view_and_gamespec() -> None:
         "When attempt_number > 1, treat previous_feedback_json as mandatory correction requirements."
         in prompt
     )
-    assert 'Invalid example, do not output: "body": ""' in prompt
-    assert '"artifact_id": "<game_spec.target_artifact_id>"' in prompt
-    assert (
-        '"body": "Concrete non-empty section body text."'
-        in prompt
-    )
-    assert '"body": "...' not in prompt
+    assert "Document delta rules:" not in prompt
+    assert "append_section" not in prompt
+    assert "Introduction" not in prompt
+    assert "Conclusion" not in prompt
     assert "blue_view_json:" not in prompt
     assert "state_json:" not in prompt
 
@@ -1854,11 +1857,35 @@ def test_blue_prompt_and_source_do_not_hardcode_project_policy_literals() -> Non
     )
     state_view = run_module._build_document_state_view(state, spec)
     prompt = run_module._render_blue_prompt(state_view, spec, 1, None)
-    assert '"artifact_id": "<game_spec.target_artifact_id>"' in prompt
-    assert '"title": "<section title>"' in prompt
+    assert '"artifact_id": "<game_spec.target_artifact_id>"' not in prompt
+    assert '"title": "<section title>"' not in prompt
+    assert "Do not duplicate existing artifact content." in prompt
+    assert "Do not emit placeholder or filler content." in prompt
     src = inspect.getsource(run_module._render_blue_prompt)
     assert '"artifact_id": "main-document"' not in src
     assert '"title": "Introduction"' not in src
+
+
+def test_document_blue_prompt_contains_document_specific_shape_rules() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Add Overview section",
+        target_artifact_id="doc-a",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="Overview section exists.",
+    )
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(run_module.DocumentArtifact(id="doc-a", sections=()),),
+    )
+    state_view = run_module._build_document_state_view(state, spec)
+    prompt = run_module._render_document_blue_prompt(state_view, spec, 1, None)
+    assert "Document delta rules:" in prompt
+    assert "section.title and section.body must be non-empty strings." in prompt
+    assert '"artifact_id": "<game_spec.target_artifact_id>"' in prompt
+    assert '"operation": "append_section"' in prompt
+    assert 'Invalid example, do not output: "body": ""' in prompt
 
 
 def test_referee_prompt_intro_and_conclusion_guides_accept_policy() -> None:

@@ -1021,26 +1021,33 @@ def create_game(
     return game_spec
 
 
-def _render_document_blue_prompt(
+def _render_blue_prompt(
     state_view: StateView,
     game_spec: GameSpec,
     attempt_number: int,
     previous_feedback: dict[str, Any] | None,
+    project_delta_instructions: str = "",
 ) -> str:
-    state_view_json = json.dumps(state_view.model_dump(mode="json"), sort_keys=True)
     previous_feedback_json = json.dumps(previous_feedback, sort_keys=True)
     return (
-        "Produce a DeltaDocumentState JSON object for the provided StateView and GameSpec.\n\n"
+        "Produce exactly one delta JSON object allowed by GameSpec.allowed_delta_type.\n\n"
         "Input:\n"
-        f"- state_view_json: {state_view_json}\n"
+        "- state_view:\n"
+        "\n"
+        f"{state_view.content}\n"
+        "\n"
         f"- attempt_number: {attempt_number}\n"
         f"- previous_feedback_json: {previous_feedback_json}\n"
         f"- objective: {game_spec.objective}\n"
         f"- target_artifact_id: {game_spec.target_artifact_id}\n"
         f"- allowed_delta_type: {game_spec.allowed_delta_type}\n"
         f"- success_condition: {game_spec.success_condition}\n\n"
-        "Validation and repair rules:\n"
-        "- section.title and section.body must be non-empty strings.\n"
+        "Execution rules:\n"
+        "- Produce one delta that satisfies objective and success_condition.\n"
+        "- Use StateView as the current artifact context.\n"
+        "- Do not duplicate existing artifact content.\n"
+        "- Do not rewrite unrelated existing state.\n"
+        "- Do not emit placeholder or filler content.\n"
         "- If previous_feedback_json contains validation errors, repair those exact errors in this attempt.\n"
         "- Do not repeat outputs that fail previously reported validation constraints.\n"
         "- When attempt_number > 1, treat previous_feedback_json as mandatory correction requirements.\n\n"
@@ -1049,7 +1056,20 @@ def _render_document_blue_prompt(
         "Do not use triple-backtick fences.\n"
         "Do not include prose before JSON.\n"
         "Do not include prose after JSON.\n"
-        "No extra fields.\n"
+        "No extra fields.\n\n"
+        f"{project_delta_instructions}"
+    )
+
+
+def _render_document_blue_prompt(
+    state_view: StateView,
+    game_spec: GameSpec,
+    attempt_number: int,
+    previous_feedback: dict[str, Any] | None,
+) -> str:
+    document_delta_instructions = (
+        "Document delta rules:\n"
+        "- section.title and section.body must be non-empty strings.\n"
         'Invalid example, do not output: "body": ""\n'
         "Required JSON shape:\n"
         "{\n"
@@ -1063,19 +1083,12 @@ def _render_document_blue_prompt(
         "  }\n"
         "}"
     )
-
-
-def _render_blue_prompt(
-    state_view: StateView,
-    game_spec: GameSpec,
-    attempt_number: int,
-    previous_feedback: dict[str, Any] | None,
-) -> str:
-    return _render_document_blue_prompt(
+    return _render_blue_prompt(
         state_view=state_view,
         game_spec=game_spec,
         attempt_number=attempt_number,
         previous_feedback=previous_feedback,
+        project_delta_instructions=document_delta_instructions,
     )
 
 
