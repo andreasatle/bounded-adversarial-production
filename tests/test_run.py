@@ -89,7 +89,7 @@ def test_main_prints_required_fields_and_no_legacy_iteration_output(
     workspace = tmp_path / "w"
     monkeypatch.setattr(
         "sys.argv",
-        ["baps-run", "--workspace", str(workspace), "--project-type", "document"],
+        ["baps-run", "--workspace", str(workspace), "--project-type", "document", "--artifact-id", "main-document"],
     )
 
     main()
@@ -143,7 +143,7 @@ def test_main_cli_config_resolves_and_prints(monkeypatch, capsys, tmp_path: Path
             str(workspace),
             "--project-type",
             "document",
-            "--goal",
+            "--artifact-id", "main-document", "--goal",
             "Custom goal",
             "--output",
             output,
@@ -170,6 +170,7 @@ def test_main_yaml_spec_resolves_and_prints(monkeypatch, capsys, tmp_path: Path)
             [
                 f"workspace: {workspace}",
                 "project_type: document",
+                "artifact_id: main-document",
                 "goal: Spec goal",
                 "output: out/spec-report.md",
                 "max_iterations: 3",
@@ -189,6 +190,28 @@ def test_main_yaml_spec_resolves_and_prints(monkeypatch, capsys, tmp_path: Path)
     assert "max_iterations=3" in out
 
 
+def test_main_document_spec_without_artifact_id_fails_cleanly(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    spec = tmp_path / "config-missing-artifact.yaml"
+    spec.write_text(
+        "\n".join(
+            [
+                "project_type: document",
+                "goal: Spec goal",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("sys.argv", ["baps-run", "--spec", str(spec)])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert "artifact_id must be non-empty" in err
+
+
 def test_main_cli_overrides_yaml(monkeypatch, capsys, tmp_path: Path) -> None:
     spec = tmp_path / "config.yaml"
     spec.write_text(
@@ -196,6 +219,7 @@ def test_main_cli_overrides_yaml(monkeypatch, capsys, tmp_path: Path) -> None:
             [
                 "workspace: from-spec",
                 "project_type: document",
+                "artifact_id: main-document",
                 "goal: Spec goal",
                 "output: from-spec.md",
                 "max_iterations: 7",
@@ -214,7 +238,7 @@ def test_main_cli_overrides_yaml(monkeypatch, capsys, tmp_path: Path) -> None:
             str(cli_workspace),
             "--project-type",
             "document",
-            "--goal",
+            "--artifact-id", "main-document", "--goal",
             "CLI goal",
             "--output",
             "from-cli.md",
@@ -244,7 +268,7 @@ def test_output_path_absolute_remains_absolute(monkeypatch, capsys, tmp_path: Pa
             str(workspace),
             "--project-type",
             "document",
-            "--output",
+            "--artifact-id", "main-document", "--output",
             str(absolute_output),
         ],
     )
@@ -257,11 +281,11 @@ def test_output_path_absolute_remains_absolute(monkeypatch, capsys, tmp_path: Pa
 @pytest.mark.parametrize(
     ("argv", "error_substring"),
     [
-        (["baps-run", "--project-type", "document", "--max-iterations", "0"], "max_iterations must be >= 1"),
+        (["baps-run", "--project-type", "document", "--artifact-id", "main-document", "--max-iterations", "0"], "max_iterations must be >= 1"),
         (["baps-run"], "project_type must be non-empty"),
-        (["baps-run", "--project-type", "document", "--goal", "   "], "goal must be non-empty"),
-        (["baps-run", "--project-type", "document", "--workspace", "   "], "workspace must be non-empty"),
-        (["baps-run", "--project-type", "document", "--output", "   "], "output must be non-empty"),
+        (["baps-run", "--project-type", "document", "--artifact-id", "main-document", "--goal", "   "], "goal must be non-empty"),
+        (["baps-run", "--project-type", "document", "--artifact-id", "main-document", "--workspace", "   "], "workspace must be non-empty"),
+        (["baps-run", "--project-type", "document", "--artifact-id", "main-document", "--output", "   "], "output must be non-empty"),
     ],
 )
 def test_invalid_config_fails_cleanly(monkeypatch, capsys, argv: list[str], error_substring: str) -> None:
@@ -304,7 +328,7 @@ def test_project_type_document_creates_state_and_logs_when_debug_enabled(
             str(workspace),
             "--project-type",
             "document",
-        ],
+        "--artifact-id", "main-document", ],
     )
 
     main()
@@ -333,7 +357,7 @@ def test_document_type_is_not_stored_in_state_output(monkeypatch, capsys, tmp_pa
             str(workspace),
             "--project-type",
             "document",
-        ],
+        "--artifact-id", "main-document", ],
     )
 
     main()
@@ -362,7 +386,7 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
             str(workspace),
             "--project-type",
             "document",
-        ],
+        "--artifact-id", "main-document", ],
     )
 
     run_module.main()
@@ -413,7 +437,7 @@ def test_main_integration_uses_state_service_apply_update(monkeypatch, tmp_path:
             str(tmp_path / "ws-service"),
             "--project-type",
             "document",
-        ],
+        "--artifact-id", "main-document", ],
     )
     run_module.main()
     assert called["value"] is True
@@ -431,7 +455,7 @@ def test_main_persists_updated_state_with_appended_section(monkeypatch, tmp_path
             str(workspace),
             "--project-type",
             "document",
-        ],
+        "--artifact-id", "main-document", ],
     )
     run_module.main()
 
@@ -465,7 +489,7 @@ def test_main_unsupported_delta_operation_fails_explicitly(monkeypatch, capsys, 
             str(tmp_path / "ws-unsupported-op"),
             "--project-type",
             "document",
-        ],
+        "--artifact-id", "main-document", ],
     )
     with pytest.raises(SystemExit) as exc:
         run_module.main()
@@ -478,6 +502,7 @@ def test_create_game_receives_input_and_state_and_outputs_game_spec() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
+        "artifact_id": "main-document",
         "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
@@ -505,6 +530,7 @@ def test_create_game_target_artifact_exists_in_state() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
+        "artifact_id": "main-document",
         "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
@@ -529,6 +555,7 @@ def test_create_game_invalid_json_fails_cleanly() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
+        "artifact_id": "main-document",
         "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
@@ -545,6 +572,7 @@ def test_create_game_invalid_json_with_debug_prints_raw_model_output(
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
+        "artifact_id": "main-document",
         "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
@@ -564,6 +592,7 @@ def test_create_game_invalid_json_without_debug_does_not_print_raw_model_output(
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
+        "artifact_id": "main-document",
         "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
@@ -581,6 +610,7 @@ def test_create_game_raw_json_still_accepted() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
+        "artifact_id": "main-document",
         "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
@@ -605,6 +635,7 @@ def test_create_game_exact_json_fence_accepted() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
+        "artifact_id": "main-document",
         "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
@@ -631,6 +662,7 @@ def test_create_game_exact_plain_fence_accepted() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
+        "artifact_id": "main-document",
         "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
@@ -657,6 +689,7 @@ def test_create_game_prose_before_fence_rejected() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
+        "artifact_id": "main-document",
         "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
@@ -683,6 +716,7 @@ def test_create_game_prose_after_fence_rejected() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
+        "artifact_id": "main-document",
         "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
@@ -709,6 +743,7 @@ def test_create_game_multiple_fenced_blocks_rejected() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
+        "artifact_id": "main-document",
         "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
@@ -735,6 +770,7 @@ def test_create_game_invalid_json_inside_fence_rejected() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
+        "artifact_id": "main-document",
         "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
@@ -753,6 +789,7 @@ def test_create_game_missing_gamespec_fields_fails_cleanly() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
+        "artifact_id": "main-document",
         "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
@@ -771,6 +808,7 @@ def test_create_game_target_artifact_not_in_state_fails_cleanly() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
+        "artifact_id": "main-document",
         "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
@@ -797,6 +835,7 @@ def test_create_game_prompt_forbids_markdown_fences_and_lists_required_shape() -
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
+        "artifact_id": "main-document",
         "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
@@ -820,6 +859,7 @@ def test_create_game_broad_goal_accepts_decomposed_atomic_gamespec() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
+        "artifact_id": "main-document",
         "goal": "add introduction and conclusion",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
@@ -846,6 +886,7 @@ def test_create_game_rejects_bundled_objective_and_success_condition() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
+        "artifact_id": "main-document",
         "goal": "add introduction and conclusion",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
@@ -871,6 +912,7 @@ def test_create_game_rejects_broad_multi_feature_gamespec() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
+        "artifact_id": "main-document",
         "goal": "implement parser and tests",
         "output_path": Path(".baps-workspace/output/report.md"),
         "max_iterations": 2,
@@ -905,6 +947,7 @@ def test_play_game_returns_delta_document_state() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -930,6 +973,7 @@ def test_play_game_accepted_candidate_becomes_current_best_delta() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -956,6 +1000,7 @@ def test_play_game_valid_blue_json_returns_delta() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -989,6 +1034,7 @@ def test_play_game_invalid_blue_json_rejected() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -1017,6 +1063,7 @@ def test_play_game_fenced_blue_json_accepted() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -1073,6 +1120,7 @@ def test_play_game_invalid_red_json_rejected() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -1127,6 +1175,7 @@ def test_play_game_invalid_referee_json_rejected() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -1172,6 +1221,7 @@ def test_play_game_referee_receives_gamespec_state_view_delta_and_red(monkeypatc
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -1199,6 +1249,7 @@ def test_play_game_referee_revise_prevents_current_best_delta() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -1238,6 +1289,7 @@ def test_play_game_referee_accept_sets_current_best_delta() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -1284,6 +1336,7 @@ def test_play_game_red_receives_gamespec_state_view_and_delta_state(monkeypatch)
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -1310,6 +1363,7 @@ def test_blue_prompt_includes_state_view_and_gamespec() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -1364,6 +1418,7 @@ def test_red_prompt_intro_only_guides_revise_for_intro_and_conclusion_success_co
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -1395,6 +1450,7 @@ def test_resolve_config_reads_artifact_id_and_required_sections_and_create_state
         "\n".join(
             [
                 "project_type: document",
+                "artifact_id: main-document",
                 "artifact_id: doc-7",
                 "required_sections:",
                 "  - Introduction",
@@ -1408,6 +1464,7 @@ def test_resolve_config_reads_artifact_id_and_required_sections_and_create_state
         spec=str(spec),
         workspace=None,
         project_type=None,
+        artifact_id=None,
         goal=None,
         output=None,
         max_iterations=None,
@@ -1425,6 +1482,7 @@ def test_create_game_required_sections_empty_state_selects_introduction() -> Non
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
+        "artifact_id": "main-document",
         "artifact_id": "main-document",
         "required_sections": ("Introduction", "Conclusion"),
         "goal": "Write a short report.",
@@ -1454,6 +1512,7 @@ def test_create_game_required_sections_with_introduction_selects_conclusion() ->
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
+        "artifact_id": "main-document",
         "artifact_id": "main-document",
         "required_sections": ("Introduction", "Conclusion"),
         "goal": "Write a short report.",
@@ -1492,6 +1551,7 @@ def test_create_game_required_sections_complete_fails_cleanly() -> None:
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
         "artifact_id": "main-document",
+        "artifact_id": "main-document",
         "required_sections": ("Introduction", "Conclusion"),
         "goal": "Write a short report.",
         "output_path": Path(".baps-workspace/output/report.md"),
@@ -1520,6 +1580,7 @@ def test_create_game_required_sections_rejects_arbitrary_section_titles() -> Non
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
+        "artifact_id": "main-document",
         "artifact_id": "main-document",
         "required_sections": ("Introduction", "Conclusion"),
         "goal": "Write a short report.",
@@ -1578,6 +1639,7 @@ def test_referee_prompt_intro_and_conclusion_guides_accept_policy() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -1622,6 +1684,7 @@ def test_referee_prompt_declares_game_local_authority_and_not_final_integration(
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -1655,6 +1718,7 @@ def test_referee_prompt_uses_red_material_findings_in_decision_policy() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -1688,6 +1752,7 @@ def test_red_and_referee_prompts_do_not_treat_state_mutation_alone_as_failure() 
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -1758,6 +1823,7 @@ def test_play_game_returns_none_if_referee_rejects() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -1788,6 +1854,7 @@ def test_play_game_accept_first_attempt_returns_immediately() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -1841,6 +1908,7 @@ def test_play_game_revise_then_accept_uses_second_attempt() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -1891,6 +1959,7 @@ def test_play_game_reject_then_accept_uses_second_attempt() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -1941,6 +2010,7 @@ def test_play_game_attempts_exhausted_returns_none() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -1988,6 +2058,7 @@ def test_play_game_previous_feedback_passed_to_later_blue_prompt() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -2051,6 +2122,7 @@ def test_play_game_invalid_blue_first_attempt_retries_second_attempt() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -2108,6 +2180,7 @@ def test_play_game_invalid_blue_all_attempts_returns_none() -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -2143,6 +2216,7 @@ def test_play_game_invalid_blue_debug_and_non_debug_output(monkeypatch, capsys) 
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -2224,6 +2298,7 @@ def test_play_game_debug_logs_appear(monkeypatch, capsys) -> None:
         {
             "workspace": Path(".baps-workspace"),
             "project_type": "document",
+        "artifact_id": "main-document",
             "goal": "Write a short report.",
             "output_path": Path(".baps-workspace/output/report.md"),
             "max_iterations": 2,
@@ -2298,7 +2373,7 @@ def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_pa
             str(tmp_path / "ws-main-play"),
             "--project-type",
             "document",
-        ],
+        "--artifact-id", "main-document", ],
     )
 
     run_module.main()
@@ -2319,7 +2394,7 @@ def test_main_exits_cleanly_if_play_game_returns_none(monkeypatch, capsys, tmp_p
             str(tmp_path / "ws-play-none"),
             "--project-type",
             "document",
-        ],
+        "--artifact-id", "main-document", ],
     )
     run_module.main()
     captured = capsys.readouterr()
@@ -2371,7 +2446,7 @@ def test_main_max_iterations_two_runs_two_iterations_with_state_carry_forward(
             str(tmp_path / "ws-multi-iter"),
             "--project-type",
             "document",
-            "--max-iterations",
+            "--artifact-id", "main-document", "--max-iterations",
             "2",
         ],
     )
@@ -2408,7 +2483,7 @@ def test_main_create_state_called_once_for_multi_iteration(monkeypatch, tmp_path
             str(tmp_path / "ws-create-once"),
             "--project-type",
             "document",
-            "--max-iterations",
+            "--artifact-id", "main-document", "--max-iterations",
             "2",
         ],
     )
@@ -2444,7 +2519,7 @@ def test_main_stops_when_create_game_cannot_produce_new_atomic_game(
             str(tmp_path / "ws-stop-no-game"),
             "--project-type",
             "document",
-            "--max-iterations",
+            "--artifact-id", "main-document", "--max-iterations",
             "3",
         ],
     )
@@ -2457,7 +2532,10 @@ def test_main_stops_when_create_game_cannot_produce_new_atomic_game(
 def test_spec_relative_path_resolves_from_cwd(monkeypatch, capsys, tmp_path: Path) -> None:
     spec = tmp_path / "config.yaml"
     workspace = tmp_path / "from-relative-spec"
-    spec.write_text("project_type: document\n" f"workspace: {workspace}\n", encoding="utf-8")
+    spec.write_text(
+        "project_type: document\nartifact_id: main-document\n" f"workspace: {workspace}\n",
+        encoding="utf-8",
+    )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("sys.argv", ["baps-run", "--spec", "config.yaml"])
 
@@ -2474,6 +2552,7 @@ def test_debug_enabled_prints_read_config_input_output(monkeypatch, capsys, tmp_
             [
                 f"workspace: {workspace}",
                 "project_type: document",
+                "artifact_id: main-document",
                 "goal: Debug spec goal",
                 "output: out/debug.md",
                 "max_iterations: 2",
@@ -2497,10 +2576,19 @@ def test_debug_enabled_prints_read_config_input_output(monkeypatch, capsys, tmp_
     assert "    max_iterations: 2" in out
     assert "[DEBUG] read_config.output:" in out
     assert f"  workspace: {workspace}" in out
+    assert "  artifact_id: main-document" in out
     assert "  goal: Debug spec goal" in out
     assert f"  output_path: {workspace / 'out/debug.md'}" in out
     assert "  max_iterations: 2" in out
     assert "{'cli_args':" not in out
+
+
+def test_examples_document_project_yaml_still_passes(monkeypatch, capsys) -> None:
+    monkeypatch.setattr("sys.argv", ["baps-run", "--spec", "examples/document-project.yaml"])
+    main()
+    out = capsys.readouterr().out
+    assert "project_type=document" in out
+    assert "stop_reason=" in out
 
 
 def test_debug_formatter_renders_nested_list_of_dicts_without_python_repr(
@@ -2516,6 +2604,8 @@ def test_debug_formatter_renders_nested_list_of_dicts_without_python_repr(
             str(workspace),
             "--project-type",
             "document",
+            "--artifact-id",
+            "main-document",
         ],
     )
 
@@ -2539,6 +2629,8 @@ def test_debug_formatter_renders_tuple_as_yaml_list_and_empty_as_brackets(
             str(workspace),
             "--project-type",
             "document",
+            "--artifact-id",
+            "main-document",
         ],
     )
 

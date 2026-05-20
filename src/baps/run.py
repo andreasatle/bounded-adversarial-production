@@ -122,6 +122,7 @@ def _debug_print_read_config(args: argparse.Namespace, spec_data: dict[str, Any]
     input_payload = {
         "cli_args": {
             "workspace": args.workspace,
+            "artifact_id": args.artifact_id,
             "goal": args.goal,
             "output": args.output,
             "max_iterations": args.max_iterations,
@@ -392,7 +393,9 @@ def _require_non_empty(value: str, field_name: str) -> str:
 
 
 def _config_artifact_id(config: dict[str, Any]) -> str:
-    return _require_non_empty(str(config.get("artifact_id", "main-document")), "artifact_id")
+    if "artifact_id" not in config:
+        raise ValueError("artifact_id must be non-empty")
+    return _require_non_empty(str(config["artifact_id"]), "artifact_id")
 
 
 def _config_required_sections(config: dict[str, Any]) -> tuple[str, ...]:
@@ -476,7 +479,9 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
         if args.project_type is not None
         else spec_data.get("project_type")
     )
-    artifact_id_raw = spec_data.get("artifact_id", "main-document")
+    artifact_id_raw = spec_data.get("artifact_id")
+    if args.artifact_id is not None:
+        artifact_id_raw = args.artifact_id
     required_sections_raw = spec_data.get("required_sections", [])
     goal_raw = args.goal if args.goal is not None else spec_data.get("goal", REQUEST)
     output_raw = args.output if args.output is not None else spec_data.get("output")
@@ -490,7 +495,12 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
     if project_type_raw is None:
         raise ValueError("project_type must be non-empty")
     project_type = _require_non_empty(str(project_type_raw), "project_type")
-    artifact_id = _require_non_empty(str(artifact_id_raw), "artifact_id")
+    if project_type == "document" and artifact_id_raw is None:
+        raise ValueError("artifact_id must be non-empty")
+    if artifact_id_raw is None:
+        artifact_id = ""
+    else:
+        artifact_id = _require_non_empty(str(artifact_id_raw), "artifact_id")
     goal = _require_non_empty(str(goal_raw), "goal")
     workspace = Path(workspace_str)
 
@@ -1202,6 +1212,11 @@ def main() -> None:
         "--project-type",
         default=None,
         help="Project type (currently supported: document).",
+    )
+    parser.add_argument(
+        "--artifact-id",
+        default=None,
+        help="Artifact id for document project state.",
     )
     parser.add_argument(
         "--goal",
