@@ -329,7 +329,11 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
     forwarded_state = captured.get("state")
     assert forwarded_state is not None
     assert forwarded_state.model_dump(mode="json") == {
-        "northstar": {"artifacts": []},
+        "northstar": {
+            "artifacts": [
+                {"id": forwarded_state.northstar.artifacts[0].id, "kind": "document"}
+            ]
+        },
         "artifacts": [{"id": "main-document", "kind": "document", "sections": []}],
     }
 
@@ -3082,6 +3086,36 @@ def test_examples_document_project_yaml_still_passes(monkeypatch, capsys) -> Non
     assert "stop_reason=" in out
 
 
+def test_init_from_spec_persists_northstar_artifact(monkeypatch, tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    workspace = tmp_path / "ws-init-northstar"
+    spec = tmp_path / "config.yaml"
+    spec.write_text(
+        "\n".join(
+            [
+                "project_type: document",
+                "artifact_id: main-document",
+                f"workspace: {workspace}",
+                "northstar_markdown: |",
+                "  # Goal",
+                "",
+                "  Write a short report grounded in NorthStar intent.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("sys.argv", ["baps-run", "init", "--spec", str(spec)])
+    run_module.main()
+
+    persisted = run_module.JsonStateStore(workspace / "state" / "state.json").load()
+    assert len(persisted.northstar.artifacts) == 1
+    northstar_artifact = persisted.northstar.artifacts[0]
+    assert northstar_artifact.kind == "document"
+    assert northstar_artifact.id.startswith("northstar:")
+
+
 def test_debug_formatter_renders_nested_list_of_dicts_without_python_repr(
     monkeypatch, capsys, tmp_path: Path
 ) -> None:
@@ -3127,7 +3161,7 @@ def test_debug_formatter_renders_tuple_as_yaml_list_and_empty_as_brackets(
 
     main()
     out = capsys.readouterr().out
-    assert "northstar:\n      artifacts: []" in out
+    assert "northstar:\n      artifacts:\n        - id: northstar:" in out
     assert "sections: []" in out
 
 

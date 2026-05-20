@@ -25,6 +25,7 @@ from baps.state import (
     RefereeDecision,
     Section,
     State,
+    StateArtifact,
     StateUpdateProposal,
     StateUpdateTarget,
     fingerprint_state,
@@ -384,6 +385,14 @@ def _config_northstar_markdown(config: dict[str, Any]) -> str:
     return _require_non_empty(str(config.get("northstar_markdown", "")), "northstar_markdown")
 
 
+def _build_northstar_artifact_from_markdown(markdown: str) -> StateArtifact:
+    fingerprint = hashlib.sha256(markdown.encode("utf-8")).hexdigest()[:12]
+    return StateArtifact(
+        id=f"northstar:{fingerprint}",
+        kind="document",
+    )
+
+
 def _build_document_state_view(state: State, game_spec: GameSpec) -> StateView:
     target_artifact = next(
         (artifact for artifact in state.artifacts if artifact.id == game_spec.target_artifact_id),
@@ -567,8 +576,10 @@ class DocumentProjectAdapter:
     supported_delta_type = "DeltaDocumentState"
 
     def create_initial_state(self, config: dict[str, Any]) -> State:
+        northstar_markdown = _config_northstar_markdown(config)
+        northstar_artifact = _build_northstar_artifact_from_markdown(northstar_markdown)
         return State(
-            northstar=NorthStar(artifacts=()),
+            northstar=NorthStar(artifacts=(northstar_artifact,)),
             artifacts=(DocumentArtifact(id=_config_artifact_id(config), sections=()),),
         )
 
