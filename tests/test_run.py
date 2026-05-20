@@ -1622,8 +1622,23 @@ def test_create_game_prompt_includes_northstar_context() -> None:
     assert "Use northstar_content from state_view_json as authoritative NorthStar text context." in prompt
     assert "Derive the next atomic game from projected state context, including NorthStar intent." in prompt
     assert "GameSpec must be self-contained for PlayGame execution without independently reading full NorthStar." in prompt
+    assert "The objective must describe BOTH:" in prompt
+    assert "1. structural change" in prompt
+    assert "2. substantive local intent" in prompt
+    assert "Do not emit objectives that only describe structure." in prompt
+    assert "The GameSpec must contain enough local intent so PlayGame can execute without reading NorthStar." in prompt
     assert "Fold relevant NorthStar intent into objective and success_condition." in prompt
     assert "Avoid purely structural objectives when NorthStar contains substantive intent." in prompt
+    assert "BAD objective: Add Introduction section." in prompt
+    assert (
+        "GOOD objective: Add Introduction section introducing bounded adversarial evaluation and its role in improving software projects."
+        in prompt
+    )
+    assert "BAD success_condition: document contains Introduction." in prompt
+    assert (
+        "GOOD success_condition: artifact contains an Introduction section explaining bounded adversarial evaluation and framing the report purpose."
+        in prompt
+    )
     assert '{\"no_new_atomic_game\": true, \"reason\": \"...\"}' in prompt
     assert "state_json:" not in prompt
     assert "mandatory_sections_json" not in prompt
