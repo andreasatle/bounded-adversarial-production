@@ -706,7 +706,6 @@ def _render_create_game_prompt(
         else _resolve_project_type_adapter(config["project_type"])
     )
     state_view = _build_create_game_state_view(state, _config_artifact_id(config))
-    state_view_json = json.dumps(state_view.model_dump(mode="json"), sort_keys=True)
     return (
         "Create a GameSpec JSON object for the given project state.\n\n"
         "Derive the next atomic game from projected state context, including NorthStar intent.\n"
@@ -714,9 +713,14 @@ def _render_create_game_prompt(
         "PlayGame is GameSpec-bound.\n\n"
         "Input:\n"
         f"- goal: {config['goal']}\n"
-        f"- state_view_json: {state_view_json}\n\n"
+        "- state_view:\n"
+        "\n"
+        "=== StateView Start ===\n"
+        f"{state_view.content}\n"
+        "=== StateView End ===\n"
+        "\n"
         f"- artifact_id: {_config_artifact_id(config)}\n"
-        "- Use northstar_content from state_view_json as authoritative NorthStar text context.\n\n"
+        "- Use StateView NorthStar section as authoritative context.\n\n"
         "Return only a JSON object.\n"
         "Do not wrap output in markdown.\n"
         "Do not use triple-backtick fences.\n"

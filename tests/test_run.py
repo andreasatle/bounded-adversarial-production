@@ -1643,13 +1643,19 @@ def test_create_game_prompt_includes_northstar_context() -> None:
         "spec_path": None,
     }
     state = run_module.create_state(config)
+    state_view = run_module._build_create_game_state_view(state, config["artifact_id"])
     prompt = run_module._render_create_game_prompt(config, state)
-    assert "state_view_json:" in prompt
-    assert "northstar_content" in prompt
+    assert "- state_view:" in prompt
+    assert "=== StateView Start ===" in prompt
+    assert "=== StateView End ===" in prompt
+    assert state_view.content in prompt
     assert "must include these sections" in prompt
-    assert '"target_artifact"' in prompt
-    assert '"sections"' in prompt
-    assert "Use northstar_content from state_view_json as authoritative NorthStar text context." in prompt
+    assert "metadata" not in prompt
+    assert "input_fingerprint" not in prompt
+    assert "projection_type" not in prompt
+    assert "northstar_content" not in prompt
+    assert "state_view_json:" not in prompt
+    assert "Use StateView NorthStar section as authoritative context." in prompt
     assert "Derive the next atomic game from projected state context, including NorthStar intent." in prompt
     assert "GameSpec must be self-contained for PlayGame execution without independently reading full NorthStar." in prompt
     assert "The objective must describe BOTH:" in prompt
