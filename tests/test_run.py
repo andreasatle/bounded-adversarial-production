@@ -348,7 +348,7 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
     original_create_game = run_module.create_game
 
     def _capturing_create_game(config, state):
-        captured["state"] = state
+        captured.setdefault("state", state)
         return original_create_game(config, state)
 
     monkeypatch.setattr(run_module, "create_game", _capturing_create_game)
@@ -436,7 +436,7 @@ def test_main_persists_updated_state_with_appended_section(monkeypatch, tmp_path
     persisted = run_module.JsonStateStore(workspace / "state" / "state.json").load()
     doc = next(a for a in persisted.artifacts if a.id == "main-document")
     assert isinstance(doc, run_module.DocumentArtifact)
-    assert len(doc.sections) == 1
+    assert len(doc.sections) == 2
     assert doc.sections[0].title == "Introduction"
     assert doc.sections[0].body == "Advance goal"
 
@@ -2139,11 +2139,137 @@ def test_main_exits_cleanly_if_play_game_returns_none(monkeypatch, capsys, tmp_p
             "document",
         ],
     )
-    with pytest.raises(SystemExit) as exc:
-        run_module.main()
-    assert exc.value.code == 2
-    err = capsys.readouterr().err
-    assert "error: play_game produced no DeltaState" in err
+    run_module.main()
+    captured = capsys.readouterr()
+    assert "error: play_game produced no DeltaState" not in captured.err
+    assert "update_applied=False" in captured.out
+    assert "state_changed=False" in captured.out
+    assert "stop_reason=play_game_no_delta" in captured.out
+
+
+def test_main_max_iterations_two_runs_two_iterations_with_state_carry_forward(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    import baps.run as run_module
+
+    create_game_seen_sections: list[list[str]] = []
+
+    def _create_game(config, state):
+        document = next(a for a in state.artifacts if a.id == "main-document")
+        section_titles = [s.title for s in document.sections]
+        create_game_seen_sections.append(section_titles)
+        if "Introduction" not in section_titles:
+            objective = "Add introduction section"
+        else:
+            objective = "Add conclusion section"
+        return run_module.GameSpec(
+            objective=objective,
+            target_artifact_id="main-document",
+            allowed_delta_type="DeltaDocumentState",
+            success_condition=objective,
+        )
+
+    def _play_game(_state, spec):
+        title = "Introduction" if "introduction" in spec.objective.lower() else "Conclusion"
+        return run_module.DeltaDocumentState(
+            artifact_id="main-document",
+            operation="append_section",
+            payload=run_module.AppendSectionDelta(
+                section=run_module.Section(title=title, body=f"{title} body")
+            ),
+        )
+
+    monkeypatch.setattr(run_module, "create_game", _create_game)
+    monkeypatch.setattr(run_module, "play_game", _play_game)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace",
+            str(tmp_path / "ws-multi-iter"),
+            "--project-type",
+            "document",
+            "--max-iterations",
+            "2",
+        ],
+    )
+
+    run_module.main()
+    out = capsys.readouterr().out
+
+    assert len(create_game_seen_sections) == 2
+    assert create_game_seen_sections[0] == []
+    assert create_game_seen_sections[1] == ["Introduction"]
+    assert "update_applied=True" in out
+    assert "state_changed=True" in out
+    persisted = run_module.JsonStateStore(tmp_path / "ws-multi-iter" / "state" / "state.json").load()
+    doc = next(a for a in persisted.artifacts if a.id == "main-document")
+    assert [section.title for section in doc.sections] == ["Introduction", "Conclusion"]
+
+
+def test_main_create_state_called_once_for_multi_iteration(monkeypatch, tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    calls = {"count": 0}
+    original_create_state = run_module.create_state
+
+    def _capture_create_state(config):
+        calls["count"] += 1
+        return original_create_state(config)
+
+    monkeypatch.setattr(run_module, "create_state", _capture_create_state)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace",
+            str(tmp_path / "ws-create-once"),
+            "--project-type",
+            "document",
+            "--max-iterations",
+            "2",
+        ],
+    )
+
+    run_module.main()
+    assert calls["count"] == 1
+
+
+def test_main_stops_when_create_game_cannot_produce_new_atomic_game(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    import baps.run as run_module
+
+    calls = {"count": 0}
+
+    def _create_game(_config, _state):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return run_module.GameSpec(
+                objective="Add introduction section",
+                target_artifact_id="main-document",
+                allowed_delta_type="DeltaDocumentState",
+                success_condition="Introduction section exists",
+            )
+        raise ValueError("no further atomic game")
+
+    monkeypatch.setattr(run_module, "create_game", _create_game)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace",
+            str(tmp_path / "ws-stop-no-game"),
+            "--project-type",
+            "document",
+            "--max-iterations",
+            "3",
+        ],
+    )
+
+    run_module.main()
+    out = capsys.readouterr().out
+    assert "stop_reason=create_game_no_new_atomic_game" in out
 
 
 def test_spec_relative_path_resolves_from_cwd(monkeypatch, capsys, tmp_path: Path) -> None:

@@ -1159,16 +1159,6 @@ def main() -> None:
         print(f"error: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
     try:
-        game_spec = create_game(config, created_state)
-    except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        raise SystemExit(2) from exc
-    delta_state = play_game(created_state, game_spec)
-    if delta_state is None:
-        print("error: play_game produced no DeltaState", file=sys.stderr)
-        raise SystemExit(2)
-
-    try:
         state_path = workspace / "state" / "state.json"
         state_store = JsonStateStore(state_path)
         state_store.save(created_state)
@@ -1176,21 +1166,56 @@ def main() -> None:
             store=state_store,
             registry=build_default_state_artifact_registry(),
         )
-        before_state = state_service.load_state()
-        proposal = _derive_state_update_from_delta(delta_state)
-        updated_state = state_service.apply_update(proposal)
-        state_changed = fingerprint_state(before_state) != fingerprint_state(updated_state)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
+
+    current_state = created_state
+    update_applied = False
+    state_changed = False
+    stop_reason = "iteration_limit_reached"
+
+    for _iteration in range(1, max_iterations + 1):
+        try:
+            game_spec = create_game(config, current_state)
+        except ValueError:
+            stop_reason = "create_game_no_new_atomic_game"
+            break
+
+        delta_state = play_game(current_state, game_spec)
+        if delta_state is None:
+            stop_reason = "play_game_no_delta"
+            break
+
+        try:
+            before_state = state_service.load_state()
+            proposal = _derive_state_update_from_delta(delta_state)
+            updated_state = state_service.apply_update(proposal)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            raise SystemExit(2) from exc
+
+        changed_this_iteration = (
+            fingerprint_state(before_state) != fingerprint_state(updated_state)
+        )
+        update_applied = True
+        if changed_this_iteration:
+            state_changed = True
+            current_state = updated_state
+            continue
+
+        stop_reason = "no_state_change"
+        current_state = updated_state
+        break
 
     print(f"workspace={workspace}")
     print(f"project_type={project_type}")
     print(f"goal={goal}")
     print(f"output_path={output_path}")
     print(f"max_iterations={max_iterations}")
-    print("update_applied=True")
+    print(f"update_applied={update_applied}")
     print(f"state_changed={state_changed}")
+    print(f"stop_reason={stop_reason}")
 
 
 if __name__ == "__main__":
