@@ -30,6 +30,7 @@ This spine is the only active product path for lifecycle execution (`init`, `run
 8. `PlayGame` is `GameSpec`-bound.
 9. `StateService` is the state mutation boundary.
 10. Export is one-way from `State` to output files.
+11. Model prompts consume `StateView` only, not authoritative `State` internals.
 
 ---
 
@@ -77,6 +78,24 @@ If reintroduced into the canonical spine, blackboard data must be:
 3. Do not treat English-semantic parsing in validators as authority.
 4. Do not let output files become canonical state.
 5. Do not introduce parallel competing execution engines.
+6. Do not bypass `ProjectTypeAdapter` boundaries from core orchestration.
+
+Examples of forbidden drift:
+
+- `run.py` inspecting `DocumentArtifact`
+- `run.py` inspecting `CodingArtifact`
+- `run.py` reading `sections`/`files` directly
+- `run.py` constructing project-specific `StateView`s
+
+7. Do not pass authoritative `State` internals directly to prompts.
+
+Prompts consume `StateView` only.
+
+These anti-invariants exist because previous architectural drift occurred around:
+
+- `State` vs `StateView` confusion
+- document-specific leakage into core orchestration
+- prompt access to raw state structures
 
 ---
 
