@@ -1,41 +1,258 @@
-# Bounded Adversarial Production
+# bounded-adversarial-production (BAPS)
 
-State-centric agent framework for bounded, inspectable progression loops.
+BAPS is a framework for **bounded model-driven project evolution**.
 
-The repository currently emphasizes typed boundaries, deterministic behavior, and explicit event recording over autonomous execution.
+Projects evolve through:
 
-## Core Loop
+- authoritative state
+- textual model projections
+- bounded games
+- typed deltas
+- controlled state mutation
+- exported outputs
 
-Current architectural loop:
+The current runtime is adapter-driven and supports multiple project types.
+
+---
+
+## Canonical Runtime
 
 ```text
-State -> Views -> StateProgressor -> GameProposal -> GameExecutor -> Integrator -> Blackboard
+config/NorthStar
+        ↓
+      State
+        ↓
+    StateView
+        ↓
+   CreateGame
+        ↓
+     GameSpec
+        ↓
+     PlayGame
+        ↓
+    DeltaState
+        ↓
+StateUpdateProposal
+        ↓
+   StateService
+        ↓
+      export
 ```
 
-This loop is represented by composable model/protocol boundaries and a small orchestration function (`run_loop(...)`).
+Lifecycle commands:
 
-## Key Concepts
+```bash
+baps-run init
+baps-run run
+baps-run init_and_run
+```
 
-- `State`: authoritative project condition (`src/baps/state.py`), distinct from process history.
-- `StateView` / `NorthStarView`: deterministic rendered views of state inputs (`src/baps/northstar_projection.py`).
-- `Blackboard`: append-only JSONL process memory and event replay source (`src/baps/blackboard.py`).
-- `StateProgressor`: proposes a candidate game progression from objective + north star view (`src/baps/state_progressor.py`).
-- `GameProposal`: structured candidate game emitted by a progressor.
-- `GameExecutor`: executes a proposed game and returns a `GameExecutionResult` (`src/baps/game_executor.py`).
-- `IntegrationDecision` / `StateChange`: structured integration outcome over execution results (`src/baps/integration.py`).
-- `run_loop(...)`: explicit orchestration of progressor -> executor -> integrator (`src/baps/loop.py`).
+---
 
-## Current Maturity
+## Core Concepts
 
-- Deterministic/fake implementations exist for progression, execution, and integration boundaries.
-- Real execution semantics and real state mutation pipelines are not implemented yet.
-- Current value is boundary clarity, replayability, inspectability, and strong test coverage.
+### State
 
-## Existing Runtime Path
+`State` is the authoritative project condition.
 
-In parallel, the project still includes the bounded Blue/Red/Referee runtime path (`runtime.py`, `game_service.py`, `play_game.py`) with append-only blackboard event output.
+Properties:
 
-## Quickstart
+- persisted as JSON
+- canonical source of truth
+- contains `NorthStar`
+- contains project artifacts
+
+Examples:
+
+- document artifacts
+- coding artifacts
+
+---
+
+### StateView
+
+`StateView` is the **model-facing textual projection**.
+
+Models consume:
+
+```text
+StateView.content
+```
+
+Models do **not** consume raw `State` JSON.
+
+Example:
+
+```text
+=== StateView Start ===
+
+--- NorthStar ---
+
+# Goal
+
+Implement Fibonacci generator.
+
+--- State Artifacts ---
+
+## Artifact: main-code
+
+kind: coding
+
+### Files
+
+src/fibonacci.py
+
+=== StateView End ===
+```
+
+---
+
+### CreateGame
+
+CreateGame derives the next bounded task:
+
+```text
+State + NorthStar
+        ↓
+     GameSpec
+```
+
+Example:
+
+```text
+Objective:
+Create Fibonacci implementation.
+
+Success condition:
+File exists and tests pass.
+```
+
+---
+
+### PlayGame
+
+PlayGame executes bounded adversarial evaluation:
+
+```text
+Blue
+   ↓
+Red
+   ↓
+Referee
+```
+
+Blue:
+- proposes candidate delta
+
+Red:
+- critiques proposal
+
+Referee:
+- decides:
+
+```text
+accept
+revise
+reject
+```
+
+---
+
+### Integration
+
+Accepted deltas become:
+
+```text
+DeltaState
+      ↓
+StateUpdateProposal
+      ↓
+StateService
+```
+
+`StateService` is the mutation boundary.
+
+Only integrated proposals modify authoritative state.
+
+---
+
+### Export
+
+Export materializes state:
+
+```text
+State
+   ↓
+output files
+```
+
+Export is:
+
+- one-way
+- non-authoritative
+
+Output files never define state.
+
+---
+
+## Project Types
+
+Current adapters:
+
+### Document
+
+Capabilities:
+
+- document state
+- section updates
+- markdown export
+
+Delta:
+
+```text
+append_section
+```
+
+Example:
+
+```bash
+uv run baps-run init_and_run \
+    --spec examples/document-project.yaml
+```
+
+---
+
+### Coding
+
+Capabilities:
+
+- file state
+- code generation
+- file export
+
+Delta:
+
+```text
+write_file
+```
+
+Example:
+
+```bash
+uv run baps-run init_and_run \
+    --spec examples/coding-project.yaml
+```
+
+Example output:
+
+```text
+src/fibonacci.py
+tests/test_fibonacci.py
+```
+
+---
+
+## Installation
 
 Install dependencies:
 
@@ -49,8 +266,55 @@ Run tests:
 uv run pytest
 ```
 
-Run deterministic demo:
+---
 
-```bash
-uv run baps-demo
+## Architecture Principles
+
+1. State is authoritative.
+
+2. StateView is model-facing.
+
+3. Project mechanics belong to adapters.
+
+4. Core orchestration remains project-type generic.
+
+5. StateService owns mutation.
+
+6. Export is one-way.
+
+---
+
+## Documentation
+
+System contract:
+
+```text
+docs/SYSTEM.md
 ```
+
+Implementation details:
+
+```text
+docs/ARCHITECTURE.md
+```
+
+---
+
+## Current Status
+
+Implemented:
+
+- adapter-driven runtime
+- document adapter
+- coding adapter
+- CreateGame
+- PlayGame
+- bounded role execution
+- Ollama integration
+- deterministic tests
+
+Inactive / future:
+
+- blackboard runtime integration
+- tool execution subsystem
+- richer orchestration layers
