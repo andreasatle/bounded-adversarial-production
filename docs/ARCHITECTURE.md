@@ -1,192 +1,208 @@
 # ARCHITECTURE.md
 
-## 1. Project Overview
+This document describes the **current implementation** of `bounded-adversarial-production` (`baps`) and is aligned to [docs/SYSTEM.md](docs/SYSTEM.md).
 
-### Purpose
-`bounded-adversarial-production` (`baps`) is a Python framework for bounded, model-driven project evolution through typed state, typed deltas, and explicit mutation boundaries.
-
-### Current philosophy (IMPLEMENTED)
-- `State` is authoritative and persisted.
-- models consume projected textual `StateView`, not authoritative state internals.
-- project-specific behavior is adapter-owned.
-- orchestration is lifecycle-driven (`init`, `run`, `init_and_run`) and bounded by configured limits.
-
-### Current architectural direction (IMPLEMENTED)
-Canonical runtime:
+Canonical runtime spine (authoritative):
 
 `config/NorthStar -> State -> StateView -> CreateGame -> GameSpec -> PlayGame -> DeltaState -> StateUpdateProposal -> StateService -> export`
 
-### Bounded adversarial production as currently implemented
-Per runtime iteration:
-- CreateGame proposes a bounded `GameSpec`.
-- PlayGame executes Blue -> Red -> Referee with bounded attempts.
-- accepted candidate delta is mapped to `StateUpdateProposal`.
-- `StateService` validates/applies/persists.
-- adapter exports state-derived output.
+---
 
-### Implemented vs conceptual vs historical
-- IMPLEMENTED: adapter-driven lifecycle/runtime above.
-- CONCEPTUAL: blackboard-centric operational memory reintegration, richer tooling/scheduling.
-- HISTORICAL/INACTIVE: legacy alternate runtime paths are not active in canonical `baps-run` flow.
+## 1. Project Overview
+
+### IMPLEMENTED
+
+`baps` is a bounded, adapter-driven runtime for model-mediated project evolution. The runtime:
+
+1. initializes authoritative `State` from config/NorthStar,
+2. renders model-facing `StateView` text,
+3. derives a bounded `GameSpec` (`CreateGame`),
+4. runs adversarial evaluation (`PlayGame`: Blue -> Red -> Referee),
+5. maps accepted deltas to `StateUpdateProposal`,
+6. applies mutations through `StateService`,
+7. exports state to output files.
+
+Current philosophy in code:
+
+- `State` is authoritative and persisted JSON.
+- `StateView` is a projection for prompts, not authority.
+- Core orchestration (`run.py`) is project-type generic.
+- Project behavior is adapter-owned (`document`, `coding`).
+- Runtime is bounded by max iterations and bounded PlayGame attempts.
+
+### CONCEPTUAL
+
+- richer tool-assisted execution/evaluation pathways,
+- more sophisticated semantic validation across roles,
+- optional blackboard reintegration as append-only run history.
+
+### HISTORICAL / INACTIVE
+
+- blackboard/event history is present on disk but not part of active canonical lifecycle execution.
+- legacy runtime references remain in documentation artifacts, not in active orchestration.
 
 ---
 
 ## 2. Current System Capabilities
 
-### Schemas (`src/baps/state.py`)
-Purpose:
-- define authoritative state, artifact types, game contracts, deltas, decisions, and update proposals.
+### Schemas (purpose, boundaries)
 
-Key classes/functions:
-- `State`, `NorthStar`, `StateArtifact`, `DocumentArtifact`, `CodingArtifact`
-- `Section`, `CodeFile`
-- `GameSpec`
-- `DeltaState`, `DeltaDocumentState`, `DeltaCodingState`
-- `RedFinding`, `RefereeDecision`, `PlayGameRuntime`
-- `StateUpdateProposal`, `StateUpdateTarget`
-- `apply_state_update`, `validate_state_artifacts`, `fingerprint_state`
+#### IMPLEMENTED
+
+Defined in `src/baps/state.py`:
+
+- `State`, `NorthStar`, `StateArtifact`, `DocumentArtifact`, `CodingArtifact`, `Section`, `CodeFile`.
+- delta contracts: `DeltaDocumentState` (`append_section`), `DeltaCodingState` (`write_file`).
+- game/decision contracts: `GameSpec`, `RedFinding`, `RefereeDecision`, `PlayGameRuntime`.
+- integration contracts: `StateUpdateTarget`, `StateUpdateProposal`.
+
+Responsibilities:
+
+- enforce model shape and field non-emptiness,
+- enforce artifact identity disjointness (`NorthStar` IDs cannot overlap state artifact IDs),
+- provide update application (`apply_state_update`) and state fingerprinting.
 
 Limitations:
-- active structured ops are `append_section` (document) and `write_file` (coding).
+
+- active delta operations are limited to `append_section` and `write_file` in adapter flow.
 
 Dependencies:
-- Pydantic v2
+
+- Pydantic v2.
 
 Boundary:
-- authoritative contracts and mutation semantics.
 
-### Runtime (`src/baps/run.py`)
-Purpose:
-- lifecycle command entrypoint and canonical orchestration.
+- authoritative domain contract and mutation semantics.
 
-Key functions:
-- lifecycle/config: `main`, `resolve_run_config`, `_initialize_project`, `_load_project_service`
-- loop: `_run_project_iterations`
-- game stages: `create_game`, `play_game`
-- model parsing/validation helpers and prompts
+### Runtime (lifecycle, integration, export)
+
+#### IMPLEMENTED
+
+Defined in `src/baps/run.py`:
+
+- lifecycle commands: `init`, `run`, `init_and_run`.
+- `create_game(...)` generates/parses/validates/normalizes `GameSpec`.
+- `play_game(...)` executes Blue/Red/Referee with bounded attempts.
+- accepted delta -> `StateUpdateProposal` -> `StateService.apply_update(...)`.
+- adapter export after update; optional adapter verification (coding runs pytest).
 
 Limitations:
-- prompt-driven role execution only.
-- no active blackboard append/query in canonical runtime.
+
+- prompt-only role execution,
+- no tool execution subsystem,
+- no scheduler beyond bounded sequential control flow.
 
 Dependencies:
-- adapters, state service/store, model clients.
+
+- adapters, model clients, state service/store.
 
 Boundary:
-- project-type generic orchestration; no project-specific mechanics should be embedded in core flow.
 
-### Adapters (`src/baps/project_adapter.py`, `document_adapter.py`, `coding_adapter.py`)
-Purpose:
-- own project-type mechanics behind `ProjectTypeAdapter`.
+- orchestration only; project semantics are delegated to adapters.
 
-Implemented project types:
-- `document`
-- `coding`
+### Adapters
 
-Adapter-owned behaviors:
-- initial state creation
-- CreateGame and PlayGame `StateView` rendering
-- Blue prompt supplement
-- delta parsing
-- delta->proposal mapping
-- export
+#### IMPLEMENTED
+
+Defined by `ProjectTypeAdapter` protocol (`src/baps/project_adapter.py`) and implemented by:
+
+- `DocumentProjectAdapter` (`src/baps/document_adapter.py`),
+- `CodingProjectAdapter` (`src/baps/coding_adapter.py`).
+
+Adapter responsibilities:
+
+1. create initial state,
+2. render CreateGame `StateView`,
+3. render PlayGame `StateView`,
+4. render Blue prompt supplement,
+5. parse Blue delta,
+6. map delta to `StateUpdateProposal`,
+7. export state,
+8. optional verify_export,
+9. optional prompt supplements for CreateGame/Red/Referee,
+10. optional `normalize_game_spec`.
+
+### StateView projection model
+
+#### IMPLEMENTED
+
+`StateView` is defined in `src/baps/northstar_projection.py` as frozen model with:
+
+- `id`, `projection_type`, `content`, `input_fingerprint`, `metadata`.
+
+In active runtime, adapters construct textual `StateView.content` blocks with explicit section delimiters and metadata fingerprints.
 
 Limitations:
-- only two adapters implemented.
 
-Boundary:
-- project specifics live here; core orchestration dispatches via adapter interface.
+- `ProjectionType` currently only includes `NORTH_STAR`.
 
-### StateView / Projection (`src/baps/northstar_projection.py`)
-Purpose:
-- immutable model-facing projection object.
+### Model layer
 
-Key models:
-- `StateView`, `ProjectionType`
-- projection input/renderer models for northstar projection helpers
+#### IMPLEMENTED
 
-Rendering rules in active runtime:
-- adapter renderers provide textual `StateView.content` with explicit delimiters/sections.
+Defined in `src/baps/models.py`:
 
-Boundary:
-- prompt input surface, not authoritative state.
+- `ModelClient` base interface,
+- `FakeModelClient` deterministic queued responses for tests,
+- `OllamaClient` HTTP client (`/api/generate`).
 
-### Model Layer (`src/baps/models.py`)
-Purpose:
-- model transport abstraction.
+### Testing
 
-Classes:
-- `ModelClient` (base)
-- `FakeModelClient` (deterministic testing)
-- `OllamaClient` (HTTP calls)
+#### IMPLEMENTED
 
-Limitations:
-- no tool execution boundary in model layer.
+Test suite (`tests/`) emphasizes deterministic runtime contracts:
 
-### Testing (`tests/*`)
-Purpose:
-- deterministic contract coverage of runtime, schemas, adapters, store/service, and projection helpers.
-
-Key characteristics:
-- extensive `FakeModelClient` use and monkeypatch-driven deterministic flows.
-- strict validation/error-path assertions.
+- heavy `FakeModelClient` usage,
+- explicit prompt/validation checks,
+- adapter boundary checks,
+- state mutation and persistence checks.
 
 ---
 
 ## 3. Repository Structure
 
-### Core orchestration modules
+### Core orchestration
 
-#### `src/baps/run.py`
-- Purpose: CLI + lifecycle + canonical execution loop.
-- Responsibilities: config resolution, command preconditions, CreateGame/PlayGame orchestration, integration/export sequencing, stop conditions, debug surfaces.
-- Dependencies: adapter registry/dispatch, state service/store, model clients, schemas.
-- Boundary: generic orchestration only.
+- `src/baps/run.py`:
+  - CLI/config resolution,
+  - lifecycle execution,
+  - CreateGame/PlayGame orchestration,
+  - stop conditions,
+  - summary/debug output.
 
-#### `src/baps/project_adapter.py`
-- Purpose: adapter protocol + registry/resolve + shared Blue prompt core.
-- Responsibilities: define adapter contract and dynamic adapter resolution.
-- Dependencies: `StateView`, state/game proposal models.
-- Boundary: interface and dispatch only.
+- `src/baps/project_adapter.py`:
+  - adapter protocol and dispatch,
+  - default adapter registry,
+  - shared Blue prompt core renderer.
 
-### Adapter mechanics modules
+### Adapter mechanics
 
-#### `src/baps/document_adapter.py`
-- Purpose: document project mechanics.
-- Responsibilities: document state init, state view rendering, delta parse/map, markdown export.
-- Dependencies: document/cross-state models, Blue prompt core.
-- Boundary: all document-specific behavior.
+- `src/baps/document_adapter.py`:
+  - document state initialization,
+  - document-specific state view rendering,
+  - append-section delta parsing/mapping,
+  - markdown export.
 
-#### `src/baps/coding_adapter.py`
-- Purpose: coding project mechanics.
-- Responsibilities: coding state init, state view rendering, delta parse/map, file export.
-- Dependencies: coding/cross-state models, Blue prompt core.
-- Boundary: all coding-specific behavior.
+- `src/baps/coding_adapter.py`:
+  - coding state initialization,
+  - coding state view rendering,
+  - write-file delta parsing/mapping,
+  - code/test export,
+  - export verification (`uv run pytest` fallback `python -m pytest`),
+  - coding-specific CreateGame/Red/Referee supplements and normalization.
 
-### State and persistence modules
+### State/persistence/model/projection modules
 
-#### `src/baps/state.py`
-- Purpose: authoritative schema and mutation logic.
-- Responsibilities: model validation, update application, artifact registry, runtime decision state models.
-- Boundary: state semantics and state transitions.
+- `src/baps/state.py`: core schema + mutation + artifact registry.
+- `src/baps/state_service.py`: mutation boundary service.
+- `src/baps/state_store.py`: storage protocol + `JsonStateStore`.
+- `src/baps/models.py`: model clients.
+- `src/baps/northstar_projection.py`: projection/view models and renderer utilities.
 
-#### `src/baps/state_service.py`
-- Purpose: mutation boundary service.
-- Responsibilities: load/validate/apply/validate/save sequence.
-- Boundary: canonical mutation gateway.
+Boundary summary:
 
-#### `src/baps/state_store.py`
-- Purpose: persistence backend contract and JSON implementation.
-- Responsibilities: load/save `State` at a file path.
-- Boundary: storage mechanism.
-
-### Model/projection modules
-
-#### `src/baps/models.py`
-- Purpose: model client abstractions and Ollama transport.
-
-#### `src/baps/northstar_projection.py`
-- Purpose: projection/view models and renderer utilities.
+- `run.py`: generic orchestration.
+- adapters: project-specific mechanics.
 
 ---
 
@@ -194,362 +210,390 @@ Key characteristics:
 
 ### Lifecycle commands
 
-#### `init`
-1. parse config/spec.
-2. ensure state file does not exist.
-3. adapter creates initial state.
-4. save initial state to `<workspace>/state/state.json`.
+- `init`:
+  1. parse config,
+  2. ensure workspace not initialized,
+  3. adapter creates initial `State`,
+  4. persist JSON state.
 
-#### `run`
-1. parse config/spec.
-2. ensure state file exists.
-3. load persisted state.
-4. run bounded iterations.
+- `run`:
+  1. load persisted state,
+  2. run bounded iterations.
 
-#### `init_and_run`
-1. perform `init`.
-2. perform `run` immediately in same invocation.
+- `init_and_run`:
+  1. initialize,
+  2. immediately run bounded iterations.
 
-### Iteration flow (`_run_project_iterations`)
-Per iteration:
+### Iteration flow
+
 1. **CreateGame**
-   - adapter builds CreateGame `StateView` from current `State` + config.
-   - prompt -> model -> parse/validate -> `GameSpec`.
+   - adapter builds CreateGame `StateView`.
+   - core renders generic CreateGame prompt + adapter supplement.
+   - model output parsed into `GameSpec`.
+   - adapter may normalize `GameSpec`.
+   - runtime validates artifact/delta-type alignment.
+
 2. **PlayGame**
    - adapter builds PlayGame `StateView`.
-   - Blue model call -> adapter delta parse.
-   - Red model evaluation.
-   - Referee model decision.
-   - accepted candidate tracked in `PlayGameRuntime` and returned.
+   - Blue generates candidate `DeltaState` (adapter parse).
+   - Red evaluates candidate against `GameSpec`.
+   - Referee decides accept/revise/reject.
+   - bounded retries (`max_attempts`, default 3).
+
 3. **Integration**
-   - adapter maps `DeltaState` -> `StateUpdateProposal`.
-   - `StateService.apply_update` validates/applies/persists.
+   - adapter maps accepted delta -> `StateUpdateProposal`.
+   - `StateService.apply_update(...)` loads/validates/applies/revalidates/saves.
+
 4. **Export**
-   - adapter exports from updated `State` to output path.
+   - adapter exports current state to output path.
+   - adapter verification may run (coding: pytest) after export.
+
+5. **Next iteration CreateGame evidence**
+   - previous iteration verification result is passed explicitly into next CreateGame prompt context.
 
 ### Persistence
-- canonical persisted state: `<workspace>/state/state.json`.
-- output files are materialized projections; they are not canonical state.
 
-### Stop conditions
-- CreateGame returns explicit no-new-game signal.
-- PlayGame returns no delta.
-- no state change after update.
-- iteration limit reached.
+- authoritative state file: `<workspace>/state/state.json`.
+- exported output files are derived materialization, not canonical authority.
+
+### Stop conditions (IMPLEMENTED)
+
+- `create_game_no_new_atomic_game`,
+- `play_game_no_delta`,
+- `no_state_change`,
+- `iteration_limit_reached`.
 
 ---
 
 ## 5. Schema Documentation
 
-### `StateArtifact`
-- Fields: `id`, `kind`.
-- Validation: non-empty strings.
-- Purpose: base artifact identity/type.
+All below are implemented in `src/baps/state.py` except `StateView`/`ProjectionType` in `src/baps/northstar_projection.py`.
 
-### `DocumentArtifact(StateArtifact)`
-- Fields: `kind="document"`, `sections: tuple[Section, ...]`.
-- Purpose: canonical document state.
+- `State`
+  - fields: `northstar`, `artifacts`.
+  - invariants: unique state artifact IDs; no overlap with NorthStar artifact IDs.
 
-### `CodingArtifact(StateArtifact)`
-- Fields: `kind="coding"`, `files: tuple[CodeFile, ...]`.
-- Purpose: canonical coding/file state.
+- `NorthStar`
+  - fields: `artifacts`.
+  - invariants: unique artifact IDs.
 
-### `Section`
-- Fields: `title`, `body`.
-- Validation: non-empty strings.
+- `StateArtifact`
+  - fields: `id`, `kind` (non-empty).
 
-### `CodeFile`
-- Fields: `path`, `content`.
-- Validation: non-empty strings.
+- `DocumentArtifact`
+  - fields: `kind="document"`, `sections`.
 
-### `NorthStar`
-- Fields: `artifacts`.
-- Validation: unique artifact ids.
-- Relationship: embedded in `State.northstar`.
+- `CodingArtifact`
+  - fields: `kind="coding"`, `files`.
 
-### `State`
-- Fields: `northstar`, `artifacts`.
-- Validation:
-  - artifact coercion to known artifact models
-  - unique state artifact ids
-  - no id overlap between northstar and state artifacts
-- Purpose: authoritative current project condition.
+- `Section`
+  - fields: `title`, `body` (non-empty).
 
-### `GameSpec`
-- Fields: `objective`, `target_artifact_id`, `allowed_delta_type`, `success_condition`.
-- Validation: all non-empty.
-- Purpose: bounded task contract for PlayGame.
+- `CodeFile`
+  - fields: `path`, `content` (non-empty).
 
-### `DeltaDocumentState`
-- Inherits: `DeltaState`.
-- Fields: `artifact_id`, `operation="append_section"`, `payload.section`.
-- Purpose: proposed document change.
+- `GameSpec`
+  - fields: `objective`, `target_artifact_id`, `allowed_delta_type`, `success_condition` (all non-empty).
 
-### `DeltaCodingState`
-- Inherits: `DeltaState`.
-- Fields: `artifact_id`, `operation="write_file"`, `payload.file`.
-- Purpose: proposed coding/file change.
+- `DeltaDocumentState`
+  - fields: `artifact_id`, `operation="append_section"`, `payload.section`.
 
-### `RedFinding`
-- Fields: `disposition`, `rationale`.
-- Validation: non-empty rationale.
+- `DeltaCodingState`
+  - fields: `artifact_id`, `operation="write_file"`, `payload.file`.
 
-### `RefereeDecision`
-- Fields: `disposition`, `rationale`.
-- Validation: non-empty rationale.
+- `RedFinding`
+  - fields: `disposition in {accept, revise, reject}`, `rationale` (non-empty).
 
-### `StateUpdateTarget`
-- Fields: `artifact_id`, optional `section`.
-- Validation: non-empty values when present.
+- `RefereeDecision`
+  - fields: `disposition in {accept, revise, reject}`, `rationale` (non-empty).
 
-### `StateUpdateProposal`
-- Fields: `id`, `target`, `summary`, `payload`, optional `base_state_fingerprint`.
-- Validation: non-empty identifiers/summary and optional fingerprint when present.
+- `StateUpdateTarget`
+  - fields: `artifact_id` (required), `section` (optional non-empty when present).
 
-### `StateView` (`northstar_projection.py`)
-- Fields: `id`, `projection_type`, `content`, `input_fingerprint`, `metadata`.
-- Validation: non-empty key string fields.
-- Config: frozen.
-- Purpose: immutable model-facing projection.
+- `StateUpdateProposal`
+  - fields: `id`, `target`, `summary`, `payload`, `base_state_fingerprint` (optional non-empty when present).
 
-### `ProjectionType`
-- Enum currently includes `NORTH_STAR`.
+- `StateView`
+  - fields: `id`, `projection_type`, `content`, `input_fingerprint`, `metadata`.
+  - invariant: frozen (immutable model config), non-empty key string fields.
+
+- `ProjectionType`
+  - implemented enum value: `north_star`.
 
 ---
 
 ## 6. Blackboard Status
 
-### Existing files
-- `blackboard/events.jsonl`
-- `blackboard/adversarial-events.jsonl`
-- `blackboard/ollama-adversarial-events.jsonl`
-- `blackboard/play-game-events.jsonl`
+### IMPLEMENTED (observed)
 
-### Current status
-- HISTORICAL/INACTIVE relative to canonical `baps-run` flow.
-- canonical lifecycle/orchestration does not append/query blackboard in active runtime path.
+- Blackboard event files exist in repository root:
+  - `blackboard/events.jsonl`
+  - `blackboard/adversarial-events.jsonl`
+  - `blackboard/ollama-adversarial-events.jsonl`
+  - `blackboard/play-game-events.jsonl`
 
-### Separation
-- `State` remains authoritative.
-- blackboard data is not part of canonical mutation/persistence path.
+### HISTORICAL / INACTIVE
 
-Observation:
-- docs discuss blackboard conceptually; code does not currently wire it into active lifecycle execution.
+- Canonical `baps-run` lifecycle does not read/write these files.
+- `run.py` active orchestration does not call a blackboard subsystem.
+
+### CONCEPTUAL
+
+- If reintroduced, `docs/SYSTEM.md` requires blackboard to remain append-only run history/meta and non-authoritative vs `State`.
 
 ---
 
 ## 7. Artifact System
 
-### Canonical lifecycle per artifact
-1. initialization via adapter `create_initial_state`
-2. CreateGame/PlayGame `StateView` rendering via adapter
-3. Blue delta parsing via adapter
-4. delta->proposal mapping via adapter
-5. proposal application via `StateService`
-6. state->filesystem export via adapter
+### IMPLEMENTED lifecycle
 
-### Adapter ownership
-- document mechanics in `document_adapter.py`
-- coding mechanics in `coding_adapter.py`
+1. Artifact initialized in adapter-created initial `State`.
+2. Adapter renders artifact context into `StateView` for CreateGame/PlayGame.
+3. Adapter parses model delta into typed `DeltaState`.
+4. Adapter maps delta into `StateUpdateProposal`.
+5. `StateService` applies proposal against authoritative `State`.
+6. Adapter exports updated artifact content to filesystem.
+
+### Adapter ownership boundaries
+
+- Core does not parse project file/section semantics.
+- Adapters own path/section-level mechanics and export formats.
 
 ### Filesystem assumptions
-- document export writes markdown file at configured output path.
-- coding export writes one file per `CodeFile.path` under configured output directory.
-- parent directories are created as needed.
 
-### Constraints
-- export is one-way from `State`.
-- output files are not used as source of truth for authoritative state.
+- state JSON lives under workspace `state/`.
+- export path is configurable and may be relative to workspace.
+- coding export creates parent directories as needed.
+
+### Export behavior
+
+- Document: render sections to markdown file.
+- Coding: write each `CodeFile` to `<output>/<file.path>`.
+- Export is one-way; exported files are not fed back as authority except through explicit state updates.
 
 ---
 
 ## 8. Runtime Engine
 
-### Responsibilities
-- lifecycle gating (`init`/`run`/`init_and_run` preconditions)
-- project-type generic orchestration
-- bounded CreateGame/PlayGame iterations
-- integration through `StateService`
-- export and stop-reason signaling
+### IMPLEMENTED responsibilities
 
-### Bounded attempts and retry
-- `play_game` retries Blue/Red/Referee attempts up to `max_attempts` (default 3).
-- invalid Blue output is treated as attempt rejection with feedback.
+- resolve config and lifecycle command,
+- construct/dispatch adapters,
+- enforce CreateGame and PlayGame contract validation,
+- control bounded iterations and bounded attempts,
+- integrate via `StateService`,
+- export and optional verification,
+- emit deterministic summary/debug fields.
 
-### Integration path
-- accepted delta mapped by adapter to `StateUpdateProposal`.
-- `StateService.apply_update` performs load/validate/apply/validate/save.
+### Bounded behavior
 
-### Deterministic testing path
-- `FakeModelClient` and monkeypatched helpers drive deterministic branch coverage.
+- outer loop bounded by `max_iterations`.
+- PlayGame bounded by `max_attempts` (default 3).
+
+### Retry behavior
+
+- Blue validation failures produce structured feedback for retry.
+- Red/Referee non-accept outcomes feed next attempt feedback.
 
 ### Validation boundaries
-- schema-level validation via Pydantic models.
-- strict prompt output parsing and key checks in runtime parsers.
-- adapter allowed delta type and target artifact consistency checks.
+
+- prompt-output JSON shape validation in core and adapters,
+- schema validation in Pydantic models,
+- mutation validation in `StateService` via registry.
+
+### Deterministic testing path
+
+- substitute clients with `FakeModelClient` or monkeypatched call points,
+- assert exact prompts, outcomes, and summary fields.
 
 ---
 
 ## 9. Roles and Prompt System
 
 ### CreateGame prompt
-- rendered in `run.py` using goal + adapter-provided CreateGame `StateView` + contract constraints.
-- expects strict JSON `GameSpec` or explicit no-game JSON sentinel.
+
+- core generic prompt in `run.py` defines one-task, one-delta contract.
+- adapter adds project-type supplement.
+- optional previous verification evidence is included explicitly.
 
 ### Blue prompt flow
-- generic core prompt: `project_adapter.render_blue_prompt_core`.
+
+- generic Blue core from `project_adapter.render_blue_prompt_core(...)`.
 - adapter supplements:
-  - document: append-section delta shape/rules
-  - coding: write-file delta shape/rules
+  - document delta rules (`append_section` + non-empty section body),
+  - coding delta rules (`write_file`, `src/` and `tests/test_*.py` preferences).
 
 ### Red prompt
-- prompt-only evaluator of objective/success_condition fit and quality/completeness concerns.
+
+- core generic contract enforces GameSpec-authoritative evaluation policy.
+- optional adapter supplement adds project-specific guidance.
+- optional verification evidence for current PlayGame context.
 
 ### Referee prompt
-- prompt-only decision authority for game-local `accept|revise|reject`.
-- explicitly not final integration authority.
+
+- core generic decision contract aligned to GameSpec.
+- optional adapter supplement.
+- optional verification evidence.
 
 ### Model layer
-- `ModelClient` base interface.
-- `FakeModelClient` deterministic tests.
-- `OllamaClient` live HTTP generation.
+
+- `ModelClient`: abstract interface.
+- `FakeModelClient`: deterministic test responder.
+- `OllamaClient`: runtime HTTP generator.
 
 ### Current limitations
-- no tool execution subsystem.
-- no multi-agent scheduler.
-- role execution is prompt-only sequential calls.
-- limited semantic validation in core (primarily structural/schema and explicit checks).
+
+#### IMPLEMENTED limitations
+
+- no tool execution subsystem,
+- no multi-agent scheduler,
+- prompt-only role execution,
+- limited semantic validation beyond typed contracts and prompt policies.
 
 ---
 
 ## 10. Testing Strategy
 
-### Philosophy
-- deterministic, contract-first testing across state/runtime/adapter boundaries.
+### IMPLEMENTED philosophy
 
-### Deterministic execution approach
-- fake responses and monkeypatching isolate orchestration logic from model variability.
+- deterministic contract testing over stochastic behavior,
+- isolate orchestration correctness from model randomness.
 
-### What is covered
-- schema validation and mutation rules (`tests/test_state.py`)
-- runtime lifecycle/orchestration/parsing/prompt contracts (`tests/test_run.py`)
-- model client behavior and error handling (`tests/test_models.py`)
-- state store/service behavior (`tests/test_state_store.py`, `tests/test_state_service.py`)
-- projection model behavior (`tests/test_northstar_projection.py`)
+Techniques:
 
-Why deterministic tests matter:
-- ensure runtime contracts stay stable despite nondeterministic model behavior in production.
+- `FakeModelClient` sequences deterministic outputs,
+- monkeypatch lifecycle boundaries (`create_game`, `play_game`, verification hooks),
+- assert validation failures, stop reasons, and prompt contents.
+
+Coverage areas:
+
+- schemas and update semantics (`test_state.py`),
+- state mutation boundary (`test_state_service.py`),
+- state persistence (`test_state_store.py`),
+- projection contracts (`test_northstar_projection.py`),
+- model client behavior (`test_models.py`),
+- runtime orchestration and adapter wiring (`test_run.py`).
+
+Why deterministic testing matters here:
+
+- runtime correctness depends on strict contract handling under variable model outputs,
+- deterministic tests verify that orchestration/persistence boundaries remain stable while prompts evolve.
 
 ---
 
 ## 11. Architectural Invariants
 
 ### Enforced (code-backed)
-1. `State` is authoritative and persisted as JSON.
-2. `NorthStar` is inside `State`.
-3. prompts consume projected `StateView` text surfaces.
-4. project-specific mechanics are adapter-owned.
-5. runtime orchestration dispatches by project type / delta type through adapter resolution.
-6. `StateService` is canonical mutation boundary.
-7. export is one-way from `State` to output files.
-8. schema validation is enforced via Pydantic models and runtime parse checks.
-9. deterministic tests enforce runtime contracts.
 
-### Conceptual (not fully enforced in active runtime)
-1. blackboard append-only runtime memory integrated with canonical flow.
-2. broader governance/replay semantics described in docs but not active in orchestration.
+1. `State` is authoritative persisted JSON (`JsonStateStore`, `StateService`).
+2. `StateView` is separate projection model and prompt input.
+3. `NorthStar` exists inside `State` and remains disjoint by artifact ID from state artifacts.
+4. Core orchestration dispatches through `ProjectTypeAdapter`.
+5. `StateService` is the mutation gateway (`apply_update`).
+6. Export is one-way from `State` to output files.
+7. Schema and prompt-output validation is mandatory before integration.
+8. Runtime loops are bounded (`max_iterations`, `max_attempts`).
+
+### Conceptual (not strictly enforced everywhere)
+
+- richer semantic quality validation beyond current contract checks,
+- expanded adapter ecosystem beyond document/coding.
 
 ---
 
 ## 12. Current Architectural Direction
 
-### IMPLEMENTED direction
-- adapter expansion pattern (`document`, `coding`)
-- bounded game iterations and bounded role attempts
-- explicit state mutation boundary (`StateService`)
+### IMPLEMENTED trajectory
 
-### CONCEPTUAL direction (observed in docs/code signals)
-- future tool boundary integration
-- possible blackboard reintegration
-- richer role envelopes/coordination semantics
+- adapter expansion pattern is established in protocol/registry,
+- bounded game loop with role interaction is stable,
+- verification evidence is now threaded through coding CreateGame and PlayGame evaluation contexts.
 
-### HISTORICAL/INACTIVE
-- blackboard event files as historical traces not used by canonical runtime.
+### CONCEPTUAL trajectory
+
+- clearer future tool boundary integration,
+- potential blackboard reintegration as non-authoritative append-only history.
+
+### HISTORICAL context
+
+- docs reference older runtime/event artifacts, but canonical active path is current adapter-driven `baps-run`.
 
 ---
 
 ## 13. Current Limitations
 
-1. blackboard runtime is inactive in canonical lifecycle flow.
-2. role execution is prompt-only and sequential.
-3. delta operations are currently limited (`append_section`, `write_file`).
-4. no tool system for validated external actions.
-5. no multi-agent scheduler.
-6. semantic quality evaluation is largely role-prompt driven, not independently tooled.
-7. some compatibility helper surfaces remain in `run.py` for test continuity.
+### IMPLEMENTED constraints
+
+- blackboard runtime integration is inactive,
+- prompt-only model role execution,
+- narrow delta operation surface (`append_section`, `write_file`),
+- no tool subsystem for executing arbitrary role actions,
+- no scheduler/parallel role runtime,
+- bounded role loop may stop before semantically ideal output,
+- generic model behavior can still produce low-quality but contract-valid outputs.
 
 ---
 
-## 14. Suggested Next Milestones
+## 14. Suggested Next Milestones (additive)
 
-1. reintroduce blackboard as append-only run meta/history in canonical spine.
-2. define explicit tool request/approval boundary for role execution.
-3. add adapter-level semantic validation hooks prior to integration.
-4. standardize role result envelopes and provenance fields.
-5. add shared adapter contract tests for future project types.
+1. Blackbox-safe blackboard reintegration as append-only run metadata (non-authoritative).
+2. Formal tool boundary for controlled execution beyond prompt-only roles.
+3. Adapter-level verification hook expansion (beyond coding pytest).
+4. Stronger contract tests around role outputs vs success_condition semantics.
+5. Optional structured role envelopes for richer machine-checkable rationale.
 
-All milestones are additive and preserve current boundaries.
+All above are additive and preserve canonical spine and adapter boundaries.
 
 ---
 
 ## 15. Developer Workflow
 
-### Tests
-- run full suite: `uv run pytest`
-- run targeted suites as needed during focused changes.
+1. Update code within existing boundaries (core orchestration vs adapter mechanics).
+2. Keep schema-driven changes explicit in `state.py` and adapter mapping logic.
+3. Run full tests: `uv run pytest`.
+4. Validate runtime behavior via `baps-run` on example specs.
+5. Prefer additive changes; avoid bypassing `StateService` and adapter dispatch.
 
-### Development flow
-1. change smallest relevant module boundary.
-2. update/add deterministic tests.
-3. run full suite.
-4. keep core orchestration generic and project behavior adapter-owned.
+Expected contributor discipline:
 
-### Additive philosophy
-- extend via typed models + adapter contract.
-- avoid parallel execution paths.
-- preserve state/view boundary and mutation boundary.
+- preserve authoritative `State` semantics,
+- preserve `StateView` as prompt-only projection,
+- preserve adapter ownership,
+- avoid project-specific leakage into `run.py` core.
 
 ---
 
 ## 16. Glossary
 
-- **State**: authoritative current project condition persisted as JSON.
-- **NorthStar**: directional intent stored as artifacts in `State.northstar`.
-- **StateView**: immutable textual projection for model prompts.
-- **GameSpec**: bounded task contract for PlayGame.
-- **DeltaState**: proposed state change produced by PlayGame.
-- **Artifact**: typed unit of state (`DocumentArtifact`, `CodingArtifact`, etc.).
-- **Adapter**: `ProjectTypeAdapter` implementation owning project-specific mechanics.
-- **RedFinding**: Red role evaluation output.
-- **RefereeDecision**: Referee role decision output.
-- **StateUpdateProposal**: integration request applied through `StateService`.
-- **Runtime**: lifecycle and iteration orchestration in `run.py`.
-- **ModelClient**: model generation interface (`FakeModelClient`, `OllamaClient`).
-- **Export**: one-way materialization from authoritative state to output files.
-- **Canonical spine**: `config/NorthStar -> State -> StateView -> CreateGame -> GameSpec -> PlayGame -> DeltaState -> StateUpdateProposal -> StateService -> export`.
+- **State**: authoritative persisted project condition.
+- **NorthStar**: goal/policy artifact set embedded in `State`.
+- **StateView**: immutable model-facing textual projection of relevant state.
+- **GameSpec**: bounded game contract (objective, target, allowed delta, success condition).
+- **DeltaState**: typed candidate mutation proposed by Blue.
+- **artifact**: typed state unit (`document`, `coding`, etc.).
+- **adapter**: project-type implementation of rendering/parsing/mapping/export behavior.
+- **RedFinding**: adversarial assessment result (`accept`/`revise`/`reject` + rationale).
+- **RefereeDecision**: authority decision for PlayGame candidate.
+- **StateUpdateProposal**: integration payload for `StateService` mutation.
+- **runtime**: lifecycle orchestration (`init`, `run`, `init_and_run`) plus bounded iterations.
+- **ModelClient**: generation interface (`FakeModelClient`, `OllamaClient`).
+- **export**: one-way materialization of state to files.
+- **canonical spine**: required runtime flow from config/NorthStar through export.
 
 ---
 
-## System Contract Alignment (with `SYSTEM.md`)
+## System Contract Alignment
 
-### Verified alignments
-1. `State != StateView` is explicit and preserved.
-2. prompts consume `StateView` surfaces, not authoritative state as stateview replacement.
-3. core orchestration is adapter-dispatched and project-type generic by contract.
-4. adapter ownership is explicit for project-specific mechanics.
-5. export is materialization output, not canonical state.
-6. blackboard is documented as inactive in canonical runtime.
+Alignment check against `docs/SYSTEM.md`:
 
-### Observations / mismatches to monitor
-1. `run.py` still carries compatibility/helper symbol surfaces that are broader than strict minimal orchestration API.
-2. debug payloads may include `state.model_dump(...)` for observability; this is separate from model-facing `StateView` prompt contract and should remain non-authoritative for prompts.
+1. **State != StateView**: aligned (`State` authoritative, `StateView` projection).
+2. **prompts consume StateView only**: aligned in active orchestration prompt construction.
+3. **core orchestration generic**: aligned by adapter protocol dispatch.
+4. **adapter ownership preserved**: aligned (CreateGame/PlayGame render/parse/map/export in adapters).
+5. **export != state**: aligned (state persisted separately; export is derived output).
+6. **blackboard inactive**: aligned for canonical `baps-run` execution.
+
+Observed mismatches / caveats:
+
+- `run.py` still contains compatibility helper imports (`_build_document_state_view`, `_build_coding_state_view`, etc.) used primarily for tests/legacy helper references, while active orchestration remains adapter-driven.
+- repository-level docs include historical references to legacy runtime modules not present in active canonical flow.
