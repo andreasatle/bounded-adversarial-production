@@ -316,6 +316,7 @@ def _debug_print_red_input(
     state_view: StateView,
     game_spec: GameSpec,
     delta_state: DeltaState,
+    verification_result: VerificationResult | None = None,
 ) -> None:
     if not _debug_enabled():
         return
@@ -324,6 +325,18 @@ def _debug_print_red_input(
         "game_spec": game_spec.model_dump(mode="json"),
         "state_view": state_view.model_dump(mode="json"),
         "delta_state": delta_state.model_dump(mode="json"),
+        "verification_result": (
+            None
+            if verification_result is None
+            else {
+                "command": verification_result.command,
+                "cwd": verification_result.cwd,
+                "exit_code": verification_result.exit_code,
+                "stdout": verification_result.stdout,
+                "stderr": verification_result.stderr,
+                "passed": verification_result.passed,
+            }
+        ),
     }
     for line in _format_debug_yaml_like(payload, indent=2):
         print(line)
@@ -345,6 +358,7 @@ def _debug_print_referee_input(
     game_spec: GameSpec,
     delta_state: DeltaState,
     red_finding: RedFinding,
+    verification_result: VerificationResult | None = None,
 ) -> None:
     if not _debug_enabled():
         return
@@ -354,6 +368,18 @@ def _debug_print_referee_input(
         "state_view": state_view.model_dump(mode="json"),
         "delta_state": delta_state.model_dump(mode="json"),
         "red_finding": red_finding.model_dump(mode="json"),
+        "verification_result": (
+            None
+            if verification_result is None
+            else {
+                "command": verification_result.command,
+                "cwd": verification_result.cwd,
+                "exit_code": verification_result.exit_code,
+                "stdout": verification_result.stdout,
+                "stderr": verification_result.stderr,
+                "passed": verification_result.passed,
+            }
+        ),
     }
     for line in _format_debug_yaml_like(payload, indent=2):
         print(line)
@@ -893,9 +919,31 @@ def _render_red_prompt(
     state_view: StateView,
     game_spec: GameSpec,
     delta_state: DeltaState,
+    verification_result: VerificationResult | None = None,
 ) -> str:
     state_view_json = json.dumps(state_view.model_dump(mode="json"), sort_keys=True)
     delta_state_json = json.dumps(delta_state.model_dump(mode="json"), sort_keys=True)
+    verification_block = ""
+    if verification_result is not None:
+        verification_json = json.dumps(
+            {
+                "command": verification_result.command,
+                "cwd": verification_result.cwd,
+                "exit_code": verification_result.exit_code,
+                "stdout": verification_result.stdout,
+                "stderr": verification_result.stderr,
+                "passed": verification_result.passed,
+            },
+            sort_keys=True,
+        )
+        verification_block = (
+            f"- verification_result_json: {verification_json}\n"
+            "Verification guidance:\n"
+            "- Treat verification_result_json as execution evidence.\n"
+            "- If pytest discovered tests, do not claim test files are empty.\n"
+            "- If verification passed, treat that as strong evidence toward accept.\n"
+            "- If verification failed, reason from exit_code/stdout/stderr evidence.\n\n"
+        )
     return (
         "Evaluate the candidate DeltaDocumentState and return a RedFinding JSON object.\n\n"
         "Input:\n"
@@ -905,6 +953,7 @@ def _render_red_prompt(
         f"- target_artifact_id: {game_spec.target_artifact_id}\n"
         f"- allowed_delta_type: {game_spec.allowed_delta_type}\n"
         f"- success_condition: {game_spec.success_condition}\n\n"
+        f"{verification_block}"
         "Evaluation policy:\n"
         "- Determine whether the candidate DeltaState moves the project toward the objective.\n"
         "- Determine whether the candidate satisfies the success_condition.\n"
@@ -930,10 +979,32 @@ def _render_referee_prompt(
     game_spec: GameSpec,
     delta_state: DeltaState,
     red_finding: RedFinding,
+    verification_result: VerificationResult | None = None,
 ) -> str:
     state_view_json = json.dumps(state_view.model_dump(mode="json"), sort_keys=True)
     delta_state_json = json.dumps(delta_state.model_dump(mode="json"), sort_keys=True)
     red_finding_json = json.dumps(red_finding.model_dump(mode="json"), sort_keys=True)
+    verification_block = ""
+    if verification_result is not None:
+        verification_json = json.dumps(
+            {
+                "command": verification_result.command,
+                "cwd": verification_result.cwd,
+                "exit_code": verification_result.exit_code,
+                "stdout": verification_result.stdout,
+                "stderr": verification_result.stderr,
+                "passed": verification_result.passed,
+            },
+            sort_keys=True,
+        )
+        verification_block = (
+            f"- verification_result_json: {verification_json}\n"
+            "Verification guidance:\n"
+            "- Treat verification_result_json as execution evidence.\n"
+            "- If pytest discovered tests, do not claim test files are empty.\n"
+            "- If verification passed, treat that as strong evidence toward accept.\n"
+            "- If verification failed, reason from exit_code/stdout/stderr evidence.\n\n"
+        )
     return (
         "Act as Referee and decide whether to accept, revise, or reject the candidate delta.\n\n"
         "Input:\n"
@@ -944,6 +1015,7 @@ def _render_referee_prompt(
         f"- target_artifact_id: {game_spec.target_artifact_id}\n"
         f"- allowed_delta_type: {game_spec.allowed_delta_type}\n"
         f"- success_condition: {game_spec.success_condition}\n\n"
+        f"{verification_block}"
         "Referee authority scope:\n"
         "- You are the game-local authority for this PlayGame decision.\n"
         "- You do NOT decide final State integration; integration is decided later by Integrator.\n\n"
@@ -973,6 +1045,7 @@ def play_game(
     model_client: ModelClient | None = None,
     red_model_client: ModelClient | None = None,
     referee_model_client: ModelClient | None = None,
+    verification_result: VerificationResult | None = None,
     max_attempts: int = 3,
 ) -> DeltaState | None:
     if max_attempts < 1:
@@ -1018,15 +1091,29 @@ def play_game(
             continue
         _debug_print_blue_output(candidate_delta)
 
-        _debug_print_red_input(state_view, game_spec, candidate_delta)
-        red_prompt = _render_red_prompt(state_view, game_spec, candidate_delta)
+        if verification_result is None:
+            _debug_print_red_input(state_view, game_spec, candidate_delta)
+        else:
+            _debug_print_red_input(
+                state_view, game_spec, candidate_delta, verification_result
+            )
+        red_prompt = _render_red_prompt(
+            state_view, game_spec, candidate_delta, verification_result
+        )
         red_generated = red_client.generate(red_prompt)
         red_finding = _parse_red_finding_json(red_generated)
         _debug_print_red_output(red_finding)
 
-        _debug_print_referee_input(state_view, game_spec, candidate_delta, red_finding)
+        if verification_result is None:
+            _debug_print_referee_input(
+                state_view, game_spec, candidate_delta, red_finding
+            )
+        else:
+            _debug_print_referee_input(
+                state_view, game_spec, candidate_delta, red_finding, verification_result
+            )
         referee_prompt = _render_referee_prompt(
-            state_view, game_spec, candidate_delta, red_finding
+            state_view, game_spec, candidate_delta, red_finding, verification_result
         )
         referee_generated = referee_client.generate(referee_prompt)
         referee_decision = _parse_referee_decision_json(referee_generated)
@@ -1125,7 +1212,11 @@ def _run_project_iterations(
             stop_reason = "create_game_no_new_atomic_game"
             break
 
-        delta_state = play_game(current_state, game_spec, adapter=adapter)
+        delta_state = play_game(
+            current_state,
+            game_spec,
+            adapter=adapter,
+        )
         if delta_state is None:
             stop_reason = "play_game_no_delta"
             break

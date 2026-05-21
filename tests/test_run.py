@@ -2101,6 +2101,129 @@ def test_red_and_referee_prompts_do_not_treat_state_mutation_alone_as_failure() 
     assert "Do NOT choose revise merely because state changed." in referee_prompt
 
 
+def test_coding_red_prompt_includes_verification_evidence_when_provided() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Write tests/test_fibonacci.py",
+        target_artifact_id="main-codebase",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="Tests pass",
+    )
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(
+            run_module.CodingArtifact(
+                id="main-codebase",
+                files=(
+                    run_module.CodeFile(
+                        path="src/fibonacci.py",
+                        content="def fibonacci(n):\n    return n\n",
+                    ),
+                ),
+            ),
+        ),
+    )
+    state_view = run_module.CodingProjectAdapter().build_state_view(state, spec)
+    delta = run_module.DeltaCodingState(
+        artifact_id="main-codebase",
+        operation="write_file",
+        payload=run_module.WriteFileDelta(
+            file=run_module.CodeFile(
+                path="tests/test_fibonacci.py",
+                content="def test_smoke():\n    assert True\n",
+            )
+        ),
+    )
+    verification = run_module.VerificationResult(
+        command="uv run pytest",
+        cwd="/tmp/project",
+        exit_code=0,
+        stdout="1 passed",
+        stderr="",
+        passed=True,
+    )
+    prompt = run_module._render_red_prompt(
+        state_view, spec, delta, verification_result=verification
+    )
+    assert "verification_result_json:" in prompt
+    assert "\"exit_code\": 0" in prompt
+    assert "\"passed\": true" in prompt
+    assert "If verification passed, treat that as strong evidence toward accept." in prompt
+    assert "If pytest discovered tests, do not claim test files are empty." in prompt
+
+
+def test_coding_referee_prompt_includes_failing_verification_evidence() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Write tests/test_fibonacci.py",
+        target_artifact_id="main-codebase",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="Tests pass",
+    )
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(run_module.CodingArtifact(id="main-codebase", files=()),),
+    )
+    state_view = run_module.CodingProjectAdapter().build_state_view(state, spec)
+    delta = run_module.DeltaCodingState(
+        artifact_id="main-codebase",
+        operation="write_file",
+        payload=run_module.WriteFileDelta(
+            file=run_module.CodeFile(
+                path="tests/test_fibonacci.py",
+                content="def test_smoke():\n    assert False\n",
+            )
+        ),
+    )
+    red = run_module.RedFinding(disposition="revise", rationale="needs fix")
+    verification = run_module.VerificationResult(
+        command="uv run pytest",
+        cwd="/tmp/project",
+        exit_code=1,
+        stdout="1 failed",
+        stderr="traceback",
+        passed=False,
+    )
+    prompt = run_module._render_referee_prompt(
+        state_view, spec, delta, red, verification_result=verification
+    )
+    assert "verification_result_json:" in prompt
+    assert "\"exit_code\": 1" in prompt
+    assert "\"stdout\": \"1 failed\"" in prompt
+    assert "\"stderr\": \"traceback\"" in prompt
+    assert "If verification failed, reason from exit_code/stdout/stderr evidence." in prompt
+
+
+def test_document_prompts_do_not_include_verification_evidence_by_default() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="Any success condition",
+    )
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(run_module.DocumentArtifact(id="main-document", sections=()),),
+    )
+    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
+    delta = run_module.DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=run_module.AppendSectionDelta(
+            section=run_module.Section(title="Intro", body="Body")
+        ),
+    )
+    red = run_module.RedFinding(disposition="accept", rationale="ok")
+    red_prompt = run_module._render_red_prompt(state_view, spec, delta)
+    referee_prompt = run_module._render_referee_prompt(state_view, spec, delta, red)
+    assert "verification_result_json:" not in red_prompt
+    assert "verification_result_json:" not in referee_prompt
+
+
 def test_state_view_is_derived_from_state_and_gamespec_with_existing_sections() -> None:
     import baps.run as run_module
 
@@ -4601,6 +4724,11 @@ def test_run_module_has_no_legacy_compatibility_shim_wrappers() -> None:
     assert "TypeError" not in src
 
 
+def test_run_module_has_no_global_verification_fallback() -> None:
+    run_source = Path("src/baps/run.py").read_text(encoding="utf-8")
+    assert "_LAST_VERIFICATION_RESULT" not in run_source
+
+
 def test_run_module_does_not_import_deleted_legacy_modules() -> None:
     import baps.run as run_module
 
@@ -4615,6 +4743,84 @@ def test_run_module_does_not_import_deleted_legacy_modules() -> None:
     )
     for item in forbidden:
         assert item not in src
+
+
+def test_coding_iteration_two_does_not_receive_stale_verification_result(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import baps.run as run_module
+
+    workspace = tmp_path / "coding-no-stale-verification"
+    verification_seen: list[object] = []
+    call_counter = {"count": 0}
+
+    def _create_game(_config, _state, adapter=None):
+        call_counter["count"] += 1
+        if call_counter["count"] == 1:
+            return run_module.GameSpec(
+                objective="Write src/fibonacci.py containing implementation",
+                target_artifact_id="main-codebase",
+                allowed_delta_type="DeltaCodingState",
+                success_condition="src/fibonacci.py exists",
+            )
+        if call_counter["count"] == 2:
+            return run_module.GameSpec(
+                objective="Write tests/test_fibonacci.py containing tests",
+                target_artifact_id="main-codebase",
+                allowed_delta_type="DeltaCodingState",
+                success_condition="tests/test_fibonacci.py exists",
+            )
+        raise run_module.NoNewAtomicGameError("done")
+
+    def _play_game(_state, spec, adapter=None, verification_result=None):
+        verification_seen.append(verification_result)
+        if "src/fibonacci.py" in spec.objective:
+            return run_module.DeltaCodingState(
+                artifact_id="main-codebase",
+                operation="write_file",
+                payload=run_module.WriteFileDelta(
+                    file=run_module.CodeFile(
+                        path="src/fibonacci.py",
+                        content="def fibonacci(n):\n    return n\n",
+                    )
+                ),
+            )
+        if "tests/test_fibonacci.py" in spec.objective:
+            return run_module.DeltaCodingState(
+                artifact_id="main-codebase",
+                operation="write_file",
+                payload=run_module.WriteFileDelta(
+                    file=run_module.CodeFile(
+                        path="tests/test_fibonacci.py",
+                        content="def test_smoke():\n    assert True\n",
+                    )
+                ),
+            )
+        return None
+
+    monkeypatch.setattr(run_module, "create_game", _create_game)
+    monkeypatch.setattr(run_module, "play_game", _play_game)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "init_and_run",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "coding",
+            "--artifact-id",
+            "main-codebase",
+            "--goal",
+            "Implement Fibonacci with tests.",
+            "--output",
+            "output/project",
+            "--max-iterations",
+            "2",
+        ],
+    )
+    run_module.main()
+    assert verification_seen == [None, None]
 
 
 def test_active_main_and_play_game_orchestration_have_no_direct_document_mechanics() -> None:
