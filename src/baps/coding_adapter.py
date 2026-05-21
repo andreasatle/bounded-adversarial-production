@@ -168,6 +168,9 @@ def render_coding_blue_prompt(
         "- Prefer pytest-discoverable tests at tests/test_*.py.\n"
         "- Keep code and tests as separate files (do not embed unittest in production file).\n"
         "- content must be a valid JSON string: escape internal double quotes as \\\" and newlines as \\n.\n"
+        "- write_file content MUST contain final artifact content only.\n"
+        "- write_file content MUST NOT include reasoning, planning notes, self-corrections, or alternative explanations.\n"
+        "- Forbidden markers in content include: 'Note:', 'Correction:', 'Correcting', 'Re-writing', 'Rewriting', 'self-contained issue', 'Re-reading context'.\n"
         "- Return one complete JSON object with balanced braces.\n"
         "Required JSON shape:\n"
         "{\n"
@@ -209,11 +212,33 @@ def parse_coding_delta_json(text: str) -> DeltaCodingState:
         )
 
     try:
-        return DeltaCodingState.model_validate(parsed)
+        delta = DeltaCodingState.model_validate(parsed)
     except Exception as exc:
         raise ValueError(
             f"blue model output failed DeltaCodingState validation: {exc}"
         ) from exc
+    _validate_coding_write_file_artifact_purity(delta)
+    return delta
+
+
+def _validate_coding_write_file_artifact_purity(delta: DeltaCodingState) -> None:
+    content = delta.payload.file.content
+    lowered = content.lower()
+    forbidden_markers = (
+        "note:",
+        "correction:",
+        "correcting",
+        "re-writing",
+        "rewriting",
+        "re-reading context",
+        "self-contained issue",
+    )
+    for marker in forbidden_markers:
+        if marker in lowered:
+            raise ValueError(
+                "blue model output failed DeltaCodingState validation: "
+                f"write_file content contains forbidden reasoning marker {marker!r}"
+            )
 
 
 def _recover_malformed_coding_delta_json(text: str) -> dict[str, object] | None:

@@ -4673,6 +4673,45 @@ def test_coding_parse_recovers_long_content_payload() -> None:
     assert "assert 299 == 299" in delta.payload.file.content
 
 
+def test_coding_parse_rejects_reasoning_note_marker() -> None:
+    import baps.coding_adapter as coding_module
+
+    raw = (
+        '{"artifact_id":"main-codebase","operation":"write_file","payload":{"file":{'
+        '"path":"tests/test_fibonacci.py",'
+        '"content":"import pytest\\n# Note: choosing approach\\ndef test_ok():\\n    assert 1 == 1\\n"'
+        "}}}"
+    )
+    with pytest.raises(ValueError, match="forbidden reasoning marker"):
+        coding_module.parse_coding_delta_json(raw)
+
+
+def test_coding_parse_rejects_self_correction_marker() -> None:
+    import baps.coding_adapter as coding_module
+
+    raw = (
+        '{"artifact_id":"main-codebase","operation":"write_file","payload":{"file":{'
+        '"path":"tests/test_fibonacci.py",'
+        '"content":"def test_ok():\\n    assert 1 == 1\\n# Correcting the above\\n"'
+        "}}}"
+    )
+    with pytest.raises(ValueError, match="forbidden reasoning marker"):
+        coding_module.parse_coding_delta_json(raw)
+
+
+def test_coding_parse_rejects_rewriting_commentary_marker() -> None:
+    import baps.coding_adapter as coding_module
+
+    raw = (
+        '{"artifact_id":"main-codebase","operation":"write_file","payload":{"file":{'
+        '"path":"tests/test_fibonacci.py",'
+        '"content":"import pytest\\n# Re-writing content structure\\ndef test_ok():\\n    assert 1 == 1\\n"'
+        "}}}"
+    )
+    with pytest.raises(ValueError, match="forbidden reasoning marker"):
+        coding_module.parse_coding_delta_json(raw)
+
+
 def test_coding_run_no_files_keeps_output_exported_false(monkeypatch, tmp_path: Path, capsys) -> None:
     import baps.run as run_module
 
