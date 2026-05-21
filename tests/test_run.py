@@ -3696,6 +3696,31 @@ def test_coding_create_game_state_view_is_textual_with_delimiters() -> None:
     assert "No files." in view.content
 
 
+def test_coding_blue_prompt_supplement_prefers_src_and_pytest_layout() -> None:
+    import baps.run as run_module
+
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(run_module.CodingArtifact(id="main-codebase", files=()),),
+    )
+    spec = run_module.GameSpec(
+        objective="Implement Fibonacci with tests",
+        target_artifact_id="main-codebase",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="Working code and tests exist",
+    )
+    view = run_module.CodingProjectAdapter().build_state_view(state, spec)
+    prompt = run_module.CodingProjectAdapter().render_blue_prompt(
+        view,
+        spec,
+        attempt_number=1,
+        previous_feedback=None,
+    )
+    assert "Prefer production code under src/." in prompt
+    assert "Prefer tests under tests/." in prompt
+    assert "tests/test_*.py" in prompt
+
+
 def test_coding_adapter_maps_file_write_delta_to_state_update() -> None:
     import baps.run as run_module
 
@@ -3747,7 +3772,7 @@ def test_coding_adapter_export_writes_files(tmp_path: Path) -> None:
     assert (tmp_path / "project" / "tests" / "test_fibonacci.py").exists()
 
 
-def test_coding_adapter_export_writes_fibonacci_generator_py(tmp_path: Path) -> None:
+def test_coding_adapter_export_writes_src_and_tests_layout(tmp_path: Path) -> None:
     import baps.run as run_module
 
     state = run_module.State(
@@ -3757,8 +3782,16 @@ def test_coding_adapter_export_writes_fibonacci_generator_py(tmp_path: Path) -> 
                 id="main-codebase",
                 files=(
                     run_module.CodeFile(
-                        path="src/fibonacci_generator.py",
+                        path="src/fibonacci.py",
                         content="def fibonacci(n):\n    return n\n",
+                    ),
+                    run_module.CodeFile(
+                        path="tests/test_fibonacci.py",
+                        content=(
+                            "from src.fibonacci import fibonacci\n\n"
+                            "def test_fibonacci_smoke():\n"
+                            "    assert fibonacci(5) == 5\n"
+                        ),
                     ),
                 ),
             ),
@@ -3771,9 +3804,60 @@ def test_coding_adapter_export_writes_fibonacci_generator_py(tmp_path: Path) -> 
         artifact_id="main-codebase",
     )
     assert changed is True
-    written = tmp_path / "project" / "src" / "fibonacci_generator.py"
-    assert written.exists()
-    assert "def fibonacci" in written.read_text(encoding="utf-8")
+    assert (tmp_path / "project" / "src" / "fibonacci.py").exists()
+    assert (tmp_path / "project" / "tests" / "test_fibonacci.py").exists()
+
+
+def test_coding_adapter_verify_export_discovers_and_runs_pytest_tests(
+    tmp_path: Path,
+) -> None:
+    import baps.run as run_module
+
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(
+            run_module.CodingArtifact(
+                id="main-codebase",
+                files=(
+                    run_module.CodeFile(
+                        path="src/fibonacci.py",
+                        content=(
+                            "def fibonacci(n):\n"
+                            "    if n < 0:\n"
+                            "        raise ValueError('n must be >= 0')\n"
+                            "    if n < 2:\n"
+                            "        return n\n"
+                            "    a, b = 0, 1\n"
+                            "    for _ in range(2, n + 1):\n"
+                            "        a, b = b, a + b\n"
+                            "    return b\n"
+                        ),
+                    ),
+                    run_module.CodeFile(
+                        path="tests/test_fibonacci.py",
+                        content=(
+                            "from pathlib import Path\n"
+                            "import sys\n\n"
+                            "sys.path.insert(0, str(Path(__file__).resolve().parents[1]))\n\n"
+                            "from src.fibonacci import fibonacci\n\n"
+                            "def test_fibonacci_values():\n"
+                            "    assert fibonacci(0) == 0\n"
+                            "    assert fibonacci(1) == 1\n"
+                            "    assert fibonacci(7) == 13\n"
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    )
+    adapter = run_module.CodingProjectAdapter()
+    output_dir = tmp_path / "project"
+    _ = adapter.export_state(state, output_dir, "main-codebase")
+    result = adapter.verify_export(output_dir)
+    assert result is not None
+    assert result.passed is True
+    assert result.exit_code == 0
+    assert "pytest" in result.command
 
 
 def test_coding_export_creates_nested_parent_directories(tmp_path: Path) -> None:

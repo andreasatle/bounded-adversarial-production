@@ -163,6 +163,10 @@ def render_coding_blue_prompt(
     coding_delta_instructions = (
         "Coding delta rules:\n"
         "- file.path and file.content must be non-empty strings.\n"
+        "- Prefer production code under src/.\n"
+        "- Prefer tests under tests/.\n"
+        "- Prefer pytest-discoverable tests at tests/test_*.py.\n"
+        "- Keep code and tests as separate files (do not embed unittest in production file).\n"
         "Required JSON shape:\n"
         "{\n"
         '  "artifact_id": "<game_spec.target_artifact_id>",\n'

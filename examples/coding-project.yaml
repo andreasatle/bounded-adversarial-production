@@ -8,3 +8,8 @@ northstar_markdown: |
   # Goal
 
   Implement a Fibonacci number generator with tests.
+
+  # Expected output layout
+
+  - Production code in `src/fibonacci.py`
+  - Pytest tests in `tests/test_fibonacci.py`
