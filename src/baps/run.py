@@ -15,6 +15,7 @@ from baps.models import ModelClient, OllamaClient
 from baps.northstar_projection import ProjectionType, StateView
 from baps.project_adapter import (
     ProjectTypeAdapter,
+    VerificationResult,
     build_default_project_type_adapters,
     resolve_adapter_for_allowed_delta_type,
     resolve_project_type_adapter,
@@ -394,6 +395,25 @@ def _debug_print_create_game_validation_failure(message: str) -> None:
         return
     print("[DEBUG] create_game.validation_failure:")
     print(f"message={message}")
+    print()
+
+
+def _debug_print_verification_result(result: VerificationResult | None) -> None:
+    if not _debug_enabled() or result is None:
+        return
+    print("[DEBUG] verify_export.result:")
+    payload = {
+        "verification": {
+            "command": result.command,
+            "cwd": result.cwd,
+            "exit_code": result.exit_code,
+            "passed": result.passed,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+        }
+    }
+    for line in _format_debug_yaml_like(payload, indent=2):
+        print(line)
     print()
 
 
@@ -1014,6 +1034,15 @@ def _derive_state_update_from_delta(
     return adapter.delta_to_state_update(delta_state)
 
 
+def _verify_export_with_adapter(
+    adapter: ProjectTypeAdapter, output_path: Path
+) -> VerificationResult | None:
+    verifier = getattr(adapter, "verify_export", None)
+    if verifier is None:
+        return None
+    return verifier(output_path)
+
+
 def _state_path_for_workspace(workspace: Path) -> Path:
     return workspace / "state" / "state.json"
 
@@ -1066,6 +1095,7 @@ def _run_project_iterations(
     state_changed = False
     output_exported = False
     output_changed = False
+    verification_result: VerificationResult | None = None
     stop_reason = "iteration_limit_reached"
 
     for _iteration in range(1, max_iterations + 1):
@@ -1090,6 +1120,8 @@ def _run_project_iterations(
         update_applied = True
         output_changed = adapter.export_state(updated_state, output_path, artifact_id)
         output_exported = output_exported or output_changed
+        verification_result = _verify_export_with_adapter(adapter, output_path)
+        _debug_print_verification_result(verification_result)
         if changed_this_iteration:
             state_changed = True
             current_state = updated_state
@@ -1104,6 +1136,7 @@ def _run_project_iterations(
         "state_changed": state_changed,
         "output_exported": output_exported,
         "output_changed": output_changed,
+        "verification_result": verification_result,
         "stop_reason": stop_reason,
     }
 
@@ -1172,6 +1205,11 @@ def main() -> None:
     state_changed = False
     output_exported = False
     output_changed = False
+    verification_run = False
+    verification_passed = False
+    verification_exit_code: int | None = None
+    verification_command: str | None = None
+    verification_cwd: str | None = None
     stop_reason = "not_run"
 
     try:
@@ -1191,6 +1229,13 @@ def main() -> None:
             state_changed = bool(results["state_changed"])
             output_exported = bool(results["output_exported"])
             output_changed = bool(results["output_changed"])
+            verification_result = results["verification_result"]
+            verification_run = verification_result is not None
+            if verification_result is not None:
+                verification_passed = verification_result.passed
+                verification_exit_code = verification_result.exit_code
+                verification_command = verification_result.command
+                verification_cwd = verification_result.cwd
             stop_reason = str(results["stop_reason"])
         else:  # init_and_run
             state_service, current_state = _initialize_project(config)
@@ -1204,6 +1249,13 @@ def main() -> None:
             state_changed = bool(results["state_changed"])
             output_exported = bool(results["output_exported"])
             output_changed = bool(results["output_changed"])
+            verification_result = results["verification_result"]
+            verification_run = verification_result is not None
+            if verification_result is not None:
+                verification_passed = verification_result.passed
+                verification_exit_code = verification_result.exit_code
+                verification_command = verification_result.command
+                verification_cwd = verification_result.cwd
             stop_reason = str(results["stop_reason"])
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -1219,6 +1271,11 @@ def main() -> None:
     print(f"state_changed={state_changed}")
     print(f"output_exported={output_exported}")
     print(f"output_changed={output_changed}")
+    print(f"verification_run={verification_run}")
+    print(f"verification_passed={verification_passed}")
+    print(f"verification_exit_code={verification_exit_code}")
+    print(f"verification_command={verification_command}")
+    print(f"verification_cwd={verification_cwd}")
     print(f"stop_reason={stop_reason}")
 
 

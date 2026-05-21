@@ -3,11 +3,13 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
 from baps.northstar_projection import ProjectionType, StateView
-from baps.project_adapter import render_blue_prompt_core
+from baps.project_adapter import VerificationResult, render_blue_prompt_core
 from baps.state import (
     CodingArtifact,
     CodeFile,
@@ -275,3 +277,36 @@ class CodingProjectAdapter:
                 file_path.write_text(code_file.content, encoding="utf-8")
                 changed = True
         return changed
+
+    def verify_export(self, output_path: Path) -> VerificationResult | None:
+        output_path.mkdir(parents=True, exist_ok=True)
+        command_args: list[str]
+        command: str
+        try:
+            command_args = ["uv", "run", "pytest"]
+            command = "uv run pytest"
+            completed = subprocess.run(
+                command_args,
+                cwd=output_path,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except FileNotFoundError:
+            command_args = [sys.executable, "-m", "pytest"]
+            command = f"{sys.executable} -m pytest"
+            completed = subprocess.run(
+                command_args,
+                cwd=output_path,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        return VerificationResult(
+            command=command,
+            cwd=str(output_path),
+            exit_code=completed.returncode,
+            stdout=completed.stdout,
+            stderr=completed.stderr,
+            passed=completed.returncode == 0,
+        )

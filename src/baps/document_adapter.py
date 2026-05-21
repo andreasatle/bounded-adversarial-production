@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from baps.northstar_projection import ProjectionType, StateView
-from baps.project_adapter import render_blue_prompt_core
+from baps.project_adapter import VerificationResult, render_blue_prompt_core
 from baps.state import (
     DeltaDocumentState,
     DeltaState,
@@ -314,3 +314,7 @@ class DocumentProjectAdapter:
         if changed:
             output_path.write_text(rendered, encoding="utf-8")
         return changed
+
+    def verify_export(self, output_path: Path) -> VerificationResult | None:
+        del output_path
+        return None

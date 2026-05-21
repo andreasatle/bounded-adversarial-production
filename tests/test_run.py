@@ -1,6 +1,7 @@
 import argparse
 import inspect
 from pathlib import Path
+import subprocess
 
 import pytest
 
@@ -3826,6 +3827,77 @@ def test_coding_export_output_changed_false_when_unchanged(tmp_path: Path) -> No
     assert second is False
 
 
+def test_default_adapter_verification_is_noop_for_document(tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    adapter = run_module.DocumentProjectAdapter()
+    result = adapter.verify_export(tmp_path / "report.md")
+    assert result is None
+
+
+def test_coding_adapter_verify_export_runs_pytest_and_captures_success(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import baps.coding_adapter as coding_module
+    import baps.run as run_module
+
+    captured: dict[str, object] = {}
+
+    def _fake_run(args, cwd, capture_output, text, check):
+        captured["args"] = args
+        captured["cwd"] = cwd
+        captured["capture_output"] = capture_output
+        captured["text"] = text
+        captured["check"] = check
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=0,
+            stdout="2 passed\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(coding_module.subprocess, "run", _fake_run)
+    adapter = run_module.CodingProjectAdapter()
+    output_dir = tmp_path / "project"
+    result = adapter.verify_export(output_dir)
+    assert result is not None
+    assert captured["args"] == ["uv", "run", "pytest"]
+    assert captured["cwd"] == output_dir
+    assert captured["capture_output"] is True
+    assert captured["text"] is True
+    assert captured["check"] is False
+    assert result.command == "uv run pytest"
+    assert result.cwd == str(output_dir)
+    assert result.exit_code == 0
+    assert result.stdout == "2 passed\n"
+    assert result.stderr == ""
+    assert result.passed is True
+
+
+def test_coding_adapter_verify_export_captures_failure(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import baps.coding_adapter as coding_module
+    import baps.run as run_module
+
+    def _fake_run(args, cwd, capture_output, text, check):
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=1,
+            stdout="1 failed\n",
+            stderr="traceback\n",
+        )
+
+    monkeypatch.setattr(coding_module.subprocess, "run", _fake_run)
+    adapter = run_module.CodingProjectAdapter()
+    result = adapter.verify_export(tmp_path / "project")
+    assert result is not None
+    assert result.exit_code == 1
+    assert result.passed is False
+    assert result.stdout == "1 failed\n"
+    assert result.stderr == "traceback\n"
+
+
 def test_coding_run_no_files_keeps_output_exported_false(monkeypatch, tmp_path: Path, capsys) -> None:
     import baps.run as run_module
 
@@ -3864,6 +3936,92 @@ def test_coding_run_no_files_keeps_output_exported_false(monkeypatch, tmp_path: 
     out = capsys.readouterr().out
     assert "output_exported=False" in out
     assert "output_changed=False" in out
+    assert "verification_run=False" in out
+
+
+def test_coding_run_summary_includes_verification_status(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    import baps.run as run_module
+
+    workspace = tmp_path / "coding-verify-summary"
+
+    monkeypatch.setattr(
+        run_module,
+        "create_game",
+        lambda *_args, **_kwargs: run_module.GameSpec(
+            objective="Write one file",
+            target_artifact_id="main-codebase",
+            allowed_delta_type="DeltaCodingState",
+            success_condition="File exists",
+        ),
+    )
+    monkeypatch.setattr(
+        run_module,
+        "play_game",
+        lambda *_args, **_kwargs: run_module.DeltaCodingState(
+            artifact_id="main-codebase",
+            operation="write_file",
+            payload=run_module.WriteFileDelta(
+                file=run_module.CodeFile(
+                    path="src/fibonacci.py",
+                    content="def fibonacci(n):\n    return n\n",
+                )
+            ),
+        ),
+    )
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "init_and_run",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "coding",
+            "--artifact-id",
+            "main-codebase",
+            "--goal",
+            "Implement Fibonacci with tests.",
+            "--output",
+            "output/project",
+            "--max-iterations",
+            "1",
+        ],
+    )
+    run_module.main()
+    out = capsys.readouterr().out
+    assert "verification_run=True" in out
+    assert "verification_passed=" in out
+    assert "verification_exit_code=" in out
+    assert "verification_command=" in out
+    assert "verification_cwd=" in out
+
+
+def test_document_run_does_not_run_verification(monkeypatch, tmp_path: Path, capsys) -> None:
+    import baps.run as run_module
+
+    workspace = tmp_path / "document-no-verify"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "init_and_run",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "document",
+            "--artifact-id",
+            "main-document",
+            "--max-iterations",
+            "1",
+        ],
+    )
+    run_module.main()
+    out = capsys.readouterr().out
+    assert "verification_run=False" in out
+    assert "verification_passed=False" in out
 
 
 def test_coding_init_and_run_exports_fibonacci_files(monkeypatch, tmp_path: Path) -> None:

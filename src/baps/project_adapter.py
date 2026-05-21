@@ -1,10 +1,21 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
 from baps.northstar_projection import StateView
 from baps.state import DeltaState, GameSpec, State, StateUpdateProposal
+
+
+@dataclass(frozen=True)
+class VerificationResult:
+    command: str
+    cwd: str
+    exit_code: int
+    stdout: str
+    stderr: str
+    passed: bool
 
 
 class ProjectTypeAdapter(Protocol):
@@ -36,6 +47,9 @@ class ProjectTypeAdapter(Protocol):
         ...
 
     def export_state(self, state: State, output_path: Path, artifact_id: str) -> bool:
+        ...
+
+    def verify_export(self, output_path: Path) -> VerificationResult | None:
         ...
 
 
