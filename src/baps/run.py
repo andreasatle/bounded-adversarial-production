@@ -771,6 +771,42 @@ def _normalize_game_spec_with_adapter(
     return normalizer(game_spec, state, config)
 
 
+def _render_red_prompt_supplement_with_adapter(
+    adapter: ProjectTypeAdapter,
+    state_view: StateView,
+    game_spec: GameSpec,
+    delta_state: DeltaState,
+    verification_result: VerificationResult | None,
+) -> str:
+    renderer = getattr(adapter, "render_red_prompt_supplement", None)
+    if renderer is None:
+        return ""
+    return renderer(
+        state_view=state_view,
+        game_spec=game_spec,
+        delta_state=delta_state,
+        verification_result=verification_result,
+    )
+
+
+def _render_referee_prompt_supplement_with_adapter(
+    adapter: ProjectTypeAdapter,
+    state_view: StateView,
+    game_spec: GameSpec,
+    delta_state: DeltaState,
+    verification_result: VerificationResult | None,
+) -> str:
+    renderer = getattr(adapter, "render_referee_prompt_supplement", None)
+    if renderer is None:
+        return ""
+    return renderer(
+        state_view=state_view,
+        game_spec=game_spec,
+        delta_state=delta_state,
+        verification_result=verification_result,
+    )
+
+
 def _normalize_json_candidate(text: str) -> str:
     normalized = text.strip()
     fence_pattern = re.compile(
@@ -920,6 +956,7 @@ def _render_red_prompt(
     game_spec: GameSpec,
     delta_state: DeltaState,
     verification_result: VerificationResult | None = None,
+    prompt_supplement: str = "",
 ) -> str:
     state_view_json = json.dumps(state_view.model_dump(mode="json"), sort_keys=True)
     delta_state_json = json.dumps(delta_state.model_dump(mode="json"), sort_keys=True)
@@ -966,6 +1003,7 @@ def _render_red_prompt(
         "Do not include prose before JSON.\n"
         "Do not include prose after JSON.\n"
         "No extra fields.\n"
+        f"{prompt_supplement}"
         "Required JSON shape:\n"
         "{\n"
         '  "disposition": "accept" | "revise" | "reject",\n'
@@ -980,6 +1018,7 @@ def _render_referee_prompt(
     delta_state: DeltaState,
     red_finding: RedFinding,
     verification_result: VerificationResult | None = None,
+    prompt_supplement: str = "",
 ) -> str:
     state_view_json = json.dumps(state_view.model_dump(mode="json"), sort_keys=True)
     delta_state_json = json.dumps(delta_state.model_dump(mode="json"), sort_keys=True)
@@ -1030,6 +1069,7 @@ def _render_referee_prompt(
         "Do not include prose before JSON.\n"
         "Do not include prose after JSON.\n"
         "No extra fields.\n"
+        f"{prompt_supplement}"
         "Required JSON shape:\n"
         "{\n"
         '  "disposition": "accept" | "revise" | "reject",\n'
@@ -1097,8 +1137,19 @@ def play_game(
             _debug_print_red_input(
                 state_view, game_spec, candidate_delta, verification_result
             )
+        red_supplement = _render_red_prompt_supplement_with_adapter(
+            resolved_adapter,
+            state_view,
+            game_spec,
+            candidate_delta,
+            verification_result,
+        )
         red_prompt = _render_red_prompt(
-            state_view, game_spec, candidate_delta, verification_result
+            state_view,
+            game_spec,
+            candidate_delta,
+            verification_result,
+            red_supplement,
         )
         red_generated = red_client.generate(red_prompt)
         red_finding = _parse_red_finding_json(red_generated)
@@ -1112,8 +1163,20 @@ def play_game(
             _debug_print_referee_input(
                 state_view, game_spec, candidate_delta, red_finding, verification_result
             )
+        referee_supplement = _render_referee_prompt_supplement_with_adapter(
+            resolved_adapter,
+            state_view,
+            game_spec,
+            candidate_delta,
+            verification_result,
+        )
         referee_prompt = _render_referee_prompt(
-            state_view, game_spec, candidate_delta, red_finding, verification_result
+            state_view,
+            game_spec,
+            candidate_delta,
+            red_finding,
+            verification_result,
+            referee_supplement,
         )
         referee_generated = referee_client.generate(referee_prompt)
         referee_decision = _parse_referee_decision_json(referee_generated)

@@ -317,6 +317,40 @@ class CodingProjectAdapter:
             previous_feedback=previous_feedback,
         )
 
+    def render_red_prompt_supplement(
+        self,
+        state_view: StateView,
+        game_spec: GameSpec,
+        delta_state: DeltaState,
+        verification_result: VerificationResult | None,
+    ) -> str:
+        del state_view, game_spec, delta_state, verification_result
+        return (
+            "Coding evaluation guidance:\n"
+            "- target_artifact_id is the artifact id, not a file path.\n"
+            "- File path belongs in DeltaCodingState.payload.file.path.\n"
+            "- Pytest tests containing assert statements are not empty.\n"
+            "- Do not reject tests as empty if assertions are present.\n"
+            "- If verification evidence exists, reason from exit_code/stdout/stderr.\n"
+        )
+
+    def render_referee_prompt_supplement(
+        self,
+        state_view: StateView,
+        game_spec: GameSpec,
+        delta_state: DeltaState,
+        verification_result: VerificationResult | None,
+    ) -> str:
+        del state_view, game_spec, delta_state, verification_result
+        return (
+            "Coding evaluation guidance:\n"
+            "- target_artifact_id is the artifact id, not a file path.\n"
+            "- File path belongs in DeltaCodingState.payload.file.path.\n"
+            "- Pytest tests containing assert statements are not empty.\n"
+            "- Do not reject tests as empty if assertions are present.\n"
+            "- If verification evidence exists, reason from exit_code/stdout/stderr.\n"
+        )
+
     def parse_blue_delta(self, text: str) -> DeltaState:
         return parse_coding_delta_json(text)
 

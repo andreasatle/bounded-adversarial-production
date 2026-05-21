@@ -2224,6 +2224,84 @@ def test_document_prompts_do_not_include_verification_evidence_by_default() -> N
     assert "verification_result_json:" not in referee_prompt
 
 
+def test_document_red_referee_prompts_do_not_include_coding_guidance() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="Any success condition",
+    )
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(run_module.DocumentArtifact(id="main-document", sections=()),),
+    )
+    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
+    delta = run_module.DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=run_module.AppendSectionDelta(
+            section=run_module.Section(title="Intro", body="Body")
+        ),
+    )
+    red = run_module.RedFinding(disposition="accept", rationale="ok")
+    red_prompt = run_module._render_red_prompt(state_view, spec, delta)
+    referee_prompt = run_module._render_referee_prompt(state_view, spec, delta, red)
+    for prompt in (red_prompt, referee_prompt):
+        assert "target_artifact_id is the artifact id, not a file path." not in prompt
+        assert "Pytest tests containing assert statements are not empty." not in prompt
+        assert "Do not reject tests as empty if assertions are present." not in prompt
+
+
+def test_coding_red_referee_prompts_include_coding_guidance() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Write tests",
+        target_artifact_id="main-codebase",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="tests exist",
+    )
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(run_module.CodingArtifact(id="main-codebase", files=()),),
+    )
+    adapter = run_module.CodingProjectAdapter()
+    state_view = adapter.build_state_view(state, spec)
+    delta = run_module.DeltaCodingState(
+        artifact_id="main-codebase",
+        operation="write_file",
+        payload=run_module.WriteFileDelta(
+            file=run_module.CodeFile(path="tests/test_fibonacci.py", content="assert True")
+        ),
+    )
+    red = run_module.RedFinding(disposition="accept", rationale="ok")
+    red_supplement = adapter.render_red_prompt_supplement(
+        state_view, spec, delta, verification_result=None
+    )
+    referee_supplement = adapter.render_referee_prompt_supplement(
+        state_view, spec, delta, verification_result=None
+    )
+    red_prompt = run_module._render_red_prompt(
+        state_view, spec, delta, prompt_supplement=red_supplement
+    )
+    referee_prompt = run_module._render_referee_prompt(
+        state_view, spec, delta, red, prompt_supplement=referee_supplement
+    )
+    for prompt in (red_prompt, referee_prompt):
+        assert "target_artifact_id is the artifact id, not a file path." in prompt
+        assert "Pytest tests containing assert statements are not empty." in prompt
+        assert "Do not reject tests as empty if assertions are present." in prompt
+
+
+def test_run_core_prompt_source_has_no_coding_specific_red_referee_guidance() -> None:
+    run_source = Path("src/baps/run.py").read_text(encoding="utf-8")
+    assert "target_artifact_id is the artifact id, not a file path." not in run_source
+    assert "Pytest tests containing assert statements are not empty." not in run_source
+    assert "Do not reject tests as empty if assertions are present." not in run_source
+
+
 def test_state_view_is_derived_from_state_and_gamespec_with_existing_sections() -> None:
     import baps.run as run_module
 
