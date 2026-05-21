@@ -3746,6 +3746,126 @@ def test_coding_adapter_export_writes_files(tmp_path: Path) -> None:
     assert (tmp_path / "project" / "tests" / "test_fibonacci.py").exists()
 
 
+def test_coding_adapter_export_writes_fibonacci_generator_py(tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(
+            run_module.CodingArtifact(
+                id="main-codebase",
+                files=(
+                    run_module.CodeFile(
+                        path="src/fibonacci_generator.py",
+                        content="def fibonacci(n):\n    return n\n",
+                    ),
+                ),
+            ),
+        ),
+    )
+    adapter = run_module.CodingProjectAdapter()
+    changed = adapter.export_state(
+        state=state,
+        output_path=tmp_path / "project",
+        artifact_id="main-codebase",
+    )
+    assert changed is True
+    written = tmp_path / "project" / "src" / "fibonacci_generator.py"
+    assert written.exists()
+    assert "def fibonacci" in written.read_text(encoding="utf-8")
+
+
+def test_coding_export_creates_nested_parent_directories(tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(
+            run_module.CodingArtifact(
+                id="main-codebase",
+                files=(
+                    run_module.CodeFile(
+                        path="pkg/subpkg/fibonacci.py",
+                        content="def fibonacci(n):\n    return n\n",
+                    ),
+                ),
+            ),
+        ),
+    )
+    adapter = run_module.CodingProjectAdapter()
+    _ = adapter.export_state(
+        state=state,
+        output_path=tmp_path / "project",
+        artifact_id="main-codebase",
+    )
+    assert (tmp_path / "project" / "pkg" / "subpkg" / "fibonacci.py").exists()
+
+
+def test_coding_export_output_changed_false_when_unchanged(tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(
+            run_module.CodingArtifact(
+                id="main-codebase",
+                files=(
+                    run_module.CodeFile(
+                        path="src/fibonacci.py",
+                        content="def fibonacci(n):\n    return n\n",
+                    ),
+                ),
+            ),
+        ),
+    )
+    adapter = run_module.CodingProjectAdapter()
+    output_dir = tmp_path / "project"
+    first = adapter.export_state(state, output_dir, "main-codebase")
+    second = adapter.export_state(state, output_dir, "main-codebase")
+    assert first is True
+    assert second is False
+
+
+def test_coding_run_no_files_keeps_output_exported_false(monkeypatch, tmp_path: Path, capsys) -> None:
+    import baps.run as run_module
+
+    workspace = tmp_path / "coding-empty-export"
+    monkeypatch.setattr(
+        run_module,
+        "create_game",
+        lambda *_args, **_kwargs: run_module.GameSpec(
+            objective="No-op coding objective",
+            target_artifact_id="main-codebase",
+            allowed_delta_type="DeltaCodingState",
+            success_condition="No file changes required",
+        ),
+    )
+    monkeypatch.setattr(run_module, "play_game", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "init_and_run",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "coding",
+            "--artifact-id",
+            "main-codebase",
+            "--goal",
+            "No-op coding objective",
+            "--output",
+            "output/project",
+            "--max-iterations",
+            "1",
+        ],
+    )
+    run_module.main()
+    out = capsys.readouterr().out
+    assert "output_exported=False" in out
+    assert "output_changed=False" in out
+
+
 def test_coding_init_and_run_exports_fibonacci_files(monkeypatch, tmp_path: Path) -> None:
     import baps.run as run_module
 
@@ -3832,6 +3952,24 @@ def test_coding_init_and_run_exports_fibonacci_files(monkeypatch, tmp_path: Path
     run_module.main()
     assert (output_dir / "src" / "fibonacci.py").exists()
     assert (output_dir / "tests" / "test_fibonacci.py").exists()
+
+
+def test_coding_example_output_path_resolves_under_workspace() -> None:
+    import baps.run as run_module
+
+    args = argparse.Namespace(
+        command="init_and_run",
+        spec="examples/coding-project.yaml",
+        workspace=None,
+        project_type=None,
+        artifact_id=None,
+        goal=None,
+        output=None,
+        max_iterations=None,
+    )
+    config = run_module.resolve_run_config(args)
+    assert config["workspace"] == Path(".baps-workspace/coding-project")
+    assert config["output_path"] == Path(".baps-workspace/coding-project/output/project")
 
 def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
     import baps.run as run_module

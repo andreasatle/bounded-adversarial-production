@@ -1590,7 +1590,7 @@ def _run_project_iterations(
         )
         update_applied = True
         output_changed = adapter.export_state(updated_state, output_path, artifact_id)
-        output_exported = True
+        output_exported = output_exported or output_changed
         if changed_this_iteration:
             state_changed = True
             current_state = updated_state
