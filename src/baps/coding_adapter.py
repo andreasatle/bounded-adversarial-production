@@ -241,6 +241,19 @@ def _validate_coding_write_file_artifact_purity(delta: DeltaCodingState) -> None
             )
 
 
+def _normalize_coding_export_content(content: str) -> str:
+    """Normalize transport-escaped file payloads at export materialization time.
+
+    This only decodes common JSON transport escapes when the content appears to
+    be single-line escaped text (for example: `import x\\nprint(...)`).
+    """
+    if "\n" in content:
+        return content
+    if "\\n" not in content and "\\t" not in content and '\\"' not in content:
+        return content
+    return content.replace("\\n", "\n").replace("\\t", "\t").replace('\\"', '"')
+
+
 def _recover_malformed_coding_delta_json(text: str) -> dict[str, object] | None:
     """Deterministic fallback for malformed write_file JSON payloads.
 
@@ -482,9 +495,10 @@ class CodingProjectAdapter:
         for code_file in artifact.files:
             file_path = output_path / code_file.path
             file_path.parent.mkdir(parents=True, exist_ok=True)
+            materialized = _normalize_coding_export_content(code_file.content)
             before = file_path.read_text(encoding="utf-8") if file_path.exists() else None
-            if before != code_file.content:
-                file_path.write_text(code_file.content, encoding="utf-8")
+            if before != materialized:
+                file_path.write_text(materialized, encoding="utf-8")
                 changed = True
         return changed
 

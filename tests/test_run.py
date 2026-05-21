@@ -1,4 +1,5 @@
 import argparse
+import ast
 import inspect
 from pathlib import Path
 import subprocess
@@ -4402,6 +4403,90 @@ def test_coding_adapter_export_writes_src_and_tests_layout(tmp_path: Path) -> No
     assert changed is True
     assert (tmp_path / "project" / "src" / "fibonacci.py").exists()
     assert (tmp_path / "project" / "tests" / "test_fibonacci.py").exists()
+
+
+def test_coding_export_normalizes_escaped_newline_content(tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    state = run_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(
+            state_module.CodingArtifact(
+                id="main-codebase",
+                files=(
+                    state_module.CodeFile(
+                        path="tests/test_fibonacci.py",
+                        content="import pytest\\n\\ndef test_ok():\\n    assert 1 == 1\\n",
+                    ),
+                ),
+            ),
+        ),
+    )
+    adapter = run_module.CodingProjectAdapter()
+    adapter.export_state(state, tmp_path / "project", "main-codebase")
+    exported = (tmp_path / "project" / "tests" / "test_fibonacci.py").read_text(
+        encoding="utf-8"
+    )
+    assert "\\n" not in exported
+    assert "import pytest\n\ndef test_ok():" in exported
+
+
+def test_coding_export_normalizes_escaped_quotes_content(tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    state = run_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(
+            state_module.CodingArtifact(
+                id="main-codebase",
+                files=(
+                    state_module.CodeFile(
+                        path="src/fibonacci.py",
+                        content='def msg():\\n    return \\"ok\\"\\n',
+                    ),
+                ),
+            ),
+        ),
+    )
+    adapter = run_module.CodingProjectAdapter()
+    adapter.export_state(state, tmp_path / "project", "main-codebase")
+    exported = (tmp_path / "project" / "src" / "fibonacci.py").read_text(
+        encoding="utf-8"
+    )
+    assert '\\"' not in exported
+    assert 'return "ok"' in exported
+
+
+def test_coding_export_normalizes_multiline_pytest_and_parses(tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    escaped_pytest = (
+        "import pytest\\n"
+        "from src.fibonacci import fibonacci\\n\\n"
+        "def test_fibonacci_base_cases():\\n"
+        "    assert fibonacci(0) == 0\\n"
+        "    assert fibonacci(1) == 1\\n\\n"
+        "def test_fibonacci_negative_input():\\n"
+        "    with pytest.raises(ValueError):\\n"
+        "        fibonacci(-1)\\n"
+    )
+    state = run_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(
+            state_module.CodingArtifact(
+                id="main-codebase",
+                files=(state_module.CodeFile(path="tests/test_fibonacci.py", content=escaped_pytest),),
+            ),
+        ),
+    )
+    adapter = run_module.CodingProjectAdapter()
+    adapter.export_state(state, tmp_path / "project", "main-codebase")
+    exported = (tmp_path / "project" / "tests" / "test_fibonacci.py").read_text(
+        encoding="utf-8"
+    )
+    ast.parse(exported)
+    assert "def test_fibonacci_base_cases():" in exported
+    assert "\\n" not in exported
 
 
 def test_coding_adapter_verify_export_discovers_and_runs_pytest_tests(
