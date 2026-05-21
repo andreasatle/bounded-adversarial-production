@@ -3874,6 +3874,9 @@ def test_coding_create_game_normalizes_two_file_objective_to_src_on_empty_state(
         "Write src/fibonacci.py containing a fibonacci implementation "
         "for the coding artifact."
     )
+    assert game_spec.target_artifact_id == "main-codebase"
+    assert game_spec.target_artifact_id != "src/fibonacci.py"
+    assert game_spec.target_artifact_id != "tests/test_fibonacci.py"
     assert game_spec.success_condition == (
         "Artifact contains src/fibonacci.py with a non-empty fibonacci "
         "implementation."
@@ -3923,10 +3926,43 @@ def test_coding_create_game_normalizes_to_tests_when_src_present() -> None:
         "Write tests/test_fibonacci.py containing pytest tests for the "
         "existing fibonacci implementation."
     )
+    assert game_spec.target_artifact_id == "main-codebase"
+    assert game_spec.target_artifact_id != "src/fibonacci.py"
+    assert game_spec.target_artifact_id != "tests/test_fibonacci.py"
     assert game_spec.success_condition == (
         "Artifact contains tests/test_fibonacci.py with non-empty pytest "
         "tests for fibonacci."
     )
+
+
+def test_coding_normalization_overrides_file_path_target_artifact_id() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "coding",
+        "artifact_id": "main-codebase",
+        "goal": "Implement Fibonacci with tests",
+        "northstar_markdown": "# Goal\n\nImplement Fibonacci with tests.",
+        "output_path": Path(".baps-workspace/output/project"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.create_state(config)
+    game_spec = run_module.create_game(
+        config,
+        state,
+        model_client=FakeModelClient(
+            [
+                '{"objective":"Write tests file",'
+                '"target_artifact_id":"tests/test_fibonacci.py",'
+                '"allowed_delta_type":"DeltaCodingState",'
+                '"success_condition":"tests/test_fibonacci.py exists"}'
+            ]
+        ),
+    )
+    assert game_spec.target_artifact_id == "main-codebase"
+    assert game_spec.target_artifact_id != "tests/test_fibonacci.py"
 
 
 def test_document_adapter_normalize_game_spec_is_identity() -> None:

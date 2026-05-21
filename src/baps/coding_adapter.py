@@ -262,7 +262,8 @@ class CodingProjectAdapter:
     def normalize_game_spec(
         self, game_spec: GameSpec, state: State, config: dict[str, object]
     ) -> GameSpec:
-        artifact = coding_artifact_from_state(state, _config_artifact_id(config))
+        configured_artifact_id = _config_artifact_id(config)
+        artifact = coding_artifact_from_state(state, configured_artifact_id)
         paths = {file.path for file in artifact.files}
         src_path = "src/fibonacci.py"
         test_path = "tests/test_fibonacci.py"
@@ -272,7 +273,7 @@ class CodingProjectAdapter:
                     "Write src/fibonacci.py containing a fibonacci implementation "
                     "for the coding artifact."
                 ),
-                target_artifact_id=game_spec.target_artifact_id,
+                target_artifact_id=configured_artifact_id,
                 allowed_delta_type=game_spec.allowed_delta_type,
                 success_condition=(
                     "Artifact contains src/fibonacci.py with a non-empty fibonacci "
@@ -285,14 +286,19 @@ class CodingProjectAdapter:
                     "Write tests/test_fibonacci.py containing pytest tests for the "
                     "existing fibonacci implementation."
                 ),
-                target_artifact_id=game_spec.target_artifact_id,
+                target_artifact_id=configured_artifact_id,
                 allowed_delta_type=game_spec.allowed_delta_type,
                 success_condition=(
                     "Artifact contains tests/test_fibonacci.py with non-empty pytest "
                     "tests for fibonacci."
                 ),
             )
-        return game_spec
+        return GameSpec(
+            objective=game_spec.objective,
+            target_artifact_id=configured_artifact_id,
+            allowed_delta_type=game_spec.allowed_delta_type,
+            success_condition=game_spec.success_condition,
+        )
 
     def build_state_view(self, state: State, game_spec: GameSpec) -> StateView:
         return build_coding_state_view(state, game_spec)
