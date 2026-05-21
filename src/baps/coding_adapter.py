@@ -247,16 +247,42 @@ class CodingProjectAdapter:
         return build_coding_create_game_state_view(state, config)
 
     def render_create_game_prompt_supplement(
-        self, state: State, config: dict[str, object], state_view: StateView
+        self,
+        state: State,
+        config: dict[str, object],
+        state_view: StateView,
+        verification_result: VerificationResult | None,
     ) -> str:
-        del state, config, state_view
-        return (
+        base = (
             "Coding CreateGame constraints:\n"
             "- DeltaCodingState write_file changes exactly one file per game.\n"
             "- Choose exactly one missing file task per GameSpec.\n"
             "- Do not request multiple files in one GameSpec.\n"
             "- If no production file exists, choose src/fibonacci.py first.\n"
             "- If production file exists and test file is missing, choose tests/test_fibonacci.py next.\n"
+        )
+        if verification_result is None:
+            del state, config, state_view
+            return base
+        verification_json = json.dumps(
+            {
+                "command": verification_result.command,
+                "cwd": verification_result.cwd,
+                "exit_code": verification_result.exit_code,
+                "stdout": verification_result.stdout,
+                "stderr": verification_result.stderr,
+                "passed": verification_result.passed,
+            },
+            sort_keys=True,
+        )
+        del state, config, state_view
+        return (
+            f"{base}"
+            "Coding CreateGame verification evidence:\n"
+            f"- previous_verification_result_json: {verification_json}\n"
+            "- Use this as evidence from the previous exported state only.\n"
+            "- If evidence shows import/layout errors, prefer a repair game that fixes import/layout.\n"
+            "- If evidence shows failing tests, prefer a repair game for implementation/tests aligned to the failure.\n"
         )
 
     def normalize_game_spec(

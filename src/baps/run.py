@@ -621,6 +621,7 @@ def _render_create_game_prompt(
     config: dict[str, Any],
     state: State,
     state_view: StateView,
+    verification_result: VerificationResult | None = None,
     adapter: ProjectTypeAdapter | None = None,
 ) -> str:
     resolved_adapter = (
@@ -632,7 +633,26 @@ def _render_create_game_prompt(
         state=state,
         config=config,
         state_view=state_view,
+        verification_result=verification_result,
     )
+    verification_block = ""
+    if verification_result is not None:
+        verification_json = json.dumps(
+            {
+                "command": verification_result.command,
+                "cwd": verification_result.cwd,
+                "exit_code": verification_result.exit_code,
+                "stdout": verification_result.stdout,
+                "stderr": verification_result.stderr,
+                "passed": verification_result.passed,
+            },
+            sort_keys=True,
+        )
+        verification_block = (
+            "- previous_verification_result_json: "
+            f"{verification_json}\n"
+            "- previous_verification_result_json applies only to the previous exported state.\n\n"
+        )
     return (
         "Create a GameSpec JSON object for the given project state.\n\n"
         "Derive the next coherent game task from projected state context, including NorthStar intent.\n"
@@ -646,6 +666,7 @@ def _render_create_game_prompt(
         "\n"
         f"- artifact_id: {_config_artifact_id(config)}\n"
         "- Use StateView NorthStar section as authoritative context.\n\n"
+        f"{verification_block}"
         "Return only a JSON object.\n"
         "Do not wrap output in markdown.\n"
         "Do not use triple-backtick fences.\n"
@@ -868,6 +889,7 @@ def create_game(
     state: State,
     model_client: ModelClient | None = None,
     adapter: ProjectTypeAdapter | None = None,
+    verification_result: VerificationResult | None = None,
 ) -> GameSpec:
     _debug_print_create_game_input(state)
     resolved_adapter = (
@@ -878,7 +900,11 @@ def create_game(
     state_view = resolved_adapter.build_create_game_state_view(state, config)
     client = model_client if model_client is not None else _build_create_game_model_client()
     prompt = _render_create_game_prompt(
-        config=config, state=state, state_view=state_view, adapter=resolved_adapter
+        config=config,
+        state=state,
+        state_view=state_view,
+        verification_result=verification_result,
+        adapter=resolved_adapter,
     )
     _debug_print_create_game_prompt(prompt)
     generated = client.generate(prompt)
@@ -1277,11 +1303,17 @@ def _run_project_iterations(
     output_exported = False
     output_changed = False
     verification_result: VerificationResult | None = None
+    create_game_verification_result: VerificationResult | None = None
     stop_reason = "iteration_limit_reached"
 
     for _iteration in range(1, max_iterations + 1):
         try:
-            game_spec = create_game(config, current_state, adapter=adapter)
+            game_spec = create_game(
+                config,
+                current_state,
+                adapter=adapter,
+                verification_result=create_game_verification_result,
+            )
         except NoNewAtomicGameError:
             stop_reason = "create_game_no_new_atomic_game"
             break
@@ -1307,6 +1339,7 @@ def _run_project_iterations(
         output_exported = output_exported or output_changed
         verification_result = _verify_export_with_adapter(adapter, output_path)
         _debug_print_verification_result(verification_result)
+        create_game_verification_result = verification_result
         if changed_this_iteration:
             state_changed = True
             current_state = updated_state

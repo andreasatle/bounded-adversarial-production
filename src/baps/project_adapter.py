@@ -29,7 +29,11 @@ class ProjectTypeAdapter(Protocol):
         ...
 
     def render_create_game_prompt_supplement(
-        self, state: State, config: dict[str, object], state_view: StateView
+        self,
+        state: State,
+        config: dict[str, object],
+        state_view: StateView,
+        verification_result: VerificationResult | None,
     ) -> str:
         ...
 

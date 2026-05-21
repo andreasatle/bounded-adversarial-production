@@ -309,9 +309,14 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
     captured: dict[str, object] = {}
     original_create_game = run_module.create_game
 
-    def _capturing_create_game(config, state, adapter=None):
+    def _capturing_create_game(config, state, adapter=None, verification_result=None):
         captured.setdefault("state", state)
-        return original_create_game(config, state, adapter=adapter)
+        return original_create_game(
+            config,
+            state,
+            adapter=adapter,
+            verification_result=verification_result,
+        )
 
     monkeypatch.setattr(run_module, "create_game", _capturing_create_game)
     monkeypatch.setattr(
@@ -3046,7 +3051,11 @@ def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_pa
         success_condition="S",
     )
 
-    monkeypatch.setattr(run_module, "create_game", lambda config, state, adapter=None: expected)
+    monkeypatch.setattr(
+        run_module,
+        "create_game",
+        lambda config, state, adapter=None, verification_result=None: expected,
+    )
 
     def _capture_play_game(state, spec, adapter=None):
         captured["state"] = state
@@ -3106,7 +3115,8 @@ def test_main_max_iterations_two_runs_two_iterations_with_state_carry_forward(
 
     create_game_seen_sections: list[list[str]] = []
 
-    def _create_game(config, state, adapter=None):
+    def _create_game(config, state, adapter=None, verification_result=None):
+        del verification_result
         document = next(a for a in state.artifacts if a.id == "main-document")
         section_titles = [s.title for s in document.sections]
         create_game_seen_sections.append(section_titles)
@@ -3195,7 +3205,8 @@ def test_main_stops_when_create_game_cannot_produce_new_atomic_game(
 
     calls = {"count": 0}
 
-    def _create_game(_config, _state, adapter=None):
+    def _create_game(_config, _state, adapter=None, verification_result=None):
+        del verification_result
         calls["count"] += 1
         if calls["count"] == 1:
             return run_module.GameSpec(
@@ -3230,7 +3241,8 @@ def test_main_create_game_parse_error_is_not_swallowed_as_no_game(
 ) -> None:
     import baps.run as run_module
 
-    def _broken_create_game(_config, _state, adapter=None):
+    def _broken_create_game(_config, _state, adapter=None, verification_result=None):
+        del verification_result
         raise ValueError("create_game model output must be valid JSON")
 
     monkeypatch.setattr(run_module, "create_game", _broken_create_game)
@@ -3544,7 +3556,8 @@ def test_second_run_sees_previous_state(monkeypatch, tmp_path: Path) -> None:
     workspace = tmp_path / "ws-second-run-state"
     seen_titles: list[list[str]] = []
 
-    def _create_game(config, state, adapter=None):
+    def _create_game(config, state, adapter=None, verification_result=None):
+        del verification_result
         doc = next(a for a in state.artifacts if a.id == "main-document")
         titles = [s.title for s in doc.sections]
         seen_titles.append(titles)
@@ -3825,10 +3838,12 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
             self.calls.append("build_create_game_state_view")
             return self._delegate.build_create_game_state_view(state, config)
 
-        def render_create_game_prompt_supplement(self, state, config, state_view):
+        def render_create_game_prompt_supplement(
+            self, state, config, state_view, verification_result
+        ):
             self.calls.append("render_create_game_prompt_supplement")
             return self._delegate.render_create_game_prompt_supplement(
-                state, config, state_view
+                state, config, state_view, verification_result
             )
 
         def build_state_view(self, state, game_spec):
@@ -4003,6 +4018,67 @@ def test_coding_create_game_prompt_includes_one_file_per_game_guidance() -> None
     assert "DeltaCodingState write_file changes exactly one file per game." in prompt
     assert "Choose exactly one missing file task per GameSpec." in prompt
     assert "Do not request multiple files in one GameSpec." in prompt
+
+
+def test_coding_create_game_prompt_includes_previous_verification_evidence() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "coding",
+        "artifact_id": "main-codebase",
+        "goal": "Implement Fibonacci with tests",
+        "northstar_markdown": "# Goal\n\nImplement Fibonacci with tests",
+        "output_path": Path(".baps-workspace/output/project"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.create_state(config)
+    adapter = run_module.CodingProjectAdapter()
+    state_view = adapter.build_create_game_state_view(state, config)
+    verification = run_module.VerificationResult(
+        command="uv run pytest",
+        cwd="/tmp/project",
+        exit_code=2,
+        stdout="ModuleNotFoundError: No module named 'src'",
+        stderr="",
+        passed=False,
+    )
+    prompt = run_module._render_create_game_prompt(
+        config=config,
+        state=state,
+        state_view=state_view,
+        verification_result=verification,
+        adapter=adapter,
+    )
+    assert "previous_verification_result_json" in prompt
+    assert "Use this as evidence from the previous exported state only." in prompt
+    assert "If evidence shows import/layout errors, prefer a repair game" in prompt
+
+
+def test_document_create_game_prompt_has_no_verification_block_by_default() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "goal": "Write report",
+        "northstar_markdown": "# Goal\n\nWrite report",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.create_state(config)
+    adapter = run_module.DocumentProjectAdapter()
+    state_view = adapter.build_create_game_state_view(state, config)
+    prompt = run_module._render_create_game_prompt(
+        config=config,
+        state=state,
+        state_view=state_view,
+        adapter=adapter,
+    )
+    assert "previous_verification_result_json" not in prompt
 
 
 def test_coding_create_game_accepts_src_file_task_first_iteration() -> None:
@@ -4873,7 +4949,8 @@ def test_coding_iteration_two_does_not_receive_stale_verification_result(
     verification_seen: list[object] = []
     call_counter = {"count": 0}
 
-    def _create_game(_config, _state, adapter=None):
+    def _create_game(_config, _state, adapter=None, verification_result=None):
+        del verification_result
         call_counter["count"] += 1
         if call_counter["count"] == 1:
             return run_module.GameSpec(
@@ -4940,6 +5017,111 @@ def test_coding_iteration_two_does_not_receive_stale_verification_result(
     )
     run_module.main()
     assert verification_seen == [None, None]
+
+
+def test_coding_create_game_receives_previous_verification_result_second_iteration(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import baps.run as run_module
+
+    workspace = tmp_path / "coding-create-game-verification-input"
+    seen: list[run_module.VerificationResult | None] = []
+    create_count = {"n": 0}
+
+    def _create_game(_config, _state, adapter=None, verification_result=None):
+        del adapter
+        seen.append(verification_result)
+        create_count["n"] += 1
+        if create_count["n"] == 1:
+            return run_module.GameSpec(
+                objective="Write src/fibonacci.py containing implementation",
+                target_artifact_id="main-codebase",
+                allowed_delta_type="DeltaCodingState",
+                success_condition="src/fibonacci.py exists",
+            )
+        if create_count["n"] == 2:
+            return run_module.GameSpec(
+                objective="Write tests/test_fibonacci.py containing tests",
+                target_artifact_id="main-codebase",
+                allowed_delta_type="DeltaCodingState",
+                success_condition="tests/test_fibonacci.py exists",
+            )
+        raise run_module.NoNewAtomicGameError("done")
+
+    def _play_game(_state, spec, adapter=None, verification_result=None):
+        del adapter, verification_result
+        if "src/fibonacci.py" in spec.objective:
+            return run_module.DeltaCodingState(
+                artifact_id="main-codebase",
+                operation="write_file",
+                payload=run_module.WriteFileDelta(
+                    file=run_module.CodeFile(
+                        path="src/fibonacci.py",
+                        content="def fibonacci(n):\n    return n\n",
+                    )
+                ),
+            )
+        return run_module.DeltaCodingState(
+            artifact_id="main-codebase",
+            operation="write_file",
+            payload=run_module.WriteFileDelta(
+                file=run_module.CodeFile(
+                    path="tests/test_fibonacci.py",
+                    content="def test_smoke():\n    assert True\n",
+                )
+            ),
+        )
+
+    verify_calls = {"n": 0}
+
+    def _verify_export(_adapter, _output_path):
+        verify_calls["n"] += 1
+        if verify_calls["n"] == 1:
+            return run_module.VerificationResult(
+                command="uv run pytest",
+                cwd=str(workspace / "output" / "project"),
+                exit_code=2,
+                stdout="ModuleNotFoundError: No module named 'src'",
+                stderr="",
+                passed=False,
+            )
+        return run_module.VerificationResult(
+            command="uv run pytest",
+            cwd=str(workspace / "output" / "project"),
+            exit_code=0,
+            stdout="1 passed",
+            stderr="",
+            passed=True,
+        )
+
+    monkeypatch.setattr(run_module, "create_game", _create_game)
+    monkeypatch.setattr(run_module, "play_game", _play_game)
+    monkeypatch.setattr(run_module, "_verify_export_with_adapter", _verify_export)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "init_and_run",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "coding",
+            "--artifact-id",
+            "main-codebase",
+            "--goal",
+            "Implement Fibonacci with tests.",
+            "--output",
+            "output/project",
+            "--max-iterations",
+            "2",
+        ],
+    )
+    run_module.main()
+
+    assert len(seen) >= 2
+    assert seen[0] is None
+    assert seen[1] is not None
+    assert seen[1].exit_code == 2
 
 
 def test_active_main_and_play_game_orchestration_have_no_direct_document_mechanics() -> None:

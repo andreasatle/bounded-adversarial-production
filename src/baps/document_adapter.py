@@ -283,9 +283,13 @@ class DocumentProjectAdapter:
         return build_document_create_game_state_view(state, config)
 
     def render_create_game_prompt_supplement(
-        self, state: State, config: dict[str, object], state_view: StateView
+        self,
+        state: State,
+        config: dict[str, object],
+        state_view: StateView,
+        verification_result: VerificationResult | None,
     ) -> str:
-        del state, config, state_view
+        del state, config, state_view, verification_result
         return ""
 
     def normalize_game_spec(
