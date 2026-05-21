@@ -20,38 +20,15 @@ from baps.project_adapter import (
     resolve_adapter_for_allowed_delta_type,
     resolve_project_type_adapter,
 )
-from baps.document_adapter import (
-    DocumentProjectAdapter,
-    build_document_state_view as _build_document_state_view,
-    build_document_create_game_state_view as _build_create_game_state_view,
-    render_document_blue_prompt as _render_document_blue_prompt,
-    parse_document_delta_json as _parse_document_delta_json,
-    derive_document_state_update_from_delta as _derive_document_state_update_from_delta,
-)
-from baps.coding_adapter import (
-    CodingProjectAdapter,
-    build_coding_state_view as _build_coding_state_view,
-    build_coding_create_game_state_view as _build_coding_create_game_state_view,
-    parse_coding_delta_json as _parse_coding_delta_json,
-    derive_coding_state_update_from_delta as _derive_coding_state_update_from_delta,
-)
+from baps.document_adapter import DocumentProjectAdapter
+from baps.coding_adapter import CodingProjectAdapter
 from baps.state import (
-    AppendSectionDelta,
-    CodeFile,
-    CodingArtifact,
-    DeltaCodingState,
-    DeltaDocumentState,
     DeltaState,
-    DocumentArtifact,
     GameSpec,
-    NorthStar,
     PlayGameRuntime,
     RedFinding,
     RefereeDecision,
-    Section,
     State,
-    StateUpdateTarget,
-    WriteFileDelta,
     StateUpdateProposal,
     fingerprint_state,
     apply_referee_decision_to_runtime,
@@ -607,14 +584,6 @@ def _resolve_project_type_adapter(project_type: str) -> ProjectTypeAdapter:
 
 def _resolve_adapter_for_allowed_delta_type(allowed_delta_type: str) -> ProjectTypeAdapter:
     return resolve_adapter_for_allowed_delta_type(allowed_delta_type)
-
-
-def _build_create_game_state_view(state: State, artifact_id: str) -> StateView:
-    adapter = _resolve_project_type_adapter("document")
-    return adapter.build_create_game_state_view(
-        state,
-        {"artifact_id": artifact_id},
-    )
 
 
 def _render_create_game_prompt(

@@ -7,6 +7,7 @@ import pytest
 
 from baps.models import FakeModelClient
 from baps.run import create_game, create_state, main, play_game
+import baps.state as state_module
 
 
 @pytest.fixture(autouse=True)
@@ -353,11 +354,11 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
 def test_derive_state_update_from_delta_converts_append_section() -> None:
     import baps.run as run_module
 
-    delta = run_module.DeltaDocumentState(
+    delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
-        payload=run_module.AppendSectionDelta(
-            section=run_module.Section(title="Introduction", body="Body text")
+        payload=state_module.AppendSectionDelta(
+            section=state_module.Section(title="Introduction", body="Body text")
         ),
     )
     proposal = run_module._derive_state_update_from_delta(
@@ -414,7 +415,7 @@ def test_main_persists_updated_state_with_appended_section(monkeypatch, tmp_path
 
     persisted = run_module.JsonStateStore(workspace / "state" / "state.json").load()
     doc = next(a for a in persisted.artifacts if a.id == "main-document")
-    assert isinstance(doc, run_module.DocumentArtifact)
+    assert isinstance(doc, state_module.DocumentArtifact)
     assert len(doc.sections) == 2
     assert doc.sections[0].title == "Introduction"
     assert doc.sections[0].body == "Advance goal"
@@ -426,11 +427,11 @@ def test_main_unsupported_delta_operation_fails_explicitly(monkeypatch, capsys, 
     monkeypatch.setattr(
         run_module,
         "play_game",
-        lambda _state, _spec, adapter=None: run_module.DeltaDocumentState.model_construct(
+        lambda _state, _spec, adapter=None: state_module.DeltaDocumentState.model_construct(
             artifact_id="main-document",
             operation="unsupported_operation",
-            payload=run_module.AppendSectionDelta(
-                section=run_module.Section(title="Introduction", body="body")
+            payload=state_module.AppendSectionDelta(
+                section=state_module.Section(title="Introduction", body="body")
             ),
         ),
     )
@@ -1010,10 +1011,12 @@ def test_create_game_prompt_forbids_markdown_fences_and_lists_required_shape() -
         "spec_path": None,
     }
     state = create_state(config)
+    adapter = run_module.DocumentProjectAdapter()
     prompt = run_module._render_create_game_prompt(
         config,
         state,
-        run_module._build_create_game_state_view(state, config["artifact_id"]),
+        adapter.build_create_game_state_view(state, config),
+        adapter=adapter,
     )
 
     assert "Return only a JSON object" in prompt
@@ -1561,7 +1564,7 @@ def test_blue_prompt_includes_state_view_and_gamespec() -> None:
             "spec_path": None,
         }
     )
-    state_view = run_module._build_document_state_view(state, spec)
+    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
     prompt = run_module._render_blue_prompt(
         state_view=state_view,
         game_spec=spec,
@@ -1620,12 +1623,12 @@ def test_red_prompt_intro_only_guides_revise_for_intro_and_conclusion_success_co
             "spec_path": None,
         }
     )
-    state_view = run_module._build_document_state_view(state, spec)
-    delta = run_module.DeltaDocumentState(
+    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
+    delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
-        payload=run_module.AppendSectionDelta(
-            section=run_module.Section(title="Introduction", body="Intro only")
+        payload=state_module.AppendSectionDelta(
+            section=state_module.Section(title="Introduction", body="Intro only")
         ),
     )
     prompt = run_module._render_red_prompt(state_view, spec, delta)
@@ -1760,13 +1763,13 @@ def test_create_game_engine_does_not_compute_next_missing_section() -> None:
         "spec_path": None,
     }
     state = run_module.State(
-        northstar=run_module.NorthStar(artifacts=()),
+        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
-            run_module.DocumentArtifact(
+            state_module.DocumentArtifact(
                 id="main-document",
                 sections=(
-                    run_module.Section(title="Introduction", body="Intro"),
-                    run_module.Section(title="Conclusion", body="Outro"),
+                    state_module.Section(title="Introduction", body="Intro"),
+                    state_module.Section(title="Conclusion", body="Outro"),
                 ),
             ),
         ),
@@ -1830,11 +1833,13 @@ def test_create_game_prompt_includes_northstar_context() -> None:
         "spec_path": None,
     }
     state = run_module.create_state(config)
-    state_view = run_module._build_create_game_state_view(state, config["artifact_id"])
+    adapter = run_module.DocumentProjectAdapter()
+    state_view = adapter.build_create_game_state_view(state, config)
     prompt = run_module._render_create_game_prompt(
         config,
         state,
-        run_module._build_create_game_state_view(state, config["artifact_id"]),
+        adapter.build_create_game_state_view(state, config),
+        adapter=adapter,
     )
     assert "- state_view:" in prompt
     assert prompt.count("=== StateView Start ===") == 1
@@ -1914,10 +1919,10 @@ def test_blue_prompt_and_source_do_not_hardcode_project_policy_literals() -> Non
         success_condition="Overview section exists.",
     )
     state = run_module.State(
-        northstar=run_module.NorthStar(artifacts=()),
-        artifacts=(run_module.DocumentArtifact(id="doc-a", sections=()),),
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.DocumentArtifact(id="doc-a", sections=()),),
     )
-    state_view = run_module._build_document_state_view(state, spec)
+    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
     prompt = run_module._render_blue_prompt(state_view, spec, 1, None)
     assert '"artifact_id": "<game_spec.target_artifact_id>"' not in prompt
     assert '"title": "<section title>"' not in prompt
@@ -1938,11 +1943,11 @@ def test_document_blue_prompt_contains_document_specific_shape_rules() -> None:
         success_condition="Overview section exists.",
     )
     state = run_module.State(
-        northstar=run_module.NorthStar(artifacts=()),
-        artifacts=(run_module.DocumentArtifact(id="doc-a", sections=()),),
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.DocumentArtifact(id="doc-a", sections=()),),
     )
-    state_view = run_module._build_document_state_view(state, spec)
-    prompt = run_module._render_document_blue_prompt(state_view, spec, 1, None)
+    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
+    prompt = run_module.DocumentProjectAdapter().render_blue_prompt(state_view, spec, 1, None)
     assert "Document delta rules:" in prompt
     assert "section.title and section.body must be non-empty strings." in prompt
     assert '"artifact_id": "<game_spec.target_artifact_id>"' in prompt
@@ -1971,12 +1976,12 @@ def test_referee_prompt_intro_and_conclusion_guides_accept_policy() -> None:
             "spec_path": None,
         }
     )
-    state_view = run_module._build_document_state_view(state, spec)
-    delta = run_module.DeltaDocumentState(
+    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
+    delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
-        payload=run_module.AppendSectionDelta(
-            section=run_module.Section(
+        payload=state_module.AppendSectionDelta(
+            section=state_module.Section(
                 title="Introduction and Conclusion",
                 body="Introduction... Conclusion...",
             )
@@ -2017,12 +2022,12 @@ def test_referee_prompt_declares_game_local_authority_and_not_final_integration(
             "spec_path": None,
         }
     )
-    state_view = run_module._build_document_state_view(state, spec)
-    delta = run_module.DeltaDocumentState(
+    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
+    delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
-        payload=run_module.AppendSectionDelta(
-            section=run_module.Section(title="Introduction", body="Body")
+        payload=state_module.AppendSectionDelta(
+            section=state_module.Section(title="Introduction", body="Body")
         ),
     )
     red = run_module.RedFinding(disposition="accept", rationale="ok")
@@ -2052,12 +2057,12 @@ def test_referee_prompt_uses_red_material_findings_in_decision_policy() -> None:
             "spec_path": None,
         }
     )
-    state_view = run_module._build_document_state_view(state, spec)
-    delta = run_module.DeltaDocumentState(
+    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
+    delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
-        payload=run_module.AppendSectionDelta(
-            section=run_module.Section(title="Introduction", body="Body")
+        payload=state_module.AppendSectionDelta(
+            section=state_module.Section(title="Introduction", body="Body")
         ),
     )
     red = run_module.RedFinding(disposition="revise", rationale="missing conclusion")
@@ -2087,12 +2092,12 @@ def test_red_and_referee_prompts_do_not_treat_state_mutation_alone_as_failure() 
             "spec_path": None,
         }
     )
-    state_view = run_module._build_document_state_view(state, spec)
-    delta = run_module.DeltaDocumentState(
+    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
+    delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
-        payload=run_module.AppendSectionDelta(
-            section=run_module.Section(title="Introduction", body="Body")
+        payload=state_module.AppendSectionDelta(
+            section=state_module.Section(title="Introduction", body="Body")
         ),
     )
     red_prompt = run_module._render_red_prompt(state_view, spec, delta)
@@ -2116,12 +2121,12 @@ def test_coding_red_prompt_includes_verification_evidence_when_provided() -> Non
         success_condition="Tests pass",
     )
     state = run_module.State(
-        northstar=run_module.NorthStar(artifacts=()),
+        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
-            run_module.CodingArtifact(
+            state_module.CodingArtifact(
                 id="main-codebase",
                 files=(
-                    run_module.CodeFile(
+                    state_module.CodeFile(
                         path="src/fibonacci.py",
                         content="def fibonacci(n):\n    return n\n",
                     ),
@@ -2130,11 +2135,11 @@ def test_coding_red_prompt_includes_verification_evidence_when_provided() -> Non
         ),
     )
     state_view = run_module.CodingProjectAdapter().build_state_view(state, spec)
-    delta = run_module.DeltaCodingState(
+    delta = state_module.DeltaCodingState(
         artifact_id="main-codebase",
         operation="write_file",
-        payload=run_module.WriteFileDelta(
-            file=run_module.CodeFile(
+        payload=state_module.WriteFileDelta(
+            file=state_module.CodeFile(
                 path="tests/test_fibonacci.py",
                 content="def test_smoke():\n    assert True\n",
             )
@@ -2168,15 +2173,15 @@ def test_coding_referee_prompt_includes_failing_verification_evidence() -> None:
         success_condition="Tests pass",
     )
     state = run_module.State(
-        northstar=run_module.NorthStar(artifacts=()),
-        artifacts=(run_module.CodingArtifact(id="main-codebase", files=()),),
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(id="main-codebase", files=()),),
     )
     state_view = run_module.CodingProjectAdapter().build_state_view(state, spec)
-    delta = run_module.DeltaCodingState(
+    delta = state_module.DeltaCodingState(
         artifact_id="main-codebase",
         operation="write_file",
-        payload=run_module.WriteFileDelta(
-            file=run_module.CodeFile(
+        payload=state_module.WriteFileDelta(
+            file=state_module.CodeFile(
                 path="tests/test_fibonacci.py",
                 content="def test_smoke():\n    assert False\n",
             )
@@ -2211,15 +2216,15 @@ def test_document_prompts_do_not_include_verification_evidence_by_default() -> N
         success_condition="Any success condition",
     )
     state = run_module.State(
-        northstar=run_module.NorthStar(artifacts=()),
-        artifacts=(run_module.DocumentArtifact(id="main-document", sections=()),),
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
     )
     state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
-    delta = run_module.DeltaDocumentState(
+    delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
-        payload=run_module.AppendSectionDelta(
-            section=run_module.Section(title="Intro", body="Body")
+        payload=state_module.AppendSectionDelta(
+            section=state_module.Section(title="Intro", body="Body")
         ),
     )
     red = run_module.RedFinding(disposition="accept", rationale="ok")
@@ -2239,15 +2244,15 @@ def test_document_red_referee_prompts_do_not_include_coding_guidance() -> None:
         success_condition="Any success condition",
     )
     state = run_module.State(
-        northstar=run_module.NorthStar(artifacts=()),
-        artifacts=(run_module.DocumentArtifact(id="main-document", sections=()),),
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
     )
     state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
-    delta = run_module.DeltaDocumentState(
+    delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
-        payload=run_module.AppendSectionDelta(
-            section=run_module.Section(title="Intro", body="Body")
+        payload=state_module.AppendSectionDelta(
+            section=state_module.Section(title="Intro", body="Body")
         ),
     )
     red = run_module.RedFinding(disposition="accept", rationale="ok")
@@ -2269,16 +2274,16 @@ def test_coding_red_referee_prompts_include_coding_guidance() -> None:
         success_condition="tests exist",
     )
     state = run_module.State(
-        northstar=run_module.NorthStar(artifacts=()),
-        artifacts=(run_module.CodingArtifact(id="main-codebase", files=()),),
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(id="main-codebase", files=()),),
     )
     adapter = run_module.CodingProjectAdapter()
     state_view = adapter.build_state_view(state, spec)
-    delta = run_module.DeltaCodingState(
+    delta = state_module.DeltaCodingState(
         artifact_id="main-codebase",
         operation="write_file",
-        payload=run_module.WriteFileDelta(
-            file=run_module.CodeFile(path="tests/test_fibonacci.py", content="assert True")
+        payload=state_module.WriteFileDelta(
+            file=state_module.CodeFile(path="tests/test_fibonacci.py", content="assert True")
         ),
     )
     red = run_module.RedFinding(disposition="accept", rationale="ok")
@@ -2314,15 +2319,15 @@ def test_red_referee_prompts_forbid_goalpost_drift_language() -> None:
         success_condition="Artifact contains tests/test_example.py with non-empty pytest tests.",
     )
     state = run_module.State(
-        northstar=run_module.NorthStar(artifacts=()),
-        artifacts=(run_module.CodingArtifact(id="main-codebase", files=()),),
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(id="main-codebase", files=()),),
     )
     state_view = run_module.CodingProjectAdapter().build_state_view(state, spec)
-    delta = run_module.DeltaCodingState(
+    delta = state_module.DeltaCodingState(
         artifact_id="main-codebase",
         operation="write_file",
-        payload=run_module.WriteFileDelta(
-            file=run_module.CodeFile(
+        payload=state_module.WriteFileDelta(
+            file=state_module.CodeFile(
                 path="tests/test_example.py",
                 content="def test_smoke():\n    assert True\n",
             )
@@ -2358,15 +2363,15 @@ def test_state_view_is_derived_from_state_and_gamespec_with_existing_sections() 
         success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
     )
     state = run_module.State(
-        northstar=run_module.NorthStar(artifacts=()),
+        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
-            run_module.DocumentArtifact(
+            state_module.DocumentArtifact(
                 id="main-document",
-                sections=(run_module.Section(title="Existing", body="Already here"),),
+                sections=(state_module.Section(title="Existing", body="Already here"),),
             ),
         ),
     )
-    state_view = run_module._build_document_state_view(state, spec)
+    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
     assert state_view.metadata["target_artifact_id"] == "main-document"
     assert state_view.metadata["sections"] == [{"title": "Existing", "body": "Already here"}]
     assert state_view.content.startswith("=== StateView Start ===")
@@ -2393,11 +2398,11 @@ def test_document_state_view_content_for_empty_document() -> None:
         success_condition="Any success condition.",
     )
     state = run_module.State(
-        northstar=run_module.NorthStar(artifacts=()),
-        artifacts=(run_module.DocumentArtifact(id="main-document", sections=()),),
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
     )
 
-    state_view = run_module._build_document_state_view(state, spec)
+    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
     content = state_view.content
     assert content.startswith("=== StateView Start ===")
     assert content.endswith("=== StateView End ===")
@@ -2416,12 +2421,12 @@ def test_create_game_state_view_content_is_markdown_for_empty_document() -> None
     import baps.run as run_module
 
     state = run_module.State(
-        northstar=run_module.NorthStar(
+        northstar=state_module.NorthStar(
             artifacts=(
-                run_module.DocumentArtifact(
+                state_module.DocumentArtifact(
                     id="northstar:abc",
                     sections=(
-                        run_module.Section(
+                        state_module.Section(
                             title="NorthStar",
                             body="# Goal\n\nWrite a short report about bounded adversarial evaluation.",
                         ),
@@ -2429,10 +2434,12 @@ def test_create_game_state_view_content_is_markdown_for_empty_document() -> None
                 ),
             )
         ),
-        artifacts=(run_module.DocumentArtifact(id="main-document", sections=()),),
+        artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
     )
 
-    state_view = run_module._build_create_game_state_view(state, "main-document")
+    state_view = run_module.DocumentProjectAdapter().build_create_game_state_view(
+        state, {"artifact_id": "main-document"}
+    )
     content = state_view.content
     assert content.startswith("=== StateView Start ===")
     assert content.endswith("=== StateView End ===")
@@ -2456,12 +2463,12 @@ def test_create_game_state_view_content_includes_sections_as_markdown() -> None:
     import baps.run as run_module
 
     state = run_module.State(
-        northstar=run_module.NorthStar(
+        northstar=state_module.NorthStar(
             artifacts=(
-                run_module.DocumentArtifact(
+                state_module.DocumentArtifact(
                     id="northstar:def",
                     sections=(
-                        run_module.Section(
+                        state_module.Section(
                             title="NorthStar",
                             body="# Goal\n\nWrite a short report about bounded adversarial evaluation.",
                         ),
@@ -2470,14 +2477,16 @@ def test_create_game_state_view_content_includes_sections_as_markdown() -> None:
             )
         ),
         artifacts=(
-            run_module.DocumentArtifact(
+            state_module.DocumentArtifact(
                 id="main-document",
-                sections=(run_module.Section(title="Introduction", body="Intro body text."),),
+                sections=(state_module.Section(title="Introduction", body="Intro body text."),),
             ),
         ),
     )
 
-    state_view = run_module._build_create_game_state_view(state, "main-document")
+    state_view = run_module.DocumentProjectAdapter().build_create_game_state_view(
+        state, {"artifact_id": "main-document"}
+    )
     content = state_view.content
     assert "### Current Sections" in content
     assert "### Introduction" in content
@@ -2950,18 +2959,18 @@ def test_play_game_invalid_blue_debug_and_non_debug_output(monkeypatch, capsys) 
 def test_runtime_preserves_accepted_delta_after_later_reject_in_helper_flow() -> None:
     import baps.run as run_module
 
-    first_delta = run_module.DeltaDocumentState(
+    first_delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
-        payload=run_module.AppendSectionDelta(
-            section=run_module.Section(title="Introduction", body="first")
+        payload=state_module.AppendSectionDelta(
+            section=state_module.Section(title="Introduction", body="first")
         ),
     )
-    second_delta = run_module.DeltaDocumentState(
+    second_delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
-        payload=run_module.AppendSectionDelta(
-            section=run_module.Section(title="Introduction", body="second")
+        payload=state_module.AppendSectionDelta(
+            section=state_module.Section(title="Introduction", body="second")
         ),
     )
     runtime = run_module.PlayGameRuntime()
@@ -3060,11 +3069,11 @@ def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_pa
     def _capture_play_game(state, spec, adapter=None):
         captured["state"] = state
         captured["spec"] = spec
-        return run_module.DeltaDocumentState(
+        return state_module.DeltaDocumentState(
             artifact_id=spec.target_artifact_id,
             operation="append_section",
-            payload=run_module.AppendSectionDelta(
-                section=run_module.Section(title="Introduction", body=spec.objective)
+            payload=state_module.AppendSectionDelta(
+                section=state_module.Section(title="Introduction", body=spec.objective)
             ),
         )
 
@@ -3133,11 +3142,11 @@ def test_main_max_iterations_two_runs_two_iterations_with_state_carry_forward(
 
     def _play_game(_state, spec, adapter=None):
         title = "Introduction" if "introduction" in spec.objective.lower() else "Conclusion"
-        return run_module.DeltaDocumentState(
+        return state_module.DeltaDocumentState(
             artifact_id="main-document",
             operation="append_section",
-            payload=run_module.AppendSectionDelta(
-                section=run_module.Section(title=title, body=f"{title} body")
+            payload=state_module.AppendSectionDelta(
+                section=state_module.Section(title=title, body=f"{title} body")
             ),
         )
 
@@ -3335,13 +3344,13 @@ def test_document_export_markdown_contains_sections_in_order(tmp_path: Path) -> 
 
     adapter = run_module.DocumentProjectAdapter()
     state = run_module.State(
-        northstar=run_module.NorthStar(artifacts=()),
+        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
-            run_module.DocumentArtifact(
+            state_module.DocumentArtifact(
                 id="main-document",
                 sections=(
-                    run_module.Section(title="Introduction", body="Intro body"),
-                    run_module.Section(title="Conclusion", body="Conclusion body"),
+                    state_module.Section(title="Introduction", body="Intro body"),
+                    state_module.Section(title="Conclusion", body="Conclusion body"),
                 ),
             ),
         ),
@@ -3360,8 +3369,8 @@ def test_document_export_creates_parent_directories(tmp_path: Path) -> None:
 
     adapter = run_module.DocumentProjectAdapter()
     state = run_module.State(
-        northstar=run_module.NorthStar(artifacts=()),
-        artifacts=(run_module.DocumentArtifact(id="main-document", sections=()),),
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
     )
     output_path = tmp_path / "a" / "b" / "c" / "report.md"
     adapter.export_state(state, output_path, "main-document")
@@ -3373,11 +3382,11 @@ def test_document_export_output_changed_false_when_unchanged(tmp_path: Path) -> 
 
     adapter = run_module.DocumentProjectAdapter()
     state = run_module.State(
-        northstar=run_module.NorthStar(artifacts=()),
+        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
-            run_module.DocumentArtifact(
+            state_module.DocumentArtifact(
                 id="main-document",
-                sections=(run_module.Section(title="Intro", body="Body"),),
+                sections=(state_module.Section(title="Intro", body="Body"),),
             ),
         ),
     )
@@ -3574,11 +3583,11 @@ def test_second_run_sees_previous_state(monkeypatch, tmp_path: Path) -> None:
 
     def _play_game(_state, spec, adapter=None):
         title = "Introduction" if "introduction" in spec.objective.lower() else "Conclusion"
-        return run_module.DeltaDocumentState(
+        return state_module.DeltaDocumentState(
             artifact_id="main-document",
             operation="append_section",
-            payload=run_module.AppendSectionDelta(
-                section=run_module.Section(title=title, body=f"{title} body")
+            payload=state_module.AppendSectionDelta(
+                section=state_module.Section(title=title, body=f"{title} body")
             ),
         )
 
@@ -3761,7 +3770,7 @@ def test_init_from_spec_persists_northstar_artifact(monkeypatch, tmp_path: Path)
     northstar_artifact = persisted.northstar.artifacts[0]
     assert northstar_artifact.kind == "document"
     assert northstar_artifact.id.startswith("northstar:")
-    assert isinstance(northstar_artifact, run_module.DocumentArtifact)
+    assert isinstance(northstar_artifact, state_module.DocumentArtifact)
     assert len(northstar_artifact.sections) == 1
     assert northstar_artifact.sections[0].body == (
         "# Goal\n\nWrite a short report grounded in NorthStar intent."
@@ -3938,7 +3947,7 @@ def test_coding_create_state_creates_coding_artifact() -> None:
     )
     assert len(state.artifacts) == 1
     artifact = state.artifacts[0]
-    assert isinstance(artifact, run_module.CodingArtifact)
+    assert isinstance(artifact, state_module.CodingArtifact)
     assert artifact.id == "main-codebase"
     assert artifact.files == ()
 
@@ -3972,8 +3981,8 @@ def test_coding_blue_prompt_supplement_prefers_src_and_pytest_layout() -> None:
     import baps.run as run_module
 
     state = run_module.State(
-        northstar=run_module.NorthStar(artifacts=()),
-        artifacts=(run_module.CodingArtifact(id="main-codebase", files=()),),
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(id="main-codebase", files=()),),
     )
     spec = run_module.GameSpec(
         objective="Implement Fibonacci with tests",
@@ -4135,10 +4144,10 @@ def test_coding_create_game_accepts_test_file_task_second_iteration() -> None:
     state = run_module.State(
         northstar=run_module.create_state(config).northstar,
         artifacts=(
-            run_module.CodingArtifact(
+            state_module.CodingArtifact(
                 id="main-codebase",
                 files=(
-                    run_module.CodeFile(
+                    state_module.CodeFile(
                         path="src/fibonacci.py",
                         content="def fibonacci(n):\n    return n\n",
                     ),
@@ -4217,10 +4226,10 @@ def test_coding_create_game_normalizes_to_tests_when_src_present() -> None:
     state = run_module.State(
         northstar=run_module.create_state(config).northstar,
         artifacts=(
-            run_module.CodingArtifact(
+            state_module.CodingArtifact(
                 id="main-codebase",
                 files=(
-                    run_module.CodeFile(
+                    state_module.CodeFile(
                         path="src/fibonacci.py",
                         content="def fibonacci(n):\n    return n\n",
                     ),
@@ -4312,11 +4321,11 @@ def test_coding_adapter_maps_file_write_delta_to_state_update() -> None:
     import baps.run as run_module
 
     adapter = run_module.CodingProjectAdapter()
-    delta = run_module.DeltaCodingState(
+    delta = state_module.DeltaCodingState(
         artifact_id="main-codebase",
         operation="write_file",
-        payload=run_module.WriteFileDelta(
-            file=run_module.CodeFile(
+        payload=state_module.WriteFileDelta(
+            file=state_module.CodeFile(
                 path="src/fibonacci.py",
                 content="def fibonacci(n):\n    return n\n",
             )
@@ -4331,16 +4340,16 @@ def test_coding_adapter_export_writes_files(tmp_path: Path) -> None:
     import baps.run as run_module
 
     state = run_module.State(
-        northstar=run_module.NorthStar(artifacts=()),
+        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
-            run_module.CodingArtifact(
+            state_module.CodingArtifact(
                 id="main-codebase",
                 files=(
-                    run_module.CodeFile(
+                    state_module.CodeFile(
                         path="src/fibonacci.py",
                         content="def fibonacci(n):\n    return n\n",
                     ),
-                    run_module.CodeFile(
+                    state_module.CodeFile(
                         path="tests/test_fibonacci.py",
                         content="def test_smoke():\n    assert True\n",
                     ),
@@ -4363,16 +4372,16 @@ def test_coding_adapter_export_writes_src_and_tests_layout(tmp_path: Path) -> No
     import baps.run as run_module
 
     state = run_module.State(
-        northstar=run_module.NorthStar(artifacts=()),
+        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
-            run_module.CodingArtifact(
+            state_module.CodingArtifact(
                 id="main-codebase",
                 files=(
-                    run_module.CodeFile(
+                    state_module.CodeFile(
                         path="src/fibonacci.py",
                         content="def fibonacci(n):\n    return n\n",
                     ),
-                    run_module.CodeFile(
+                    state_module.CodeFile(
                         path="tests/test_fibonacci.py",
                         content=(
                             "from src.fibonacci import fibonacci\n\n"
@@ -4401,12 +4410,12 @@ def test_coding_adapter_verify_export_discovers_and_runs_pytest_tests(
     import baps.run as run_module
 
     state = run_module.State(
-        northstar=run_module.NorthStar(artifacts=()),
+        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
-            run_module.CodingArtifact(
+            state_module.CodingArtifact(
                 id="main-codebase",
                 files=(
-                    run_module.CodeFile(
+                    state_module.CodeFile(
                         path="src/fibonacci.py",
                         content=(
                             "def fibonacci(n):\n"
@@ -4420,7 +4429,7 @@ def test_coding_adapter_verify_export_discovers_and_runs_pytest_tests(
                             "    return b\n"
                         ),
                     ),
-                    run_module.CodeFile(
+                    state_module.CodeFile(
                         path="tests/test_fibonacci.py",
                         content=(
                             "from pathlib import Path\n"
@@ -4451,12 +4460,12 @@ def test_coding_export_creates_nested_parent_directories(tmp_path: Path) -> None
     import baps.run as run_module
 
     state = run_module.State(
-        northstar=run_module.NorthStar(artifacts=()),
+        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
-            run_module.CodingArtifact(
+            state_module.CodingArtifact(
                 id="main-codebase",
                 files=(
-                    run_module.CodeFile(
+                    state_module.CodeFile(
                         path="pkg/subpkg/fibonacci.py",
                         content="def fibonacci(n):\n    return n\n",
                     ),
@@ -4477,12 +4486,12 @@ def test_coding_export_output_changed_false_when_unchanged(tmp_path: Path) -> No
     import baps.run as run_module
 
     state = run_module.State(
-        northstar=run_module.NorthStar(artifacts=()),
+        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
-            run_module.CodingArtifact(
+            state_module.CodingArtifact(
                 id="main-codebase",
                 files=(
-                    run_module.CodeFile(
+                    state_module.CodeFile(
                         path="src/fibonacci.py",
                         content="def fibonacci(n):\n    return n\n",
                     ),
@@ -4630,11 +4639,11 @@ def test_coding_run_summary_includes_verification_status(
     monkeypatch.setattr(
         run_module,
         "play_game",
-        lambda *_args, **_kwargs: run_module.DeltaCodingState(
+        lambda *_args, **_kwargs: state_module.DeltaCodingState(
             artifact_id="main-codebase",
             operation="write_file",
-            payload=run_module.WriteFileDelta(
-                file=run_module.CodeFile(
+            payload=state_module.WriteFileDelta(
+                file=state_module.CodeFile(
                     path="src/fibonacci.py",
                     content="def fibonacci(n):\n    return n\n",
                 )
@@ -4717,11 +4726,11 @@ def test_coding_init_and_run_exports_fibonacci_files(monkeypatch, tmp_path: Path
     def _play_game(_state, _game_spec, adapter=None):
         call_counter["count"] += 1
         if call_counter["count"] == 1:
-            return run_module.DeltaCodingState(
+            return state_module.DeltaCodingState(
                 artifact_id="main-codebase",
                 operation="write_file",
-                payload=run_module.WriteFileDelta(
-                    file=run_module.CodeFile(
+                payload=state_module.WriteFileDelta(
+                    file=state_module.CodeFile(
                         path="src/fibonacci.py",
                         content=(
                             "def fibonacci(n):\n"
@@ -4738,11 +4747,11 @@ def test_coding_init_and_run_exports_fibonacci_files(monkeypatch, tmp_path: Path
                 ),
             )
         if call_counter["count"] == 2:
-            return run_module.DeltaCodingState(
+            return state_module.DeltaCodingState(
                 artifact_id="main-codebase",
                 operation="write_file",
-                payload=run_module.WriteFileDelta(
-                    file=run_module.CodeFile(
+                payload=state_module.WriteFileDelta(
+                    file=state_module.CodeFile(
                         path="tests/test_fibonacci.py",
                         content=(
                             "from src.fibonacci import fibonacci\n\n"
@@ -4831,11 +4840,11 @@ def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
 
         def parse_blue_delta(self, _text):
             self.calls.append("parse_blue_delta")
-            return run_module.DeltaDocumentState(
+            return state_module.DeltaDocumentState(
                 artifact_id="main-document",
                 operation="append_section",
-                payload=run_module.AppendSectionDelta(
-                    section=run_module.Section(title="Intro", body="Body")
+                payload=state_module.AppendSectionDelta(
+                    section=state_module.Section(title="Intro", body="Body")
                 ),
             )
 
@@ -4850,8 +4859,8 @@ def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
         success_condition="section exists",
     )
     state = run_module.State(
-        northstar=run_module.NorthStar(artifacts=()),
-        artifacts=(run_module.DocumentArtifact(id="main-document", sections=()),),
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
     )
     delta = run_module.play_game(
         state,
@@ -4861,7 +4870,7 @@ def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
         red_model_client=FakeModelClient(['{"disposition":"accept","rationale":"ok"}']),
         referee_model_client=FakeModelClient(['{"disposition":"accept","rationale":"ok"}']),
     )
-    assert isinstance(delta, run_module.DeltaDocumentState)
+    assert isinstance(delta, state_module.DeltaDocumentState)
     assert adapter.calls == ["build_state_view", "render_blue_prompt", "parse_blue_delta"]
 
 
@@ -4887,21 +4896,21 @@ def test_integration_uses_adapter_delta_to_update_mapper() -> None:
             raise NotImplementedError
 
         def delta_to_state_update(self, delta_state):
-            return run_module.StateUpdateProposal(
-                id="mapped",
-                target=run_module.StateUpdateTarget(artifact_id=delta_state.artifact_id),
-                summary="mapped",
-                payload={
-                    "operation": "replace_artifact",
+                return run_module.StateUpdateProposal(
+                    id="mapped",
+                    target=state_module.StateUpdateTarget(artifact_id=delta_state.artifact_id),
+                    summary="mapped",
+                    payload={
+                        "operation": "replace_artifact",
                     "artifact": {"id": delta_state.artifact_id, "kind": "document"},
                 },
             )
 
-    delta = run_module.DeltaDocumentState(
+    delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
-        payload=run_module.AppendSectionDelta(
-            section=run_module.Section(title="T", body="B")
+        payload=state_module.AppendSectionDelta(
+            section=state_module.Section(title="T", body="B")
         ),
     )
     proposal = run_module._derive_state_update_from_delta(delta, adapter=_MapperAdapter())
@@ -4971,22 +4980,22 @@ def test_coding_iteration_two_does_not_receive_stale_verification_result(
     def _play_game(_state, spec, adapter=None, verification_result=None):
         verification_seen.append(verification_result)
         if "src/fibonacci.py" in spec.objective:
-            return run_module.DeltaCodingState(
+            return state_module.DeltaCodingState(
                 artifact_id="main-codebase",
                 operation="write_file",
-                payload=run_module.WriteFileDelta(
-                    file=run_module.CodeFile(
+                payload=state_module.WriteFileDelta(
+                    file=state_module.CodeFile(
                         path="src/fibonacci.py",
                         content="def fibonacci(n):\n    return n\n",
                     )
                 ),
             )
         if "tests/test_fibonacci.py" in spec.objective:
-            return run_module.DeltaCodingState(
+            return state_module.DeltaCodingState(
                 artifact_id="main-codebase",
                 operation="write_file",
-                payload=run_module.WriteFileDelta(
-                    file=run_module.CodeFile(
+                payload=state_module.WriteFileDelta(
+                    file=state_module.CodeFile(
                         path="tests/test_fibonacci.py",
                         content="def test_smoke():\n    assert True\n",
                     )
@@ -5051,21 +5060,21 @@ def test_coding_create_game_receives_previous_verification_result_second_iterati
     def _play_game(_state, spec, adapter=None, verification_result=None):
         del adapter, verification_result
         if "src/fibonacci.py" in spec.objective:
-            return run_module.DeltaCodingState(
+            return state_module.DeltaCodingState(
                 artifact_id="main-codebase",
                 operation="write_file",
-                payload=run_module.WriteFileDelta(
-                    file=run_module.CodeFile(
+                payload=state_module.WriteFileDelta(
+                    file=state_module.CodeFile(
                         path="src/fibonacci.py",
                         content="def fibonacci(n):\n    return n\n",
                     )
                 ),
             )
-        return run_module.DeltaCodingState(
+        return state_module.DeltaCodingState(
             artifact_id="main-codebase",
             operation="write_file",
-            payload=run_module.WriteFileDelta(
-                file=run_module.CodeFile(
+            payload=state_module.WriteFileDelta(
+                file=state_module.CodeFile(
                     path="tests/test_fibonacci.py",
                     content="def test_smoke():\n    assert True\n",
                 )
