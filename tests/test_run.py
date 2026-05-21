@@ -3844,6 +3844,116 @@ def test_coding_create_game_accepts_test_file_task_second_iteration() -> None:
     assert game_spec.allowed_delta_type == "DeltaCodingState"
 
 
+def test_coding_create_game_normalizes_two_file_objective_to_src_on_empty_state() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "coding",
+        "artifact_id": "main-codebase",
+        "goal": "Implement Fibonacci with tests",
+        "northstar_markdown": "# Goal\n\nImplement Fibonacci with tests.",
+        "output_path": Path(".baps-workspace/output/project"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.create_state(config)
+    game_spec = run_module.create_game(
+        config,
+        state,
+        model_client=FakeModelClient(
+            [
+                '{"objective":"Create src/fibonacci.py and tests/test_fibonacci.py",'
+                '"target_artifact_id":"main-codebase",'
+                '"allowed_delta_type":"DeltaCodingState",'
+                '"success_condition":"src/fibonacci.py and tests/test_fibonacci.py exist"}'
+            ]
+        ),
+    )
+    assert game_spec.objective == (
+        "Write src/fibonacci.py containing a fibonacci implementation "
+        "for the coding artifact."
+    )
+    assert game_spec.success_condition == (
+        "Artifact contains src/fibonacci.py with a non-empty fibonacci "
+        "implementation."
+    )
+
+
+def test_coding_create_game_normalizes_to_tests_when_src_present() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "coding",
+        "artifact_id": "main-codebase",
+        "goal": "Implement Fibonacci with tests",
+        "northstar_markdown": "# Goal\n\nImplement Fibonacci with tests.",
+        "output_path": Path(".baps-workspace/output/project"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.State(
+        northstar=run_module.create_state(config).northstar,
+        artifacts=(
+            run_module.CodingArtifact(
+                id="main-codebase",
+                files=(
+                    run_module.CodeFile(
+                        path="src/fibonacci.py",
+                        content="def fibonacci(n):\n    return n\n",
+                    ),
+                ),
+            ),
+        ),
+    )
+    game_spec = run_module.create_game(
+        config,
+        state,
+        model_client=FakeModelClient(
+            [
+                '{"objective":"Create src/fibonacci.py and tests/test_fibonacci.py",'
+                '"target_artifact_id":"main-codebase",'
+                '"allowed_delta_type":"DeltaCodingState",'
+                '"success_condition":"src/fibonacci.py and tests/test_fibonacci.py exist"}'
+            ]
+        ),
+    )
+    assert game_spec.objective == (
+        "Write tests/test_fibonacci.py containing pytest tests for the "
+        "existing fibonacci implementation."
+    )
+    assert game_spec.success_condition == (
+        "Artifact contains tests/test_fibonacci.py with non-empty pytest "
+        "tests for fibonacci."
+    )
+
+
+def test_document_adapter_normalize_game_spec_is_identity() -> None:
+    import baps.run as run_module
+
+    adapter = run_module.DocumentProjectAdapter()
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "goal": "Write a short report.",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.create_state(config)
+    original = run_module.GameSpec(
+        objective="Any document objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="Any document success condition",
+    )
+    normalized = adapter.normalize_game_spec(original, state, config)
+    assert normalized == original
+
+
 def test_coding_adapter_maps_file_write_delta_to_state_update() -> None:
     import baps.run as run_module
 

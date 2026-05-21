@@ -288,6 +288,12 @@ class DocumentProjectAdapter:
         del state, config, state_view
         return ""
 
+    def normalize_game_spec(
+        self, game_spec: GameSpec, state: State, config: dict[str, object]
+    ) -> GameSpec:
+        del state, config
+        return game_spec
+
     def build_state_view(self, state: State, game_spec: GameSpec) -> StateView:
         return build_document_state_view(state, game_spec)
 

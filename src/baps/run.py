@@ -733,6 +733,18 @@ def _validate_atomic_game_spec(game_spec: GameSpec) -> None:
         raise ValueError("create_game model output allowed_delta_type must be non-empty")
 
 
+def _normalize_game_spec_with_adapter(
+    adapter: ProjectTypeAdapter,
+    game_spec: GameSpec,
+    state: State,
+    config: dict[str, Any],
+) -> GameSpec:
+    normalizer = getattr(adapter, "normalize_game_spec", None)
+    if normalizer is None:
+        return game_spec
+    return normalizer(game_spec, state, config)
+
+
 def _normalize_json_candidate(text: str) -> str:
     normalized = text.strip()
     fence_pattern = re.compile(
@@ -813,6 +825,9 @@ def create_game(
         game_spec = _parse_create_game_output(generated)
     except (ValueError, NoNewAtomicGameError):
         raise
+    game_spec = _normalize_game_spec_with_adapter(
+        resolved_adapter, game_spec, state, config
+    )
     try:
         _validate_atomic_game_spec(game_spec)
     except ValueError as exc:
