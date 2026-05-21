@@ -167,6 +167,8 @@ def render_coding_blue_prompt(
         "- Prefer tests under tests/.\n"
         "- Prefer pytest-discoverable tests at tests/test_*.py.\n"
         "- Keep code and tests as separate files (do not embed unittest in production file).\n"
+        "- content must be a valid JSON string: escape internal double quotes as \\\" and newlines as \\n.\n"
+        "- Return one complete JSON object with balanced braces.\n"
         "Required JSON shape:\n"
         "{\n"
         '  "artifact_id": "<game_spec.target_artifact_id>",\n'
@@ -193,7 +195,9 @@ def parse_coding_delta_json(text: str) -> DeltaCodingState:
     try:
         parsed = json.loads(normalized)
     except json.JSONDecodeError as exc:
-        raise ValueError("blue model output must be valid JSON") from exc
+        parsed = _recover_malformed_coding_delta_json(normalized)
+        if parsed is None:
+            raise ValueError("blue model output must be valid JSON") from exc
 
     if not isinstance(parsed, dict):
         raise ValueError("blue model output must be a JSON object")
@@ -210,6 +214,67 @@ def parse_coding_delta_json(text: str) -> DeltaCodingState:
         raise ValueError(
             f"blue model output failed DeltaCodingState validation: {exc}"
         ) from exc
+
+
+def _recover_malformed_coding_delta_json(text: str) -> dict[str, object] | None:
+    """Deterministic fallback for malformed write_file JSON payloads.
+
+    Handles common model failures where file.content includes unescaped quotes/newlines,
+    while the outer object still follows the expected shape.
+    """
+    artifact_match = re.search(r'"artifact_id"\s*:\s*"([^"]+)"', text)
+    operation_match = re.search(r'"operation"\s*:\s*"([^"]+)"', text)
+    path_match = re.search(r'"path"\s*:\s*"([^"]+)"', text)
+    content_start_match = re.search(r'"content"\s*:\s*"', text)
+    if (
+        artifact_match is None
+        or operation_match is None
+        or path_match is None
+        or content_start_match is None
+    ):
+        return None
+
+    start = content_start_match.end()
+    remainder = text[start:]
+    end_patterns = (
+        re.compile(r'"\s*}\s*}\s*}\s*$', re.DOTALL),
+        re.compile(r'"\s*}\s*}\s*$', re.DOTALL),
+        re.compile(r'"\s*}\s*$', re.DOTALL),
+    )
+    end_index: int | None = None
+    for pattern in end_patterns:
+        match = pattern.search(remainder)
+        if match is not None:
+            end_index = match.start()
+            break
+    if end_index is None:
+        return None
+
+    raw_content = remainder[:end_index]
+    escaped_content = (
+        raw_content.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\r", "\\r")
+        .replace("\n", "\\n")
+        .replace("\t", "\\t")
+    )
+    reconstructed = (
+        "{"
+        f'"artifact_id":"{artifact_match.group(1)}",'
+        f'"operation":"{operation_match.group(1)}",'
+        '"payload":{"file":{'
+        f'"path":"{path_match.group(1)}",'
+        f'"content":"{escaped_content}"'
+        "}}"
+        "}"
+    )
+    try:
+        parsed = json.loads(reconstructed)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    return parsed
 
 
 def derive_coding_state_update_from_delta(delta_state: DeltaState) -> StateUpdateProposal:

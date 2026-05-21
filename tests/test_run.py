@@ -4626,6 +4626,53 @@ def test_coding_adapter_verify_export_captures_failure(
     assert result.stderr == "traceback\n"
 
 
+def test_coding_parse_recovers_unescaped_quotes_in_content() -> None:
+    import baps.coding_adapter as coding_module
+
+    raw = (
+        '{"artifact_id":"main-codebase","operation":"write_file","payload":{"file":{'
+        '"path":"tests/test_fibonacci.py",'
+        '"content":"def test_msg():\n    assert "hello" == "hello"\n"}}}'
+    )
+    delta = coding_module.parse_coding_delta_json(raw)
+    assert delta.artifact_id == "main-codebase"
+    assert delta.payload.file.path == "tests/test_fibonacci.py"
+    assert 'assert "hello" == "hello"' in delta.payload.file.content
+
+
+def test_coding_parse_recovers_multiline_pytest_content() -> None:
+    import baps.coding_adapter as coding_module
+
+    raw = (
+        '{"artifact_id":"main-codebase","operation":"write_file","payload":{"file":{'
+        '"path":"tests/test_fibonacci.py",'
+        '"content":"import pytest\n'
+        'from src.fibonacci import fibonacci\n\n'
+        'def test_values():\n'
+        '    assert fibonacci(0) == 0\n'
+        '    assert fibonacci(5) == 5\n"}}}'
+    )
+    delta = coding_module.parse_coding_delta_json(raw)
+    assert "import pytest" in delta.payload.file.content
+    assert "assert fibonacci(5) == 5" in delta.payload.file.content
+
+
+def test_coding_parse_recovers_long_content_payload() -> None:
+    import baps.coding_adapter as coding_module
+
+    long_lines = ["def test_many():"] + [f"    assert {i} == {i}" for i in range(300)]
+    long_content = "\n".join(long_lines)
+    raw = (
+        '{"artifact_id":"main-codebase","operation":"write_file","payload":{"file":{'
+        '"path":"tests/test_fibonacci.py",'
+        f'"content":"{long_content}"'
+        "}}}"
+    )
+    delta = coding_module.parse_coding_delta_json(raw)
+    assert len(delta.payload.file.content.splitlines()) >= 301
+    assert "assert 299 == 299" in delta.payload.file.content
+
+
 def test_coding_run_no_files_keeps_output_exported_false(monkeypatch, tmp_path: Path, capsys) -> None:
     import baps.run as run_module
 
