@@ -5141,3 +5141,27 @@ def test_active_main_and_play_game_orchestration_have_no_direct_document_mechani
     for token in ("DocumentArtifact", "DeltaDocumentState", "append_section", "sections"):
         assert token not in main_src
         assert token not in play_src
+
+
+def test_run_py_adapter_boundary_regression_guards() -> None:
+    run_source = Path("src/baps/run.py").read_text(encoding="utf-8")
+
+    forbidden_helpers = (
+        "_build_document_state_view",
+        "_build_coding_state_view",
+        "_build_create_game_state_view",
+    )
+    for name in forbidden_helpers:
+        assert name not in run_source
+
+    forbidden_symbols = (
+        "DocumentArtifact",
+        "CodingArtifact",
+        "Section",
+        "CodeFile",
+    )
+    for symbol in forbidden_symbols:
+        assert symbol not in run_source
+
+    assert ".sections" not in run_source
+    assert ".files" not in run_source
