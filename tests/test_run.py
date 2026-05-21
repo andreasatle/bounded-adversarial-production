@@ -2293,6 +2293,47 @@ def test_coding_red_referee_prompts_include_coding_guidance() -> None:
         assert "target_artifact_id is the artifact id, not a file path." in prompt
         assert "Pytest tests containing assert statements are not empty." in prompt
         assert "Do not reject tests as empty if assertions are present." in prompt
+        assert (
+            "If success_condition only requires non-empty tests, basic asserted tests satisfy that condition."
+            in prompt
+        )
+
+
+def test_red_referee_prompts_forbid_goalpost_drift_language() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Write tests/test_example.py with non-empty pytest tests.",
+        target_artifact_id="main-codebase",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="Artifact contains tests/test_example.py with non-empty pytest tests.",
+    )
+    state = run_module.State(
+        northstar=run_module.NorthStar(artifacts=()),
+        artifacts=(run_module.CodingArtifact(id="main-codebase", files=()),),
+    )
+    state_view = run_module.CodingProjectAdapter().build_state_view(state, spec)
+    delta = run_module.DeltaCodingState(
+        artifact_id="main-codebase",
+        operation="write_file",
+        payload=run_module.WriteFileDelta(
+            file=run_module.CodeFile(
+                path="tests/test_example.py",
+                content="def test_smoke():\n    assert True\n",
+            )
+        ),
+    )
+    red = run_module.RedFinding(disposition="accept", rationale="ok")
+    red_prompt = run_module._render_red_prompt(state_view, spec, delta)
+    referee_prompt = run_module._render_referee_prompt(state_view, spec, delta, red)
+    for prompt in (red_prompt, referee_prompt):
+        assert "Treat GameSpec.success_condition as authoritative acceptance contract." in prompt
+        assert "Do not invent stronger requirements than objective/success_condition." in prompt
+        assert (
+            "Do not add stricter standards such as 'more comprehensive', 'better coverage', "
+            "'stronger tests', or 'more complete' unless those words (or equivalent requirements) "
+            "are explicit in GameSpec."
+        ) in prompt
 
 
 def test_run_core_prompt_source_has_no_coding_specific_red_referee_guidance() -> None:

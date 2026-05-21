@@ -331,6 +331,7 @@ class CodingProjectAdapter:
             "- File path belongs in DeltaCodingState.payload.file.path.\n"
             "- Pytest tests containing assert statements are not empty.\n"
             "- Do not reject tests as empty if assertions are present.\n"
+            "- If success_condition only requires non-empty tests, basic asserted tests satisfy that condition.\n"
             "- If verification evidence exists, reason from exit_code/stdout/stderr.\n"
         )
 
@@ -348,6 +349,7 @@ class CodingProjectAdapter:
             "- File path belongs in DeltaCodingState.payload.file.path.\n"
             "- Pytest tests containing assert statements are not empty.\n"
             "- Do not reject tests as empty if assertions are present.\n"
+            "- If success_condition only requires non-empty tests, basic asserted tests satisfy that condition.\n"
             "- If verification evidence exists, reason from exit_code/stdout/stderr.\n"
         )
 
