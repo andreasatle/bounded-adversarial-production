@@ -1211,12 +1211,12 @@ def _derive_state_update_from_delta(
 
 
 def _verify_export_with_adapter(
-    adapter: ProjectTypeAdapter, output_path: Path
+    adapter: ProjectTypeAdapter, output_path: Path, state: State, artifact_id: str
 ) -> VerificationResult | None:
     verifier = getattr(adapter, "verify_export", None)
     if verifier is None:
         return None
-    return verifier(output_path)
+    return verifier(output_path, state, artifact_id)
 
 
 def _state_path_for_workspace(workspace: Path) -> Path:
@@ -1306,7 +1306,9 @@ def _run_project_iterations(
         update_applied = True
         output_changed = adapter.export_state(updated_state, output_path, artifact_id)
         output_exported = output_exported or output_changed
-        verification_result = _verify_export_with_adapter(adapter, output_path)
+        verification_result = _verify_export_with_adapter(
+            adapter, output_path, updated_state, artifact_id
+        )
         _debug_print_verification_result(verification_result)
         create_game_verification_result = verification_result
         if changed_this_iteration:

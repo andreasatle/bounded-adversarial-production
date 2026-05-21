@@ -81,7 +81,9 @@ class ProjectTypeAdapter(Protocol):
     def export_state(self, state: State, output_path: Path, artifact_id: str) -> bool:
         ...
 
-    def verify_export(self, output_path: Path) -> VerificationResult | None:
+    def verify_export(
+        self, output_path: Path, state: State, artifact_id: str
+    ) -> VerificationResult | None:
         ...
 
 

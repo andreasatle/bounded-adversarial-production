@@ -351,6 +351,55 @@ class DocumentProjectAdapter:
             output_path.write_text(rendered, encoding="utf-8")
         return changed
 
-    def verify_export(self, output_path: Path) -> VerificationResult | None:
-        del output_path
-        return None
+    def verify_export(
+        self, output_path: Path, state: State, artifact_id: str
+    ) -> VerificationResult | None:
+        command = "document_export_consistency_check"
+        cwd = str(output_path.parent)
+        if not output_path.exists():
+            return VerificationResult(
+                command=command,
+                cwd=cwd,
+                exit_code=1,
+                stdout="",
+                stderr=f"export file missing: {output_path}",
+                passed=False,
+            )
+
+        content = output_path.read_text(encoding="utf-8")
+        if content.strip() == "":
+            return VerificationResult(
+                command=command,
+                cwd=cwd,
+                exit_code=1,
+                stdout="",
+                stderr="export file is empty",
+                passed=False,
+            )
+
+        artifact = document_artifact_from_state(state, artifact_id)
+        missing: list[str] = []
+        for section in artifact.sections:
+            if section.title not in content:
+                missing.append(f"missing section title: {section.title}")
+            if section.body.strip() and section.body not in content:
+                missing.append(f"missing section body for title: {section.title}")
+
+        if missing:
+            return VerificationResult(
+                command=command,
+                cwd=cwd,
+                exit_code=1,
+                stdout="",
+                stderr="; ".join(missing),
+                passed=False,
+            )
+
+        return VerificationResult(
+            command=command,
+            cwd=cwd,
+            exit_code=0,
+            stdout="document export verification passed",
+            stderr="",
+            passed=True,
+        )

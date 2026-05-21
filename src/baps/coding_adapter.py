@@ -398,7 +398,10 @@ class CodingProjectAdapter:
                 changed = True
         return changed
 
-    def verify_export(self, output_path: Path) -> VerificationResult | None:
+    def verify_export(
+        self, output_path: Path, state: State, artifact_id: str
+    ) -> VerificationResult | None:
+        del state, artifact_id
         output_path.mkdir(parents=True, exist_ok=True)
         command_args: list[str]
         command: str

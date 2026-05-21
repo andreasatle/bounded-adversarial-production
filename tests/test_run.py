@@ -4449,7 +4449,7 @@ def test_coding_adapter_verify_export_discovers_and_runs_pytest_tests(
     adapter = run_module.CodingProjectAdapter()
     output_dir = tmp_path / "project"
     _ = adapter.export_state(state, output_dir, "main-codebase")
-    result = adapter.verify_export(output_dir)
+    result = adapter.verify_export(output_dir, state, "main-codebase")
     assert result is not None
     assert result.passed is True
     assert result.exit_code == 0
@@ -4507,12 +4507,52 @@ def test_coding_export_output_changed_false_when_unchanged(tmp_path: Path) -> No
     assert second is False
 
 
-def test_default_adapter_verification_is_noop_for_document(tmp_path: Path) -> None:
+def test_document_adapter_verify_export_passes_for_matching_export(tmp_path: Path) -> None:
     import baps.run as run_module
 
+    state = run_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(
+            state_module.DocumentArtifact(
+                id="main-document",
+                sections=(
+                    state_module.Section(title="Introduction", body="Hello"),
+                    state_module.Section(title="Conclusion", body="World"),
+                ),
+            ),
+        ),
+    )
     adapter = run_module.DocumentProjectAdapter()
-    result = adapter.verify_export(tmp_path / "report.md")
-    assert result is None
+    output_path = tmp_path / "report.md"
+    output_path.write_text("## Introduction\n\nHello\n\n## Conclusion\n\nWorld", encoding="utf-8")
+    result = adapter.verify_export(output_path, state, "main-document")
+    assert result is not None
+    assert result.passed is True
+    assert result.exit_code == 0
+
+
+def test_document_adapter_verify_export_fails_when_section_content_missing(
+    tmp_path: Path,
+) -> None:
+    import baps.run as run_module
+
+    state = run_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(
+            state_module.DocumentArtifact(
+                id="main-document",
+                sections=(state_module.Section(title="Introduction", body="Hello"),),
+            ),
+        ),
+    )
+    adapter = run_module.DocumentProjectAdapter()
+    output_path = tmp_path / "report.md"
+    output_path.write_text("## Different\n\nBody", encoding="utf-8")
+    result = adapter.verify_export(output_path, state, "main-document")
+    assert result is not None
+    assert result.passed is False
+    assert result.exit_code == 1
+    assert "missing section title: Introduction" in result.stderr
 
 
 def test_coding_adapter_verify_export_runs_pytest_and_captures_success(
@@ -4539,7 +4579,11 @@ def test_coding_adapter_verify_export_runs_pytest_and_captures_success(
     monkeypatch.setattr(coding_module.subprocess, "run", _fake_run)
     adapter = run_module.CodingProjectAdapter()
     output_dir = tmp_path / "project"
-    result = adapter.verify_export(output_dir)
+    state = run_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(id="main-codebase", files=()),),
+    )
+    result = adapter.verify_export(output_dir, state, "main-codebase")
     assert result is not None
     assert captured["args"] == ["uv", "run", "pytest"]
     assert captured["cwd"] == output_dir
@@ -4570,7 +4614,11 @@ def test_coding_adapter_verify_export_captures_failure(
 
     monkeypatch.setattr(coding_module.subprocess, "run", _fake_run)
     adapter = run_module.CodingProjectAdapter()
-    result = adapter.verify_export(tmp_path / "project")
+    state = run_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(id="main-codebase", files=()),),
+    )
+    result = adapter.verify_export(tmp_path / "project", state, "main-codebase")
     assert result is not None
     assert result.exit_code == 1
     assert result.passed is False
@@ -4679,7 +4727,7 @@ def test_coding_run_summary_includes_verification_status(
     assert "verification_cwd=" in out
 
 
-def test_document_run_does_not_run_verification(monkeypatch, tmp_path: Path, capsys) -> None:
+def test_document_run_runs_verification(monkeypatch, tmp_path: Path, capsys) -> None:
     import baps.run as run_module
 
     workspace = tmp_path / "document-no-verify"
@@ -4700,8 +4748,9 @@ def test_document_run_does_not_run_verification(monkeypatch, tmp_path: Path, cap
     )
     run_module.main()
     out = capsys.readouterr().out
-    assert "verification_run=False" in out
-    assert "verification_passed=False" in out
+    assert "verification_run=True" in out
+    assert "verification_passed=True" in out
+    assert "verification_command=document_export_consistency_check" in out
 
 
 def test_coding_init_and_run_exports_fibonacci_files(monkeypatch, tmp_path: Path) -> None:
@@ -5083,7 +5132,7 @@ def test_coding_create_game_receives_previous_verification_result_second_iterati
 
     verify_calls = {"n": 0}
 
-    def _verify_export(_adapter, _output_path):
+    def _verify_export(_adapter, _output_path, _state, _artifact_id):
         verify_calls["n"] += 1
         if verify_calls["n"] == 1:
             return run_module.VerificationResult(
