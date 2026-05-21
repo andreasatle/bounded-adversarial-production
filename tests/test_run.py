@@ -1007,6 +1007,7 @@ def test_create_game_prompt_forbids_markdown_fences_and_lists_required_shape() -
     state = create_state(config)
     prompt = run_module._render_create_game_prompt(
         config,
+        state,
         run_module._build_create_game_state_view(state, config["artifact_id"]),
     )
 
@@ -1020,9 +1021,9 @@ def test_create_game_prompt_forbids_markdown_fences_and_lists_required_shape() -
     assert "GameSpec should represent one coherent task" in prompt
     assert "structural change, local content intent, and semantic purpose may coexist" in prompt
     assert "reject only when multiple independent tasks/features are bundled." in prompt
-    assert "VALID: Add Introduction section introducing bounded adversarial evaluation." in prompt
-    assert "VALID: Add Conclusion section summarizing the report findings." in prompt
-    assert "INVALID: Add Introduction and Conclusion sections." in prompt
+    assert "VALID: One bounded artifact update with explicit intent." in prompt
+    assert "INVALID: Two independent feature changes in one GameSpec." in prompt
+    assert "INVALID: Artifact update plus export/operational task in one GameSpec." in prompt
 
 
 def test_create_game_broad_goal_accepts_decomposed_atomic_gamespec() -> None:
@@ -1827,6 +1828,7 @@ def test_create_game_prompt_includes_northstar_context() -> None:
     state_view = run_module._build_create_game_state_view(state, config["artifact_id"])
     prompt = run_module._render_create_game_prompt(
         config,
+        state,
         run_module._build_create_game_state_view(state, config["artifact_id"]),
     )
     assert "- state_view:" in prompt
@@ -1849,14 +1851,14 @@ def test_create_game_prompt_includes_northstar_context() -> None:
     assert "The GameSpec must contain enough local intent so PlayGame can execute without reading NorthStar." in prompt
     assert "Fold relevant NorthStar intent into objective and success_condition." in prompt
     assert "Avoid purely structural objectives when NorthStar contains substantive intent." in prompt
-    assert "BAD objective: Add Introduction section." in prompt
+    assert "BAD objective: Apply structural formatting only." in prompt
     assert (
-        "GOOD objective: Add Introduction section introducing bounded adversarial evaluation and its role in improving software projects."
+        "GOOD objective: Apply one structural change with concrete local intent tied to project goals."
         in prompt
     )
-    assert "BAD success_condition: document contains Introduction." in prompt
+    assert "BAD success_condition: structure exists." in prompt
     assert (
-        "GOOD success_condition: artifact contains an Introduction section explaining bounded adversarial evaluation and framing the report purpose."
+        "GOOD success_condition: one bounded artifact change exists and satisfies stated local intent."
         in prompt
     )
     assert '{\"no_new_atomic_game\": true, \"reason\": \"...\"}' in prompt
@@ -3581,6 +3583,12 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
             self.calls.append("build_create_game_state_view")
             return self._delegate.build_create_game_state_view(state, config)
 
+        def render_create_game_prompt_supplement(self, state, config, state_view):
+            self.calls.append("render_create_game_prompt_supplement")
+            return self._delegate.render_create_game_prompt_supplement(
+                state, config, state_view
+            )
+
         def build_state_view(self, state, game_spec):
             self.calls.append("build_state_view")
             return self._delegate.build_state_view(state, game_spec)
@@ -3622,6 +3630,7 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
     run_module.main()
     assert "create_initial_state" in adapter.calls
     assert "build_create_game_state_view" in adapter.calls
+    assert "render_create_game_prompt_supplement" in adapter.calls
     assert "build_state_view" in adapter.calls
     assert "render_blue_prompt" in adapter.calls
     assert "parse_blue_delta" in adapter.calls
@@ -3647,6 +3656,12 @@ def test_core_orchestration_does_not_reference_concrete_project_adapters() -> No
         src = inspect.getsource(fn)
         assert "DocumentProjectAdapter" not in src
         assert "CodingProjectAdapter" not in src
+
+
+def test_run_core_source_has_no_coding_file_policy_literals() -> None:
+    run_source = Path("src/baps/run.py").read_text(encoding="utf-8")
+    assert "src/fibonacci.py" not in run_source
+    assert "tests/test_fibonacci.py" not in run_source
 
 
 def test_coding_create_state_creates_coding_artifact() -> None:
@@ -3719,6 +3734,114 @@ def test_coding_blue_prompt_supplement_prefers_src_and_pytest_layout() -> None:
     assert "Prefer production code under src/." in prompt
     assert "Prefer tests under tests/." in prompt
     assert "tests/test_*.py" in prompt
+
+
+def test_coding_create_game_prompt_includes_one_file_per_game_guidance() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "coding",
+        "artifact_id": "main-codebase",
+        "goal": "Implement Fibonacci with tests",
+        "northstar_markdown": "# Goal\n\nImplement Fibonacci with tests",
+        "output_path": Path(".baps-workspace/output/project"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.create_state(config)
+    adapter = run_module.CodingProjectAdapter()
+    state_view = adapter.build_create_game_state_view(state, config)
+    prompt = run_module._render_create_game_prompt(
+        config=config,
+        state=state,
+        state_view=state_view,
+        adapter=adapter,
+    )
+    assert "DeltaCodingState write_file changes exactly one file per game." in prompt
+    assert "Choose exactly one missing file task per GameSpec." in prompt
+    assert "Do not request multiple files in one GameSpec." in prompt
+
+
+def test_coding_create_game_accepts_src_file_task_first_iteration() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "coding",
+        "artifact_id": "main-codebase",
+        "goal": "Implement Fibonacci with tests",
+        "northstar_markdown": (
+            "# Goal\n\nImplement Fibonacci with tests.\n"
+            "- Production code in `src/fibonacci.py`\n"
+            "- Pytest tests in `tests/test_fibonacci.py`\n"
+        ),
+        "output_path": Path(".baps-workspace/output/project"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.create_state(config)
+    game_spec = run_module.create_game(
+        config,
+        state,
+        model_client=FakeModelClient(
+            [
+                '{"objective":"Write src/fibonacci.py with fibonacci implementation",'
+                '"target_artifact_id":"main-codebase",'
+                '"allowed_delta_type":"DeltaCodingState",'
+                '"success_condition":"Artifact contains src/fibonacci.py with a fibonacci function."}'
+            ]
+        ),
+    )
+    assert "src/fibonacci.py" in game_spec.objective
+    assert game_spec.allowed_delta_type == "DeltaCodingState"
+
+
+def test_coding_create_game_accepts_test_file_task_second_iteration() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "coding",
+        "artifact_id": "main-codebase",
+        "goal": "Implement Fibonacci with tests",
+        "northstar_markdown": (
+            "# Goal\n\nImplement Fibonacci with tests.\n"
+            "- Production code in `src/fibonacci.py`\n"
+            "- Pytest tests in `tests/test_fibonacci.py`\n"
+        ),
+        "output_path": Path(".baps-workspace/output/project"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.State(
+        northstar=run_module.create_state(config).northstar,
+        artifacts=(
+            run_module.CodingArtifact(
+                id="main-codebase",
+                files=(
+                    run_module.CodeFile(
+                        path="src/fibonacci.py",
+                        content="def fibonacci(n):\n    return n\n",
+                    ),
+                ),
+            ),
+        ),
+    )
+    game_spec = run_module.create_game(
+        config,
+        state,
+        model_client=FakeModelClient(
+            [
+                '{"objective":"Write tests/test_fibonacci.py with pytest cases for fibonacci",'
+                '"target_artifact_id":"main-codebase",'
+                '"allowed_delta_type":"DeltaCodingState",'
+                '"success_condition":"Artifact contains tests/test_fibonacci.py with pytest tests for fibonacci."}'
+            ]
+        ),
+    )
+    assert "tests/test_fibonacci.py" in game_spec.objective
+    assert game_spec.allowed_delta_type == "DeltaCodingState"
 
 
 def test_coding_adapter_maps_file_write_delta_to_state_update() -> None:

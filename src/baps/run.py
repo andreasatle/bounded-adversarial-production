@@ -593,6 +593,7 @@ def _build_create_game_state_view(state: State, artifact_id: str) -> StateView:
 
 def _render_create_game_prompt(
     config: dict[str, Any],
+    state: State,
     state_view: StateView,
     adapter: ProjectTypeAdapter | None = None,
 ) -> str:
@@ -600,6 +601,11 @@ def _render_create_game_prompt(
         adapter
         if adapter is not None
         else _resolve_project_type_adapter(config["project_type"])
+    )
+    supplement = resolved_adapter.render_create_game_prompt_supplement(
+        state=state,
+        config=config,
+        state_view=state_view,
     )
     return (
         "Create a GameSpec JSON object for the given project state.\n\n"
@@ -631,10 +637,10 @@ def _render_create_game_prompt(
         "Fold relevant NorthStar intent into objective and success_condition.\n"
         "Avoid purely structural objectives when NorthStar contains substantive intent.\n"
         "Illustrative examples (not fixed policy):\n"
-        "BAD objective: Add Introduction section.\n"
-        "GOOD objective: Add Introduction section introducing bounded adversarial evaluation and its role in improving software projects.\n"
-        "BAD success_condition: document contains Introduction.\n"
-        "GOOD success_condition: artifact contains an Introduction section explaining bounded adversarial evaluation and framing the report purpose.\n"
+        "BAD objective: Apply structural formatting only.\n"
+        "GOOD objective: Apply one structural change with concrete local intent tied to project goals.\n"
+        "BAD success_condition: structure exists.\n"
+        "GOOD success_condition: one bounded artifact change exists and satisfies stated local intent.\n"
         "GameSpec should represent one coherent task:\n"
         "- target exactly one artifact.\n"
         "- permit exactly one delta type.\n"
@@ -643,11 +649,9 @@ def _render_create_game_prompt(
         "- structural change, local content intent, and semantic purpose may coexist when they belong to the same artifact update.\n"
         "- reject only when multiple independent tasks/features are bundled.\n"
         "Examples:\n"
-        "- VALID: Add Introduction section introducing bounded adversarial evaluation.\n"
-        "- VALID: Add Conclusion section summarizing the report findings.\n"
-        "- INVALID: Add Introduction and Conclusion sections.\n"
-        "- INVALID: Add Introduction section and export report.\n"
-        "- INVALID: Update report and create appendix.\n"
+        "- VALID: One bounded artifact update with explicit intent.\n"
+        "- INVALID: Two independent feature changes in one GameSpec.\n"
+        "- INVALID: Artifact update plus export/operational task in one GameSpec.\n"
         "Required JSON shape:\n"
         "{\n"
         '  "objective": "...",\n'
@@ -655,7 +659,8 @@ def _render_create_game_prompt(
         '  "allowed_delta_type": "...",\n'
         '  "success_condition": "..."\n'
         "}\n\n"
-        f"For this project type, allowed_delta_type must be {resolved_adapter.supported_delta_type}."
+        f"For this project type, allowed_delta_type must be {resolved_adapter.supported_delta_type}.\n"
+        f"{supplement}"
     )
 
 
@@ -799,7 +804,7 @@ def create_game(
     state_view = resolved_adapter.build_create_game_state_view(state, config)
     client = model_client if model_client is not None else _build_create_game_model_client()
     prompt = _render_create_game_prompt(
-        config=config, state_view=state_view, adapter=resolved_adapter
+        config=config, state=state, state_view=state_view, adapter=resolved_adapter
     )
     _debug_print_create_game_prompt(prompt)
     generated = client.generate(prompt)

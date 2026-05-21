@@ -246,6 +246,19 @@ class CodingProjectAdapter:
     def build_create_game_state_view(self, state: State, config: dict[str, object]) -> StateView:
         return build_coding_create_game_state_view(state, config)
 
+    def render_create_game_prompt_supplement(
+        self, state: State, config: dict[str, object], state_view: StateView
+    ) -> str:
+        del state, config, state_view
+        return (
+            "Coding CreateGame constraints:\n"
+            "- DeltaCodingState write_file changes exactly one file per game.\n"
+            "- Choose exactly one missing file task per GameSpec.\n"
+            "- Do not request multiple files in one GameSpec.\n"
+            "- If no production file exists, choose src/fibonacci.py first.\n"
+            "- If production file exists and test file is missing, choose tests/test_fibonacci.py next.\n"
+        )
+
     def build_state_view(self, state: State, game_spec: GameSpec) -> StateView:
         return build_coding_state_view(state, game_spec)
 

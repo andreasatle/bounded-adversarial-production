@@ -28,6 +28,11 @@ class ProjectTypeAdapter(Protocol):
     def build_create_game_state_view(self, state: State, config: dict[str, object]) -> StateView:
         ...
 
+    def render_create_game_prompt_supplement(
+        self, state: State, config: dict[str, object], state_view: StateView
+    ) -> str:
+        ...
+
     def build_state_view(self, state: State, game_spec: GameSpec) -> StateView:
         ...
 
