@@ -101,6 +101,8 @@ class GameSpec(BaseModel):
 class RedFinding(BaseModel):
     disposition: Literal["accept", "revise", "reject"]
     rationale: str
+    success_condition_met: bool | None = None
+    findings: tuple[str, ...] = ()
 
     _validate_rationale = field_validator("rationale")(_require_non_empty)
 
@@ -108,6 +110,8 @@ class RedFinding(BaseModel):
 class RefereeDecision(BaseModel):
     disposition: Literal["accept", "revise", "reject"]
     rationale: str
+    red_override: bool | None = None
+    improvement_hints: tuple[str, ...] = ()
 
     _validate_rationale = field_validator("rationale")(_require_non_empty)
 

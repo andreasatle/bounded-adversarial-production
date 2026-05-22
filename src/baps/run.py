@@ -821,6 +821,12 @@ def _render_referee_prompt_supplement_with_adapter(
 
 
 
+_RED_REQUIRED_KEYS = frozenset({"disposition", "rationale"})
+_RED_OPTIONAL_KEYS = frozenset({"success_condition_met", "findings"})
+_REFEREE_REQUIRED_KEYS = frozenset({"disposition", "rationale"})
+_REFEREE_OPTIONAL_KEYS = frozenset({"red_override", "improvement_hints"})
+
+
 def _parse_red_finding_json(text: str) -> RedFinding:
     normalized = _normalize_json_candidate(text)
     try:
@@ -831,11 +837,13 @@ def _parse_red_finding_json(text: str) -> RedFinding:
     if not isinstance(parsed, dict):
         raise ValueError("red model output must be a JSON object")
 
-    required_keys = {"disposition", "rationale"}
-    if set(parsed.keys()) != required_keys:
-        raise ValueError(
-            "red model output must contain exactly keys: disposition, rationale"
-        )
+    present = set(parsed.keys())
+    if not _RED_REQUIRED_KEYS.issubset(present):
+        missing = _RED_REQUIRED_KEYS - present
+        raise ValueError(f"red model output missing required keys: {sorted(missing)}")
+    unexpected = present - _RED_REQUIRED_KEYS - _RED_OPTIONAL_KEYS
+    if unexpected:
+        raise ValueError(f"red model output contains unexpected keys: {sorted(unexpected)}")
 
     try:
         return RedFinding.model_validate(parsed)
@@ -853,11 +861,13 @@ def _parse_referee_decision_json(text: str) -> RefereeDecision:
     if not isinstance(parsed, dict):
         raise ValueError("referee model output must be a JSON object")
 
-    required_keys = {"disposition", "rationale"}
-    if set(parsed.keys()) != required_keys:
-        raise ValueError(
-            "referee model output must contain exactly keys: disposition, rationale"
-        )
+    present = set(parsed.keys())
+    if not _REFEREE_REQUIRED_KEYS.issubset(present):
+        missing = _REFEREE_REQUIRED_KEYS - present
+        raise ValueError(f"referee model output missing required keys: {sorted(missing)}")
+    unexpected = present - _REFEREE_REQUIRED_KEYS - _REFEREE_OPTIONAL_KEYS
+    if unexpected:
+        raise ValueError(f"referee model output contains unexpected keys: {sorted(unexpected)}")
 
     try:
         return RefereeDecision.model_validate(parsed)
@@ -976,13 +986,16 @@ def _render_red_prompt(
         "Do not use triple-backtick fences.\n"
         "Do not include prose before JSON.\n"
         "Do not include prose after JSON.\n"
-        "No extra fields.\n"
         f"{prompt_supplement}"
         "Required JSON shape:\n"
         "{\n"
         '  "disposition": "accept" | "revise" | "reject",\n'
-        '  "rationale": "..."\n'
-        "}"
+        '  "rationale": "...",\n'
+        '  "success_condition_met": true | false,\n'
+        '  "findings": ["<specific issue 1>", "<specific issue 2>"]\n'
+        "}\n"
+        "findings must be an empty list for accept. "
+        "success_condition_met must be true for accept and false for revise/reject.\n"
     )
 
 
@@ -1047,13 +1060,16 @@ def _render_referee_prompt(
         "Do not use triple-backtick fences.\n"
         "Do not include prose before JSON.\n"
         "Do not include prose after JSON.\n"
-        "No extra fields.\n"
         f"{prompt_supplement}"
         "Required JSON shape:\n"
         "{\n"
         '  "disposition": "accept" | "revise" | "reject",\n'
-        '  "rationale": "..."\n'
-        "}"
+        '  "rationale": "...",\n'
+        '  "red_override": true | false,\n'
+        '  "improvement_hints": ["<specific actionable improvement 1>", "<specific actionable improvement 2>"]\n'
+        "}\n"
+        "red_override must be true when your disposition differs from Red's disposition. "
+        "improvement_hints must be empty for accept.\n"
     )
 
 

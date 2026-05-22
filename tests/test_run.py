@@ -1408,6 +1408,173 @@ def test_play_game_invalid_referee_json_rejected() -> None:
         )
 
 
+def test_red_finding_optional_fields_parse_when_present() -> None:
+    import baps.run as run_module
+
+    red = run_module._parse_red_finding_json(
+        '{"disposition":"revise","rationale":"needs work",'
+        '"success_condition_met":false,'
+        '"findings":["section body is too short","title duplicates existing section"]}'
+    )
+    assert red.disposition == "revise"
+    assert red.success_condition_met is False
+    assert red.findings == ("section body is too short", "title duplicates existing section")
+
+
+def test_red_finding_defaults_when_optional_fields_absent() -> None:
+    import baps.run as run_module
+
+    red = run_module._parse_red_finding_json(
+        '{"disposition":"accept","rationale":"looks good"}'
+    )
+    assert red.success_condition_met is None
+    assert red.findings == ()
+
+
+def test_red_finding_unexpected_key_rejected() -> None:
+    import baps.run as run_module
+
+    with pytest.raises(ValueError, match="unexpected keys"):
+        run_module._parse_red_finding_json(
+            '{"disposition":"accept","rationale":"ok","confidence":0.9}'
+        )
+
+
+def test_red_finding_missing_required_key_rejected() -> None:
+    import baps.run as run_module
+
+    with pytest.raises(ValueError, match="missing required keys"):
+        run_module._parse_red_finding_json('{"disposition":"accept"}')
+
+
+def test_referee_decision_optional_fields_parse_when_present() -> None:
+    import baps.run as run_module
+
+    decision = run_module._parse_referee_decision_json(
+        '{"disposition":"revise","rationale":"override Red",'
+        '"red_override":true,'
+        '"improvement_hints":["add concrete section body","cite NorthStar goal"]}'
+    )
+    assert decision.disposition == "revise"
+    assert decision.red_override is True
+    assert decision.improvement_hints == ("add concrete section body", "cite NorthStar goal")
+
+
+def test_referee_decision_defaults_when_optional_fields_absent() -> None:
+    import baps.run as run_module
+
+    decision = run_module._parse_referee_decision_json(
+        '{"disposition":"accept","rationale":"approved"}'
+    )
+    assert decision.red_override is None
+    assert decision.improvement_hints == ()
+
+
+def test_referee_decision_unexpected_key_rejected() -> None:
+    import baps.run as run_module
+
+    with pytest.raises(ValueError, match="unexpected keys"):
+        run_module._parse_referee_decision_json(
+            '{"disposition":"accept","rationale":"ok","confidence":0.9}'
+        )
+
+
+def test_referee_decision_missing_required_key_rejected() -> None:
+    import baps.run as run_module
+
+    with pytest.raises(ValueError, match="missing required keys"):
+        run_module._parse_referee_decision_json('{"rationale":"ok"}')
+
+
+def test_improvement_hints_appear_in_previous_feedback_for_blue() -> None:
+    """improvement_hints from Referee flow into Blue's previous_feedback via model_dump."""
+    import baps.run as run_module
+
+    captured_feedback: list[dict | None] = []
+    original_debug = run_module._debug_print_blue_input
+
+    def _capture(state_view, game_spec, attempt, previous_feedback):
+        captured_feedback.append(previous_feedback)
+        original_debug(state_view, game_spec, attempt, previous_feedback)
+
+    import baps.run as run_module
+    import importlib
+    run_module_fresh = run_module  # same module, just alias for clarity
+
+    spec, state = _make_document_spec_and_state()
+
+    from unittest.mock import patch
+    with patch.object(run_module_fresh, "_debug_print_blue_input", _capture):
+        play_game(
+            state,
+            spec,
+            model_client=_make_blue_client("Attempt One", "Attempt Two"),
+            red_model_client=FakeModelClient(
+                [
+                    '{"disposition":"accept","rationale":"ok"}',
+                    '{"disposition":"accept","rationale":"ok"}',
+                ]
+            ),
+            referee_model_client=FakeModelClient(
+                [
+                    '{"disposition":"revise","rationale":"needs work",'
+                    '"red_override":false,'
+                    '"improvement_hints":["make body longer","cite NorthStar"]}',
+                    '{"disposition":"accept","rationale":"approved"}',
+                ]
+            ),
+            max_attempts=2,
+        )
+
+    assert len(captured_feedback) >= 2
+    feedback = captured_feedback[1]
+    assert feedback is not None
+    assert "referee_decision" in feedback
+    hints = feedback["referee_decision"]["improvement_hints"]
+    assert hints == ["make body longer", "cite NorthStar"]
+
+
+def test_red_prompt_includes_success_condition_met_and_findings_fields() -> None:
+    import baps.run as run_module
+
+    captured: dict[str, object] = {}
+    original = run_module._render_red_prompt
+
+    def _capture(*args, **kwargs):
+        result = original(*args, **kwargs)
+        captured["prompt"] = result
+        return result
+
+    import importlib
+    from unittest.mock import patch
+    spec, state = _make_document_spec_and_state()
+    with patch.object(run_module, "_render_red_prompt", _capture):
+        play_game(state, spec, model_client=_make_blue_client("Introduction"))
+    prompt = str(captured["prompt"])
+    assert "success_condition_met" in prompt
+    assert "findings" in prompt
+
+
+def test_referee_prompt_includes_red_override_and_improvement_hints_fields() -> None:
+    import baps.run as run_module
+
+    captured: dict[str, object] = {}
+    original = run_module._render_referee_prompt
+
+    def _capture(*args, **kwargs):
+        result = original(*args, **kwargs)
+        captured["prompt"] = result
+        return result
+
+    from unittest.mock import patch
+    spec, state = _make_document_spec_and_state()
+    with patch.object(run_module, "_render_referee_prompt", _capture):
+        play_game(state, spec, model_client=_make_blue_client("Introduction"))
+    prompt = str(captured["prompt"])
+    assert "red_override" in prompt
+    assert "improvement_hints" in prompt
+
+
 def test_play_game_referee_receives_gamespec_state_view_delta_and_red(monkeypatch) -> None:
     import baps.run as run_module
 
@@ -3097,11 +3264,12 @@ def test_play_game_previous_feedback_passed_to_later_blue_prompt() -> None:
         "If previous_feedback_json contains validation errors, repair those exact errors in this attempt."
         in second_prompt
     )
-    assert '"red_finding": {"disposition": "accept", "rationale": "ok"}' in second_prompt
-    assert (
-        '"referee_decision": {"disposition": "revise", "rationale": "needs revision"}'
-        in second_prompt
-    )
+    assert '"red_finding"' in second_prompt
+    assert '"disposition": "accept"' in second_prompt
+    assert '"rationale": "ok"' in second_prompt
+    assert '"referee_decision"' in second_prompt
+    assert '"disposition": "revise"' in second_prompt
+    assert '"rationale": "needs revision"' in second_prompt
 
 
 def test_play_game_invalid_blue_first_attempt_retries_second_attempt() -> None:
