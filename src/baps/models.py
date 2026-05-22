@@ -19,7 +19,7 @@ class ToolCall:
 
 
 class ModelClient:
-    def generate(self, prompt: str) -> str:
+    def generate(self, prompt: str, format: str | dict | None = None) -> str:
         raise NotImplementedError
 
     def generate_with_tools(self, prompt: str, tools: list[ToolDefinition]) -> ToolCall:
@@ -39,7 +39,7 @@ class FakeModelClient(ModelClient):
         self._response_index = 0
         self._tool_response_index = 0
 
-    def generate(self, prompt: str) -> str:
+    def generate(self, prompt: str, format: str | dict | None = None) -> str:
         if not prompt.strip():
             raise ValueError("prompt must be a non-empty string")
 
@@ -75,15 +75,17 @@ class OllamaClient(ModelClient):
         self.model = model
         self.base_url = base_url.rstrip("/")
 
-    def generate(self, prompt: str) -> str:
+    def generate(self, prompt: str, format: str | dict | None = None) -> str:
         if not prompt.strip():
             raise ValueError("prompt must be a non-empty string")
 
-        payload = {
+        payload: dict = {
             "model": self.model,
             "prompt": prompt,
             "stream": False,
         }
+        if format is not None:
+            payload["format"] = format
         body = json.dumps(payload).encode("utf-8")
         req = request.Request(
             url=f"{self.base_url}/api/generate",

@@ -457,6 +457,35 @@ _build_blue_model_client = _build_model_client
 _build_red_model_client = _build_model_client
 _build_referee_model_client = _build_model_client
 
+# Structured output schemas passed to Ollama's format parameter.
+# CreateGame uses plain "json" because it has three valid shapes (GameSpec,
+# no_new_atomic_game, northstar_update_needed) which can't be expressed as one schema.
+# Blue uses plain "json" because the delta shape varies by adapter/project type.
+_CREATE_GAME_FORMAT: str = "json"
+_BLUE_FORMAT: str = "json"
+_RED_FINDING_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "disposition": {"type": "string", "enum": ["accept", "reject"]},
+        "rationale": {"type": "string"},
+        "success_condition_met": {"type": ["boolean", "null"]},
+        "findings": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["disposition", "rationale"],
+    "additionalProperties": False,
+}
+_REFEREE_DECISION_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "disposition": {"type": "string", "enum": ["accept", "reject"]},
+        "rationale": {"type": "string"},
+        "red_override": {"type": ["boolean", "null"]},
+        "improvement_hints": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["disposition", "rationale"],
+    "additionalProperties": False,
+}
+
 
 def _require_non_empty(value: str, field_name: str) -> str:
     if value.strip() == "":
@@ -928,7 +957,7 @@ def create_game(
         adapter=resolved_adapter,
     )
     _debug_print_create_game_prompt(prompt)
-    generated = client.generate(prompt)
+    generated = client.generate(prompt, format=_CREATE_GAME_FORMAT)
     _debug_print_create_game_raw_model_output(generated)
     try:
         game_spec = _parse_create_game_output(generated)
@@ -1159,7 +1188,7 @@ def play_game(
                 }
                 continue
         else:
-            blue_generated = client.generate(blue_prompt)
+            blue_generated = client.generate(blue_prompt, format=_BLUE_FORMAT)
             try:
                 candidate_delta = resolved_adapter.parse_blue_delta(blue_generated)
             except ValueError as exc:
@@ -1195,7 +1224,7 @@ def play_game(
             verification_result,
             red_supplement,
         )
-        red_generated = red_client.generate(red_prompt)
+        red_generated = red_client.generate(red_prompt, format=_RED_FINDING_SCHEMA)
         red_finding = _parse_red_finding_json(red_generated)
         _debug_print_red_output(red_finding)
 
@@ -1222,7 +1251,7 @@ def play_game(
             verification_result,
             referee_supplement,
         )
-        referee_generated = referee_client.generate(referee_prompt)
+        referee_generated = referee_client.generate(referee_prompt, format=_REFEREE_DECISION_SCHEMA)
         referee_decision = _parse_referee_decision_json(referee_generated)
         _debug_print_referee_output(referee_decision)
 
