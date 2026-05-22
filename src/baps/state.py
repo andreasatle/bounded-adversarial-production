@@ -55,7 +55,6 @@ class CodeFile(BaseModel):
     content: str
 
     _validate_path = field_validator("path")(_require_non_empty)
-    _validate_content = field_validator("content")(_require_non_empty)
 
 
 class CodingArtifact(StateArtifact):

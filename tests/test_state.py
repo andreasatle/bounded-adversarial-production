@@ -67,6 +67,18 @@ def test_document_artifact_sections_accepts_section_instances() -> None:
     assert artifact.sections[0].body == "Hello"
 
 
+def test_code_file_accepts_empty_content() -> None:
+    f = CodeFile(path="src/__init__.py", content="")
+    assert f.path == "src/__init__.py"
+    assert f.content == ""
+
+
+@pytest.mark.parametrize("bad_path", ["", "   ", "\t"])
+def test_code_file_rejects_empty_or_whitespace_path(bad_path: str) -> None:
+    with pytest.raises(ValidationError):
+        CodeFile(path=bad_path, content="")
+
+
 def test_delta_document_state_append_section_constructs_valid_model() -> None:
     delta = DeltaDocumentState(
         artifact_id="main-document",
