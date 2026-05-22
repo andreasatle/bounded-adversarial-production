@@ -494,6 +494,19 @@ class CodingProjectAdapter:
         artifact = coding_artifact_from_state(state, artifact_id)
         output_path.mkdir(parents=True, exist_ok=True)
         changed = False
+
+        conftest_path = output_path / "conftest.py"
+        conftest_content = (
+            "import sys, os\n"
+            'sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))\n'
+        )
+        conftest_before = (
+            conftest_path.read_text(encoding="utf-8") if conftest_path.exists() else None
+        )
+        if conftest_before != conftest_content:
+            conftest_path.write_text(conftest_content, encoding="utf-8")
+            changed = True
+
         for code_file in artifact.files:
             file_path = output_path / code_file.path
             file_path.parent.mkdir(parents=True, exist_ok=True)
