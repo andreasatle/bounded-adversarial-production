@@ -6,7 +6,13 @@ from pathlib import Path
 from typing import Any
 
 from baps.northstar_projection import ProjectionType, StateView
-from baps.project_adapter import VerificationResult, _normalize_json_candidate, render_blue_prompt_core
+from baps.project_adapter import (
+    VerificationResult,
+    _config_artifact_id,
+    _config_northstar_markdown,
+    _normalize_json_candidate,
+    render_blue_prompt_core,
+)
 from baps.state import (
     DeltaDocumentState,
     DeltaState,
@@ -19,21 +25,6 @@ from baps.state import (
     StateUpdateTarget,
 )
 
-
-def _config_artifact_id(config: dict[str, Any]) -> str:
-    if "artifact_id" not in config:
-        raise ValueError("artifact_id must be non-empty")
-    value = str(config["artifact_id"])
-    if value.strip() == "":
-        raise ValueError("artifact_id must be non-empty")
-    return value
-
-
-def _config_northstar_markdown(config: dict[str, Any]) -> str:
-    value = str(config.get("northstar_markdown", ""))
-    if value.strip() == "":
-        raise ValueError("northstar_markdown must be non-empty")
-    return value
 
 
 

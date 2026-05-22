@@ -15,6 +15,8 @@ from baps.northstar_projection import ProjectionType, StateView
 from baps.project_adapter import (
     ProjectTypeAdapter,
     VerificationResult,
+    _config_artifact_id,
+    _config_northstar_markdown,
     _normalize_json_candidate,
     build_default_project_type_adapters,
     resolve_adapter_for_allowed_delta_type,
@@ -468,15 +470,6 @@ def _require_non_empty(value: str, field_name: str) -> str:
         raise ValueError(f"{field_name} must be non-empty")
     return value
 
-
-def _config_artifact_id(config: dict[str, Any]) -> str:
-    if "artifact_id" not in config:
-        raise ValueError("artifact_id must be non-empty")
-    return _require_non_empty(str(config["artifact_id"]), "artifact_id")
-
-
-def _config_northstar_markdown(config: dict[str, Any]) -> str:
-    return _require_non_empty(str(config.get("northstar_markdown", "")), "northstar_markdown")
 
 
 def _load_spec(spec_path: Path) -> dict[str, Any]:

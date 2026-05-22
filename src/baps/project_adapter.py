@@ -3,10 +3,26 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from baps.northstar_projection import StateView
 from baps.state import DeltaState, GameSpec, State, StateUpdateProposal
+
+
+def _config_artifact_id(config: dict[str, Any]) -> str:
+    if "artifact_id" not in config:
+        raise ValueError("artifact_id must be non-empty")
+    value = str(config["artifact_id"])
+    if value.strip() == "":
+        raise ValueError("artifact_id must be non-empty")
+    return value
+
+
+def _config_northstar_markdown(config: dict[str, Any]) -> str:
+    value = str(config.get("northstar_markdown", ""))
+    if value.strip() == "":
+        raise ValueError("northstar_markdown must be non-empty")
+    return value
 
 
 def _normalize_json_candidate(text: str) -> str:
