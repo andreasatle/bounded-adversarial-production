@@ -166,6 +166,8 @@ def render_coding_blue_prompt(
         "- Prefer production code under src/.\n"
         "- Prefer tests under tests/.\n"
         "- Prefer pytest-discoverable tests at tests/test_*.py.\n"
+        "- Test files must import from their corresponding production module using standard Python imports (e.g. from src.fibonacci import fibonacci).\n"
+        "- Test files must NOT redefine or duplicate production functions.\n"
         "- Keep code and tests as separate files (do not embed unittest in production file).\n"
         "- content must be a valid JSON string: escape internal double quotes as \\\" and newlines as \\n.\n"
         "- write_file content MUST contain final artifact content only.\n"
