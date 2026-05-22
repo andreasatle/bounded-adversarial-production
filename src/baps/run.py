@@ -441,28 +441,16 @@ def _debug_print_verification_result(result: VerificationResult | None) -> None:
     print()
 
 
-def _build_create_game_model_client() -> ModelClient:
+def _build_model_client() -> ModelClient:
     model = os.getenv("BAPS_OLLAMA_MODEL", "llama3.2")
     base_url = os.getenv("BAPS_OLLAMA_BASE_URL", "http://localhost:11434")
     return OllamaClient(model=model, base_url=base_url)
 
 
-def _build_blue_model_client() -> ModelClient:
-    model = os.getenv("BAPS_OLLAMA_MODEL", "llama3.2")
-    base_url = os.getenv("BAPS_OLLAMA_BASE_URL", "http://localhost:11434")
-    return OllamaClient(model=model, base_url=base_url)
-
-
-def _build_red_model_client() -> ModelClient:
-    model = os.getenv("BAPS_OLLAMA_MODEL", "llama3.2")
-    base_url = os.getenv("BAPS_OLLAMA_BASE_URL", "http://localhost:11434")
-    return OllamaClient(model=model, base_url=base_url)
-
-
-def _build_referee_model_client() -> ModelClient:
-    model = os.getenv("BAPS_OLLAMA_MODEL", "llama3.2")
-    base_url = os.getenv("BAPS_OLLAMA_BASE_URL", "http://localhost:11434")
-    return OllamaClient(model=model, base_url=base_url)
+_build_create_game_model_client = _build_model_client
+_build_blue_model_client = _build_model_client
+_build_red_model_client = _build_model_client
+_build_referee_model_client = _build_model_client
 
 
 def _require_non_empty(value: str, field_name: str) -> str:
