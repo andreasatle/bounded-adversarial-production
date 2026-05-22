@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from baps.models import ToolCall, ToolDefinition
 from baps.northstar_projection import StateView
 from baps.state import DeltaState, GameSpec, State, StateUpdateProposal
 
@@ -99,6 +100,12 @@ class ProjectTypeAdapter(Protocol):
         delta_state: DeltaState,
         verification_result: VerificationResult | None,
     ) -> str:
+        ...
+
+    def build_blue_tools(self) -> list[ToolDefinition]:
+        ...
+
+    def tool_call_to_delta(self, tool_call: ToolCall) -> DeltaState:
         ...
 
     def parse_blue_delta(self, text: str) -> DeltaState:

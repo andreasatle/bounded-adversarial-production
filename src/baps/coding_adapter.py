@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from baps.models import ToolCall, ToolDefinition
 from baps.northstar_projection import ProjectionType, StateView
 from baps.project_adapter import (
     VerificationResult,
@@ -27,6 +28,7 @@ from baps.state import (
     State,
     StateUpdateProposal,
     StateUpdateTarget,
+    WriteFileDelta,
 )
 from baps.document_adapter import build_northstar_artifact_from_markdown
 
@@ -463,6 +465,55 @@ class CodingProjectAdapter:
             "- If success_condition only requires non-empty tests, basic asserted tests satisfy that condition.\n"
             "- If verification evidence exists, reason from exit_code/stdout/stderr.\n"
         )
+
+    def build_blue_tools(self) -> list[ToolDefinition]:
+        return [
+            ToolDefinition(
+                name="write_file",
+                description="Write a file to the coding artifact.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "artifact_id": {
+                            "type": "string",
+                            "description": "Target coding artifact ID",
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "Relative file path (non-empty)",
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "Full file content",
+                        },
+                    },
+                    "required": ["artifact_id", "path", "content"],
+                },
+            )
+        ]
+
+    def tool_call_to_delta(self, tool_call: ToolCall) -> DeltaState:
+        if tool_call.name != "write_file":
+            raise ValueError(f"unexpected tool: {tool_call.name!r}")
+        args = tool_call.arguments
+        try:
+            artifact_id = str(args["artifact_id"])
+            path = str(args["path"])
+            content = str(args["content"])
+        except KeyError as exc:
+            raise ValueError(f"missing required tool argument: {exc}") from exc
+        try:
+            return DeltaCodingState.model_validate(
+                {
+                    "artifact_id": artifact_id,
+                    "operation": "write_file",
+                    "payload": {"file": {"path": path, "content": content}},
+                }
+            )
+        except Exception as exc:
+            raise ValueError(
+                f"tool call arguments failed DeltaCodingState validation: {exc}"
+            ) from exc
 
     def parse_blue_delta(self, text: str) -> DeltaState:
         return parse_coding_delta_json(text)

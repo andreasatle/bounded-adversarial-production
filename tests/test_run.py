@@ -7,7 +7,7 @@ import subprocess
 
 import pytest
 
-from baps.models import FakeModelClient
+from baps.models import FakeModelClient, ToolCall
 from baps.run import create_game, create_state, main, play_game
 import baps.state as state_module
 
@@ -19,9 +19,9 @@ def _patch_create_game_model_client(monkeypatch):
         '"allowed_delta_type":"DeltaDocumentState",'
         '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}'
     )
-    blue_response = (
-        '{"artifact_id":"main-document","operation":"append_section",'
-        '"payload":{"section":{"title":"Introduction","body":"Advance goal"}}}'
+    blue_tool_response = ToolCall(
+        name="append_section",
+        arguments={"artifact_id": "main-document", "title": "Introduction", "body": "Advance goal"},
     )
     red_response = '{"disposition":"accept","rationale":"deterministic test path"}'
     referee_response = '{"disposition":"accept","rationale":"deterministic test path"}'
@@ -30,7 +30,7 @@ def _patch_create_game_model_client(monkeypatch):
         return FakeModelClient([create_game_response])
 
     def _fake_blue_builder():
-        return FakeModelClient([blue_response])
+        return FakeModelClient(tool_responses=[blue_tool_response])
 
     def _fake_red_builder():
         return FakeModelClient([red_response])
@@ -1173,7 +1173,7 @@ def test_play_game_accepted_candidate_becomes_current_best_delta() -> None:
     assert dumped["payload"]["section"]["body"] == "Advance goal"
 
 
-def test_play_game_valid_blue_json_returns_delta() -> None:
+def test_play_game_valid_blue_tool_call_returns_delta() -> None:
     import baps.run as run_module
 
     spec = run_module.GameSpec(
@@ -1198,9 +1198,15 @@ def test_play_game_valid_blue_json_returns_delta() -> None:
         state,
         spec,
         model_client=FakeModelClient(
-            [
-                '{"artifact_id":"main-document","operation":"append_section",'
-                '"payload":{"section":{"title":"Introduction","body":"Any objective"}}}'
+            tool_responses=[
+                ToolCall(
+                    name="append_section",
+                    arguments={
+                        "artifact_id": "main-document",
+                        "title": "Introduction",
+                        "body": "Any objective",
+                    },
+                )
             ]
         ),
     )
@@ -1208,7 +1214,7 @@ def test_play_game_valid_blue_json_returns_delta() -> None:
     assert delta.model_dump(mode="json")["artifact_id"] == "main-document"
 
 
-def test_play_game_invalid_blue_json_rejected() -> None:
+def test_play_game_no_tool_call_rejected() -> None:
     import baps.run as run_module
 
     spec = run_module.GameSpec(
@@ -1232,13 +1238,13 @@ def test_play_game_invalid_blue_json_rejected() -> None:
     delta = play_game(
         state,
         spec,
-        model_client=FakeModelClient(["not-json"]),
+        model_client=FakeModelClient(tool_responses=[None]),
         max_attempts=1,
     )
     assert delta is None
 
 
-def test_play_game_fenced_blue_json_accepted() -> None:
+def test_play_game_tool_call_with_empty_body_rejected() -> None:
     import baps.run as run_module
 
     spec = run_module.GameSpec(
@@ -1263,16 +1269,16 @@ def test_play_game_fenced_blue_json_accepted() -> None:
         state,
         spec,
         model_client=FakeModelClient(
-            [
-                "```json\n"
-                '{"artifact_id":"main-document","operation":"append_section",'
-                '"payload":{"section":{"title":"Introduction","body":"Any objective"}}}\n'
-                "```"
+            tool_responses=[
+                ToolCall(
+                    name="append_section",
+                    arguments={"artifact_id": "main-document", "title": "Intro", "body": ""},
+                )
             ]
         ),
+        max_attempts=1,
     )
-    assert delta is not None
-    assert delta.model_dump(mode="json")["operation"] == "append_section"
+    assert delta is None
 
 
 def test_play_game_valid_red_json_parses() -> None:
@@ -1322,9 +1328,15 @@ def test_play_game_invalid_red_json_rejected() -> None:
             state,
             spec,
             model_client=FakeModelClient(
-                [
-                    '{"artifact_id":"main-document","operation":"append_section",'
-                    '"payload":{"section":{"title":"Introduction","body":"Any objective"}}}'
+                tool_responses=[
+                    ToolCall(
+                        name="append_section",
+                        arguments={
+                            "artifact_id": "main-document",
+                            "title": "Introduction",
+                            "body": "Any objective",
+                        },
+                    )
                 ]
             ),
             red_model_client=FakeModelClient(["not-json"]),
@@ -1378,9 +1390,15 @@ def test_play_game_invalid_referee_json_rejected() -> None:
             state,
             spec,
             model_client=FakeModelClient(
-                [
-                    '{"artifact_id":"main-document","operation":"append_section",'
-                    '"payload":{"section":{"title":"Introduction","body":"Any objective"}}}'
+                tool_responses=[
+                    ToolCall(
+                        name="append_section",
+                        arguments={
+                            "artifact_id": "main-document",
+                            "title": "Introduction",
+                            "body": "Any objective",
+                        },
+                    )
                 ]
             ),
             red_model_client=FakeModelClient(
@@ -1453,9 +1471,15 @@ def test_play_game_referee_revise_promotes_candidate_as_fallback() -> None:
         state,
         spec,
         model_client=FakeModelClient(
-            [
-                '{"artifact_id":"main-document","operation":"append_section",'
-                '"payload":{"section":{"title":"Introduction","body":"Any objective"}}}'
+            tool_responses=[
+                ToolCall(
+                    name="append_section",
+                    arguments={
+                        "artifact_id": "main-document",
+                        "title": "Introduction",
+                        "body": "Any objective",
+                    },
+                )
             ]
         ),
         red_model_client=FakeModelClient(
@@ -1495,9 +1519,15 @@ def test_play_game_referee_accept_sets_current_best_delta() -> None:
         state,
         spec,
         model_client=FakeModelClient(
-            [
-                '{"artifact_id":"main-document","operation":"append_section",'
-                '"payload":{"section":{"title":"Introduction","body":"Any objective"}}}'
+            tool_responses=[
+                ToolCall(
+                    name="append_section",
+                    arguments={
+                        "artifact_id": "main-document",
+                        "title": "Introduction",
+                        "body": "Any objective",
+                    },
+                )
             ]
         ),
         red_model_client=FakeModelClient(
@@ -2566,11 +2596,9 @@ def test_play_game_accept_first_attempt_returns_immediately() -> None:
         }
     )
     blue_client = FakeModelClient(
-        [
-            '{"artifact_id":"main-document","operation":"append_section",'
-            '"payload":{"section":{"title":"Introduction","body":"first"}}}',
-            '{"artifact_id":"main-document","operation":"append_section",'
-            '"payload":{"section":{"title":"Introduction","body":"second"}}}',
+        tool_responses=[
+            ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": "first"}),
+            ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": "second"}),
         ]
     )
     red_client = FakeModelClient(
@@ -2594,7 +2622,7 @@ def test_play_game_accept_first_attempt_returns_immediately() -> None:
         max_attempts=3,
     )
     assert delta is not None
-    assert len(blue_client.prompts) == 1
+    assert len(blue_client.tool_prompts) == 1
     assert len(red_client.prompts) == 1
     assert len(referee_client.prompts) == 1
 
@@ -2621,11 +2649,9 @@ def test_play_game_revise_then_accept_uses_second_attempt() -> None:
         }
     )
     blue_client = FakeModelClient(
-        [
-            '{"artifact_id":"main-document","operation":"append_section",'
-            '"payload":{"section":{"title":"Introduction","body":"first"}}}',
-            '{"artifact_id":"main-document","operation":"append_section",'
-            '"payload":{"section":{"title":"Introduction","body":"second"}}}',
+        tool_responses=[
+            ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": "first"}),
+            ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": "second"}),
         ]
     )
     delta = play_game(
@@ -2648,7 +2674,7 @@ def test_play_game_revise_then_accept_uses_second_attempt() -> None:
     )
     assert delta is not None
     assert delta.model_dump(mode="json")["payload"]["section"]["body"] == "second"
-    assert len(blue_client.prompts) == 2
+    assert len(blue_client.tool_prompts) == 2
 
 
 def test_play_game_reject_then_accept_uses_second_attempt() -> None:
@@ -2673,11 +2699,9 @@ def test_play_game_reject_then_accept_uses_second_attempt() -> None:
         }
     )
     blue_client = FakeModelClient(
-        [
-            '{"artifact_id":"main-document","operation":"append_section",'
-            '"payload":{"section":{"title":"Introduction","body":"first"}}}',
-            '{"artifact_id":"main-document","operation":"append_section",'
-            '"payload":{"section":{"title":"Introduction","body":"second"}}}',
+        tool_responses=[
+            ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": "first"}),
+            ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": "second"}),
         ]
     )
     delta = play_game(
@@ -2700,7 +2724,7 @@ def test_play_game_reject_then_accept_uses_second_attempt() -> None:
     )
     assert delta is not None
     assert delta.model_dump(mode="json")["payload"]["section"]["body"] == "second"
-    assert len(blue_client.prompts) == 2
+    assert len(blue_client.tool_prompts) == 2
 
 
 def test_play_game_attempts_exhausted_all_rejected_returns_none() -> None:
@@ -2728,11 +2752,9 @@ def test_play_game_attempts_exhausted_all_rejected_returns_none() -> None:
         state,
         spec,
         model_client=FakeModelClient(
-            [
-                '{"artifact_id":"main-document","operation":"append_section",'
-                '"payload":{"section":{"title":"Introduction","body":"first"}}}',
-                '{"artifact_id":"main-document","operation":"append_section",'
-                '"payload":{"section":{"title":"Introduction","body":"second"}}}',
+            tool_responses=[
+                ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": "first"}),
+                ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": "second"}),
             ]
         ),
         red_model_client=FakeModelClient(
@@ -2777,11 +2799,9 @@ def test_play_game_attempts_exhausted_last_revised_returned_as_fallback() -> Non
         state,
         spec,
         model_client=FakeModelClient(
-            [
-                '{"artifact_id":"main-document","operation":"append_section",'
-                '"payload":{"section":{"title":"Introduction","body":"first"}}}',
-                '{"artifact_id":"main-document","operation":"append_section",'
-                '"payload":{"section":{"title":"Introduction","body":"second"}}}',
+            tool_responses=[
+                ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": "first"}),
+                ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": "second"}),
             ]
         ),
         red_model_client=FakeModelClient(
@@ -2824,11 +2844,9 @@ def test_play_game_previous_feedback_passed_to_later_blue_prompt() -> None:
         }
     )
     blue_client = FakeModelClient(
-        [
-            '{"artifact_id":"main-document","operation":"append_section",'
-            '"payload":{"section":{"title":"Introduction","body":"first"}}}',
-            '{"artifact_id":"main-document","operation":"append_section",'
-            '"payload":{"section":{"title":"Introduction","body":"second"}}}',
+        tool_responses=[
+            ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": "first"}),
+            ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": "second"}),
         ]
     )
     _ = play_game(
@@ -2849,8 +2867,8 @@ def test_play_game_previous_feedback_passed_to_later_blue_prompt() -> None:
         ),
         max_attempts=2,
     )
-    assert len(blue_client.prompts) == 2
-    second_prompt = blue_client.prompts[1]
+    assert len(blue_client.tool_prompts) == 2
+    second_prompt = blue_client.tool_prompts[1]
     assert "previous_feedback_json:" in second_prompt
     assert (
         "When attempt_number > 1, treat previous_feedback_json as mandatory correction requirements."
@@ -2889,11 +2907,9 @@ def test_play_game_invalid_blue_first_attempt_retries_second_attempt() -> None:
         }
     )
     blue_client = FakeModelClient(
-        [
-            '{"artifact_id":"main-document","operation":"append_section",'
-            '"payload":{"section":{"title":"Introduction","body":""}}}',
-            '{"artifact_id":"main-document","operation":"append_section",'
-            '"payload":{"section":{"title":"Introduction","body":"second"}}}',
+        tool_responses=[
+            ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": ""}),
+            ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": "second"}),
         ]
     )
     delta = play_game(
@@ -2910,8 +2926,8 @@ def test_play_game_invalid_blue_first_attempt_retries_second_attempt() -> None:
     )
     assert delta is not None
     assert delta.payload.section.body == "second"
-    assert len(blue_client.prompts) == 2
-    second_prompt = blue_client.prompts[1]
+    assert len(blue_client.tool_prompts) == 2
+    second_prompt = blue_client.tool_prompts[1]
     assert "previous_feedback_json:" in second_prompt
     assert (
         "When attempt_number > 1, treat previous_feedback_json as mandatory correction requirements."
@@ -2951,11 +2967,9 @@ def test_play_game_invalid_blue_all_attempts_returns_none() -> None:
         state,
         spec,
         model_client=FakeModelClient(
-            [
-                '{"artifact_id":"main-document","operation":"append_section",'
-                '"payload":{"section":{"title":"Introduction","body":""}}}',
-                '{"artifact_id":"main-document","operation":"append_section",'
-                '"payload":{"section":{"title":"Introduction","body":""}}}',
+            tool_responses=[
+                ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": ""}),
+                ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": ""}),
             ]
         ),
         max_attempts=2,
@@ -2989,24 +3003,24 @@ def test_play_game_invalid_blue_debug_and_non_debug_output(monkeypatch, capsys) 
         state,
         spec,
         model_client=FakeModelClient(
-            ['{"artifact_id":"main-document","operation":"append_section","payload":{"section":{"title":"Introduction","body":""}}}']
+            tool_responses=[ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": ""})]
         ),
         max_attempts=1,
     )
     non_debug_out = capsys.readouterr().out
-    assert "[DEBUG] blue.raw_model_output:" not in non_debug_out
+    assert "[DEBUG] blue.failed_tool_call:" not in non_debug_out
 
     monkeypatch.setenv("BAPS_DEBUG", "1")
     _ = play_game(
         state,
         spec,
         model_client=FakeModelClient(
-            ['{"artifact_id":"main-document","operation":"append_section","payload":{"section":{"title":"Introduction","body":""}}}']
+            tool_responses=[ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": ""})]
         ),
         max_attempts=1,
     )
     debug_out = capsys.readouterr().out
-    assert "[DEBUG] blue.raw_model_output:" in debug_out
+    assert "[DEBUG] blue.failed_tool_call:" in debug_out
     assert "[DEBUG] play_game.attempt_rejected:" in debug_out
     assert "reason: blue output failed DeltaState validation:" in debug_out
     assert "payload.section.body" in debug_out
@@ -3922,9 +3936,13 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
                 state_view, game_spec, attempt_number, previous_feedback
             )
 
-        def parse_blue_delta(self, text):
-            self.calls.append("parse_blue_delta")
-            return self._delegate.parse_blue_delta(text)
+        def build_blue_tools(self):
+            self.calls.append("build_blue_tools")
+            return self._delegate.build_blue_tools()
+
+        def tool_call_to_delta(self, tool_call):
+            self.calls.append("tool_call_to_delta")
+            return self._delegate.tool_call_to_delta(tool_call)
 
         def delta_to_state_update(self, delta_state):
             self.calls.append("delta_to_state_update")
@@ -3956,7 +3974,8 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
     assert "render_create_game_prompt_supplement" in adapter.calls
     assert "build_state_view" in adapter.calls
     assert "render_blue_prompt" in adapter.calls
-    assert "parse_blue_delta" in adapter.calls
+    assert "build_blue_tools" in adapter.calls
+    assert "tool_call_to_delta" in adapter.calls
     assert "delta_to_state_update" in adapter.calls
     assert "export_state" in adapter.calls
 
@@ -5087,6 +5106,7 @@ def test_coding_example_output_path_resolves_under_workspace() -> None:
 
 def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
     import baps.run as run_module
+    from baps.models import ToolDefinition
 
     class _PlayAdapter:
         project_type = "document"
@@ -5114,8 +5134,12 @@ def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
             self.calls.append("render_blue_prompt")
             return "blue-prompt"
 
-        def parse_blue_delta(self, _text):
-            self.calls.append("parse_blue_delta")
+        def build_blue_tools(self):
+            self.calls.append("build_blue_tools")
+            return [ToolDefinition(name="append_section", description="Append", parameters={})]
+
+        def tool_call_to_delta(self, _tool_call):
+            self.calls.append("tool_call_to_delta")
             return state_module.DeltaDocumentState(
                 artifact_id="main-document",
                 operation="append_section",
@@ -5142,12 +5166,14 @@ def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
         state,
         spec,
         adapter=adapter,
-        model_client=FakeModelClient(["ignored"]),
+        model_client=FakeModelClient(
+            tool_responses=[ToolCall("append_section", {"artifact_id": "main-document", "title": "Intro", "body": "Body"})]
+        ),
         red_model_client=FakeModelClient(['{"disposition":"accept","rationale":"ok"}']),
         referee_model_client=FakeModelClient(['{"disposition":"accept","rationale":"ok"}']),
     )
     assert isinstance(delta, state_module.DeltaDocumentState)
-    assert adapter.calls == ["build_state_view", "render_blue_prompt", "parse_blue_delta"]
+    assert adapter.calls == ["build_state_view", "render_blue_prompt", "build_blue_tools", "tool_call_to_delta"]
 
 
 def test_integration_uses_adapter_delta_to_update_mapper() -> None:

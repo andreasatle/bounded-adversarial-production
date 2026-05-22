@@ -248,12 +248,12 @@ def _debug_print_play_game_attempt(attempt: int) -> None:
     print()
 
 
-def _debug_print_blue_raw_model_output(raw_text: str) -> None:
+def _debug_print_blue_failed_tool_call(tool_call: object) -> None:
     if not _debug_enabled():
         return
-    print("[DEBUG] blue.raw_model_output:")
-    for line in raw_text.splitlines() or [""]:
-        print(f"  {line}")
+    print("[DEBUG] blue.failed_tool_call:")
+    for line in _format_debug_yaml_like({"tool_call": str(tool_call)}, indent=2):
+        print(line)
     print()
 
 
@@ -1093,11 +1093,24 @@ def play_game(
         blue_prompt = resolved_adapter.render_blue_prompt(
             state_view, game_spec, attempt, previous_feedback
         )
-        blue_generated = client.generate(blue_prompt)
+        blue_tools = resolved_adapter.build_blue_tools()
         try:
-            candidate_delta = resolved_adapter.parse_blue_delta(blue_generated)
+            blue_tool_call = client.generate_with_tools(blue_prompt, blue_tools)
         except ValueError as exc:
-            _debug_print_blue_raw_model_output(blue_generated)
+            reason = f"blue output failed DeltaState validation: {exc}"
+            _debug_print_attempt_rejected(attempt, reason)
+            previous_feedback = {
+                "attempt_rejection": {
+                    "stage": "blue",
+                    "reason": reason,
+                    "validation_error": str(exc),
+                }
+            }
+            continue
+        try:
+            candidate_delta = resolved_adapter.tool_call_to_delta(blue_tool_call)
+        except ValueError as exc:
+            _debug_print_blue_failed_tool_call(blue_tool_call)
             reason = f"blue output failed DeltaState validation: {exc}"
             _debug_print_attempt_rejected(attempt, reason)
             previous_feedback = {

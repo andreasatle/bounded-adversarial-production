@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from baps.models import ToolCall, ToolDefinition
 from baps.northstar_projection import ProjectionType, StateView
 from baps.project_adapter import (
     VerificationResult,
@@ -14,6 +15,7 @@ from baps.project_adapter import (
     render_blue_prompt_core,
 )
 from baps.state import (
+    AppendSectionDelta,
     DeltaDocumentState,
     DeltaState,
     DocumentArtifact,
@@ -313,6 +315,55 @@ class DocumentProjectAdapter:
     ) -> str:
         del state_view, game_spec, delta_state, verification_result
         return ""
+
+    def build_blue_tools(self) -> list[ToolDefinition]:
+        return [
+            ToolDefinition(
+                name="append_section",
+                description="Append a new section to the document artifact.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "artifact_id": {
+                            "type": "string",
+                            "description": "Target document artifact ID",
+                        },
+                        "title": {
+                            "type": "string",
+                            "description": "Section title (non-empty)",
+                        },
+                        "body": {
+                            "type": "string",
+                            "description": "Section body text (non-empty)",
+                        },
+                    },
+                    "required": ["artifact_id", "title", "body"],
+                },
+            )
+        ]
+
+    def tool_call_to_delta(self, tool_call: ToolCall) -> DeltaState:
+        if tool_call.name != "append_section":
+            raise ValueError(f"unexpected tool: {tool_call.name!r}")
+        args = tool_call.arguments
+        try:
+            artifact_id = str(args["artifact_id"])
+            title = str(args["title"])
+            body = str(args["body"])
+        except KeyError as exc:
+            raise ValueError(f"missing required tool argument: {exc}") from exc
+        try:
+            return DeltaDocumentState.model_validate(
+                {
+                    "artifact_id": artifact_id,
+                    "operation": "append_section",
+                    "payload": {"section": {"title": title, "body": body}},
+                }
+            )
+        except Exception as exc:
+            raise ValueError(
+                f"tool call arguments failed DeltaDocumentState validation: {exc}"
+            ) from exc
 
     def parse_blue_delta(self, text: str) -> DeltaState:
         return parse_document_delta_json(text)
