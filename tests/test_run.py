@@ -50,7 +50,14 @@ def test_main_prints_required_fields_and_no_legacy_iteration_output(
     workspace = tmp_path / "w"
     monkeypatch.setattr(
         "sys.argv",
-        ["baps-run", "--workspace", str(workspace), "--project-type", "document", "--artifact-id", "main-document"],
+        [
+            "baps-run",
+            "--workspace", str(workspace),
+            "--project-type", "document",
+            "--artifact-id", "main-document",
+            "--goal", "Write a short report.",
+            "--output", "output/report.md",
+        ],
     )
 
     main()
@@ -207,8 +214,9 @@ def test_output_path_absolute_remains_absolute(monkeypatch, capsys, tmp_path: Pa
             str(workspace),
             "--project-type",
             "document",
-            "--artifact-id", "main-document", "--output",
-            str(absolute_output),
+            "--artifact-id", "main-document",
+            "--goal", "Write a report.",
+            "--output", str(absolute_output),
         ],
     )
 
@@ -220,11 +228,37 @@ def test_output_path_absolute_remains_absolute(monkeypatch, capsys, tmp_path: Pa
 @pytest.mark.parametrize(
     ("argv", "error_substring"),
     [
-        (["baps-run", "--project-type", "document", "--artifact-id", "main-document", "--max-iterations", "0"], "max_iterations must be >= 1"),
+        (
+            ["baps-run", "--project-type", "document", "--artifact-id", "main-document",
+             "--goal", "Write a report.", "--output", "output/report.md", "--max-iterations", "0"],
+            "max_iterations must be >= 1",
+        ),
         (["baps-run"], "project_type must be non-empty"),
-        (["baps-run", "--project-type", "document", "--artifact-id", "main-document", "--goal", "   "], "goal must be non-empty"),
-        (["baps-run", "--project-type", "document", "--artifact-id", "main-document", "--workspace", "   "], "workspace must be non-empty"),
-        (["baps-run", "--project-type", "document", "--artifact-id", "main-document", "--output", "   "], "output must be non-empty"),
+        (
+            ["baps-run", "--project-type", "document", "--artifact-id", "main-document",
+             "--output", "output/report.md", "--goal", "   "],
+            "goal must be non-empty",
+        ),
+        (
+            ["baps-run", "--project-type", "document", "--artifact-id", "main-document",
+             "--goal", "Write a report.", "--output", "output/report.md", "--workspace", "   "],
+            "workspace must be non-empty",
+        ),
+        (
+            ["baps-run", "--project-type", "document", "--artifact-id", "main-document",
+             "--goal", "Write a report.", "--output", "   "],
+            "output must be non-empty",
+        ),
+        (
+            ["baps-run", "--project-type", "document", "--artifact-id", "main-document",
+             "--output", "output/report.md"],
+            "goal is required",
+        ),
+        (
+            ["baps-run", "--project-type", "document", "--artifact-id", "main-document",
+             "--goal", "Write a report."],
+            "output is required",
+        ),
     ],
 )
 def test_invalid_config_fails_cleanly(monkeypatch, capsys, argv: list[str], error_substring: str) -> None:
@@ -239,8 +273,14 @@ def test_invalid_config_fails_cleanly(monkeypatch, capsys, argv: list[str], erro
 @pytest.mark.parametrize(
     ("argv", "error_substring"),
     [
-        (["baps-run", "--project-type", "git"], "project_type 'git' is not implemented"),
-        (["baps-run", "--project-type", "unknown"], "unknown project_type: unknown"),
+        (
+            ["baps-run", "--project-type", "git", "--goal", "g", "--output", "o/o.md"],
+            "project_type 'git' is not implemented",
+        ),
+        (
+            ["baps-run", "--project-type", "unknown", "--goal", "g", "--output", "o/o.md"],
+            "unknown project_type: unknown",
+        ),
     ],
 )
 def test_invalid_project_type_fails_cleanly(
@@ -267,7 +307,7 @@ def test_project_type_document_creates_state_and_logs_when_debug_enabled(
             str(workspace),
             "--project-type",
             "document",
-        "--artifact-id", "main-document", ],
+        "--artifact-id", "main-document", "--goal", "Write a report.", "--output", "output/report.md", ],
     )
 
     main()
@@ -296,7 +336,7 @@ def test_document_type_is_not_stored_in_state_output(monkeypatch, capsys, tmp_pa
             str(workspace),
             "--project-type",
             "document",
-        "--artifact-id", "main-document", ],
+        "--artifact-id", "main-document", "--goal", "Write a report.", "--output", "output/report.md", ],
     )
 
     main()
@@ -330,7 +370,7 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
             str(workspace),
             "--project-type",
             "document",
-        "--artifact-id", "main-document", ],
+        "--artifact-id", "main-document", "--goal", "Write a report.", "--output", "output/report.md", ],
     )
 
     run_module.main()
@@ -344,7 +384,7 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
                     "id": forwarded_state.northstar.artifacts[0].id,
                     "kind": "document",
                     "sections": [
-                        {"title": "NorthStar", "body": "Write a short report."}
+                        {"title": "NorthStar", "body": "Write a report."}
                     ],
                 }
             ]
@@ -393,7 +433,7 @@ def test_main_integration_uses_state_service_apply_update(monkeypatch, tmp_path:
             str(tmp_path / "ws-service"),
             "--project-type",
             "document",
-        "--artifact-id", "main-document", ],
+        "--artifact-id", "main-document", "--goal", "Write a report.", "--output", "output/report.md", ],
     )
     run_module.main()
     assert called["value"] is True
@@ -411,7 +451,7 @@ def test_main_persists_updated_state_with_appended_section(monkeypatch, tmp_path
             str(workspace),
             "--project-type",
             "document",
-        "--artifact-id", "main-document", ],
+        "--artifact-id", "main-document", "--goal", "Write a report.", "--output", "output/report.md", ],
     )
     run_module.main()
 
@@ -445,7 +485,7 @@ def test_main_unsupported_delta_operation_fails_explicitly(monkeypatch, capsys, 
             str(tmp_path / "ws-unsupported-op"),
             "--project-type",
             "document",
-        "--artifact-id", "main-document", ],
+        "--artifact-id", "main-document", "--goal", "Write a report.", "--output", "output/report.md", ],
     )
     with pytest.raises(SystemExit) as exc:
         run_module.main()
@@ -2069,6 +2109,8 @@ def test_resolve_config_reads_artifact_id_and_northstar_and_create_state_uses_ar
             [
                 "project_type: document",
                 "artifact_id: doc-7",
+                "goal: Write a short report.",
+                "output: output/report.md",
                 "northstar_markdown: |",
                 "  # Goal",
                 "  Write a short report.",
@@ -3615,7 +3657,7 @@ def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_pa
             str(tmp_path / "ws-main-play"),
             "--project-type",
             "document",
-        "--artifact-id", "main-document", ],
+        "--artifact-id", "main-document", "--goal", "Write a report.", "--output", "output/report.md", ],
     )
 
     run_module.main()
@@ -3636,7 +3678,7 @@ def test_main_exits_cleanly_if_play_game_returns_none(monkeypatch, capsys, tmp_p
             str(tmp_path / "ws-play-none"),
             "--project-type",
             "document",
-        "--artifact-id", "main-document", ],
+        "--artifact-id", "main-document", "--goal", "Write a report.", "--output", "output/report.md", ],
     )
     run_module.main()
     captured = capsys.readouterr()
@@ -3689,7 +3731,7 @@ def test_main_max_iterations_two_runs_two_iterations_with_state_carry_forward(
             str(tmp_path / "ws-multi-iter"),
             "--project-type",
             "document",
-            "--artifact-id", "main-document", "--max-iterations",
+            "--artifact-id", "main-document", "--goal", "Write a report.", "--output", "output/report.md", "--max-iterations",
             "2",
         ],
     )
@@ -3727,7 +3769,7 @@ def test_main_create_state_called_once_for_multi_iteration(monkeypatch, tmp_path
             str(tmp_path / "ws-create-once"),
             "--project-type",
             "document",
-            "--artifact-id", "main-document", "--max-iterations",
+            "--artifact-id", "main-document", "--goal", "Write a report.", "--output", "output/report.md", "--max-iterations",
             "2",
         ],
     )
@@ -3764,7 +3806,7 @@ def test_main_stops_when_create_game_cannot_produce_new_atomic_game(
             str(tmp_path / "ws-stop-no-game"),
             "--project-type",
             "document",
-            "--artifact-id", "main-document", "--max-iterations",
+            "--artifact-id", "main-document", "--goal", "Write a report.", "--output", "output/report.md", "--max-iterations",
             "3",
         ],
     )
@@ -3798,6 +3840,7 @@ def test_main_stop_reason_iteration_limit_reached_after_all_iterations_used(
             "--workspace", str(tmp_path / "ws-iter-limit"),
             "--project-type", "document",
             "--artifact-id", "main-document",
+            "--goal", "Write a report.", "--output", "output/report.md",
             "--max-iterations", "2",
         ],
     )
@@ -3820,6 +3863,7 @@ def test_main_stop_reason_no_state_change_when_applied_delta_has_no_effect(
             "--workspace", str(tmp_path / "ws-no-change"),
             "--project-type", "document",
             "--artifact-id", "main-document",
+            "--goal", "Write a report.", "--output", "output/report.md",
             "--max-iterations", "3",
         ],
     )
@@ -3855,6 +3899,7 @@ def test_main_no_state_change_stops_loop_before_max_iterations(
             "--workspace", str(tmp_path / "ws-no-change-early"),
             "--project-type", "document",
             "--artifact-id", "main-document",
+            "--goal", "Write a report.", "--output", "output/report.md",
             "--max-iterations", "5",
         ],
     )
@@ -3888,6 +3933,7 @@ def test_main_no_state_change_after_prior_state_change_reports_state_changed_tru
             "--workspace", str(tmp_path / "ws-change-then-no-change"),
             "--project-type", "document",
             "--artifact-id", "main-document",
+            "--goal", "Write a report.", "--output", "output/report.md",
             "--max-iterations", "5",
         ],
     )
@@ -3917,6 +3963,7 @@ def test_main_create_game_parse_error_is_not_swallowed_as_no_game(
             "document",
             "--artifact-id",
             "main-document",
+            "--goal", "Write a report.", "--output", "output/report.md",
             "--max-iterations",
             "2",
         ],
@@ -3979,6 +4026,7 @@ def test_active_main_writes_output_path_from_state(tmp_path: Path, monkeypatch, 
             "document",
             "--artifact-id",
             "main-document",
+            "--goal", "Write a report.", "--output", "output/report.md",
             "--max-iterations",
             "1",
         ],
@@ -4072,6 +4120,8 @@ def test_baps_init_creates_state_file(monkeypatch, tmp_path: Path) -> None:
             "document",
             "--artifact-id",
             "main-document",
+            "--goal", "Write a report.",
+            "--output", "output/report.md",
         ],
     )
     main()
@@ -4089,6 +4139,8 @@ def test_baps_init_twice_fails(monkeypatch, tmp_path: Path, capsys) -> None:
         "document",
         "--artifact-id",
         "main-document",
+        "--goal", "Write a report.",
+        "--output", "output/report.md",
     ]
     monkeypatch.setattr("sys.argv", argv)
     main()
@@ -4112,6 +4164,8 @@ def test_baps_run_before_init_fails(monkeypatch, tmp_path: Path, capsys) -> None
             "document",
             "--artifact-id",
             "main-document",
+            "--goal", "Write a report.",
+            "--output", "output/report.md",
         ],
     )
     with pytest.raises(SystemExit) as exc:
@@ -4137,6 +4191,8 @@ def test_baps_run_loads_existing_state_without_create_state(
             "document",
             "--artifact-id",
             "main-document",
+            "--goal", "Write a report.",
+            "--output", "output/report.md",
         ],
     )
     main()
@@ -4157,6 +4213,7 @@ def test_baps_run_loads_existing_state_without_create_state(
             "document",
             "--artifact-id",
             "main-document",
+            "--goal", "Write a report.", "--output", "output/report.md",
             "--max-iterations",
             "1",
         ],
@@ -4177,6 +4234,7 @@ def test_baps_init_and_run_works_once(monkeypatch, tmp_path: Path) -> None:
             "document",
             "--artifact-id",
             "main-document",
+            "--goal", "Write a report.", "--output", "output/report.md",
             "--max-iterations",
             "1",
         ],
@@ -4199,6 +4257,7 @@ def test_baps_init_and_run_after_initialization_fails(
         "document",
         "--artifact-id",
         "main-document",
+        "--goal", "Write a report.", "--output", "output/report.md",
         "--max-iterations",
         "1",
     ]
@@ -4257,6 +4316,8 @@ def test_second_run_sees_previous_state(monkeypatch, tmp_path: Path) -> None:
             "document",
             "--artifact-id",
             "main-document",
+            "--goal", "Write a report.",
+            "--output", "output/report.md",
         ],
     )
     main()
@@ -4272,6 +4333,7 @@ def test_second_run_sees_previous_state(monkeypatch, tmp_path: Path) -> None:
             "document",
             "--artifact-id",
             "main-document",
+            "--goal", "Write a report.", "--output", "output/report.md",
             "--max-iterations",
             "1",
         ],
@@ -4288,6 +4350,7 @@ def test_second_run_sees_previous_state(monkeypatch, tmp_path: Path) -> None:
             "document",
             "--artifact-id",
             "main-document",
+            "--goal", "Write a report.", "--output", "output/report.md",
             "--max-iterations",
             "1",
         ],
@@ -4310,6 +4373,8 @@ def test_export_works_after_run_command(monkeypatch, tmp_path: Path) -> None:
             "document",
             "--artifact-id",
             "main-document",
+            "--goal", "Write a report.",
+            "--output", "output/report.md",
         ],
     )
     main()
@@ -4324,6 +4389,7 @@ def test_export_works_after_run_command(monkeypatch, tmp_path: Path) -> None:
             "document",
             "--artifact-id",
             "main-document",
+            "--goal", "Write a report.", "--output", "output/report.md",
             "--max-iterations",
             "1",
         ],
@@ -4336,7 +4402,8 @@ def test_spec_relative_path_resolves_from_cwd(monkeypatch, capsys, tmp_path: Pat
     spec = tmp_path / "config.yaml"
     workspace = tmp_path / "from-relative-spec"
     spec.write_text(
-        "project_type: document\nartifact_id: main-document\n" f"workspace: {workspace}\n",
+        "project_type: document\nartifact_id: main-document\n"
+        f"workspace: {workspace}\ngoal: Write a report.\noutput: output/report.md\n",
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
@@ -4486,6 +4553,8 @@ def test_init_from_spec_persists_northstar_artifact(monkeypatch, tmp_path: Path)
                 "project_type: document",
                 "artifact_id: main-document",
                 f"workspace: {workspace}",
+                "goal: Write a short report grounded in NorthStar intent.",
+                "output: output/report.md",
                 "northstar_markdown: |",
                 "  # Goal",
                 "",
@@ -4525,6 +4594,8 @@ def test_debug_formatter_renders_nested_list_of_dicts_without_python_repr(
             "document",
             "--artifact-id",
             "main-document",
+            "--goal", "Write a report.",
+            "--output", "output/report.md",
         ],
     )
 
@@ -4550,6 +4621,8 @@ def test_debug_formatter_renders_tuple_as_yaml_list_and_empty_as_brackets(
             "document",
             "--artifact-id",
             "main-document",
+            "--goal", "Write a report.",
+            "--output", "output/report.md",
         ],
     )
 
@@ -4626,6 +4699,7 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
             "document",
             "--artifact-id",
             "main-document",
+            "--goal", "Write a report.", "--output", "output/report.md",
             "--max-iterations",
             "1",
         ],
@@ -5743,6 +5817,7 @@ def test_document_run_runs_verification(monkeypatch, tmp_path: Path, capsys) -> 
             "document",
             "--artifact-id",
             "main-document",
+            "--goal", "Write a report.", "--output", "output/report.md",
             "--max-iterations",
             "1",
         ],
@@ -6355,6 +6430,7 @@ def test_run_iterations_northstar_update_proposed_writes_blackboard_and_stops(
             "--workspace", str(workspace),
             "--project-type", "document",
             "--artifact-id", "main-document",
+            "--goal", "Write a report.", "--output", "output/report.md",
             "--max-iterations", "3",
         ],
     )
@@ -6395,6 +6471,7 @@ def test_run_iterations_northstar_update_proposed_does_not_apply_state_update(
             "--workspace", str(workspace),
             "--project-type", "document",
             "--artifact-id", "main-document",
+            "--goal", "Write a report.", "--output", "output/report.md",
             "--max-iterations", "3",
         ],
     )
@@ -6443,6 +6520,7 @@ def test_run_iterations_northstar_proposal_appends_on_multiple_signals(
             "--workspace", str(workspace),
             "--project-type", "document",
             "--artifact-id", "main-document",
+            "--goal", "Write a report.", "--output", "output/report.md",
             "--max-iterations", "1",
         ],
     )

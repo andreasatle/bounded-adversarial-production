@@ -39,9 +39,6 @@ from baps.state import (
 from baps.state_service import StateService
 from baps.state_store import JsonStateStore
 
-REQUEST = "Write a short report."
-
-
 class NoNewAtomicGameError(ValueError):
     """Raised when the model explicitly indicates no new atomic game is available."""
 
@@ -537,7 +534,7 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
         if not northstar_path.exists():
             raise ValueError(f"northstar_path file not found: {northstar_path}")
         northstar_markdown_raw = northstar_path.read_text(encoding="utf-8")
-    goal_raw = _resolve(args.goal, "goal", REQUEST)
+    goal_raw = _resolve(args.goal, "goal")
     output_raw = _resolve(args.output, "output")
     max_iterations_raw = (
         args.max_iterations
@@ -556,6 +553,8 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
         if artifact_id_raw is not None
         else ""
     )
+    if goal_raw is None:
+        raise ValueError("goal is required: provide --goal, or set 'goal' in the spec/workspace config")
     goal = _require_non_empty(str(goal_raw), "goal")
     northstar_markdown = _require_non_empty(
         str(northstar_markdown_raw) if northstar_markdown_raw is not None else goal,
@@ -564,10 +563,9 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
     workspace = Path(workspace_str)
 
     if output_raw is None:
-        output_path = workspace / "output" / "report.md"
-    else:
-        output_str = _require_non_empty(str(output_raw), "output")
-        output_path = _resolve_output_path(workspace, output_str)
+        raise ValueError("output is required: provide --output, or set 'output' in the spec/workspace config")
+    output_str = _require_non_empty(str(output_raw), "output")
+    output_path = _resolve_output_path(workspace, output_str)
 
     try:
         max_iterations = int(max_iterations_raw)
@@ -1458,7 +1456,7 @@ def main() -> None:
     parser.add_argument(
         "--goal",
         default=None,
-        help=f"Runtime goal text. Defaults to '{REQUEST}' if not provided.",
+        help="Runtime goal text. Required if not set in spec or workspace config.",
     )
     parser.add_argument(
         "--output",
