@@ -5,6 +5,7 @@ DOCUMENT_WORKSPACE=".baps-workspace/document-project"
 CODING_WORKSPACE=".baps-workspace/coding-project"
 LOGROOT=".baps-workspace/logs"
 MODEL="gemma4:e4b"
+PLANNER_MODEL="gemma4:27b"
 mkdir -p "$LOGROOT"
 
 TS=$(date +"%Y%m%d-%H%M%S")
@@ -29,6 +30,7 @@ echo "writing log to: $LOGFILE"
   echo "============================================================"
 
   BAPS_OLLAMA_MODEL=$MODEL \
+  BAPS_OLLAMA_PLANNER_MODEL=$PLANNER_MODEL \
   BAPS_DEBUG=1 \
   uv run baps-run init_and_run \
       --spec examples/document-project.yaml
@@ -48,6 +50,7 @@ echo "writing log to: $LOGFILE"
   echo "============================================================"
 
   BAPS_OLLAMA_MODEL=$MODEL \
+  BAPS_OLLAMA_PLANNER_MODEL=$PLANNER_MODEL \
   BAPS_DEBUG=1 \
   uv run baps-run init_and_run \
       --spec examples/coding-project.yaml

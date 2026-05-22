@@ -444,7 +444,15 @@ def _build_model_client() -> ModelClient:
     return OllamaClient(model=model, base_url=base_url)
 
 
-_build_create_game_model_client = _build_model_client
+def _build_create_game_model_client() -> ModelClient:
+    model = (
+        os.getenv("BAPS_OLLAMA_PLANNER_MODEL")
+        or os.getenv("BAPS_OLLAMA_MODEL", "llama3.2")
+    )
+    base_url = os.getenv("BAPS_OLLAMA_BASE_URL", "http://localhost:11434")
+    return OllamaClient(model=model, base_url=base_url)
+
+
 _build_blue_model_client = _build_model_client
 _build_red_model_client = _build_model_client
 _build_referee_model_client = _build_model_client
