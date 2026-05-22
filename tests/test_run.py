@@ -1576,6 +1576,225 @@ def test_play_game_red_receives_gamespec_state_view_and_delta_state(monkeypatch)
     assert captured["delta_state"] is not None
 
 
+def _make_document_spec_and_state(success_condition: str = "A section exists."):
+    import baps.run as run_module
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition=success_condition,
+    )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+            "artifact_id": "main-document",
+            "goal": "Write a short report.",
+            "northstar_markdown": "# Goal\n\nWrite a short report.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    return spec, state
+
+
+def _make_blue_client(*titles: str):
+    return FakeModelClient(
+        tool_responses=[
+            ToolCall(
+                name="append_section",
+                arguments={"artifact_id": "main-document", "title": t, "body": "Body text."},
+            )
+            for t in titles
+        ]
+    )
+
+
+def test_red_prompt_includes_success_condition(monkeypatch) -> None:
+    import baps.run as run_module
+
+    captured: dict[str, object] = {}
+    original = run_module._render_red_prompt
+
+    def _capture(*args, **kwargs):
+        result = original(*args, **kwargs)
+        captured["prompt"] = result
+        return result
+
+    monkeypatch.setattr(run_module, "_render_red_prompt", _capture)
+    success_condition = "Unique success_condition string for red prompt contract test."
+    spec, state = _make_document_spec_and_state(success_condition)
+    play_game(state, spec, model_client=_make_blue_client("Introduction"))
+    assert "prompt" in captured
+    assert success_condition in str(captured["prompt"])
+
+
+def test_referee_prompt_includes_success_condition_and_red_rationale(monkeypatch) -> None:
+    import baps.run as run_module
+
+    captured: dict[str, object] = {}
+    original = run_module._render_referee_prompt
+
+    def _capture(*args, **kwargs):
+        result = original(*args, **kwargs)
+        captured["prompt"] = result
+        return result
+
+    monkeypatch.setattr(run_module, "_render_referee_prompt", _capture)
+    success_condition = "Unique success_condition string for referee prompt contract test."
+    spec, state = _make_document_spec_and_state(success_condition)
+    red_rationale = "Unique red rationale for referee prompt test."
+    play_game(
+        state,
+        spec,
+        model_client=_make_blue_client("Introduction"),
+        red_model_client=FakeModelClient(
+            [f'{{"disposition":"accept","rationale":"{red_rationale}"}}']
+        ),
+    )
+    prompt = str(captured["prompt"])
+    assert success_condition in prompt
+    assert red_rationale in prompt
+
+
+def test_play_game_referee_revise_retries_and_second_attempt_accepted() -> None:
+    import baps.run as run_module
+
+    spec, state = _make_document_spec_and_state()
+    delta = play_game(
+        state,
+        spec,
+        model_client=_make_blue_client("Attempt One", "Attempt Two"),
+        red_model_client=FakeModelClient(
+            [
+                '{"disposition":"accept","rationale":"ok"}',
+                '{"disposition":"accept","rationale":"ok"}',
+            ]
+        ),
+        referee_model_client=FakeModelClient(
+            [
+                '{"disposition":"revise","rationale":"needs work"}',
+                '{"disposition":"accept","rationale":"approved"}',
+            ]
+        ),
+        max_attempts=2,
+    )
+    assert delta is not None
+    assert delta.artifact_id == "main-document"
+    assert isinstance(delta, state_module.DeltaDocumentState)
+    assert delta.payload.section.title == "Attempt Two"
+
+
+def test_play_game_referee_reject_retries_and_second_attempt_accepted() -> None:
+    import baps.run as run_module
+
+    spec, state = _make_document_spec_and_state()
+    delta = play_game(
+        state,
+        spec,
+        model_client=_make_blue_client("Bad Attempt", "Good Attempt"),
+        red_model_client=FakeModelClient(
+            [
+                '{"disposition":"accept","rationale":"ok"}',
+                '{"disposition":"accept","rationale":"ok"}',
+            ]
+        ),
+        referee_model_client=FakeModelClient(
+            [
+                '{"disposition":"reject","rationale":"wrong direction"}',
+                '{"disposition":"accept","rationale":"approved"}',
+            ]
+        ),
+        max_attempts=2,
+    )
+    assert delta is not None
+    assert isinstance(delta, state_module.DeltaDocumentState)
+    assert delta.payload.section.title == "Good Attempt"
+
+
+def test_play_game_previous_feedback_on_retry_contains_red_and_referee(monkeypatch) -> None:
+    import baps.run as run_module
+
+    captured_feedback: list[dict | None] = []
+    original_debug = run_module._debug_print_blue_input
+
+    def _capture(state_view, game_spec, attempt, previous_feedback):
+        captured_feedback.append(previous_feedback)
+        original_debug(state_view, game_spec, attempt, previous_feedback)
+
+    monkeypatch.setattr(run_module, "_debug_print_blue_input", _capture)
+    spec, state = _make_document_spec_and_state()
+    play_game(
+        state,
+        spec,
+        model_client=_make_blue_client("Attempt One", "Attempt Two"),
+        red_model_client=FakeModelClient(
+            [
+                '{"disposition":"accept","rationale":"red rationale for feedback test"}',
+                '{"disposition":"accept","rationale":"ok"}',
+            ]
+        ),
+        referee_model_client=FakeModelClient(
+            [
+                '{"disposition":"revise","rationale":"referee rationale for feedback test"}',
+                '{"disposition":"accept","rationale":"approved"}',
+            ]
+        ),
+        max_attempts=2,
+    )
+    assert len(captured_feedback) >= 2
+    assert captured_feedback[0] is None
+    feedback = captured_feedback[1]
+    assert feedback is not None
+    assert "red_finding" in feedback
+    assert "referee_decision" in feedback
+    assert feedback["red_finding"]["rationale"] == "red rationale for feedback test"
+    assert feedback["referee_decision"]["rationale"] == "referee rationale for feedback test"
+    assert feedback["referee_decision"]["disposition"] == "revise"
+
+
+def test_play_game_red_reject_with_referee_accept_returns_delta() -> None:
+    """Red is advisory: a Red reject must not prevent acceptance when Referee accepts."""
+    spec, state = _make_document_spec_and_state()
+    delta = play_game(
+        state,
+        spec,
+        model_client=_make_blue_client("Introduction"),
+        red_model_client=FakeModelClient(
+            ['{"disposition":"reject","rationale":"red says no"}']
+        ),
+        referee_model_client=FakeModelClient(
+            ['{"disposition":"accept","rationale":"referee overrides"}']
+        ),
+    )
+    assert delta is not None
+    assert delta.artifact_id == "main-document"
+
+
+def test_play_game_all_referee_rejects_returns_none() -> None:
+    spec, state = _make_document_spec_and_state()
+    delta = play_game(
+        state,
+        spec,
+        model_client=_make_blue_client("Attempt One", "Attempt Two"),
+        red_model_client=FakeModelClient(
+            [
+                '{"disposition":"accept","rationale":"ok"}',
+                '{"disposition":"accept","rationale":"ok"}',
+            ]
+        ),
+        referee_model_client=FakeModelClient(
+            [
+                '{"disposition":"reject","rationale":"wrong"}',
+                '{"disposition":"reject","rationale":"still wrong"}',
+            ]
+        ),
+        max_attempts=2,
+    )
+    assert delta is None
+
+
 def test_blue_prompt_includes_state_view_and_gamespec() -> None:
     import baps.project_adapter as project_adapter_module
     import baps.run as run_module
