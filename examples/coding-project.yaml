@@ -20,6 +20,12 @@ northstar_markdown: |
     - `token_overlap`: identical inputs (1.0), disjoint inputs (0.0), partial overlap
     - `compare`: integration test asserting all three keys are present and score is in [0, 1]
 
+  # Exact return type contract — do not deviate
+
+  - `normalize` returns `str`
+  - `token_overlap` returns `float` in [0.0, 1.0] — NOT a set, NOT a count
+  - `compare` returns `dict` with exactly three keys: "a" (str), "b" (str), "score" (float)
+
   # Quality requirements
 
   All functions must have type annotations. Tests must use plain pytest (no mocking).

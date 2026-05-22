@@ -362,14 +362,27 @@ class CodingProjectAdapter:
             },
             sort_keys=True,
         )
+        exit_code = verification_result.exit_code
+        if exit_code == 5:
+            no_tests_hint = (
+                "- exit_code=5 means pytest collected zero tests: no test file exists yet.\n"
+                "  Choose a game that WRITES the missing test file. Do NOT rewrite src.\n"
+            )
+        elif exit_code == 1:
+            no_tests_hint = (
+                "- exit_code=1 means tests were found but failed.\n"
+                "  Prefer a repair game that fixes the failing implementation or test.\n"
+            )
+        else:
+            no_tests_hint = ""
         del state, config, state_view
         return (
             f"{base}"
             "Coding CreateGame verification evidence:\n"
             f"- previous_verification_result_json: {verification_json}\n"
             "- Use this as evidence from the previous exported state only.\n"
+            f"{no_tests_hint}"
             "- If evidence shows import/layout errors, prefer a repair game that fixes import/layout.\n"
-            "- If evidence shows failing tests, prefer a repair game for implementation/tests aligned to the failure.\n"
         )
 
     def normalize_game_spec(
