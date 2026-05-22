@@ -1428,7 +1428,7 @@ def test_play_game_referee_receives_gamespec_state_view_delta_and_red(monkeypatc
     assert captured["red_finding"] is not None
 
 
-def test_play_game_referee_revise_prevents_current_best_delta() -> None:
+def test_play_game_referee_revise_promotes_candidate_as_fallback() -> None:
     import baps.run as run_module
 
     spec = run_module.GameSpec(
@@ -1466,7 +1466,8 @@ def test_play_game_referee_revise_prevents_current_best_delta() -> None:
         ),
         max_attempts=1,
     )
-    assert delta is None
+    assert delta is not None
+    assert delta.artifact_id == "main-document"
 
 
 def test_play_game_referee_accept_sets_current_best_delta() -> None:
@@ -2698,7 +2699,56 @@ def test_play_game_reject_then_accept_uses_second_attempt() -> None:
     assert len(blue_client.prompts) == 2
 
 
-def test_play_game_attempts_exhausted_returns_none() -> None:
+def test_play_game_attempts_exhausted_all_rejected_returns_none() -> None:
+    import baps.run as run_module
+
+    spec = run_module.GameSpec(
+        objective="Any objective",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
+    )
+    state = create_state(
+        {
+            "workspace": Path(".baps-workspace"),
+            "project_type": "document",
+        "artifact_id": "main-document",
+            "goal": "Write a short report.",
+            "northstar_markdown": "# Goal\n\nWrite a short report.",
+            "output_path": Path(".baps-workspace/output/report.md"),
+            "max_iterations": 2,
+            "spec_path": None,
+        }
+    )
+    delta = play_game(
+        state,
+        spec,
+        model_client=FakeModelClient(
+            [
+                '{"artifact_id":"main-document","operation":"append_section",'
+                '"payload":{"section":{"title":"Introduction","body":"first"}}}',
+                '{"artifact_id":"main-document","operation":"append_section",'
+                '"payload":{"section":{"title":"Introduction","body":"second"}}}',
+            ]
+        ),
+        red_model_client=FakeModelClient(
+            [
+                '{"disposition":"accept","rationale":"ok"}',
+                '{"disposition":"accept","rationale":"ok"}',
+            ]
+        ),
+        referee_model_client=FakeModelClient(
+            [
+                '{"disposition":"reject","rationale":"no"}',
+                '{"disposition":"reject","rationale":"still no"}',
+            ]
+        ),
+        max_attempts=2,
+    )
+    assert delta is None
+
+
+def test_play_game_attempts_exhausted_last_revised_returned_as_fallback() -> None:
     import baps.run as run_module
 
     spec = run_module.GameSpec(
@@ -2744,7 +2794,8 @@ def test_play_game_attempts_exhausted_returns_none() -> None:
         ),
         max_attempts=2,
     )
-    assert delta is None
+    assert delta is not None
+    assert delta.payload.section.body == "second"
 
 
 def test_play_game_previous_feedback_passed_to_later_blue_prompt() -> None:

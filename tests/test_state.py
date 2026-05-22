@@ -250,6 +250,63 @@ def test_play_game_runtime_preserves_earlier_accepted_delta_when_later_candidate
     )
 
 
+def test_apply_referee_decision_revise_promotes_candidate_as_best_delta() -> None:
+    candidate = DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=AppendSectionDelta(section=Section(title="Draft", body="Draft body.")),
+    )
+    runtime = apply_referee_decision_to_runtime(
+        runtime=PlayGameRuntime(),
+        candidate_delta=candidate,
+        decision=RefereeDecision(disposition="revise", rationale="Promising but needs work."),
+    )
+
+    assert runtime.current_best_delta is not None
+    assert runtime.current_best_delta.model_dump(mode="json") == candidate.model_dump(mode="json")
+
+
+def test_apply_referee_decision_reject_discards_candidate_and_keeps_none() -> None:
+    candidate = DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=AppendSectionDelta(section=Section(title="Bad", body="Wrong direction.")),
+    )
+    runtime = apply_referee_decision_to_runtime(
+        runtime=PlayGameRuntime(),
+        candidate_delta=candidate,
+        decision=RefereeDecision(disposition="reject", rationale="Wrong direction."),
+    )
+
+    assert runtime.current_best_delta is None
+
+
+def test_apply_referee_decision_revise_then_reject_keeps_revised_candidate() -> None:
+    first_candidate = DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=AppendSectionDelta(section=Section(title="First", body="First body.")),
+    )
+    runtime = apply_referee_decision_to_runtime(
+        runtime=PlayGameRuntime(),
+        candidate_delta=first_candidate,
+        decision=RefereeDecision(disposition="revise", rationale="Good start."),
+    )
+    second_candidate = DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=AppendSectionDelta(section=Section(title="Second", body="Worse body.")),
+    )
+    runtime = apply_referee_decision_to_runtime(
+        runtime=runtime,
+        candidate_delta=second_candidate,
+        decision=RefereeDecision(disposition="reject", rationale="Regression."),
+    )
+
+    assert runtime.current_best_delta is not None
+    assert runtime.current_best_delta.model_dump(mode="json") == first_candidate.model_dump(mode="json")
+
+
 def test_document_artifact_is_subclass_and_instance_of_state_artifact() -> None:
     artifact = DocumentArtifact(id="main-document", sections=())
     assert isinstance(artifact, StateArtifact)

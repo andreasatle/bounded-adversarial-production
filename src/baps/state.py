@@ -124,14 +124,10 @@ def apply_referee_decision_to_runtime(
     if decision.disposition == "accept":
         return PlayGameRuntime(current_best_delta=candidate_delta.model_copy(deep=True))
     if decision.disposition == "revise":
-        return PlayGameRuntime(
-            current_best_delta=(
-                runtime.current_best_delta.model_copy(deep=True)
-                if runtime.current_best_delta is not None
-                else None
-            )
-        )
+        # Candidate is promising — promote it as the best fallback for exhausted attempts.
+        return PlayGameRuntime(current_best_delta=candidate_delta.model_copy(deep=True))
     if decision.disposition == "reject":
+        # Candidate is wrong direction — discard it, keep previous best.
         return PlayGameRuntime(
             current_best_delta=(
                 runtime.current_best_delta.model_copy(deep=True)
