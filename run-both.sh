@@ -5,7 +5,7 @@ DOCUMENT_WORKSPACE=".baps-workspace/document-project"
 CODING_WORKSPACE=".baps-workspace/coding-project"
 LOGROOT=".baps-workspace/logs"
 MODEL="gemma4:e4b"
-PLANNER_MODEL="gemma4:27b"
+PLANNER_MODEL="gemma4:26b"
 mkdir -p "$LOGROOT"
 
 TS=$(date +"%Y%m%d-%H%M%S")
