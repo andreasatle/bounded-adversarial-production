@@ -456,6 +456,33 @@ class CodingProjectAdapter:
             return base + "- If pytest discovered tests, do not claim test files are empty.\n"
         return base
 
+    def build_blue_output_format(self) -> str | dict | None:
+        return {
+            "type": "object",
+            "properties": {
+                "artifact_id": {"type": "string"},
+                "operation": {"type": "string", "enum": ["write_file"]},
+                "payload": {
+                    "type": "object",
+                    "properties": {
+                        "file": {
+                            "type": "object",
+                            "properties": {
+                                "path": {"type": "string"},
+                                "content": {"type": "string"},
+                            },
+                            "required": ["path", "content"],
+                            "additionalProperties": False,
+                        }
+                    },
+                    "required": ["file"],
+                    "additionalProperties": False,
+                },
+            },
+            "required": ["artifact_id", "operation", "payload"],
+            "additionalProperties": False,
+        }
+
     def build_blue_tools(self) -> list[ToolDefinition]:
         return [
             ToolDefinition(

@@ -102,6 +102,9 @@ class ProjectTypeAdapter(Protocol):
     ) -> str:
         ...
 
+    def build_blue_output_format(self) -> str | dict | None:
+        ...
+
     def build_blue_tools(self) -> list[ToolDefinition]:
         ...
 

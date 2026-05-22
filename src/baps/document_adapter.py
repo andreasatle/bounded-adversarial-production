@@ -322,6 +322,33 @@ class DocumentProjectAdapter:
         del state_view, game_spec, delta_state, verification_result
         return ""
 
+    def build_blue_output_format(self) -> str | dict | None:
+        return {
+            "type": "object",
+            "properties": {
+                "artifact_id": {"type": "string"},
+                "operation": {"type": "string", "enum": ["append_section"]},
+                "payload": {
+                    "type": "object",
+                    "properties": {
+                        "section": {
+                            "type": "object",
+                            "properties": {
+                                "title": {"type": "string"},
+                                "body": {"type": "string"},
+                            },
+                            "required": ["title", "body"],
+                            "additionalProperties": False,
+                        }
+                    },
+                    "required": ["section"],
+                    "additionalProperties": False,
+                },
+            },
+            "required": ["artifact_id", "operation", "payload"],
+            "additionalProperties": False,
+        }
+
     def build_blue_tools(self) -> list[ToolDefinition]:
         return [
             ToolDefinition(

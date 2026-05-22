@@ -458,11 +458,43 @@ _build_red_model_client = _build_model_client
 _build_referee_model_client = _build_model_client
 
 # Structured output schemas passed to Ollama's format parameter.
-# CreateGame uses plain "json" because it has three valid shapes (GameSpec,
-# no_new_atomic_game, northstar_update_needed) which can't be expressed as one schema.
-# Blue uses plain "json" because the delta shape varies by adapter/project type.
-_CREATE_GAME_FORMAT: str = "json"
-_BLUE_FORMAT: str = "json"
+# Constrained decoding prevents truncated JSON and hallucinated output shapes.
+# CreateGame uses anyOf to cover all three valid shapes.
+# Blue format is adapter-specific; see build_blue_output_format() on each adapter.
+_CREATE_GAME_SCHEMA: dict = {
+    "anyOf": [
+        {
+            "type": "object",
+            "properties": {
+                "objective": {"type": "string"},
+                "target_artifact_id": {"type": "string"},
+                "allowed_delta_type": {"type": "string"},
+                "success_condition": {"type": "string"},
+            },
+            "required": ["objective", "target_artifact_id", "allowed_delta_type", "success_condition"],
+            "additionalProperties": False,
+        },
+        {
+            "type": "object",
+            "properties": {
+                "no_new_atomic_game": {"type": "boolean"},
+                "reason": {"type": "string"},
+            },
+            "required": ["no_new_atomic_game", "reason"],
+            "additionalProperties": False,
+        },
+        {
+            "type": "object",
+            "properties": {
+                "northstar_update_needed": {"type": "boolean"},
+                "rationale": {"type": "string"},
+                "proposed_northstar": {"type": "string"},
+            },
+            "required": ["northstar_update_needed", "rationale", "proposed_northstar"],
+            "additionalProperties": False,
+        },
+    ]
+}
 _RED_FINDING_SCHEMA: dict = {
     "type": "object",
     "properties": {
@@ -957,7 +989,7 @@ def create_game(
         adapter=resolved_adapter,
     )
     _debug_print_create_game_prompt(prompt)
-    generated = client.generate(prompt, format=_CREATE_GAME_FORMAT)
+    generated = client.generate(prompt, format=_CREATE_GAME_SCHEMA)
     _debug_print_create_game_raw_model_output(generated)
     try:
         game_spec = _parse_create_game_output(generated)
@@ -1188,7 +1220,9 @@ def play_game(
                 }
                 continue
         else:
-            blue_generated = client.generate(blue_prompt, format=_BLUE_FORMAT)
+            blue_generated = client.generate(
+                blue_prompt, format=resolved_adapter.build_blue_output_format()
+            )
             try:
                 candidate_delta = resolved_adapter.parse_blue_delta(blue_generated)
             except ValueError as exc:
