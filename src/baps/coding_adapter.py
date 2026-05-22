@@ -551,8 +551,22 @@ class CodingProjectAdapter:
     def verify_export(
         self, output_path: Path, state: State, artifact_id: str
     ) -> VerificationResult | None:
-        del state, artifact_id
         output_path.mkdir(parents=True, exist_ok=True)
+        artifact = coding_artifact_from_state(state, artifact_id)
+        missing_files = [
+            code_file.path
+            for code_file in artifact.files
+            if not (output_path / code_file.path).exists()
+        ]
+        if missing_files:
+            return VerificationResult(
+                command="file_presence_check",
+                cwd=str(output_path),
+                exit_code=1,
+                stdout="",
+                stderr=f"exported files missing from output: {', '.join(missing_files)}",
+                passed=False,
+            )
         command_args: list[str]
         command: str
         try:

@@ -4786,6 +4786,124 @@ def test_coding_adapter_verify_export_captures_failure(
     assert result.stderr == "traceback\n"
 
 
+def test_coding_adapter_verify_export_fails_for_missing_state_file(tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    state = run_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(
+            state_module.CodingArtifact(
+                id="main-codebase",
+                files=(
+                    state_module.CodeFile(path="src/fibonacci.py", content="def fibonacci(n): return n\n"),
+                ),
+            ),
+        ),
+    )
+    adapter = run_module.CodingProjectAdapter()
+    output_dir = tmp_path / "project"
+    output_dir.mkdir()
+    result = adapter.verify_export(output_dir, state, "main-codebase")
+    assert result is not None
+    assert result.passed is False
+    assert result.exit_code == 1
+    assert result.command == "file_presence_check"
+    assert "src/fibonacci.py" in result.stderr
+    assert "exported files missing from output" in result.stderr
+
+
+def test_coding_adapter_verify_export_skips_pytest_when_files_missing(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import baps.coding_adapter as coding_module
+    import baps.run as run_module
+
+    pytest_called = {"n": 0}
+
+    def _fake_run(*_args, **_kwargs):
+        pytest_called["n"] += 1
+        return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(coding_module.subprocess, "run", _fake_run)
+    state = run_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(
+            state_module.CodingArtifact(
+                id="main-codebase",
+                files=(
+                    state_module.CodeFile(path="src/fibonacci.py", content="def fibonacci(n): return n\n"),
+                ),
+            ),
+        ),
+    )
+    adapter = run_module.CodingProjectAdapter()
+    output_dir = tmp_path / "project"
+    output_dir.mkdir()
+    result = adapter.verify_export(output_dir, state, "main-codebase")
+    assert result is not None
+    assert result.passed is False
+    assert pytest_called["n"] == 0
+
+
+def test_document_adapter_render_create_game_prompt_supplement_empty_when_no_verification() -> None:
+    import baps.run as run_module
+
+    adapter = run_module.DocumentProjectAdapter()
+    state = run_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
+    )
+    from baps.northstar_projection import ProjectionType, StateView
+    state_view = StateView(
+        id="sv:test",
+        projection_type=ProjectionType.NORTH_STAR,
+        content="state view content",
+        input_fingerprint="x",
+        metadata={},
+    )
+    result = adapter.render_create_game_prompt_supplement(
+        state=state,
+        config={"artifact_id": "main-document", "northstar_markdown": "goal"},
+        state_view=state_view,
+        verification_result=None,
+    )
+    assert result == ""
+
+
+def test_document_adapter_render_create_game_prompt_supplement_includes_guidance_on_failure() -> None:
+    import baps.run as run_module
+
+    adapter = run_module.DocumentProjectAdapter()
+    state = run_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
+    )
+    from baps.northstar_projection import ProjectionType, StateView
+    state_view = StateView(
+        id="sv:test",
+        projection_type=ProjectionType.NORTH_STAR,
+        content="state view content",
+        input_fingerprint="x",
+        metadata={},
+    )
+    verification_result = run_module.VerificationResult(
+        command="document_export_consistency_check",
+        cwd="/tmp",
+        exit_code=1,
+        stdout="",
+        stderr="missing section title: Introduction",
+        passed=False,
+    )
+    result = adapter.render_create_game_prompt_supplement(
+        state=state,
+        config={"artifact_id": "main-document", "northstar_markdown": "goal"},
+        state_view=state_view,
+        verification_result=verification_result,
+    )
+    assert "Document CreateGame verification evidence" in result
+    assert "missing sections" in result
+
+
 def test_coding_parse_recovers_unescaped_quotes_in_content() -> None:
     import baps.coding_adapter as coding_module
 

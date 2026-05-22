@@ -270,8 +270,14 @@ class DocumentProjectAdapter:
         state_view: StateView,
         verification_result: VerificationResult | None,
     ) -> str:
-        del state, config, state_view, verification_result
-        return ""
+        del state, config, state_view
+        if verification_result is None:
+            return ""
+        return (
+            "Document CreateGame verification evidence:\n"
+            "- If evidence shows missing sections, prefer a game that appends those sections.\n"
+            "- If evidence shows an empty export, prefer a game that adds foundational content.\n"
+        )
 
     def normalize_game_spec(
         self, game_spec: GameSpec, state: State, config: dict[str, object]
