@@ -462,38 +462,19 @@ _build_referee_model_client = _build_model_client
 # CreateGame uses anyOf to cover all three valid shapes.
 # Blue format is adapter-specific; see build_blue_output_format() on each adapter.
 _CREATE_GAME_SCHEMA: dict = {
-    "anyOf": [
-        {
-            "type": "object",
-            "properties": {
-                "objective": {"type": "string"},
-                "target_artifact_id": {"type": "string"},
-                "allowed_delta_type": {"type": "string"},
-                "success_condition": {"type": "string"},
-            },
-            "required": ["objective", "target_artifact_id", "allowed_delta_type", "success_condition"],
-            "additionalProperties": False,
-        },
-        {
-            "type": "object",
-            "properties": {
-                "no_new_atomic_game": {"type": "boolean"},
-                "reason": {"type": "string"},
-            },
-            "required": ["no_new_atomic_game", "reason"],
-            "additionalProperties": False,
-        },
-        {
-            "type": "object",
-            "properties": {
-                "northstar_update_needed": {"type": "boolean"},
-                "rationale": {"type": "string"},
-                "proposed_northstar": {"type": "string"},
-            },
-            "required": ["northstar_update_needed", "rationale", "proposed_northstar"],
-            "additionalProperties": False,
-        },
-    ]
+    "type": "object",
+    "properties": {
+        "objective": {"type": "string"},
+        "target_artifact_id": {"type": "string"},
+        "allowed_delta_type": {"type": "string"},
+        "success_condition": {"type": "string"},
+        "no_new_atomic_game": {"type": "boolean"},
+        "reason": {"type": "string"},
+        "northstar_update_needed": {"type": "boolean"},
+        "rationale": {"type": "string"},
+        "proposed_northstar": {"type": "string"},
+    },
+    "additionalProperties": False,
 }
 _RED_FINDING_SCHEMA: dict = {
     "type": "object",
