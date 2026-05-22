@@ -437,8 +437,8 @@ class CodingProjectAdapter:
         delta_state: DeltaState,
         verification_result: VerificationResult | None,
     ) -> str:
-        del state_view, game_spec, delta_state, verification_result
-        return (
+        del state_view, game_spec, delta_state
+        base = (
             "Coding evaluation guidance:\n"
             "- target_artifact_id is the artifact id, not a file path.\n"
             "- File path belongs in DeltaCodingState.payload.file.path.\n"
@@ -447,6 +447,9 @@ class CodingProjectAdapter:
             "- If success_condition only requires non-empty tests, basic asserted tests satisfy that condition.\n"
             "- If verification evidence exists, reason from exit_code/stdout/stderr.\n"
         )
+        if verification_result is not None:
+            return base + "- If pytest discovered tests, do not claim test files are empty.\n"
+        return base
 
     def render_referee_prompt_supplement(
         self,
@@ -455,8 +458,8 @@ class CodingProjectAdapter:
         delta_state: DeltaState,
         verification_result: VerificationResult | None,
     ) -> str:
-        del state_view, game_spec, delta_state, verification_result
-        return (
+        del state_view, game_spec, delta_state
+        base = (
             "Coding evaluation guidance:\n"
             "- target_artifact_id is the artifact id, not a file path.\n"
             "- File path belongs in DeltaCodingState.payload.file.path.\n"
@@ -465,6 +468,9 @@ class CodingProjectAdapter:
             "- If success_condition only requires non-empty tests, basic asserted tests satisfy that condition.\n"
             "- If verification evidence exists, reason from exit_code/stdout/stderr.\n"
         )
+        if verification_result is not None:
+            return base + "- If pytest discovered tests, do not claim test files are empty.\n"
+        return base
 
     def build_blue_tools(self) -> list[ToolDefinition]:
         return [

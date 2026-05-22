@@ -2532,6 +2532,10 @@ def test_red_and_referee_prompts_do_not_treat_state_mutation_alone_as_failure() 
     )
     assert "Do NOT reject or revise merely because state differs from the original state." in red_prompt
     assert "Do NOT choose revise merely because state changed." in referee_prompt
+    assert "candidate DeltaDocumentState" not in red_prompt
+    assert "pytest discovered tests" not in red_prompt
+    assert "pytest discovered tests" not in referee_prompt
+    assert "Evaluate the candidate DeltaState" in red_prompt
 
 
 def test_coding_red_prompt_includes_verification_evidence_when_provided() -> None:
@@ -2576,8 +2580,10 @@ def test_coding_red_prompt_includes_verification_evidence_when_provided() -> Non
         stderr="",
         passed=True,
     )
+    adapter = run_module.CodingProjectAdapter()
+    supplement = adapter.render_red_prompt_supplement(state_view, spec, delta, verification)
     prompt = run_module._render_red_prompt(
-        state_view, spec, delta, verification_result=verification
+        state_view, spec, delta, verification_result=verification, prompt_supplement=supplement
     )
     assert "verification_result_json:" in prompt
     assert "\"exit_code\": 0" in prompt

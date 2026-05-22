@@ -955,12 +955,11 @@ def _render_red_prompt(
             f"- verification_result_json: {verification_json}\n"
             "Verification guidance:\n"
             "- Treat verification_result_json as execution evidence.\n"
-            "- If pytest discovered tests, do not claim test files are empty.\n"
             "- If verification passed, treat that as strong evidence toward accept.\n"
             "- If verification failed, reason from exit_code/stdout/stderr evidence.\n\n"
         )
     return (
-        "Evaluate the candidate DeltaDocumentState and return a RedFinding JSON object.\n\n"
+        "Evaluate the candidate DeltaState and return a RedFinding JSON object.\n\n"
         "Input:\n"
         f"- state_view_json: {state_view_json}\n"
         f"- delta_state_json: {delta_state_json}\n"
@@ -1027,7 +1026,6 @@ def _render_referee_prompt(
             f"- verification_result_json: {verification_json}\n"
             "Verification guidance:\n"
             "- Treat verification_result_json as execution evidence.\n"
-            "- If pytest discovered tests, do not claim test files are empty.\n"
             "- If verification passed, treat that as strong evidence toward accept.\n"
             "- If verification failed, reason from exit_code/stdout/stderr evidence.\n\n"
         )
