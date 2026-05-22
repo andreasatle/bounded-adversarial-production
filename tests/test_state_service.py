@@ -144,7 +144,7 @@ def test_apply_update_does_not_save_when_update_fails() -> None:
     assert store.save_calls == 0
 
 
-def test_apply_update_does_not_require_blackboard() -> None:
+def test_apply_update_rejects_northstar_artifact_target() -> None:
     store = InMemoryStateStore(state=_state())
     registry = _registry_with_counting_adapters([])
     service = StateService(store=store, registry=registry)
@@ -158,10 +158,10 @@ def test_apply_update_does_not_require_blackboard() -> None:
         },
     )
 
-    updated = service.apply_update(proposal)
+    with pytest.raises(ValueError, match="human approval"):
+        service.apply_update(proposal)
 
-    assert isinstance(updated, State)
-    assert store.save_calls == 1
+    assert store.save_calls == 0
 
 
 def test_service_does_not_mutate_original_loaded_state() -> None:

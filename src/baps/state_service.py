@@ -26,6 +26,12 @@ class StateService:
     def apply_update(self, proposal: StateUpdateProposal) -> State:
         current = self.store.load()
         validated_current = validate_state_artifacts(current, self.registry)
+        northstar_ids = {a.id for a in validated_current.northstar.artifacts}
+        if proposal.target.artifact_id in northstar_ids:
+            raise ValueError(
+                "NorthStar artifacts cannot be modified through automated state updates; "
+                "human approval is required to update NorthStar"
+            )
         if not validate_update_base_state(validated_current, proposal):
             raise ValueError("base_state_fingerprint does not match current state")
         updated = apply_state_update(validated_current, proposal)

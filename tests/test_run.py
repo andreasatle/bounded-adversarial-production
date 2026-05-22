@@ -1,6 +1,7 @@
 import argparse
 import ast
 import inspect
+import json
 from pathlib import Path
 import subprocess
 
@@ -5385,3 +5386,236 @@ def test_run_py_adapter_boundary_regression_guards() -> None:
 
     assert ".sections" not in run_source
     assert ".files" not in run_source
+
+
+# ---------------------------------------------------------------------------
+# NorthStarUpdateNeededError — parse, prompt, and lifecycle tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_create_game_output_northstar_update_needed_raises_signal() -> None:
+    import baps.run as run_module
+
+    raw = json.dumps({
+        "northstar_update_needed": True,
+        "rationale": "Accumulated state has drifted from NorthStar intent.",
+        "proposed_northstar": "# Updated Goal\n\nNew direction.",
+    })
+    with pytest.raises(run_module.NorthStarUpdateNeededError) as exc_info:
+        run_module._parse_create_game_output(raw)
+
+    assert exc_info.value.rationale == "Accumulated state has drifted from NorthStar intent."
+    assert exc_info.value.proposed_northstar == "# Updated Goal\n\nNew direction."
+
+
+def test_parse_create_game_output_northstar_update_needed_flag_must_be_true() -> None:
+    import baps.run as run_module
+
+    raw = json.dumps({
+        "northstar_update_needed": False,
+        "rationale": "some reason",
+        "proposed_northstar": "new northstar",
+    })
+    with pytest.raises(ValueError, match="northstar_update_needed=true"):
+        run_module._parse_create_game_output(raw)
+
+
+def test_parse_create_game_output_northstar_update_needed_empty_rationale_raises() -> None:
+    import baps.run as run_module
+
+    raw = json.dumps({
+        "northstar_update_needed": True,
+        "rationale": "   ",
+        "proposed_northstar": "new northstar",
+    })
+    with pytest.raises(ValueError, match="rationale must be non-empty"):
+        run_module._parse_create_game_output(raw)
+
+
+def test_parse_create_game_output_northstar_update_needed_empty_proposed_northstar_raises() -> None:
+    import baps.run as run_module
+
+    raw = json.dumps({
+        "northstar_update_needed": True,
+        "rationale": "valid rationale",
+        "proposed_northstar": "   ",
+    })
+    with pytest.raises(ValueError, match="proposed_northstar must be non-empty"):
+        run_module._parse_create_game_output(raw)
+
+
+def test_create_game_prompt_includes_northstar_update_needed_instruction() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "goal": "Write a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.create_state(config)
+    adapter = run_module.DocumentProjectAdapter()
+    prompt = run_module._render_create_game_prompt(
+        config, state, adapter.build_create_game_state_view(state, config), adapter=adapter
+    )
+
+    assert '"northstar_update_needed": true' in prompt
+    assert '"rationale"' in prompt
+    assert '"proposed_northstar"' in prompt
+    assert "trajectory does not align with NorthStar intent" in prompt
+    assert "complete updated NorthStar content" in prompt
+
+
+def test_create_game_northstar_update_needed_signal_raises_error() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "goal": "Write a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.create_state(config)
+    response = json.dumps({
+        "northstar_update_needed": True,
+        "rationale": "State has drifted from NorthStar goal.",
+        "proposed_northstar": "# Revised Goal\n\nNew direction.",
+    })
+    with pytest.raises(run_module.NorthStarUpdateNeededError) as exc_info:
+        run_module.create_game(
+            config, state, model_client=FakeModelClient([response])
+        )
+
+    assert "drifted" in exc_info.value.rationale
+    assert "Revised" in exc_info.value.proposed_northstar
+
+
+def test_run_iterations_northstar_update_proposed_writes_blackboard_and_stops(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    import baps.run as run_module
+
+    workspace = tmp_path / "ws-northstar-proposal"
+
+    def _create_game_raises(_config, _state, adapter=None, verification_result=None):
+        raise run_module.NorthStarUpdateNeededError(
+            rationale="Game direction contradicts NorthStar.",
+            proposed_northstar="# Revised NorthStar\n\nNew direction.",
+        )
+
+    monkeypatch.setattr(run_module, "create_game", _create_game_raises)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace", str(workspace),
+            "--project-type", "document",
+            "--artifact-id", "main-document",
+            "--max-iterations", "3",
+        ],
+    )
+
+    run_module.main()
+    out = capsys.readouterr().out
+
+    assert "stop_reason=northstar_update_proposed" in out
+    assert "northstar_proposal_written=True" in out
+
+    proposals_path = workspace / "blackboard" / "northstar_proposals.jsonl"
+    assert proposals_path.exists()
+    entry = json.loads(proposals_path.read_text(encoding="utf-8").strip())
+    assert entry["event"] == "northstar_update_proposal"
+    assert entry["rationale"] == "Game direction contradicts NorthStar."
+    assert entry["proposed_northstar"] == "# Revised NorthStar\n\nNew direction."
+    assert "created_at" in entry
+
+
+def test_run_iterations_northstar_update_proposed_does_not_apply_state_update(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import baps.run as run_module
+
+    workspace = tmp_path / "ws-northstar-no-update"
+
+    def _create_game_raises(_config, _state, adapter=None, verification_result=None):
+        raise run_module.NorthStarUpdateNeededError(
+            rationale="Direction mismatch.",
+            proposed_northstar="# New NorthStar",
+        )
+
+    monkeypatch.setattr(run_module, "create_game", _create_game_raises)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace", str(workspace),
+            "--project-type", "document",
+            "--artifact-id", "main-document",
+            "--max-iterations", "3",
+        ],
+    )
+
+    run_module.main()
+
+    state_path = workspace / "state" / "state.json"
+    initial_state = run_module.State.model_validate(
+        json.loads(state_path.read_text(encoding="utf-8"))
+    )
+    assert len(initial_state.artifacts) == 1
+    artifact = initial_state.artifacts[0]
+    assert hasattr(artifact, "sections") or artifact.kind == "document"
+
+
+def test_run_iterations_northstar_proposal_appends_on_multiple_signals(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import baps.run as run_module
+
+    workspace = tmp_path / "ws-northstar-append"
+
+    proposals_path = workspace / "blackboard" / "northstar_proposals.jsonl"
+    proposals_path.parent.mkdir(parents=True, exist_ok=True)
+    proposals_path.write_text(
+        json.dumps({
+            "event": "northstar_update_proposal",
+            "rationale": "Earlier proposal.",
+            "proposed_northstar": "# Old NorthStar",
+            "created_at": "2026-01-01T00:00:00",
+        }) + "\n",
+        encoding="utf-8",
+    )
+
+    def _create_game_raises(_config, _state, adapter=None, verification_result=None):
+        raise run_module.NorthStarUpdateNeededError(
+            rationale="New mismatch.",
+            proposed_northstar="# Newer NorthStar",
+        )
+
+    monkeypatch.setattr(run_module, "create_game", _create_game_raises)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace", str(workspace),
+            "--project-type", "document",
+            "--artifact-id", "main-document",
+            "--max-iterations", "1",
+        ],
+    )
+
+    run_module.main()
+
+    lines = [l for l in proposals_path.read_text(encoding="utf-8").splitlines() if l.strip()]
+    assert len(lines) == 2
+    first = json.loads(lines[0])
+    second = json.loads(lines[1])
+    assert first["rationale"] == "Earlier proposal."
+    assert second["rationale"] == "New mismatch."

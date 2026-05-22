@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
+import datetime
 import json
 import os
 import re
@@ -42,6 +42,15 @@ REQUEST = "Write a short report."
 
 class NoNewAtomicGameError(ValueError):
     """Raised when the model explicitly indicates no new atomic game is available."""
+
+
+class NorthStarUpdateNeededError(ValueError):
+    """Raised when CreateGame signals the trajectory has drifted from NorthStar intent."""
+
+    def __init__(self, rationale: str, proposed_northstar: str) -> None:
+        super().__init__(rationale)
+        self.rationale = rationale
+        self.proposed_northstar = proposed_northstar
 
 
 def _debug_enabled() -> bool:
@@ -373,6 +382,16 @@ def _debug_print_referee_output(referee_decision: RefereeDecision) -> None:
     print()
 
 
+def _debug_print_northstar_update_proposal(rationale: str, proposed_northstar: str) -> None:
+    if not _debug_enabled():
+        return
+    print("[DEBUG] create_game.northstar_update_proposal:")
+    payload = {"rationale": rationale, "proposed_northstar": proposed_northstar}
+    for line in _format_debug_yaml_like(payload, indent=2):
+        print(line)
+    print()
+
+
 def _debug_print_create_game_raw_model_output(raw_text: str) -> None:
     if not _debug_enabled():
         return
@@ -644,6 +663,10 @@ def _render_create_game_prompt(
         "No extra fields.\n"
         "If no useful coherent game task remains for current state+northstar, return exactly:\n"
         '{\"no_new_atomic_game\": true, \"reason\": \"...\"}\n'
+        "If the current project trajectory does not align with NorthStar intent, return exactly:\n"
+        '{\"northstar_update_needed\": true, \"rationale\": \"...\", \"proposed_northstar\": \"...\"}\n'
+        "Use northstar_update_needed when the game direction contradicts NorthStar intent or accumulated state has drifted from the NorthStar goal.\n"
+        "proposed_northstar must contain the complete updated NorthStar content as a plain string.\n"
         "GameSpec must be self-contained for PlayGame execution without independently reading full NorthStar.\n"
         "The objective must describe BOTH:\n"
         "1. structural change\n"
@@ -733,6 +756,25 @@ def _parse_create_game_output(text: str) -> GameSpec:
         if not reason:
             raise ValueError("create_game no-game response reason must be non-empty")
         raise NoNewAtomicGameError(reason)
+
+    if set(parsed.keys()) == {"northstar_update_needed", "rationale", "proposed_northstar"}:
+        if parsed["northstar_update_needed"] is not True:
+            raise ValueError(
+                "create_game northstar_update_needed response must set northstar_update_needed=true"
+            )
+        rationale = str(parsed["rationale"]).strip()
+        if not rationale:
+            raise ValueError(
+                "create_game northstar_update_needed response rationale must be non-empty"
+            )
+        proposed_northstar = str(parsed["proposed_northstar"]).strip()
+        if not proposed_northstar:
+            raise ValueError(
+                "create_game northstar_update_needed response proposed_northstar must be non-empty"
+            )
+        raise NorthStarUpdateNeededError(
+            rationale=rationale, proposed_northstar=proposed_northstar
+        )
 
     return _parse_game_spec_json(normalized)
 
@@ -1219,6 +1261,22 @@ def _verify_export_with_adapter(
     return verifier(output_path, state, artifact_id)
 
 
+def _append_northstar_proposal_to_blackboard(
+    workspace: Path, rationale: str, proposed_northstar: str
+) -> None:
+    blackboard_dir = workspace / "blackboard"
+    blackboard_dir.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "event": "northstar_update_proposal",
+        "rationale": rationale,
+        "proposed_northstar": proposed_northstar,
+        "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
+    }
+    proposals_path = blackboard_dir / "northstar_proposals.jsonl"
+    with proposals_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
 def _state_path_for_workspace(workspace: Path) -> Path:
     return workspace / "state" / "state.json"
 
@@ -1271,6 +1329,7 @@ def _run_project_iterations(
     state_changed = False
     output_exported = False
     output_changed = False
+    northstar_proposal_written = False
     verification_result: VerificationResult | None = None
     create_game_verification_result: VerificationResult | None = None
     stop_reason = "iteration_limit_reached"
@@ -1285,6 +1344,16 @@ def _run_project_iterations(
             )
         except NoNewAtomicGameError:
             stop_reason = "create_game_no_new_atomic_game"
+            break
+        except NorthStarUpdateNeededError as exc:
+            _debug_print_northstar_update_proposal(exc.rationale, exc.proposed_northstar)
+            _append_northstar_proposal_to_blackboard(
+                workspace=config["workspace"],
+                rationale=exc.rationale,
+                proposed_northstar=exc.proposed_northstar,
+            )
+            northstar_proposal_written = True
+            stop_reason = "northstar_update_proposed"
             break
 
         delta_state = play_game(
@@ -1325,6 +1394,7 @@ def _run_project_iterations(
         "state_changed": state_changed,
         "output_exported": output_exported,
         "output_changed": output_changed,
+        "northstar_proposal_written": northstar_proposal_written,
         "verification_result": verification_result,
         "stop_reason": stop_reason,
     }
@@ -1394,6 +1464,7 @@ def main() -> None:
     state_changed = False
     output_exported = False
     output_changed = False
+    northstar_proposal_written = False
     verification_run = False
     verification_passed = False
     verification_exit_code: int | None = None
@@ -1418,6 +1489,7 @@ def main() -> None:
             state_changed = bool(results["state_changed"])
             output_exported = bool(results["output_exported"])
             output_changed = bool(results["output_changed"])
+            northstar_proposal_written = bool(results["northstar_proposal_written"])
             verification_result = results["verification_result"]
             verification_run = verification_result is not None
             if verification_result is not None:
@@ -1438,6 +1510,7 @@ def main() -> None:
             state_changed = bool(results["state_changed"])
             output_exported = bool(results["output_exported"])
             output_changed = bool(results["output_changed"])
+            northstar_proposal_written = bool(results["northstar_proposal_written"])
             verification_result = results["verification_result"]
             verification_run = verification_result is not None
             if verification_result is not None:
@@ -1460,6 +1533,7 @@ def main() -> None:
     print(f"state_changed={state_changed}")
     print(f"output_exported={output_exported}")
     print(f"output_changed={output_changed}")
+    print(f"northstar_proposal_written={northstar_proposal_written}")
     print(f"verification_run={verification_run}")
     print(f"verification_passed={verification_passed}")
     print(f"verification_exit_code={verification_exit_code}")
