@@ -4394,6 +4394,87 @@ def test_examples_document_project_yaml_still_passes(monkeypatch, capsys) -> Non
     assert "stop_reason=" in out
 
 
+def _write_init_spec(tmp_path: Path, workspace: Path, goal: str = "Write a report.") -> Path:
+    spec = tmp_path / "init-spec.yaml"
+    spec.write_text(
+        "\n".join([
+            f"workspace: {workspace}",
+            "project_type: document",
+            "artifact_id: main-document",
+            f"goal: {goal}",
+            "northstar_markdown: '# NorthStar\\n\\nWrite a report.'",
+            "output: output/report.md",
+        ]),
+        encoding="utf-8",
+    )
+    return spec
+
+
+def test_init_saves_workspace_config(monkeypatch, capsys, tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    workspace = tmp_path / "ws-config-save"
+    spec = _write_init_spec(tmp_path, workspace, goal="Write a structured report.")
+    monkeypatch.setattr("sys.argv", ["baps-run", "init", "--spec", str(spec)])
+    run_module.main()
+    capsys.readouterr()
+
+    config_path = workspace / "baps-config.json"
+    assert config_path.exists()
+    saved = json.loads(config_path.read_text())
+    assert saved["project_type"] == "document"
+    assert saved["artifact_id"] == "main-document"
+    assert saved["goal"] == "Write a structured report."
+    assert "northstar_markdown" in saved
+    assert "output" in saved
+
+
+def test_run_loads_project_type_and_artifact_from_workspace_config(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    import baps.run as run_module
+
+    workspace = tmp_path / "ws-resume"
+    spec = _write_init_spec(tmp_path, workspace)
+    monkeypatch.setattr("sys.argv", ["baps-run", "init", "--spec", str(spec)])
+    run_module.main()
+    capsys.readouterr()
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["baps-run", "run", "--workspace", str(workspace), "--max-iterations", "1"],
+    )
+    run_module.main()
+    out = capsys.readouterr().out
+    assert "project_type=document" in out
+    assert "stop_reason=" in out
+
+
+def test_run_cli_args_override_workspace_config(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    import baps.run as run_module
+
+    workspace = tmp_path / "ws-override"
+    spec = _write_init_spec(tmp_path, workspace, goal="Original goal.")
+    monkeypatch.setattr("sys.argv", ["baps-run", "init", "--spec", str(spec)])
+    run_module.main()
+    capsys.readouterr()
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run", "run",
+            "--workspace", str(workspace),
+            "--goal", "Overridden goal.",
+            "--max-iterations", "1",
+        ],
+    )
+    run_module.main()
+    out = capsys.readouterr().out
+    assert "goal=Overridden goal." in out
+
+
 def test_init_from_spec_persists_northstar_artifact(monkeypatch, tmp_path: Path) -> None:
     import baps.run as run_module
 

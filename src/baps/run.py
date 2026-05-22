@@ -504,14 +504,22 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
         if args.workspace is not None
         else spec_data.get("workspace", ".baps-workspace")
     )
-    project_type_raw = (
-        args.project_type
-        if args.project_type is not None
-        else spec_data.get("project_type")
-    )
-    artifact_id_raw = spec_data.get("artifact_id")
-    if args.artifact_id is not None:
-        artifact_id_raw = args.artifact_id
+
+    workspace_config: dict[str, Any] = {}
+    if getattr(args, "command", None) == "run":
+        workspace_config = _load_workspace_config(Path(str(workspace_raw)))
+
+    def _resolve(cli_val: object, spec_key: str, default: object = None) -> object:
+        if cli_val is not None:
+            return cli_val
+        if spec_key in spec_data:
+            return spec_data[spec_key]
+        if spec_key in workspace_config:
+            return workspace_config[spec_key]
+        return default
+
+    project_type_raw = _resolve(args.project_type, "project_type")
+    artifact_id_raw = _resolve(args.artifact_id, "artifact_id")
     if "required_sections" in spec_data:
         raise ValueError(
             "required_sections is no longer supported; declare required structure in northstar_markdown"
@@ -520,7 +528,7 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
         unknown_keys = sorted(set(spec_data.keys()) - _KNOWN_SPEC_KEYS - {"required_sections"})
         if unknown_keys:
             raise ValueError(f"spec file contains unknown keys: {unknown_keys}")
-    northstar_markdown_raw = spec_data.get("northstar_markdown")
+    northstar_markdown_raw = _resolve(None, "northstar_markdown")
     northstar_path_raw = spec_data.get("northstar_path")
     if northstar_markdown_raw is None and northstar_path_raw is not None:
         northstar_path = Path(str(northstar_path_raw))
@@ -529,8 +537,8 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
         if not northstar_path.exists():
             raise ValueError(f"northstar_path file not found: {northstar_path}")
         northstar_markdown_raw = northstar_path.read_text(encoding="utf-8")
-    goal_raw = args.goal if args.goal is not None else spec_data.get("goal", REQUEST)
-    output_raw = args.output if args.output is not None else spec_data.get("output")
+    goal_raw = _resolve(args.goal, "goal", REQUEST)
+    output_raw = _resolve(args.output, "output")
     max_iterations_raw = (
         args.max_iterations
         if args.max_iterations is not None
@@ -1263,6 +1271,45 @@ def _state_path_for_workspace(workspace: Path) -> Path:
     return workspace / "state" / "state.json"
 
 
+def _workspace_config_path(workspace: Path) -> Path:
+    return workspace / "baps-config.json"
+
+
+_WORKSPACE_CONFIG_FIELDS = ("project_type", "artifact_id", "northstar_markdown", "goal", "output")
+
+
+def _save_workspace_config(config: dict[str, Any], workspace: Path) -> None:
+    workspace.mkdir(parents=True, exist_ok=True)
+    output_path: Path = config["output_path"]
+    try:
+        output_str = str(output_path.relative_to(workspace))
+    except ValueError:
+        output_str = str(output_path)
+    saved = {
+        "project_type": config["project_type"],
+        "artifact_id": config["artifact_id"],
+        "northstar_markdown": config["northstar_markdown"],
+        "goal": config["goal"],
+        "output": output_str,
+    }
+    _workspace_config_path(workspace).write_text(
+        json.dumps(saved, indent=2, sort_keys=True), encoding="utf-8"
+    )
+
+
+def _load_workspace_config(workspace: Path) -> dict[str, Any]:
+    path = _workspace_config_path(workspace)
+    if not path.exists():
+        return {}
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    if not isinstance(loaded, dict):
+        return {}
+    return {k: v for k, v in loaded.items() if k in _WORKSPACE_CONFIG_FIELDS}
+
+
 def _ensure_not_initialized(workspace: Path) -> None:
     if _state_path_for_workspace(workspace).exists():
         raise ValueError("project already initialized")
@@ -1281,6 +1328,7 @@ def _initialize_project(
     initial_state = create_state(config)
     state_store = JsonStateStore(_state_path_for_workspace(workspace))
     state_store.save(initial_state)
+    _save_workspace_config(config, workspace)
     service = StateService(
         store=state_store,
         registry=build_default_state_artifact_registry(),
