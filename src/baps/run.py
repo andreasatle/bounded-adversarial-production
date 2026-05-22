@@ -4,7 +4,6 @@ import argparse
 import datetime
 import json
 import os
-import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -16,6 +15,7 @@ from baps.northstar_projection import ProjectionType, StateView
 from baps.project_adapter import (
     ProjectTypeAdapter,
     VerificationResult,
+    _normalize_json_candidate,
     build_default_project_type_adapters,
     resolve_adapter_for_allowed_delta_type,
     resolve_project_type_adapter,
@@ -838,17 +838,6 @@ def _render_referee_prompt_supplement_with_adapter(
         verification_result=verification_result,
     )
 
-
-def _normalize_json_candidate(text: str) -> str:
-    normalized = text.strip()
-    fence_pattern = re.compile(
-        r"\A```(?:json)?[ \t]*\n(?P<body>[\s\S]*?)\n```[ \t]*\Z",
-        re.IGNORECASE,
-    )
-    fence_match = fence_pattern.match(normalized)
-    if fence_match is not None:
-        normalized = fence_match.group("body").strip()
-    return normalized
 
 
 def _parse_red_finding_json(text: str) -> RedFinding:

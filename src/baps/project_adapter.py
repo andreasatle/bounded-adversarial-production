@@ -1,11 +1,24 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
 from baps.northstar_projection import StateView
 from baps.state import DeltaState, GameSpec, State, StateUpdateProposal
+
+
+def _normalize_json_candidate(text: str) -> str:
+    normalized = text.strip()
+    fence_pattern = re.compile(
+        r"\A```(?:json)?[ \t]*\n(?P<body>[\s\S]*?)\n```[ \t]*\Z",
+        re.IGNORECASE,
+    )
+    fence_match = fence_pattern.match(normalized)
+    if fence_match is not None:
+        normalized = fence_match.group("body").strip()
+    return normalized
 
 
 @dataclass(frozen=True)
