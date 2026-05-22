@@ -1238,7 +1238,7 @@ def test_play_game_no_tool_call_rejected() -> None:
     delta = play_game(
         state,
         spec,
-        model_client=FakeModelClient(tool_responses=[None]),
+        model_client=FakeModelClient(tool_responses=[None], responses=["not-json"]),
         max_attempts=1,
     )
     assert delta is None

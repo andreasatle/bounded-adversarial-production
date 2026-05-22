@@ -1094,33 +1094,41 @@ def play_game(
             state_view, game_spec, attempt, previous_feedback
         )
         blue_tools = resolved_adapter.build_blue_tools()
+        blue_tool_call = None
         try:
             blue_tool_call = client.generate_with_tools(blue_prompt, blue_tools)
-        except ValueError as exc:
-            reason = f"blue output failed DeltaState validation: {exc}"
-            _debug_print_attempt_rejected(attempt, reason)
-            previous_feedback = {
-                "attempt_rejection": {
-                    "stage": "blue",
-                    "reason": reason,
-                    "validation_error": str(exc),
+        except ValueError:
+            pass
+        if blue_tool_call is not None:
+            try:
+                candidate_delta = resolved_adapter.tool_call_to_delta(blue_tool_call)
+            except ValueError as exc:
+                _debug_print_blue_failed_tool_call(blue_tool_call)
+                reason = f"blue output failed DeltaState validation: {exc}"
+                _debug_print_attempt_rejected(attempt, reason)
+                previous_feedback = {
+                    "attempt_rejection": {
+                        "stage": "blue",
+                        "reason": reason,
+                        "validation_error": str(exc),
+                    }
                 }
-            }
-            continue
-        try:
-            candidate_delta = resolved_adapter.tool_call_to_delta(blue_tool_call)
-        except ValueError as exc:
-            _debug_print_blue_failed_tool_call(blue_tool_call)
-            reason = f"blue output failed DeltaState validation: {exc}"
-            _debug_print_attempt_rejected(attempt, reason)
-            previous_feedback = {
-                "attempt_rejection": {
-                    "stage": "blue",
-                    "reason": reason,
-                    "validation_error": str(exc),
+                continue
+        else:
+            blue_generated = client.generate(blue_prompt)
+            try:
+                candidate_delta = resolved_adapter.parse_blue_delta(blue_generated)
+            except ValueError as exc:
+                reason = f"blue output failed DeltaState validation: {exc}"
+                _debug_print_attempt_rejected(attempt, reason)
+                previous_feedback = {
+                    "attempt_rejection": {
+                        "stage": "blue",
+                        "reason": reason,
+                        "validation_error": str(exc),
+                    }
                 }
-            }
-            continue
+                continue
         _debug_print_blue_output(candidate_delta)
 
         if verification_result is None:
