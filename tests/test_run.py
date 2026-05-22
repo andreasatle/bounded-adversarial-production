@@ -1547,6 +1547,7 @@ def test_play_game_red_receives_gamespec_state_view_and_delta_state(monkeypatch)
 
 
 def test_blue_prompt_includes_state_view_and_gamespec() -> None:
+    import baps.project_adapter as project_adapter_module
     import baps.run as run_module
 
     spec = run_module.GameSpec(
@@ -1568,7 +1569,7 @@ def test_blue_prompt_includes_state_view_and_gamespec() -> None:
         }
     )
     state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
-    prompt = run_module._render_blue_prompt(
+    prompt = project_adapter_module.render_blue_prompt_core(
         state_view=state_view,
         game_spec=spec,
         attempt_number=1,
@@ -1913,6 +1914,7 @@ def test_required_sections_top_level_is_rejected_in_config(monkeypatch, capsys, 
 
 
 def test_blue_prompt_and_source_do_not_hardcode_project_policy_literals() -> None:
+    import baps.project_adapter as project_adapter_module
     import baps.run as run_module
 
     spec = run_module.GameSpec(
@@ -1926,12 +1928,14 @@ def test_blue_prompt_and_source_do_not_hardcode_project_policy_literals() -> Non
         artifacts=(state_module.DocumentArtifact(id="doc-a", sections=()),),
     )
     state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
-    prompt = run_module._render_blue_prompt(state_view, spec, 1, None)
+    prompt = project_adapter_module.render_blue_prompt_core(
+        state_view=state_view, game_spec=spec, attempt_number=1, previous_feedback=None
+    )
     assert '"artifact_id": "<game_spec.target_artifact_id>"' not in prompt
     assert '"title": "<section title>"' not in prompt
     assert "Do not duplicate existing artifact content." in prompt
     assert "Do not emit placeholder or filler content." in prompt
-    src = inspect.getsource(run_module._render_blue_prompt)
+    src = inspect.getsource(project_adapter_module.render_blue_prompt_core)
     assert '"artifact_id": "main-document"' not in src
     assert '"title": "Introduction"' not in src
 

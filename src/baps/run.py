@@ -918,45 +918,6 @@ def create_game(
     return game_spec
 
 
-def _render_blue_prompt(
-    state_view: StateView,
-    game_spec: GameSpec,
-    attempt_number: int,
-    previous_feedback: dict[str, Any] | None,
-    project_delta_instructions: str = "",
-) -> str:
-    previous_feedback_json = json.dumps(previous_feedback, sort_keys=True)
-    return (
-        "Produce exactly one delta JSON object allowed by GameSpec.allowed_delta_type.\n\n"
-        "Input:\n"
-        "- state_view:\n"
-        "\n"
-        f"{state_view.content}\n"
-        "\n"
-        f"- attempt_number: {attempt_number}\n"
-        f"- previous_feedback_json: {previous_feedback_json}\n"
-        f"- objective: {game_spec.objective}\n"
-        f"- target_artifact_id: {game_spec.target_artifact_id}\n"
-        f"- allowed_delta_type: {game_spec.allowed_delta_type}\n"
-        f"- success_condition: {game_spec.success_condition}\n\n"
-        "Execution rules:\n"
-        "- Produce one delta that satisfies objective and success_condition.\n"
-        "- Use StateView as the current artifact context.\n"
-        "- Do not duplicate existing artifact content.\n"
-        "- Do not rewrite unrelated existing state.\n"
-        "- Do not emit placeholder or filler content.\n"
-        "- If previous_feedback_json contains validation errors, repair those exact errors in this attempt.\n"
-        "- Do not repeat outputs that fail previously reported validation constraints.\n"
-        "- When attempt_number > 1, treat previous_feedback_json as mandatory correction requirements.\n\n"
-        "Return only a JSON object.\n"
-        "Do not wrap output in markdown.\n"
-        "Do not use triple-backtick fences.\n"
-        "Do not include prose before JSON.\n"
-        "Do not include prose after JSON.\n"
-        "No extra fields.\n\n"
-        f"{project_delta_instructions}"
-    )
-
 
 def _render_red_prompt(
     state_view: StateView,
