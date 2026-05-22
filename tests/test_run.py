@@ -3703,6 +3703,129 @@ def test_main_stops_when_create_game_cannot_produce_new_atomic_game(
     assert "stop_reason=create_game_no_new_atomic_game" in out
 
 
+def test_main_stop_reason_iteration_limit_reached_after_all_iterations_used(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    import baps.run as run_module
+
+    create_game_calls = {"n": 0}
+
+    def _create_game(_config, _state, adapter=None, verification_result=None):
+        create_game_calls["n"] += 1
+        return run_module.GameSpec(
+            objective="Add a section",
+            target_artifact_id="main-document",
+            allowed_delta_type="DeltaDocumentState",
+            success_condition="Section exists.",
+        )
+
+    monkeypatch.setattr(run_module, "create_game", _create_game)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace", str(tmp_path / "ws-iter-limit"),
+            "--project-type", "document",
+            "--artifact-id", "main-document",
+            "--max-iterations", "2",
+        ],
+    )
+    run_module.main()
+    out = capsys.readouterr().out
+    assert "stop_reason=iteration_limit_reached" in out
+    assert create_game_calls["n"] == 2
+
+
+def test_main_stop_reason_no_state_change_when_applied_delta_has_no_effect(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    import baps.run as run_module
+
+    monkeypatch.setattr(run_module, "fingerprint_state", lambda _state: "constant-fp")
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace", str(tmp_path / "ws-no-change"),
+            "--project-type", "document",
+            "--artifact-id", "main-document",
+            "--max-iterations", "3",
+        ],
+    )
+    run_module.main()
+    out = capsys.readouterr().out
+    assert "stop_reason=no_state_change" in out
+    assert "state_changed=False" in out
+    assert "update_applied=True" in out
+
+
+def test_main_no_state_change_stops_loop_before_max_iterations(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    import baps.run as run_module
+
+    create_game_calls = {"n": 0}
+
+    def _create_game(_config, _state, adapter=None, verification_result=None):
+        create_game_calls["n"] += 1
+        return run_module.GameSpec(
+            objective="Add a section",
+            target_artifact_id="main-document",
+            allowed_delta_type="DeltaDocumentState",
+            success_condition="Section exists.",
+        )
+
+    monkeypatch.setattr(run_module, "create_game", _create_game)
+    monkeypatch.setattr(run_module, "fingerprint_state", lambda _state: "constant-fp")
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace", str(tmp_path / "ws-no-change-early"),
+            "--project-type", "document",
+            "--artifact-id", "main-document",
+            "--max-iterations", "5",
+        ],
+    )
+    run_module.main()
+    out = capsys.readouterr().out
+    assert "stop_reason=no_state_change" in out
+    assert create_game_calls["n"] == 1
+
+
+def test_main_no_state_change_after_prior_state_change_reports_state_changed_true(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    """State changed on iteration 1 (carried forward), then no change on iteration 2."""
+    import baps.run as run_module
+
+    call_count = {"n": 0}
+
+    def _fingerprint(_state):
+        call_count["n"] += 1
+        # Calls 1 and 2: before/after iteration 1 — return different values (state changes)
+        # Calls 3 and 4: before/after iteration 2 — return same value (no state change)
+        if call_count["n"] <= 2:
+            return f"fp-{call_count['n']}"
+        return "constant-fp"
+
+    monkeypatch.setattr(run_module, "fingerprint_state", _fingerprint)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "--workspace", str(tmp_path / "ws-change-then-no-change"),
+            "--project-type", "document",
+            "--artifact-id", "main-document",
+            "--max-iterations", "5",
+        ],
+    )
+    run_module.main()
+    out = capsys.readouterr().out
+    assert "stop_reason=no_state_change" in out
+    assert "state_changed=True" in out
+
+
 def test_main_create_game_parse_error_is_not_swallowed_as_no_game(
     monkeypatch, capsys, tmp_path: Path
 ) -> None:
