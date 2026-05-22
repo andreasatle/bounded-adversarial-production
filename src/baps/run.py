@@ -460,6 +460,18 @@ def _require_non_empty(value: str, field_name: str) -> str:
 
 
 
+_KNOWN_SPEC_KEYS = frozenset({
+    "workspace",
+    "project_type",
+    "artifact_id",
+    "northstar_markdown",
+    "northstar_path",
+    "goal",
+    "output",
+    "max_iterations",
+})
+
+
 def _load_spec(spec_path: Path) -> dict[str, Any]:
     if not spec_path.exists():
         raise ValueError(f"spec file not found: {spec_path}")
@@ -504,6 +516,10 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError(
             "required_sections is no longer supported; declare required structure in northstar_markdown"
         )
+    if spec_data:
+        unknown_keys = sorted(set(spec_data.keys()) - _KNOWN_SPEC_KEYS - {"required_sections"})
+        if unknown_keys:
+            raise ValueError(f"spec file contains unknown keys: {unknown_keys}")
     northstar_markdown_raw = spec_data.get("northstar_markdown")
     northstar_path_raw = spec_data.get("northstar_path")
     if northstar_markdown_raw is None and northstar_path_raw is not None:
@@ -1394,7 +1410,7 @@ def main() -> None:
     parser.add_argument(
         "--goal",
         default=None,
-        help="Runtime goal text.",
+        help=f"Runtime goal text. Defaults to '{REQUEST}' if not provided.",
     )
     parser.add_argument(
         "--output",

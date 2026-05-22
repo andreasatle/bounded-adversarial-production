@@ -2329,6 +2329,71 @@ def test_required_sections_top_level_is_rejected_in_config(monkeypatch, capsys, 
     assert "required_sections is no longer supported" in capsys.readouterr().err
 
 
+def test_spec_file_unknown_key_raises(monkeypatch, capsys, tmp_path: Path) -> None:
+    spec = tmp_path / "bad-key.yaml"
+    spec.write_text(
+        "project_type: document\nartifact_id: main-document\nmax_iteration: 2\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("sys.argv", ["baps-run", "--spec", str(spec)])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert "unknown keys" in err
+    assert "max_iteration" in err
+
+
+def test_spec_file_multiple_unknown_keys_all_reported(monkeypatch, capsys, tmp_path: Path) -> None:
+    spec = tmp_path / "multi-bad-keys.yaml"
+    spec.write_text(
+        "project_type: document\nartifact_id: main-document\ntypo_a: x\ntypo_b: y\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("sys.argv", ["baps-run", "--spec", str(spec)])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert "typo_a" in err
+    assert "typo_b" in err
+
+
+def test_spec_file_all_known_keys_accepted(monkeypatch, capsys, tmp_path: Path) -> None:
+    spec = tmp_path / "all-known-keys.yaml"
+    spec.write_text(
+        "\n".join([
+            "workspace: " + str(tmp_path / "ws"),
+            "project_type: document",
+            "artifact_id: main-document",
+            "northstar_markdown: '# Goal'",
+            "goal: Write a report.",
+            "output: output/report.md",
+            "max_iterations: 1",
+        ]),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("sys.argv", ["baps-run", "--spec", str(spec)])
+    main()
+    out = capsys.readouterr().out
+    assert "project_type=document" in out
+
+
+def test_spec_file_required_sections_still_gets_specific_error(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    spec = tmp_path / "required-sections.yaml"
+    spec.write_text(
+        "project_type: document\nartifact_id: main-document\nrequired_sections:\n  - Intro\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("sys.argv", ["baps-run", "--spec", str(spec)])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
+    assert "required_sections is no longer supported" in capsys.readouterr().err
+
+
 def test_blue_prompt_and_source_do_not_hardcode_project_policy_literals() -> None:
     import baps.project_adapter as project_adapter_module
     import baps.run as run_module
