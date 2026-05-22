@@ -385,9 +385,7 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
 
     if "artifact" not in proposal.payload:
         raise ValueError("replace_artifact operation requires payload['artifact']")
-    replacement = StateArtifact.model_validate(proposal.payload["artifact"])
-    if not isinstance(existing, StateArtifact):
-        raise ValueError("replace_artifact only supports StateArtifact targets")
+    replacement = _coerce_state_artifact(proposal.payload["artifact"])
 
     if replacement.id != target_artifact_id:
         raise ValueError(

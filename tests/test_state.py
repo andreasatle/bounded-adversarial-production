@@ -6,6 +6,8 @@ from baps.state import (
     apply_referee_decision_to_runtime,
     AppendSectionDelta,
     build_default_state_artifact_registry,
+    CodeFile,
+    CodingArtifact,
     DeltaState,
     DeltaDocumentState,
     DocumentArtifact,
@@ -924,6 +926,72 @@ def test_apply_state_update_replacement_rejects_different_kind() -> None:
     )
     with pytest.raises(ValueError, match="kind must match existing artifact kind"):
         apply_state_update(state, proposal)
+
+
+def test_apply_state_update_replace_artifact_preserves_document_artifact_type() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+        artifacts=(
+            DocumentArtifact(
+                id="doc-1",
+                sections=(Section(title="Intro", body="Body text."),),
+            ),
+        ),
+    )
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="doc-1"),
+        summary="Replace document artifact with updated sections.",
+        payload={
+            "operation": "replace_artifact",
+            "artifact": {
+                "id": "doc-1",
+                "kind": "document",
+                "sections": [{"title": "Revised", "body": "New body."}],
+            },
+        },
+    )
+
+    updated = apply_state_update(state, proposal)
+
+    replaced = updated.artifacts[0]
+    assert isinstance(replaced, DocumentArtifact)
+    assert len(replaced.sections) == 1
+    assert replaced.sections[0].title == "Revised"
+    assert replaced.sections[0].body == "New body."
+
+
+def test_apply_state_update_replace_artifact_preserves_coding_artifact_type() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+        artifacts=(
+            CodingArtifact(
+                id="code-1",
+                files=(CodeFile(path="src/main.py", content="print('hello')"),),
+            ),
+        ),
+    )
+    proposal = StateUpdateProposal(
+        id="proposal-1",
+        target=StateUpdateTarget(artifact_id="code-1"),
+        summary="Replace coding artifact with updated files.",
+        payload={
+            "operation": "replace_artifact",
+            "artifact": {
+                "id": "code-1",
+                "kind": "coding",
+                "files": [{"path": "src/main.py", "content": "print('world')"}],
+            },
+        },
+    )
+
+    updated = apply_state_update(state, proposal)
+
+    replaced = updated.artifacts[0]
+    assert isinstance(replaced, CodingArtifact)
+    assert len(replaced.files) == 1
+    assert replaced.files[0].path == "src/main.py"
+    assert replaced.files[0].content == "print('world')"
 
 
 def test_apply_state_update_unsupported_operation_raises_not_implemented() -> None:
