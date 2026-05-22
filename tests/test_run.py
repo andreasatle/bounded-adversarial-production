@@ -4909,15 +4909,19 @@ def test_coding_create_game_accepts_test_file_task_second_iteration() -> None:
     assert game_spec.allowed_delta_type == "DeltaCodingState"
 
 
-def test_coding_create_game_normalizes_two_file_objective_to_src_on_empty_state() -> None:
+def test_coding_normalize_passes_through_model_objective_and_success_condition() -> None:
     import baps.run as run_module
 
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "coding",
         "artifact_id": "main-codebase",
-        "goal": "Implement Fibonacci with tests",
-        "northstar_markdown": "# Goal\n\nImplement Fibonacci with tests.",
+        "goal": "Implement a text similarity utility",
+        "northstar_markdown": (
+            "# Goal\n\nImplement a text similarity utility.\n"
+            "- src/similarity.py\n"
+            "- tests/test_similarity.py\n"
+        ),
         "output_path": Path(".baps-workspace/output/project"),
         "max_iterations": 2,
         "spec_path": None,
@@ -4928,76 +4932,47 @@ def test_coding_create_game_normalizes_two_file_objective_to_src_on_empty_state(
         state,
         model_client=FakeModelClient(
             [
-                '{"objective":"Create src/fibonacci.py and tests/test_fibonacci.py",'
+                '{"objective":"Write src/similarity.py with normalize and token_overlap",'
                 '"target_artifact_id":"main-codebase",'
                 '"allowed_delta_type":"DeltaCodingState",'
-                '"success_condition":"src/fibonacci.py and tests/test_fibonacci.py exist"}'
+                '"success_condition":"Artifact contains src/similarity.py with all required functions."}'
             ]
         ),
     )
-    assert game_spec.objective == (
-        "Write src/fibonacci.py containing a fibonacci implementation "
-        "for the coding artifact."
-    )
+    assert game_spec.objective == "Write src/similarity.py with normalize and token_overlap"
+    assert game_spec.success_condition == "Artifact contains src/similarity.py with all required functions."
     assert game_spec.target_artifact_id == "main-codebase"
-    assert game_spec.target_artifact_id != "src/fibonacci.py"
-    assert game_spec.target_artifact_id != "tests/test_fibonacci.py"
-    assert game_spec.success_condition == (
-        "Artifact contains src/fibonacci.py with a non-empty fibonacci "
-        "implementation."
-    )
 
 
-def test_coding_create_game_normalizes_to_tests_when_src_present() -> None:
+def test_coding_normalize_does_not_inject_hardcoded_file_paths() -> None:
     import baps.run as run_module
 
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "coding",
         "artifact_id": "main-codebase",
-        "goal": "Implement Fibonacci with tests",
-        "northstar_markdown": "# Goal\n\nImplement Fibonacci with tests.",
+        "goal": "Implement a text similarity utility",
+        "northstar_markdown": "# Goal\n\nImplement a text similarity utility.",
         "output_path": Path(".baps-workspace/output/project"),
         "max_iterations": 2,
         "spec_path": None,
     }
-    state = run_module.State(
-        northstar=run_module.create_state(config).northstar,
-        artifacts=(
-            state_module.CodingArtifact(
-                id="main-codebase",
-                files=(
-                    state_module.CodeFile(
-                        path="src/fibonacci.py",
-                        content="def fibonacci(n):\n    return n\n",
-                    ),
-                ),
-            ),
-        ),
-    )
+    state = run_module.create_state(config)
     game_spec = run_module.create_game(
         config,
         state,
         model_client=FakeModelClient(
             [
-                '{"objective":"Create src/fibonacci.py and tests/test_fibonacci.py",'
+                '{"objective":"Write src/similarity.py",'
                 '"target_artifact_id":"main-codebase",'
                 '"allowed_delta_type":"DeltaCodingState",'
-                '"success_condition":"src/fibonacci.py and tests/test_fibonacci.py exist"}'
+                '"success_condition":"src/similarity.py exists with required functions"}'
             ]
         ),
     )
-    assert game_spec.objective == (
-        "Write tests/test_fibonacci.py containing pytest tests for the "
-        "existing fibonacci implementation."
-    )
+    assert "fibonacci" not in game_spec.objective.lower()
+    assert "fibonacci" not in game_spec.success_condition.lower()
     assert game_spec.target_artifact_id == "main-codebase"
-    assert game_spec.target_artifact_id != "src/fibonacci.py"
-    assert game_spec.target_artifact_id != "tests/test_fibonacci.py"
-    assert game_spec.success_condition == (
-        "Artifact contains tests/test_fibonacci.py with non-empty pytest "
-        "tests for fibonacci."
-    )
 
 
 def test_coding_normalization_overrides_file_path_target_artifact_id() -> None:

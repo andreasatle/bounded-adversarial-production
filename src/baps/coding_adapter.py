@@ -148,7 +148,7 @@ def render_coding_blue_prompt(
         "- Prefer production code under src/.\n"
         "- Prefer tests under tests/.\n"
         "- Prefer pytest-discoverable tests at tests/test_*.py.\n"
-        "- Test files must import from their corresponding production module using standard Python imports (e.g. from src.fibonacci import fibonacci).\n"
+        "- Test files must import from their corresponding production module using standard Python imports (e.g. from src.mymodule import myfunction).\n"
         "- Test files must NOT redefine or duplicate production functions.\n"
         "- Keep code and tests as separate files (do not embed unittest in production file).\n"
         "- content must be a valid JSON string: escape internal double quotes as \\\" and newlines as \\n.\n"
@@ -345,8 +345,8 @@ class CodingProjectAdapter:
             "- DeltaCodingState write_file changes exactly one file per game.\n"
             "- Choose exactly one missing file task per GameSpec.\n"
             "- Do not request multiple files in one GameSpec.\n"
-            "- If no production file exists, choose src/fibonacci.py first.\n"
-            "- If production file exists and test file is missing, choose tests/test_fibonacci.py next.\n"
+            "- File paths must be derived from the NorthStar spec, not invented.\n"
+            "- Prefer production files under src/ before writing test files.\n"
         )
         if verification_result is None:
             del state, config, state_view
@@ -375,37 +375,8 @@ class CodingProjectAdapter:
     def normalize_game_spec(
         self, game_spec: GameSpec, state: State, config: dict[str, object]
     ) -> GameSpec:
+        del state
         configured_artifact_id = _config_artifact_id(config)
-        artifact = coding_artifact_from_state(state, configured_artifact_id)
-        paths = {file.path for file in artifact.files}
-        src_path = "src/fibonacci.py"
-        test_path = "tests/test_fibonacci.py"
-        if src_path not in paths:
-            return GameSpec(
-                objective=(
-                    "Write src/fibonacci.py containing a fibonacci implementation "
-                    "for the coding artifact."
-                ),
-                target_artifact_id=configured_artifact_id,
-                allowed_delta_type=game_spec.allowed_delta_type,
-                success_condition=(
-                    "Artifact contains src/fibonacci.py with a non-empty fibonacci "
-                    "implementation."
-                ),
-            )
-        if test_path not in paths:
-            return GameSpec(
-                objective=(
-                    "Write tests/test_fibonacci.py containing pytest tests for the "
-                    "existing fibonacci implementation."
-                ),
-                target_artifact_id=configured_artifact_id,
-                allowed_delta_type=game_spec.allowed_delta_type,
-                success_condition=(
-                    "Artifact contains tests/test_fibonacci.py with non-empty pytest "
-                    "tests for fibonacci."
-                ),
-            )
         return GameSpec(
             objective=game_spec.objective,
             target_artifact_id=configured_artifact_id,
