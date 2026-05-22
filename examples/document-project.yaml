@@ -1,17 +1,24 @@
 project_type: document
 artifact_id: main-document
 workspace: .baps-workspace/document-project
-goal: "Write a short report about why bounded adversarial evaluation helps software projects, with an introduction and conclusion."
+goal: "Write a technical report on using multiple AI vision models to improve OCR accuracy for historical legal documents, including verification strategies and human review."
 output: output/report.md
-max_iterations: 2
+max_iterations: 6
 northstar_markdown: |
   # Goal
 
-  Write a short report about why bounded adversarial evaluation helps software projects.
+  Write a comprehensive technical report on AI-assisted OCR quality assurance for historical legal documents such as deeds, easements, and title chains.
 
-  # Required structure
+  # Required sections, in order
 
-  The report must include these sections, in order:
+  1. Introduction — the problem of processing scanned historical legal documents at scale
+  2. OCR Challenges — varying scan quality, handwriting, degraded paper, and critical accuracy requirements
+  3. Mixture of Experts — using multiple vision models in parallel to cross-check transcriptions
+  4. Verification Strategy — comparing model outputs, computing confidence, flagging disagreements
+  5. Human Review — focusing manual effort only on uncertain or high-risk segments
+  6. Conclusion — path toward trustworthy automated transcription for title insurance workflows
 
-  1. Introduction
-  2. Conclusion
+  # Quality requirements
+
+  Each section must contain substantive content (not just a heading). Numbers, names, and legal
+  descriptions must be treated as high-risk fields requiring explicit verification notes.

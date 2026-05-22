@@ -1,15 +1,25 @@
 project_type: coding
 artifact_id: main-codebase
 workspace: .baps-workspace/coding-project
-goal: "Implement a Fibonacci number generator with tests."
+goal: "Implement a text similarity utility with normalize, token overlap, and compare functions, plus comprehensive pytest tests."
 output: output/project
-max_iterations: 2
+max_iterations: 5
 northstar_markdown: |
   # Goal
 
-  Implement a Fibonacci number generator with tests.
+  Implement a text similarity comparison utility with pytest tests.
 
   # Expected output layout
 
-  - Production code in `src/fibonacci.py`
-  - Pytest tests in `tests/test_fibonacci.py`
+  - `src/similarity.py` — must contain:
+    - `normalize(text: str) -> str` — lowercase, strip punctuation, collapse whitespace
+    - `token_overlap(a: str, b: str) -> float` — Jaccard similarity on word tokens (0.0–1.0)
+    - `compare(a: str, b: str) -> dict` — returns {"a": normalized_a, "b": normalized_b, "score": float}
+  - `tests/test_similarity.py` — must contain pytest tests covering:
+    - `normalize`: empty string, punctuation stripping, case folding, whitespace collapsing
+    - `token_overlap`: identical inputs (1.0), disjoint inputs (0.0), partial overlap
+    - `compare`: integration test asserting all three keys are present and score is in [0, 1]
+
+  # Quality requirements
+
+  All functions must have type annotations. Tests must use plain pytest (no mocking).
