@@ -62,9 +62,10 @@ async def _run_baps(
         stderr=asyncio.subprocess.STDOUT,
         env=_env_for_model(model),
     )
-    stdout, _ = await proc.communicate()
-    for line in stdout.decode(errors="replace").splitlines():
-        print(f"{prefix} {line}", flush=True)
+    assert proc.stdout is not None
+    async for raw in proc.stdout:
+        print(f"{prefix} {raw.decode(errors='replace').rstrip()}", flush=True)
+    await proc.wait()
 
     result_path = workspace / "run-result.json"
     if result_path.exists():
