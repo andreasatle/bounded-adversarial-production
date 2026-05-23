@@ -70,8 +70,7 @@ echo "writing log to: $LOGFILE"
   echo "============================================================"
   echo "RUN FINISHED: $(date)"
   echo "============================================================"
-} >"$LOGFILE" 2>&1
+} 2>&1 | tee "$LOGFILE"
 
 echo "done"
 echo "log: $LOGFILE"
-tail -50 "$LOGFILE"
