@@ -2298,7 +2298,7 @@ def test_create_game_engine_does_not_compute_next_missing_section() -> None:
     assert game_spec.objective == "Add Abstract section"
 
 
-def test_create_game_explicit_no_new_atomic_game_signal() -> None:
+def test_create_game_explicit_no_new_game_signal() -> None:
     import baps.run as run_module
 
     config = {
@@ -2312,12 +2312,12 @@ def test_create_game_explicit_no_new_atomic_game_signal() -> None:
         "spec_path": None,
     }
     state = run_module.create_state(config)
-    with pytest.raises(run_module.NoNewAtomicGameError):
+    with pytest.raises(run_module.NoNewGameError):
         run_module.create_game(
             config,
             state,
             model_client=FakeModelClient(
-                ['{"no_new_atomic_game": true, "reason": "all required sections already present"}']
+                ['{"no_new_game": true, "reason": "all required sections already present"}']
             ),
         )
 
@@ -2380,7 +2380,7 @@ def test_create_game_prompt_includes_northstar_context() -> None:
         "GOOD success_condition: one bounded artifact change exists and satisfies stated local intent."
         in prompt
     )
-    assert '{\"no_new_atomic_game\": true, \"reason\": \"...\"}' in prompt
+    assert '{\"no_new_game\": true, \"reason\": \"...\"}' in prompt
     assert "state_json:" not in prompt
     assert "mandatory_sections_json" not in prompt
     assert "next_missing_required_section" not in prompt
@@ -3825,7 +3825,7 @@ def test_main_create_state_called_once_for_multi_iteration(monkeypatch, tmp_path
     assert calls["count"] == 1
 
 
-def test_main_stops_when_create_game_cannot_produce_new_atomic_game(
+def test_main_stops_when_create_game_cannot_produce_new_game(
     monkeypatch, capsys, tmp_path: Path
 ) -> None:
     import baps.run as run_module
@@ -3842,7 +3842,7 @@ def test_main_stops_when_create_game_cannot_produce_new_atomic_game(
                 allowed_delta_type="DeltaDocumentState",
                 success_condition="Introduction section exists",
             )
-        raise run_module.NoNewAtomicGameError("no further atomic game")
+        raise run_module.NoNewGameError("no further game")
 
     monkeypatch.setattr(run_module, "create_game", _create_game)
     monkeypatch.setattr(
@@ -3860,7 +3860,7 @@ def test_main_stops_when_create_game_cannot_produce_new_atomic_game(
 
     run_module.main()
     out = capsys.readouterr().out
-    assert "stop_reason=create_game_no_new_atomic_game" in out
+    assert "stop_reason=create_game_no_new_game" in out
 
 
 def test_main_stop_reason_iteration_limit_reached_after_all_iterations_used(
@@ -5608,6 +5608,152 @@ def test_coding_adapter_verify_export_skips_pytest_when_files_missing(
     assert pytest_called["n"] == 0
 
 
+def test_coding_adapter_commit_export_inits_and_commits(monkeypatch, tmp_path: Path) -> None:
+    import baps.coding_adapter as coding_module
+    import baps.run as run_module
+
+    calls: list[list[str]] = []
+
+    def _fake_run(args, **kwargs):
+        calls.append(list(args))
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(coding_module.subprocess, "run", _fake_run)
+    output_dir = tmp_path / "project"
+    output_dir.mkdir()
+    game_spec = state_module.GameSpec(
+        objective="Add fibonacci function",
+        target_artifact_id="main-codebase",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="tests pass",
+    )
+    adapter = run_module.CodingProjectAdapter()
+    committed = adapter.commit_export(output_dir, game_spec)
+    assert committed is True
+    assert any(args[:2] == ["git", "init"] for args in calls)
+    assert any(args[:3] == ["git", "commit", "-m"] for args in calls)
+    commit_call = next(args for args in calls if args[:2] == ["git", "commit"])
+    assert commit_call[3] == "baps: Add fibonacci function"
+
+
+def test_coding_adapter_commit_export_skips_init_when_git_dir_exists(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import baps.coding_adapter as coding_module
+    import baps.run as run_module
+
+    calls: list[list[str]] = []
+
+    def _fake_run(args, **kwargs):
+        calls.append(list(args))
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(coding_module.subprocess, "run", _fake_run)
+    output_dir = tmp_path / "project"
+    output_dir.mkdir()
+    (output_dir / ".git").mkdir()
+    game_spec = state_module.GameSpec(
+        objective="Fix tests",
+        target_artifact_id="main-codebase",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="tests pass",
+    )
+    adapter = run_module.CodingProjectAdapter()
+    adapter.commit_export(output_dir, game_spec)
+    assert not any(args[:2] == ["git", "init"] for args in calls)
+
+
+def test_coding_adapter_commit_export_returns_false_when_git_unavailable(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import baps.coding_adapter as coding_module
+    import baps.run as run_module
+
+    def _fake_run(args, **kwargs):
+        raise FileNotFoundError("git not found")
+
+    monkeypatch.setattr(coding_module.subprocess, "run", _fake_run)
+    output_dir = tmp_path / "project"
+    output_dir.mkdir()
+    game_spec = state_module.GameSpec(
+        objective="Add feature",
+        target_artifact_id="main-codebase",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="tests pass",
+    )
+    adapter = run_module.CodingProjectAdapter()
+    committed = adapter.commit_export(output_dir, game_spec)
+    assert committed is False
+
+
+def test_coding_adapter_commit_export_returns_false_when_commit_fails(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import baps.coding_adapter as coding_module
+    import baps.run as run_module
+
+    def _fake_run(args, **kwargs):
+        returncode = 1 if args[:2] == ["git", "commit"] else 0
+        return subprocess.CompletedProcess(args=args, returncode=returncode, stdout="", stderr="")
+
+    monkeypatch.setattr(coding_module.subprocess, "run", _fake_run)
+    output_dir = tmp_path / "project"
+    output_dir.mkdir()
+    (output_dir / ".git").mkdir()
+    game_spec = state_module.GameSpec(
+        objective="Fix tests",
+        target_artifact_id="main-codebase",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="tests pass",
+    )
+    adapter = run_module.CodingProjectAdapter()
+    committed = adapter.commit_export(output_dir, game_spec)
+    assert committed is False
+
+
+def test_commit_export_with_adapter_calls_adapter_method(monkeypatch, tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    committed_args: list = []
+
+    class _CommittingAdapter:
+        project_type = "coding"
+
+        def commit_export(self, output_path, game_spec):
+            committed_args.append((output_path, game_spec))
+            return True
+
+    game_spec = state_module.GameSpec(
+        objective="Add feature",
+        target_artifact_id="main-codebase",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="tests pass",
+    )
+    output_dir = tmp_path / "project"
+    output_dir.mkdir()
+    result = run_module._commit_export_with_adapter(_CommittingAdapter(), output_dir, game_spec)
+    assert result is True
+    assert committed_args == [(output_dir, game_spec)]
+
+
+def test_commit_export_with_adapter_skips_adapter_without_method(tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    class _NoCommitAdapter:
+        project_type = "coding"
+
+    game_spec = state_module.GameSpec(
+        objective="Add feature",
+        target_artifact_id="main-codebase",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="tests pass",
+    )
+    result = run_module._commit_export_with_adapter(
+        _NoCommitAdapter(), tmp_path / "project", game_spec
+    )
+    assert result is False
+
+
 def test_document_adapter_render_create_game_prompt_supplement_empty_when_no_verification() -> None:
     import baps.run as run_module
 
@@ -6220,7 +6366,7 @@ def test_coding_iteration_two_does_not_receive_stale_verification_result(
                 allowed_delta_type="DeltaCodingState",
                 success_condition="tests/test_fibonacci.py exists",
             )
-        raise run_module.NoNewAtomicGameError("done")
+        raise run_module.NoNewGameError("done")
 
     def _play_game(_state, spec, adapter=None, verification_result=None):
         verification_seen.append(verification_result)
@@ -6300,7 +6446,7 @@ def test_coding_create_game_receives_previous_verification_result_second_iterati
                 allowed_delta_type="DeltaCodingState",
                 success_condition="tests/test_fibonacci.py exists",
             )
-        raise run_module.NoNewAtomicGameError("done")
+        raise run_module.NoNewGameError("done")
 
     def _play_game(_state, spec, adapter=None, verification_result=None):
         del adapter, verification_result

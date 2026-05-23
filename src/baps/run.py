@@ -48,8 +48,8 @@ _NORTHSTAR_PROPOSALS_FILE = "northstar_proposals.jsonl"
 _WORKSPACE_CONFIG_FILE = "baps-config.json"
 
 
-class NoNewAtomicGameError(ValueError):
-    """Raised when the model explicitly indicates no new atomic game is available."""
+class NoNewGameError(ValueError):
+    """Raised when the model explicitly indicates no new game is available."""
 
 
 class NorthStarUpdateNeededError(ValueError):
@@ -478,7 +478,7 @@ _CREATE_GAME_SCHEMA: dict = {
         "target_artifact_id": {"type": "string"},
         "allowed_delta_type": {"type": "string"},
         "success_condition": {"type": "string"},
-        "no_new_atomic_game": {"type": "boolean"},
+        "no_new_game": {"type": "boolean"},
         "reason": {"type": "string"},
         "northstar_update_needed": {"type": "boolean"},
         "rationale": {"type": "string"},
@@ -725,7 +725,7 @@ def _render_create_game_prompt(
         "Do not include prose after JSON.\n"
         "No extra fields.\n"
         "If no useful coherent game task remains for current state+northstar, return exactly:\n"
-        '{\"no_new_atomic_game\": true, \"reason\": \"...\"}\n'
+        '{\"no_new_game\": true, \"reason\": \"...\"}\n'
         "If the current project trajectory does not align with NorthStar intent, return exactly:\n"
         '{\"northstar_update_needed\": true, \"rationale\": \"...\", \"proposed_northstar\": \"...\"}\n'
         "Use northstar_update_needed when the game direction contradicts NorthStar intent or accumulated state has drifted from the NorthStar goal.\n"
@@ -810,15 +810,15 @@ def _parse_create_game_output(text: str) -> GameSpec:
     if not isinstance(parsed, dict):
         raise ValueError("create_game model output must be a JSON object")
 
-    if set(parsed.keys()) == {"no_new_atomic_game", "reason"}:
-        if parsed["no_new_atomic_game"] is not True:
+    if set(parsed.keys()) == {"no_new_game", "reason"}:
+        if parsed["no_new_game"] is not True:
             raise ValueError(
-                "create_game no-game response must set no_new_atomic_game=true"
+                "create_game no-game response must set no_new_game=true"
             )
         reason = str(parsed["reason"]).strip()
         if not reason:
             raise ValueError("create_game no-game response reason must be non-empty")
-        raise NoNewAtomicGameError(reason)
+        raise NoNewGameError(reason)
 
     if set(parsed.keys()) == {"northstar_update_needed", "rationale", "proposed_northstar"}:
         if parsed["northstar_update_needed"] is not True:
@@ -842,7 +842,7 @@ def _parse_create_game_output(text: str) -> GameSpec:
     return _parse_game_spec_json(normalized)
 
 
-def _validate_atomic_game_spec(game_spec: GameSpec) -> None:
+def _validate_game_spec(game_spec: GameSpec) -> None:
     _debug_print_create_game_validation_input(game_spec)
     if not game_spec.objective.strip():
         raise ValueError("create_game model output objective must be non-empty")
@@ -996,13 +996,13 @@ def create_game(
         generated = fallback_role.generate(prompt)
         _debug_print_create_game_raw_model_output(generated)
         game_spec = _parse_create_game_output(generated)
-    except NoNewAtomicGameError:
+    except NoNewGameError:
         raise
     game_spec = _normalize_game_spec_with_adapter(
         resolved_adapter, game_spec, state, config
     )
     try:
-        _validate_atomic_game_spec(game_spec)
+        _validate_game_spec(game_spec)
     except ValueError as exc:
         _debug_print_create_game_validation_failure(str(exc))
         raise
@@ -1330,6 +1330,18 @@ def _verify_export_with_adapter(
     return verifier(output_path, state, artifact_id)
 
 
+def _commit_export_with_adapter(
+    adapter: ProjectTypeAdapter, output_path: Path, game_spec: GameSpec
+) -> bool:
+    committer = getattr(adapter, "commit_export", None)
+    if committer is None:
+        return False
+    committed = committer(output_path, game_spec)
+    if _debug_enabled() and committed:
+        print(f"[DEBUG] commit_export: committed export to git at {output_path}")
+    return committed
+
+
 def _append_northstar_proposal_to_blackboard(
     workspace: Path, rationale: str, proposed_northstar: str
 ) -> None:
@@ -1451,8 +1463,8 @@ def _run_project_iterations(
                 adapter=adapter,
                 verification_result=create_game_verification_result,
             )
-        except NoNewAtomicGameError:
-            stop_reason = "create_game_no_new_atomic_game"
+        except NoNewGameError:
+            stop_reason = "create_game_no_new_game"
             break
         except NorthStarUpdateNeededError as exc:
             _debug_print_northstar_update_proposal(exc.rationale, exc.proposed_northstar)
@@ -1488,6 +1500,8 @@ def _run_project_iterations(
             adapter, output_path, updated_state, artifact_id
         )
         _debug_print_verification_result(verification_result)
+        if output_changed:
+            _commit_export_with_adapter(adapter, output_path, game_spec)
         create_game_verification_result = verification_result
         if changed_this_iteration:
             state_changed = True

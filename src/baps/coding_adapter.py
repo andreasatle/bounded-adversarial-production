@@ -595,6 +595,32 @@ class CodingProjectAdapter:
                 changed = True
         return changed
 
+    def commit_export(self, output_path: Path, game_spec: GameSpec) -> bool:
+        try:
+            if not (output_path / ".git").exists():
+                subprocess.run(
+                    ["git", "init"],
+                    cwd=output_path,
+                    capture_output=True,
+                    check=True,
+                )
+            subprocess.run(
+                ["git", "add", "-A"],
+                cwd=output_path,
+                capture_output=True,
+                check=True,
+            )
+            result = subprocess.run(
+                ["git", "commit", "-m", f"baps: {game_spec.objective}"],
+                cwd=output_path,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            return result.returncode == 0
+        except (FileNotFoundError, subprocess.SubprocessError):
+            return False
+
     def verify_export(
         self, output_path: Path, state: State, artifact_id: str
     ) -> VerificationResult | None:

@@ -135,7 +135,7 @@ uv run pytest
 ## Stop conditions
 
 Implemented stop conditions to be aware of:
-- `create_game_no_new_atomic_game`
+- `create_game_no_new_game`
 - `play_game_no_delta`
 - `no_state_change`
 - `iteration_limit_reached`
@@ -150,7 +150,7 @@ NorthStar is intentionally immutable through the automated pipeline. Updates req
 ### How proposals are generated
 
 When CreateGame detects that the current project trajectory does not align with NorthStar intent, it
-returns a third response shape instead of a `GameSpec` or `no_new_atomic_game`:
+returns a third response shape instead of a `GameSpec` or `no_new_game`:
 
 ```json
 {"northstar_update_needed": true, "rationale": "...", "proposed_northstar": "..."}
