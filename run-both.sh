@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Load .env so all BAPS_* and API key variables are available in this shell.
+if [[ -f .env ]]; then
+  set -o allexport
+  source .env
+  set +o allexport
+fi
+
 DOCUMENT_WORKSPACE=".baps-workspace/document-project"
 CODING_WORKSPACE=".baps-workspace/coding-project"
 LOGROOT=".baps-workspace/logs"
-MODEL="gemma4:e4b"
-PLANNER_MODEL="gemma4:26b"
 mkdir -p "$LOGROOT"
 
 TS=$(date +"%Y%m%d-%H%M%S")
@@ -19,6 +24,12 @@ echo "writing log to: $LOGFILE"
   echo "============================================================"
   echo "RUN STARTED: $(date)"
   echo "LOGFILE: $LOGFILE"
+  echo "BAPS_BACKEND: ${BAPS_BACKEND:-ollama}"
+  case "${BAPS_BACKEND:-ollama}" in
+    anthropic) echo "MODEL: ${BAPS_ANTHROPIC_MODEL:-claude-sonnet-4-6}" ;;
+    openai)    echo "MODEL: ${BAPS_OPENAI_MODEL:-gpt-4o}" ;;
+    *)         echo "MODEL: ${BAPS_OLLAMA_MODEL:-llama3.2} (planner: ${BAPS_OLLAMA_PLANNER_MODEL:-unset})" ;;
+  esac
   echo "============================================================"
   echo
 
@@ -29,10 +40,7 @@ echo "writing log to: $LOGFILE"
   echo "time: $(date)"
   echo "============================================================"
 
-  BAPS_OLLAMA_MODEL=$MODEL \
-  BAPS_OLLAMA_PLANNER_MODEL=$PLANNER_MODEL \
-  BAPS_DEBUG=1 \
-  uv run baps-run init_and_run \
+  BAPS_DEBUG=1 uv run baps-run init_and_run \
       --spec examples/document-project.yaml
 
   echo
@@ -49,10 +57,7 @@ echo "writing log to: $LOGFILE"
   echo "time: $(date)"
   echo "============================================================"
 
-  BAPS_OLLAMA_MODEL=$MODEL \
-  BAPS_OLLAMA_PLANNER_MODEL=$PLANNER_MODEL \
-  BAPS_DEBUG=1 \
-  uv run baps-run init_and_run \
+  BAPS_DEBUG=1 uv run baps-run init_and_run \
       --spec examples/coding-project.yaml
 
   echo
