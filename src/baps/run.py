@@ -826,7 +826,10 @@ def _render_create_game_prompt(
         '{\"no_new_game\": true, \"reason\": \"...\"}\n\n'
         "If this gap is too large or spans independent concerns, return exactly:\n"
         '{\"decompose\": true, \"rationale\": \"...\", \"sub_gaps\": [{\"description\": \"...\"}, ...]}\n'
-        "Sub-gaps must partition the current gap: together they close it, individually they are coherent.\n\n"
+        "Sub-gaps must partition the current gap: together they close it, individually they are coherent.\n"
+        "Sub-gaps are executed strictly in list order — each sub-gap runs to completion before the next begins.\n"
+        "Order sub-gaps by dependency: if sub-gap B requires anything that sub-gap A produces, A must appear before B.\n"
+        "A sub-gap must never depend on the output of a later sub-gap.\n\n"
         "If the current trajectory cannot satisfy NorthStar without changing NorthStar itself, return exactly:\n"
         '{\"northstar_update_needed\": true, \"rationale\": \"...\", \"proposed_northstar\": \"...\"}\n'
         "proposed_northstar must contain the complete updated NorthStar content as a plain string.\n\n"
