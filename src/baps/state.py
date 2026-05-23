@@ -2,9 +2,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+from enum import Enum
 from typing import Literal, Protocol
 
 from pydantic import BaseModel, Field, SerializeAsAny, model_validator, field_validator
+
+
+class Disposition(str, Enum):
+    accept = "accept"
+    revise = "revise"
+    reject = "reject"
 
 
 def _require_non_empty(value: str) -> str:
@@ -14,19 +21,16 @@ def _require_non_empty(value: str) -> str:
 
 
 def _coerce_state_artifact(value: object) -> StateArtifact:
-    if isinstance(value, DocumentArtifact):
+    if isinstance(value, (DocumentArtifact, CodingArtifact, StateArtifact)):
         return value
-    if isinstance(value, CodingArtifact):
-        return value
-    if isinstance(value, StateArtifact):
-        return value
-    if isinstance(value, dict):
-        if "sections" in value:
-            return DocumentArtifact.model_validate(value)
-        if "files" in value:
-            return CodingArtifact.model_validate(value)
-        return StateArtifact.model_validate(value)
-    raise TypeError("artifact entries must be StateArtifact-compatible values")
+    if not isinstance(value, dict):
+        raise TypeError("artifact entries must be StateArtifact-compatible values")
+    kind = value.get("kind")
+    if kind == "document":
+        return DocumentArtifact.model_validate(value)
+    if kind == "coding":
+        return CodingArtifact.model_validate(value)
+    return StateArtifact.model_validate(value)
 
 
 class StateArtifact(BaseModel):
@@ -35,6 +39,9 @@ class StateArtifact(BaseModel):
 
     _validate_id = field_validator("id")(_require_non_empty)
     _validate_kind = field_validator("kind")(_require_non_empty)
+
+    def render_as_text(self) -> str:
+        return ""
 
 
 class Section(BaseModel):
@@ -49,6 +56,44 @@ class DocumentArtifact(StateArtifact):
     kind: Literal["document"] = "document"
     sections: tuple[Section, ...] = ()
 
+    def render_as_text(self) -> str:
+        return "\n\n".join(section.body for section in self.sections)
+
+    def apply_delta(self, delta: DeltaState) -> DocumentArtifact:
+        if isinstance(delta, DeltaDocumentState):
+            return DocumentArtifact(
+                id=self.id,
+                sections=(*self.sections, delta.payload.section),
+            )
+        if isinstance(delta, DeltaModifyDocumentState):
+            title = delta.payload.section_title
+            if not any(s.title == title for s in self.sections):
+                raise ValueError(
+                    f"modify_section: no section with title {title!r} in artifact {self.id!r}"
+                )
+            return DocumentArtifact(
+                id=self.id,
+                sections=tuple(
+                    Section(title=s.title, body=delta.payload.new_body)
+                    if s.title == title
+                    else s
+                    for s in self.sections
+                ),
+            )
+        if isinstance(delta, DeltaDeleteDocumentState):
+            title = delta.payload.section_title
+            if not any(s.title == title for s in self.sections):
+                raise ValueError(
+                    f"delete_section: no section with title {title!r} in artifact {self.id!r}"
+                )
+            return DocumentArtifact(
+                id=self.id,
+                sections=tuple(s for s in self.sections if s.title != title),
+            )
+        raise ValueError(
+            f"DocumentArtifact does not support delta type: {type(delta).__name__}"
+        )
+
 
 class CodeFile(BaseModel):
     path: str
@@ -60,6 +105,30 @@ class CodeFile(BaseModel):
 class CodingArtifact(StateArtifact):
     kind: Literal["coding"] = "coding"
     files: tuple[CodeFile, ...] = ()
+
+    def apply_delta(self, delta: DeltaState) -> CodingArtifact:
+        if isinstance(delta, DeltaCodingState):
+            files_by_path = {f.path: f for f in self.files}
+            files_by_path[delta.payload.file.path] = delta.payload.file
+            return CodingArtifact(id=self.id, files=tuple(files_by_path.values()))
+        if isinstance(delta, DeltaCodingBatchState):
+            files_by_path = {f.path: f for f in self.files}
+            for incoming in delta.payload.files:
+                files_by_path[incoming.path] = incoming
+            return CodingArtifact(id=self.id, files=tuple(files_by_path.values()))
+        if isinstance(delta, DeltaDeleteCodingState):
+            path = delta.payload.path
+            if not any(f.path == path for f in self.files):
+                raise ValueError(
+                    f"delete_file: no file with path {path!r} in artifact {self.id!r}"
+                )
+            return CodingArtifact(
+                id=self.id,
+                files=tuple(f for f in self.files if f.path != path),
+            )
+        raise ValueError(
+            f"CodingArtifact does not support delta type: {type(delta).__name__}"
+        )
 
 
 class AppendSectionDelta(BaseModel):
@@ -162,7 +231,7 @@ class DecomposeSpec(BaseModel):
 
 
 class RedFinding(BaseModel):
-    disposition: Literal["accept", "revise", "reject"]
+    disposition: Disposition
     rationale: str
     success_condition_met: bool | None = None
     findings: tuple[str, ...] = ()
@@ -171,7 +240,7 @@ class RedFinding(BaseModel):
 
 
 class RefereeDecision(BaseModel):
-    disposition: Literal["accept", "revise", "reject"]
+    disposition: Disposition
     rationale: str
     red_override: bool | None = None
     improvement_hints: tuple[str, ...] = ()
@@ -188,25 +257,26 @@ def apply_referee_decision_to_runtime(
     candidate_delta: DeltaState,
     decision: RefereeDecision,
 ) -> PlayGameRuntime:
-    if decision.disposition == "accept":
+    if decision.disposition in (Disposition.accept, Disposition.revise):
+        # Accept: done. Revise: promising — promote as best fallback for exhausted attempts.
         return PlayGameRuntime(current_best_delta=candidate_delta.model_copy(deep=True))
-    if decision.disposition == "revise":
-        # Candidate is promising — promote it as the best fallback for exhausted attempts.
-        return PlayGameRuntime(current_best_delta=candidate_delta.model_copy(deep=True))
-    if decision.disposition == "reject":
-        # Candidate is wrong direction — discard it, keep previous best.
-        return PlayGameRuntime(
-            current_best_delta=(
-                runtime.current_best_delta.model_copy(deep=True)
-                if runtime.current_best_delta is not None
-                else None
-            )
+    # Reject: wrong direction — discard candidate, keep previous best.
+    return PlayGameRuntime(
+        current_best_delta=(
+            runtime.current_best_delta.model_copy(deep=True)
+            if runtime.current_best_delta is not None
+            else None
         )
-    raise ValueError(f"unsupported referee disposition: {decision.disposition}")
+    )
 
 
 class NorthStar(BaseModel):
     artifacts: tuple[SerializeAsAny[StateArtifact], ...]
+
+    def render_content(self) -> str:
+        """Render all artifact text representations joined for prompt consumption."""
+        parts = [a.render_as_text() for a in self.artifacts]
+        return "\n\n".join(p for p in parts if p).strip()
 
     @field_validator("artifacts", mode="before")
     @classmethod
@@ -501,6 +571,27 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
         )
 
     return _replace_artifact_in_state(state, target_artifact_id, replacement)
+
+
+def apply_state_delta(state: State, delta: DeltaState) -> State:
+    """Apply a typed DeltaState directly to State via the artifact's own apply_delta method.
+
+    Searches only mutable (non-NorthStar) artifacts. NorthStar protection is enforced
+    at the StateService level before this function is called.
+    """
+    artifact_id = delta.artifact_id
+    artifact = next((a for a in state.artifacts if a.id == artifact_id), None)
+    if artifact is None:
+        raise ValueError(f"mutable artifact not found in state: {artifact_id!r}")
+    if not hasattr(artifact, "apply_delta"):
+        raise ValueError(
+            f"artifact kind {artifact.kind!r} does not implement apply_delta"
+        )
+    updated = artifact.apply_delta(delta)
+    return State(
+        northstar=state.northstar,
+        artifacts=tuple(updated if a.id == artifact_id else a for a in state.artifacts),
+    )
 
 
 def validate_state_artifacts(state: State, registry: StateArtifactRegistry) -> State:

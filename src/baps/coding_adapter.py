@@ -15,7 +15,7 @@ from baps.project_adapter import (
     VerificationResult,
     _config_artifact_id,
     _config_northstar_markdown,
-    _normalize_json_candidate,
+    normalize_json_candidate,
     render_blue_prompt_core,
 )
 from baps.state import (
@@ -25,7 +25,6 @@ from baps.state import (
     DeltaCodingState,
     DeltaDeleteCodingState,
     DeltaState,
-    DocumentArtifact,
     GameSpec,
     NorthStar,
     State,
@@ -77,12 +76,7 @@ def coding_artifact_from_state(state: State, artifact_id: str) -> CodingArtifact
 def build_coding_create_game_state_view(state: State, config: dict[str, Any]) -> StateView:
     artifact_id = _config_artifact_id(config)
     target_artifact = coding_artifact_from_state(state, artifact_id)
-    northstar_content_parts: list[str] = []
-    for artifact in state.northstar.artifacts:
-        if isinstance(artifact, DocumentArtifact):
-            for section in artifact.sections:
-                northstar_content_parts.append(section.body)
-    northstar_content = "\n\n".join(northstar_content_parts).strip()
+    northstar_content = state.northstar.render_content()
 
     _MAX_LINES_PER_FILE = 30  # lines shown in CreateGame view per file
 
@@ -286,7 +280,7 @@ def _fix_delta_file_content_quotes(parsed: dict) -> None:
 
 
 def parse_coding_delta_json(text: str) -> DeltaCodingState | DeltaCodingBatchState:
-    normalized = _normalize_json_candidate(text)
+    normalized = normalize_json_candidate(text)
     try:
         parsed = json.loads(normalized)
     except json.JSONDecodeError as exc:

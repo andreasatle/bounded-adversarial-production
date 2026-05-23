@@ -14,7 +14,7 @@ import baps.state as state_module
 
 # Captured before autouse fixtures patch them — used by backend dispatch tests.
 _real_build_model_client = _real_run._build_model_client
-_real_build_create_game_model_client = _real_run._build_create_game_model_client
+_real_build_planner_model_client = _real_run._build_planner_model_client
 _real_build_anthropic_client = _real_run._build_anthropic_client
 _real_build_openai_client = _real_run._build_openai_client
 _real_build_role_client = _real_run._build_role_client
@@ -46,7 +46,7 @@ def _patch_create_game_model_client(monkeypatch):
             tool_responses=[blue_tool_response],
         )
 
-    monkeypatch.setattr("baps.run._build_create_game_model_client", _fake_create_game_builder)
+    monkeypatch.setattr("baps.run._build_planner_model_client", _fake_create_game_builder)
     monkeypatch.setattr("baps.run._build_model_client", _fake_model_client_builder)
     # _build_role_client must delegate to the live _build_model_client so per-test
     # overrides of _build_model_client (e.g. fallback tests) continue to work.
@@ -427,13 +427,13 @@ def test_main_integration_uses_state_service_apply_update(monkeypatch, tmp_path:
     import baps.run as run_module
 
     called = {"value": False}
-    original_apply = run_module.StateService.apply_update
+    original_apply = run_module.StateService.apply_delta
 
-    def _capture_apply(self, proposal):
+    def _capture_apply(self, delta):
         called["value"] = True
-        return original_apply(self, proposal)
+        return original_apply(self, delta)
 
-    monkeypatch.setattr(run_module.StateService, "apply_update", _capture_apply)
+    monkeypatch.setattr(run_module.StateService, "apply_delta", _capture_apply)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -478,11 +478,11 @@ def test_main_unsupported_delta_operation_fails_explicitly(monkeypatch, capsys, 
     monkeypatch.setattr(
         run_module,
         "play_game",
-        lambda _state, _spec, adapter=None: state_module.DeltaDocumentState.model_construct(
+        lambda _state, _spec, adapter=None: state_module.DeltaCodingState(
             artifact_id="main-document",
-            operation="unsupported_operation",
-            payload=state_module.AppendSectionDelta(
-                section=state_module.Section(title="Introduction", body="body")
+            operation="write_file",
+            payload=state_module.WriteFileDelta(
+                file=state_module.CodeFile(path="foo.py", content="x")
             ),
         ),
     )
@@ -500,7 +500,7 @@ def test_main_unsupported_delta_operation_fails_explicitly(monkeypatch, capsys, 
         run_module.main()
     assert exc.value.code == 2
     err = capsys.readouterr().err
-    assert "unsupported delta operation for integration" in err
+    assert "DocumentArtifact does not support delta type" in err
 
 
 def test_create_game_receives_input_and_state_and_outputs_game_spec() -> None:
@@ -641,7 +641,7 @@ def test_create_game_fallback_to_executor_when_planner_returns_invalid_json(
     state = create_state(config)
 
     # Planner (auto-built) returns invalid JSON; executor fallback returns valid JSON.
-    monkeypatch.setattr("baps.run._build_create_game_model_client", lambda: FakeModelClient(["not-json"]))
+    monkeypatch.setattr("baps.run._build_planner_model_client", lambda: FakeModelClient(["not-json"]))
     monkeypatch.setattr("baps.run._build_model_client", lambda: FakeModelClient([valid_response]))
 
     game_spec = run_module.create_game(config, state)
@@ -4760,7 +4760,6 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
     assert "build_blue_output_format" in adapter.calls
     assert "build_blue_tools" in adapter.calls
     assert "tool_call_to_delta" in adapter.calls
-    assert "delta_to_state_update" in adapter.calls
     assert "export_state" in adapter.calls
 
 
@@ -6839,7 +6838,7 @@ def test_build_create_game_client_uses_cloud_client_without_planner_split(monkey
     monkeypatch.setenv("BAPS_BACKEND", "anthropic")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     monkeypatch.delenv("BAPS_OLLAMA_PLANNER_MODEL", raising=False)
-    client = _real_build_create_game_model_client()
+    client = _real_build_planner_model_client()
     assert isinstance(client, AnthropicClient)
 
 
@@ -6847,7 +6846,7 @@ def test_build_create_game_client_uses_ollama_planner_model_when_set(monkeypatch
     monkeypatch.delenv("BAPS_BACKEND", raising=False)
     monkeypatch.setenv("BAPS_OLLAMA_PLANNER_MODEL", "mistral")
     monkeypatch.setenv("BAPS_OLLAMA_MODEL", "llama3.2")
-    client = _real_build_create_game_model_client()
+    client = _real_build_planner_model_client()
     assert isinstance(client, OllamaClient)
     assert client.model == "mistral"
 
@@ -6856,7 +6855,7 @@ def test_build_create_game_client_falls_back_to_ollama_model_when_no_planner(mon
     monkeypatch.delenv("BAPS_BACKEND", raising=False)
     monkeypatch.delenv("BAPS_OLLAMA_PLANNER_MODEL", raising=False)
     monkeypatch.setenv("BAPS_OLLAMA_MODEL", "llama3.2")
-    client = _real_build_create_game_model_client()
+    client = _real_build_planner_model_client()
     assert isinstance(client, OllamaClient)
     assert client.model == "llama3.2"
 

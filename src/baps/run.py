@@ -17,7 +17,7 @@ from baps.project_adapter import (
     VerificationResult,
     _config_artifact_id,
     _config_northstar_markdown,
-    _normalize_json_candidate,
+    normalize_json_candidate,
     build_default_project_type_adapters,
     resolve_adapter_for_allowed_delta_type,
     resolve_project_type_adapter,
@@ -488,7 +488,7 @@ def _build_model_client() -> ModelClient:
     )
 
 
-def _build_create_game_model_client() -> ModelClient:
+def _build_planner_model_client() -> ModelClient:
     backend = os.getenv("BAPS_BACKEND", "ollama").lower()
     if backend == "anthropic":
         return _build_anthropic_client()
@@ -514,7 +514,7 @@ def _build_decompose_client() -> ModelClient:
     role_model = os.getenv("BAPS_DECOMPOSE_MODEL", "").strip()
     if role_backend or role_model:
         return _build_role_client("decompose")
-    return _build_create_game_model_client()
+    return _build_planner_model_client()
 
 
 def _build_role_client(role: str) -> ModelClient:
@@ -583,7 +583,7 @@ _CREATE_GAME_SCHEMA: dict = {
 _RED_FINDING_SCHEMA: dict = {
     "type": "object",
     "properties": {
-        "disposition": {"type": "string", "enum": ["accept", "reject"]},
+        "disposition": {"type": "string", "enum": ["accept", "revise", "reject"]},
         "rationale": {"type": "string", "maxLength": 500},
         "success_condition_met": {"type": ["boolean", "null"]},
         "findings": {"type": "array", "items": {"type": "string", "maxLength": 300}},
@@ -594,7 +594,7 @@ _RED_FINDING_SCHEMA: dict = {
 _REFEREE_DECISION_SCHEMA: dict = {
     "type": "object",
     "properties": {
-        "disposition": {"type": "string", "enum": ["accept", "reject"]},
+        "disposition": {"type": "string", "enum": ["accept", "revise", "reject"]},
         "rationale": {"type": "string", "maxLength": 500},
         "red_override": {"type": ["boolean", "null"]},
         "improvement_hints": {"type": "array", "items": {"type": "string", "maxLength": 300}},
@@ -870,7 +870,7 @@ def _ensure_target_artifact_exists(state: State, artifact_id: str) -> None:
 
 
 def _parse_game_spec_json(text: str) -> GameSpec:
-    normalized = _normalize_json_candidate(text)
+    normalized = normalize_json_candidate(text)
     try:
         parsed = json.loads(normalized)
     except json.JSONDecodeError as exc:
@@ -898,7 +898,7 @@ def _parse_game_spec_json(text: str) -> GameSpec:
 
 
 def _parse_create_game_output(text: str) -> GameSpec | DecomposeSpec:
-    normalized = _normalize_json_candidate(text)
+    normalized = normalize_json_candidate(text)
     try:
         parsed = json.loads(normalized)
     except json.JSONDecodeError as exc:
@@ -1025,7 +1025,7 @@ _REFEREE_OPTIONAL_KEYS = frozenset({"red_override", "improvement_hints"})
 
 
 def _parse_red_finding_json(text: str) -> RedFinding:
-    normalized = _normalize_json_candidate(text)
+    normalized = normalize_json_candidate(text)
     try:
         parsed = json.loads(normalized)
     except json.JSONDecodeError as exc:
@@ -1049,7 +1049,7 @@ def _parse_red_finding_json(text: str) -> RedFinding:
 
 
 def _parse_referee_decision_json(text: str) -> RefereeDecision:
-    normalized = _normalize_json_candidate(text)
+    normalized = normalize_json_candidate(text)
     try:
         parsed = json.loads(normalized)
     except json.JSONDecodeError as exc:
@@ -1090,7 +1090,7 @@ def create_game(
     state_view = resolved_adapter.build_create_game_state_view(state, config)
     use_planner = model_client is None
     if use_planner:
-        client = _build_decompose_client() if depth > 0 else _build_create_game_model_client()
+        client = _build_decompose_client() if depth > 0 else _build_planner_model_client()
     else:
         client = model_client
     role_name = "decompose" if depth > 0 else "create_game"
@@ -1660,8 +1660,7 @@ def _solve_gap(
         return
 
     before_state = state_service.load_state()
-    proposal = _derive_state_update_from_delta(delta_state, adapter=adapter)
-    updated_state = state_service.apply_update(proposal)
+    updated_state = state_service.apply_delta(delta_state)
     changed = fingerprint_state(before_state) != fingerprint_state(updated_state)
 
     ctx.output_changed = adapter.export_state(updated_state, output_path, artifact_id)

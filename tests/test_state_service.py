@@ -119,7 +119,7 @@ def test_apply_update_loads_validates_applies_validates_saves_and_returns_state(
     updated = service.apply_update(proposal)
 
     assert store.load_calls == 1
-    assert len(calls) == 8
+    assert len(calls) == 7
     assert store.save_calls == 1
     assert store.last_saved == updated
     assert updated == store.state

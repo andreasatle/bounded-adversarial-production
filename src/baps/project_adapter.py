@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,7 +27,7 @@ def _config_northstar_markdown(config: dict[str, Any]) -> str:
     return value
 
 
-def _normalize_json_candidate(text: str) -> str:
+def normalize_json_candidate(text: str) -> str:
     normalized = text.strip()
     fence_pattern = re.compile(
         r"\A```(?:json)?[ \t]*\n(?P<body>[\s\S]*?)\n```[ \t]*\Z",
@@ -136,17 +137,22 @@ def build_default_project_type_adapters() -> dict[str, ProjectTypeAdapter]:
     }
 
 
+@functools.lru_cache(maxsize=None)
+def _cached_default_adapters() -> dict[str, ProjectTypeAdapter]:
+    return build_default_project_type_adapters()
+
+
 def resolve_project_type_adapter(project_type: str) -> ProjectTypeAdapter:
     if project_type == "git":
         raise ValueError("project_type 'git' is not implemented")
-    adapter = build_default_project_type_adapters().get(project_type)
+    adapter = _cached_default_adapters().get(project_type)
     if adapter is None:
         raise ValueError(f"unknown project_type: {project_type}")
     return adapter
 
 
 def resolve_adapter_for_allowed_delta_type(allowed_delta_type: str) -> ProjectTypeAdapter:
-    for adapter in build_default_project_type_adapters().values():
+    for adapter in _cached_default_adapters().values():
         if adapter.supported_delta_type == allowed_delta_type:
             return adapter
     raise ValueError(f"unknown allowed_delta_type: {allowed_delta_type}")

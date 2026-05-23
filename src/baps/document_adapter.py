@@ -11,7 +11,7 @@ from baps.project_adapter import (
     VerificationResult,
     _config_artifact_id,
     _config_northstar_markdown,
-    _normalize_json_candidate,
+    normalize_json_candidate,
     render_blue_prompt_core,
 )
 from baps.state import (
@@ -52,12 +52,7 @@ def document_artifact_from_state(state: State, artifact_id: str) -> DocumentArti
 
 def build_document_create_game_state_view(state: State, config: dict[str, Any]) -> StateView:
     target_artifact = document_artifact_from_state(state, _config_artifact_id(config))
-    northstar_content_parts: list[str] = []
-    for artifact in state.northstar.artifacts:
-        if isinstance(artifact, DocumentArtifact):
-            for section in artifact.sections:
-                northstar_content_parts.append(section.body)
-    northstar_content = "\n\n".join(northstar_content_parts).strip()
+    northstar_content = state.northstar.render_content()
     section_summaries = [
         {"title": section.title, "body": section.body}
         for section in target_artifact.sections
@@ -221,7 +216,7 @@ def render_document_blue_prompt(
 
 
 def parse_document_delta_json(text: str) -> DeltaDocumentState | DeltaModifyDocumentState:
-    normalized = _normalize_json_candidate(text)
+    normalized = normalize_json_candidate(text)
     try:
         parsed = json.loads(normalized)
     except json.JSONDecodeError as exc:

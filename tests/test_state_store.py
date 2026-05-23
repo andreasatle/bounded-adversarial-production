@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from baps.state import NorthStar, State, StateArtifact
+from baps.state import DocumentArtifact, NorthStar, State, StateArtifact
 from baps.state_store import JsonStateStore
 
 
@@ -11,12 +11,12 @@ def _sample_state() -> State:
     return State(
         northstar=NorthStar(
             artifacts=(
-                StateArtifact(id="northstar-1", kind="document"),
+                DocumentArtifact(id="northstar-1"),
                 StateArtifact(id="northstar-2", kind="git_repository"),
             )
         ),
         artifacts=(
-            StateArtifact(id="artifact-1", kind="document"),
+            DocumentArtifact(id="artifact-1"),
             StateArtifact(id="artifact-2", kind="git_repository"),
         ),
     )
@@ -70,12 +70,12 @@ def test_json_state_store_instances_do_not_share_state(tmp_path: Path) -> None:
     store_two = JsonStateStore(path_two)
 
     state_one = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+        northstar=NorthStar(artifacts=(DocumentArtifact(id="n1"),)),
         artifacts=(StateArtifact(id="a1", kind="git_repository"),),
     )
     state_two = State(
         northstar=NorthStar(artifacts=(StateArtifact(id="n2", kind="git_repository"),)),
-        artifacts=(StateArtifact(id="a2", kind="document"),),
+        artifacts=(DocumentArtifact(id="a2"),),
     )
 
     store_one.save(state_one)
