@@ -17,6 +17,12 @@ _DEFAULT_SPECS = [
     "examples/coding-project.yaml",
 ]
 
+# TODO: Consider making the ladder dynamic during a run:
+#   - Reload BAPS_MODEL_LADDER from .env before each spec run
+#   - Score-driven escalation: jump to highest-scoring model above threshold
+#     rather than stepping through fixed positions
+#   - Drop models that score below a floor after N runs
+#
 # All known models, ordered cheapest/fastest → most capable.
 # Referenced by short name in BAPS_MODEL_LADDER.
 _KNOWN_MODELS: dict[str, ModelConfig] = {
