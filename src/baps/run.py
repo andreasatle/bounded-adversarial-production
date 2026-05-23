@@ -500,6 +500,45 @@ def _build_create_game_model_client() -> ModelClient:
     )
 
 
+def _build_role_client(role: str) -> ModelClient:
+    """Build a model client for a named role (blue, red, referee, create_game).
+
+    Checks BAPS_{ROLE}_BACKEND and BAPS_{ROLE}_MODEL first; falls back to the
+    global _build_model_client() when no role-specific vars are set.
+    """
+    role_upper = role.upper()
+    role_backend = os.getenv(f"BAPS_{role_upper}_BACKEND", "").strip().lower()
+    role_model = os.getenv(f"BAPS_{role_upper}_MODEL", "").strip()
+
+    if not role_backend and not role_model:
+        return _build_model_client()
+
+    backend = role_backend or os.getenv("BAPS_BACKEND", "ollama").lower()
+
+    if backend == "anthropic":
+        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        if not api_key.strip():
+            raise ValueError("ANTHROPIC_API_KEY must be set for anthropic backend")
+        return AnthropicClient(
+            model=role_model or os.getenv("BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL),
+            api_key=api_key,
+            base_url=os.getenv("BAPS_ANTHROPIC_BASE_URL", _DEFAULT_ANTHROPIC_BASE_URL),
+        )
+    if backend == "openai":
+        api_key = os.getenv("OPENAI_API_KEY", "")
+        if not api_key.strip():
+            raise ValueError("OPENAI_API_KEY must be set for openai backend")
+        return OpenAIClient(
+            model=role_model or os.getenv("BAPS_OPENAI_MODEL", _DEFAULT_OPENAI_MODEL),
+            api_key=api_key,
+            base_url=os.getenv("BAPS_OPENAI_BASE_URL", _DEFAULT_OPENAI_BASE_URL),
+        )
+    return OllamaClient(
+        model=role_model or os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL),
+        base_url=os.getenv("BAPS_OLLAMA_BASE_URL", _DEFAULT_OLLAMA_BASE_URL),
+    )
+
+
 # Role schemas.
 # constrained=True: Ollama constrained decoding enforces the schema at inference time.
 # Safe only when all string fields are enums or carry maxLength.
@@ -1030,7 +1069,7 @@ def create_game(
         # Planner returned empty or unparseable output — retry once with executor model
         if _debug_enabled():
             print("[DEBUG] create_game.fallback: planner invalid JSON, retrying with executor model")
-        fallback_role = Role("create_game", _build_model_client(), _CREATE_GAME_SCHEMA, constrained=False)
+        fallback_role = Role("create_game", _build_role_client("create_game"), _CREATE_GAME_SCHEMA, constrained=False)
         generated = fallback_role.generate(prompt)
         _debug_print_create_game_raw_model_output(generated)
         game_spec = _parse_create_game_output(generated)
@@ -1226,19 +1265,19 @@ def play_game(
     previous_feedback: dict[str, Any] | None = None
     blue_role = Role(
         "blue",
-        model_client if model_client is not None else _build_model_client(),
+        model_client if model_client is not None else _build_role_client("blue"),
         resolved_adapter.build_blue_output_format(),
         constrained=False,
     )
     red_role = Role(
         "red",
-        red_model_client if red_model_client is not None else _build_model_client(),
+        red_model_client if red_model_client is not None else _build_role_client("red"),
         _RED_FINDING_SCHEMA,
         constrained=True,
     )
     referee_role = Role(
         "referee",
-        referee_model_client if referee_model_client is not None else _build_model_client(),
+        referee_model_client if referee_model_client is not None else _build_role_client("referee"),
         _REFEREE_DECISION_SCHEMA,
         constrained=True,
     )

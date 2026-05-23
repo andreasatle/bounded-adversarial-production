@@ -17,6 +17,7 @@ _real_build_model_client = _real_run._build_model_client
 _real_build_create_game_model_client = _real_run._build_create_game_model_client
 _real_build_anthropic_client = _real_run._build_anthropic_client
 _real_build_openai_client = _real_run._build_openai_client
+_real_build_role_client = _real_run._build_role_client
 
 
 @pytest.fixture(autouse=True)
@@ -47,6 +48,9 @@ def _patch_create_game_model_client(monkeypatch):
 
     monkeypatch.setattr("baps.run._build_create_game_model_client", _fake_create_game_builder)
     monkeypatch.setattr("baps.run._build_model_client", _fake_model_client_builder)
+    # _build_role_client must delegate to the live _build_model_client so per-test
+    # overrides of _build_model_client (e.g. fallback tests) continue to work.
+    monkeypatch.setattr("baps.run._build_role_client", lambda _role: _real_run._build_model_client())
 
 
 def test_main_prints_required_fields_and_no_legacy_iteration_output(
@@ -6869,3 +6873,81 @@ def test_build_create_game_client_falls_back_to_ollama_model_when_no_planner(mon
     client = _real_build_create_game_model_client()
     assert isinstance(client, OllamaClient)
     assert client.model == "llama3.2"
+
+
+# --- _build_role_client tests ---
+
+
+def test_build_role_client_falls_back_to_global_when_no_role_vars(monkeypatch) -> None:
+    monkeypatch.delenv("BAPS_RED_BACKEND", raising=False)
+    monkeypatch.delenv("BAPS_RED_MODEL", raising=False)
+    monkeypatch.delenv("BAPS_BACKEND", raising=False)
+    monkeypatch.setenv("BAPS_OLLAMA_MODEL", "llama3.2")
+    # Restore the real _build_model_client so the fallback path exercises it,
+    # not the FakeModelClient injected by the autouse fixture.
+    monkeypatch.setattr("baps.run._build_model_client", _real_build_model_client)
+    client = _real_build_role_client("red")
+    assert isinstance(client, OllamaClient)
+    assert client.model == "llama3.2"
+
+
+def test_build_role_client_uses_role_model_on_anthropic_backend(monkeypatch) -> None:
+    monkeypatch.setenv("BAPS_RED_BACKEND", "anthropic")
+    monkeypatch.setenv("BAPS_RED_MODEL", "claude-haiku-4-5-20251001")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    client = _real_build_role_client("red")
+    assert isinstance(client, AnthropicClient)
+    assert client.model == "claude-haiku-4-5-20251001"
+
+
+def test_build_role_client_uses_role_model_on_openai_backend(monkeypatch) -> None:
+    monkeypatch.setenv("BAPS_REFEREE_BACKEND", "openai")
+    monkeypatch.setenv("BAPS_REFEREE_MODEL", "gpt-4o-mini")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-test")
+    client = _real_build_role_client("referee")
+    assert isinstance(client, OpenAIClient)
+    assert client.model == "gpt-4o-mini"
+
+
+def test_build_role_client_uses_role_model_on_ollama_backend(monkeypatch) -> None:
+    monkeypatch.setenv("BAPS_BLUE_BACKEND", "ollama")
+    monkeypatch.setenv("BAPS_BLUE_MODEL", "gemma3:latest")
+    client = _real_build_role_client("blue")
+    assert isinstance(client, OllamaClient)
+    assert client.model == "gemma3:latest"
+
+
+def test_build_role_client_infers_backend_from_global_when_only_model_set(monkeypatch) -> None:
+    monkeypatch.delenv("BAPS_RED_BACKEND", raising=False)
+    monkeypatch.setenv("BAPS_RED_MODEL", "claude-haiku-4-5-20251001")
+    monkeypatch.setenv("BAPS_BACKEND", "anthropic")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    client = _real_build_role_client("red")
+    assert isinstance(client, AnthropicClient)
+    assert client.model == "claude-haiku-4-5-20251001"
+
+
+def test_build_role_client_raises_on_anthropic_without_api_key(monkeypatch) -> None:
+    monkeypatch.setenv("BAPS_RED_BACKEND", "anthropic")
+    monkeypatch.setenv("BAPS_RED_MODEL", "claude-haiku-4-5-20251001")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    with pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
+        _real_build_role_client("red")
+
+
+def test_build_role_client_raises_on_openai_without_api_key(monkeypatch) -> None:
+    monkeypatch.setenv("BAPS_REFEREE_BACKEND", "openai")
+    monkeypatch.setenv("BAPS_REFEREE_MODEL", "gpt-4o-mini")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with pytest.raises(ValueError, match="OPENAI_API_KEY"):
+        _real_build_role_client("referee")
+
+
+def test_build_role_client_uses_global_anthropic_model_when_only_backend_set(monkeypatch) -> None:
+    monkeypatch.setenv("BAPS_BLUE_BACKEND", "anthropic")
+    monkeypatch.delenv("BAPS_BLUE_MODEL", raising=False)
+    monkeypatch.setenv("BAPS_ANTHROPIC_MODEL", "claude-sonnet-4-6")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    client = _real_build_role_client("blue")
+    assert isinstance(client, AnthropicClient)
+    assert client.model == "claude-sonnet-4-6"
