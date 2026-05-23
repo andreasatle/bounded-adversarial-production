@@ -74,6 +74,12 @@ class ModifySectionDelta(BaseModel):
     _validate_new_body = field_validator("new_body")(_require_non_empty)
 
 
+class DeleteSectionDelta(BaseModel):
+    section_title: str
+
+    _validate_section_title = field_validator("section_title")(_require_non_empty)
+
+
 class WriteFileDelta(BaseModel):
     file: CodeFile
 
@@ -87,6 +93,12 @@ class WriteFilesDelta(BaseModel):
         if not files:
             raise ValueError("write_files payload must contain at least one file")
         return files
+
+
+class DeleteFileDelta(BaseModel):
+    path: str
+
+    _validate_path = field_validator("path")(_require_non_empty)
 
 
 class DeltaState(BaseModel):
@@ -105,6 +117,11 @@ class DeltaModifyDocumentState(DeltaState):
     payload: ModifySectionDelta
 
 
+class DeltaDeleteDocumentState(DeltaState):
+    operation: Literal["delete_section"]
+    payload: DeleteSectionDelta
+
+
 class DeltaCodingState(DeltaState):
     operation: Literal["write_file"]
     payload: WriteFileDelta
@@ -113,6 +130,11 @@ class DeltaCodingState(DeltaState):
 class DeltaCodingBatchState(DeltaState):
     operation: Literal["write_files"]
     payload: WriteFilesDelta
+
+
+class DeltaDeleteCodingState(DeltaState):
+    operation: Literal["delete_file"]
+    payload: DeleteFileDelta
 
 
 class GameSpec(BaseModel):
@@ -389,6 +411,42 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
         )
         return _replace_artifact_in_state(state, target_artifact_id, replacement)
 
+    if operation == "delete_section":
+        target_artifact_id = proposal.target.artifact_id
+        existing = find_state_artifact(state, target_artifact_id)
+        if not isinstance(existing, DocumentArtifact):
+            raise ValueError("delete_section operation requires a DocumentArtifact target")
+        if "section_title" not in proposal.payload:
+            raise ValueError("delete_section operation requires payload['section_title']")
+        section_title = str(proposal.payload["section_title"])
+        if not any(s.title == section_title for s in existing.sections):
+            raise ValueError(
+                f"delete_section: no section with title {section_title!r} found in artifact {target_artifact_id!r}"
+            )
+        replacement = DocumentArtifact(
+            id=existing.id,
+            sections=tuple(s for s in existing.sections if s.title != section_title),
+        )
+        return _replace_artifact_in_state(state, target_artifact_id, replacement)
+
+    if operation == "delete_file":
+        target_artifact_id = proposal.target.artifact_id
+        existing = find_state_artifact(state, target_artifact_id)
+        if not isinstance(existing, CodingArtifact):
+            raise ValueError("delete_file operation requires a CodingArtifact target")
+        if "path" not in proposal.payload:
+            raise ValueError("delete_file operation requires payload['path']")
+        path = str(proposal.payload["path"])
+        if not any(f.path == path for f in existing.files):
+            raise ValueError(
+                f"delete_file: no file with path {path!r} found in artifact {target_artifact_id!r}"
+            )
+        replacement = CodingArtifact(
+            id=existing.id,
+            files=tuple(f for f in existing.files if f.path != path),
+        )
+        return _replace_artifact_in_state(state, target_artifact_id, replacement)
+
     if operation == "add_artifact":
         if "artifact" not in proposal.payload:
             raise ValueError("add_artifact operation requires payload['artifact']")
@@ -411,7 +469,8 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
         raise NotImplementedError(
             "unsupported state update operation: "
             f"{operation!r}; supported: 'replace_artifact', 'add_artifact', "
-            "'append_section', 'modify_section', 'write_file', 'write_files'"
+            "'append_section', 'modify_section', 'delete_section', "
+            "'write_file', 'write_files', 'delete_file'"
         )
 
     if "artifact" not in proposal.payload:

@@ -7147,3 +7147,149 @@ def test_document_blue_prompt_includes_modify_section_shape() -> None:
     assert "modify_section" in prompt
     assert "section_title" in prompt
     assert "new_body" in prompt
+
+
+# --- delete_file adapter tests ---
+
+def test_parse_coding_delta_json_handles_delete_file_operation() -> None:
+    import json
+    from baps.coding_adapter import parse_coding_delta_json
+
+    text = json.dumps({
+        "artifact_id": "main-codebase",
+        "operation": "delete_file",
+        "payload": {"path": "src/old.py"},
+    })
+    delta = parse_coding_delta_json(text)
+    assert isinstance(delta, state_module.DeltaDeleteCodingState)
+    assert delta.payload.path == "src/old.py"
+
+
+def test_coding_adapter_maps_delete_file_delta_to_state_update() -> None:
+    import baps.run as run_module
+
+    adapter = run_module.CodingProjectAdapter()
+    delta = state_module.DeltaDeleteCodingState(
+        artifact_id="main-codebase",
+        operation="delete_file",
+        payload=state_module.DeleteFileDelta(path="src/old.py"),
+    )
+    proposal = adapter.delta_to_state_update(delta)
+    assert proposal.payload["operation"] == "delete_file"
+    assert proposal.payload["path"] == "src/old.py"
+
+
+def test_coding_adapter_tool_call_delete_file_returns_correct_delta() -> None:
+    import baps.run as run_module
+    from baps.models import ToolCall
+
+    adapter = run_module.CodingProjectAdapter()
+    tool_call = ToolCall(
+        name="delete_file",
+        arguments={"artifact_id": "main-codebase", "path": "src/old.py"},
+    )
+    delta = adapter.tool_call_to_delta(tool_call)
+    assert isinstance(delta, state_module.DeltaDeleteCodingState)
+    assert delta.payload.path == "src/old.py"
+
+
+# --- delete_section adapter tests ---
+
+def test_parse_document_delta_json_handles_delete_section_operation() -> None:
+    import json
+    from baps.document_adapter import parse_document_delta_json
+
+    text = json.dumps({
+        "artifact_id": "main-document",
+        "operation": "delete_section",
+        "payload": {"section_title": "Obsolete"},
+    })
+    delta = parse_document_delta_json(text)
+    assert isinstance(delta, state_module.DeltaDeleteDocumentState)
+    assert delta.payload.section_title == "Obsolete"
+
+
+def test_document_adapter_maps_delete_section_delta_to_state_update() -> None:
+    import baps.run as run_module
+
+    adapter = run_module.DocumentProjectAdapter()
+    delta = state_module.DeltaDeleteDocumentState(
+        artifact_id="main-document",
+        operation="delete_section",
+        payload=state_module.DeleteSectionDelta(section_title="Obsolete"),
+    )
+    proposal = adapter.delta_to_state_update(delta)
+    assert proposal.payload["operation"] == "delete_section"
+    assert proposal.payload["section_title"] == "Obsolete"
+
+
+def test_document_adapter_tool_call_delete_section_returns_correct_delta() -> None:
+    import baps.run as run_module
+    from baps.models import ToolCall
+
+    adapter = run_module.DocumentProjectAdapter()
+    tool_call = ToolCall(
+        name="delete_section",
+        arguments={"artifact_id": "main-document", "section_title": "Obsolete"},
+    )
+    delta = adapter.tool_call_to_delta(tool_call)
+    assert isinstance(delta, state_module.DeltaDeleteDocumentState)
+    assert delta.payload.section_title == "Obsolete"
+
+
+# --- CreateGame coding state view shows file contents ---
+
+def test_coding_create_game_state_view_includes_file_contents() -> None:
+    import baps.run as run_module
+
+    state = run_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(
+            id="main-codebase",
+            files=(
+                state_module.CodeFile(path="src/hello.py", content="def hello():\n    return 'hi'\n"),
+            ),
+        ),),
+    )
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "coding",
+        "artifact_id": "main-codebase",
+        "goal": "Build something",
+        "northstar_markdown": "# Goal",
+        "output_path": Path(".baps-workspace/output"),
+        "max_iterations": 1,
+        "spec_path": None,
+    }
+    adapter = run_module.CodingProjectAdapter()
+    view = adapter.build_create_game_state_view(state, config)
+    assert "src/hello.py" in view.content
+    assert "def hello():" in view.content
+
+
+def test_coding_create_game_state_view_truncates_long_files() -> None:
+    import baps.run as run_module
+
+    long_content = "\n".join(f"line_{i} = {i}" for i in range(100))
+    state = run_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(
+            id="main-codebase",
+            files=(state_module.CodeFile(path="src/big.py", content=long_content),),
+        ),),
+    )
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "coding",
+        "artifact_id": "main-codebase",
+        "goal": "Build something",
+        "northstar_markdown": "# Goal",
+        "output_path": Path(".baps-workspace/output"),
+        "max_iterations": 1,
+        "spec_path": None,
+    }
+    adapter = run_module.CodingProjectAdapter()
+    view = adapter.build_create_game_state_view(state, config)
+    assert "more lines" in view.content
+    assert "line_0 = 0" in view.content
+    assert "line_99 = 99" not in view.content

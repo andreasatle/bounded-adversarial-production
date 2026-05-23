@@ -16,6 +16,7 @@ from baps.project_adapter import (
 )
 from baps.state import (
     AppendSectionDelta,
+    DeltaDeleteDocumentState,
     DeltaDocumentState,
     DeltaModifyDocumentState,
     DeltaState,
@@ -200,6 +201,14 @@ def render_document_blue_prompt(
         '    "section_title": "<exact title of existing section>",\n'
         '    "new_body": "Replacement body text."\n'
         "  }\n"
+        "}\n"
+        "Use delete_section to remove a section that is no longer needed:\n"
+        "{\n"
+        '  "artifact_id": "<game_spec.target_artifact_id>",\n'
+        '  "operation": "delete_section",\n'
+        '  "payload": {\n'
+        '    "section_title": "<exact title of section to delete>"\n'
+        "  }\n"
         "}"
     )
     return render_blue_prompt_core(
@@ -234,6 +243,14 @@ def parse_document_delta_json(text: str) -> DeltaDocumentState | DeltaModifyDocu
         except Exception as exc:
             raise ValueError(
                 f"blue model output failed DeltaModifyDocumentState validation: {exc}"
+            ) from exc
+
+    if operation == "delete_section":
+        try:
+            return DeltaDeleteDocumentState.model_validate(parsed)
+        except Exception as exc:
+            raise ValueError(
+                f"blue model output failed DeltaDeleteDocumentState validation: {exc}"
             ) from exc
 
     try:
@@ -274,6 +291,16 @@ def derive_document_state_update_from_delta(delta_state: DeltaState) -> StateUpd
                 "section": delta_state.payload.section.model_dump(mode="json"),
             },
         )
+    if isinstance(delta_state, DeltaDeleteDocumentState):
+        return StateUpdateProposal(
+            id=f"state-update:{delta_state.artifact_id}:delete_section:{delta_state.payload.section_title}",
+            target=StateUpdateTarget(artifact_id=delta_state.artifact_id),
+            summary=f"Delete section '{delta_state.payload.section_title}' from document artifact {delta_state.artifact_id}",
+            payload={
+                "operation": "delete_section",
+                "section_title": delta_state.payload.section_title,
+            },
+        )
     raise ValueError(f"unsupported delta type for integration: {type(delta_state).__name__}")
 
 
@@ -309,6 +336,7 @@ class DocumentProjectAdapter:
             "Document CreateGame constraints:\n"
             "- Use append_section to add a new section to the document.\n"
             "- Use modify_section to rewrite an existing section's body (section_title must match exactly).\n"
+            "- Use delete_section to remove a section that is no longer needed (section_title must match exactly).\n"
         )
         if verification_result is None:
             return base
@@ -414,6 +442,24 @@ class DocumentProjectAdapter:
                     "required": ["artifact_id", "section_title", "new_body"],
                 },
             ),
+            ToolDefinition(
+                name="delete_section",
+                description="Remove a section from the document artifact.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "artifact_id": {
+                            "type": "string",
+                            "description": "Target document artifact ID",
+                        },
+                        "section_title": {
+                            "type": "string",
+                            "description": "Exact title of the section to delete",
+                        },
+                    },
+                    "required": ["artifact_id", "section_title"],
+                },
+            ),
         ]
 
     def tool_call_to_delta(self, tool_call: ToolCall) -> DeltaState:
@@ -455,6 +501,24 @@ class DocumentProjectAdapter:
             except Exception as exc:
                 raise ValueError(
                     f"tool call arguments failed DeltaDocumentState validation: {exc}"
+                ) from exc
+        if tool_call.name == "delete_section":
+            try:
+                artifact_id = str(args["artifact_id"])
+                section_title = str(args["section_title"])
+            except KeyError as exc:
+                raise ValueError(f"missing required tool argument: {exc}") from exc
+            try:
+                return DeltaDeleteDocumentState.model_validate(
+                    {
+                        "artifact_id": artifact_id,
+                        "operation": "delete_section",
+                        "payload": {"section_title": section_title},
+                    }
+                )
+            except Exception as exc:
+                raise ValueError(
+                    f"tool call arguments failed DeltaDeleteDocumentState validation: {exc}"
                 ) from exc
         raise ValueError(f"unexpected tool: {tool_call.name!r}")
 

@@ -9,9 +9,13 @@ from baps.state import (
     CodeFile,
     CodingArtifact,
     DeltaCodingBatchState,
+    DeltaDeleteCodingState,
+    DeltaDeleteDocumentState,
     DeltaModifyDocumentState,
     DeltaState,
     DeltaDocumentState,
+    DeleteFileDelta,
+    DeleteSectionDelta,
     DocumentArtifact,
     DocumentArtifactAdapter,
     find_state_artifact,
@@ -1706,4 +1710,124 @@ def test_apply_state_update_modify_section_requires_document_artifact() -> None:
         },
     )
     with pytest.raises(ValueError, match="DocumentArtifact"):
+        apply_state_update(state, proposal)
+
+
+# --- delete_section ---
+
+def test_apply_state_update_delete_section_removes_matching_section() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=()),
+        artifacts=(DocumentArtifact(
+            id="doc",
+            sections=(
+                Section(title="Intro", body="intro"),
+                Section(title="Details", body="details"),
+                Section(title="Conclusion", body="conclusion"),
+            ),
+        ),),
+    )
+    proposal = StateUpdateProposal(
+        id="u1",
+        target=StateUpdateTarget(artifact_id="doc"),
+        summary="delete intro",
+        payload={"operation": "delete_section", "section_title": "Details"},
+    )
+    updated = apply_state_update(state, proposal)
+    artifact = next(a for a in updated.artifacts if a.id == "doc")
+    assert isinstance(artifact, DocumentArtifact)
+    titles = [s.title for s in artifact.sections]
+    assert titles == ["Intro", "Conclusion"]
+
+
+def test_apply_state_update_delete_section_raises_if_title_not_found() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=()),
+        artifacts=(DocumentArtifact(
+            id="doc",
+            sections=(Section(title="Intro", body="body"),),
+        ),),
+    )
+    proposal = StateUpdateProposal(
+        id="u1",
+        target=StateUpdateTarget(artifact_id="doc"),
+        summary="delete missing",
+        payload={"operation": "delete_section", "section_title": "Ghost"},
+    )
+    with pytest.raises(ValueError, match="Ghost"):
+        apply_state_update(state, proposal)
+
+
+def test_apply_state_update_delete_section_requires_document_artifact() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=()),
+        artifacts=(CodingArtifact(id="code", files=()),),
+    )
+    proposal = StateUpdateProposal(
+        id="u1",
+        target=StateUpdateTarget(artifact_id="code"),
+        summary="bad",
+        payload={"operation": "delete_section", "section_title": "Intro"},
+    )
+    with pytest.raises(ValueError, match="DocumentArtifact"):
+        apply_state_update(state, proposal)
+
+
+# --- delete_file ---
+
+def test_apply_state_update_delete_file_removes_matching_file() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=()),
+        artifacts=(CodingArtifact(
+            id="code",
+            files=(
+                CodeFile(path="a.py", content="a"),
+                CodeFile(path="b.py", content="b"),
+                CodeFile(path="c.py", content="c"),
+            ),
+        ),),
+    )
+    proposal = StateUpdateProposal(
+        id="u1",
+        target=StateUpdateTarget(artifact_id="code"),
+        summary="delete b",
+        payload={"operation": "delete_file", "path": "b.py"},
+    )
+    updated = apply_state_update(state, proposal)
+    artifact = next(a for a in updated.artifacts if a.id == "code")
+    assert isinstance(artifact, CodingArtifact)
+    paths = [f.path for f in artifact.files]
+    assert paths == ["a.py", "c.py"]
+
+
+def test_apply_state_update_delete_file_raises_if_path_not_found() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=()),
+        artifacts=(CodingArtifact(
+            id="code",
+            files=(CodeFile(path="a.py", content="a"),),
+        ),),
+    )
+    proposal = StateUpdateProposal(
+        id="u1",
+        target=StateUpdateTarget(artifact_id="code"),
+        summary="delete missing",
+        payload={"operation": "delete_file", "path": "ghost.py"},
+    )
+    with pytest.raises(ValueError, match="ghost.py"):
+        apply_state_update(state, proposal)
+
+
+def test_apply_state_update_delete_file_requires_coding_artifact() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=()),
+        artifacts=(DocumentArtifact(id="doc", sections=()),),
+    )
+    proposal = StateUpdateProposal(
+        id="u1",
+        target=StateUpdateTarget(artifact_id="doc"),
+        summary="bad",
+        payload={"operation": "delete_file", "path": "a.py"},
+    )
+    with pytest.raises(ValueError, match="CodingArtifact"):
         apply_state_update(state, proposal)

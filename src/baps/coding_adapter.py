@@ -23,6 +23,7 @@ from baps.state import (
     CodeFile,
     DeltaCodingBatchState,
     DeltaCodingState,
+    DeltaDeleteCodingState,
     DeltaState,
     DocumentArtifact,
     GameSpec,
@@ -71,10 +72,20 @@ def build_coding_create_game_state_view(state: State, config: dict[str, Any]) ->
                 northstar_content_parts.append(section.body)
     northstar_content = "\n\n".join(northstar_content_parts).strip()
 
+    _MAX_LINES_PER_FILE = 30  # lines shown in CreateGame view per file
+
     file_lines: list[str] = []
     if target_artifact.files:
         for file in target_artifact.files:
-            file_lines.append(f"- {file.path}")
+            file_lines.append(f"### {file.path}")
+            file_lines.append("")
+            lines = file.content.splitlines()
+            if len(lines) <= _MAX_LINES_PER_FILE:
+                file_lines.extend(lines)
+            else:
+                file_lines.extend(lines[:_MAX_LINES_PER_FILE])
+                file_lines.append(f"... ({len(lines) - _MAX_LINES_PER_FILE} more lines)")
+            file_lines.append("")
     else:
         file_lines.append("No files.")
 
@@ -91,11 +102,11 @@ def build_coding_create_game_state_view(state: State, config: dict[str, Any]) ->
             f"## Artifact: {target_artifact.id}",
             "",
             f"kind: {target_artifact.kind}",
+            f"files: {len(target_artifact.files)}",
             "",
             "### Current Files",
             "",
             *file_lines,
-            "",
             "=== StateView End ===",
         ]
     ).rstrip()
@@ -163,6 +174,7 @@ def render_coding_blue_prompt(
         "Coding delta rules:\n"
         "- Use write_files (plural) to write one or more files in a single delta — preferred.\n"
         "- Use write_file (singular) only when writing exactly one file.\n"
+        "- Use delete_file to remove a file that is no longer needed.\n"
         "- file paths and content must be non-empty strings.\n"
         "- Prefer production code under src/.\n"
         "- Prefer tests under tests/.\n"
@@ -194,6 +206,14 @@ def render_coding_blue_prompt(
         '      "path": "<relative path>",\n'
         '      "content": "<full file content>"\n'
         "    }\n"
+        "  }\n"
+        "}\n"
+        "Alternative shape (delete_file — remove a file):\n"
+        "{\n"
+        '  "artifact_id": "<game_spec.target_artifact_id>",\n'
+        '  "operation": "delete_file",\n'
+        '  "payload": {\n'
+        '    "path": "<relative path to delete>"\n'
         "  }\n"
         "}"
     )
@@ -283,6 +303,14 @@ def parse_coding_delta_json(text: str) -> DeltaCodingState | DeltaCodingBatchSta
             ) from exc
         _validate_coding_write_files_purity(delta)
         return delta
+
+    if operation == "delete_file":
+        try:
+            return DeltaDeleteCodingState.model_validate(parsed)
+        except Exception as exc:
+            raise ValueError(
+                f"blue model output failed DeltaDeleteCodingState validation: {exc}"
+            ) from exc
 
     try:
         delta = DeltaCodingState.model_validate(parsed)
@@ -432,6 +460,16 @@ def derive_coding_state_update_from_delta(delta_state: DeltaState) -> StateUpdat
             payload={
                 "operation": "write_file",
                 "file": delta_state.payload.file.model_dump(mode="json"),
+            },
+        )
+    if isinstance(delta_state, DeltaDeleteCodingState):
+        return StateUpdateProposal(
+            id=f"state-update:{delta_state.artifact_id}:delete_file:{delta_state.payload.path}",
+            target=StateUpdateTarget(artifact_id=delta_state.artifact_id),
+            summary=f"Delete file '{delta_state.payload.path}' from coding artifact {delta_state.artifact_id}",
+            payload={
+                "operation": "delete_file",
+                "path": delta_state.payload.path,
             },
         )
     raise ValueError(f"unsupported delta type for integration: {type(delta_state).__name__}")
@@ -610,6 +648,24 @@ class CodingProjectAdapter:
                     "required": ["artifact_id", "path", "content"],
                 },
             ),
+            ToolDefinition(
+                name="delete_file",
+                description="Delete a file from the coding artifact.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "artifact_id": {
+                            "type": "string",
+                            "description": "Target coding artifact ID",
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "Relative file path to delete",
+                        },
+                    },
+                    "required": ["artifact_id", "path"],
+                },
+            ),
         ]
 
     def tool_call_to_delta(self, tool_call: ToolCall) -> DeltaState:
@@ -652,6 +708,24 @@ class CodingProjectAdapter:
             except Exception as exc:
                 raise ValueError(
                     f"tool call arguments failed DeltaCodingState validation: {exc}"
+                ) from exc
+        if tool_call.name == "delete_file":
+            try:
+                artifact_id = str(args["artifact_id"])
+                path = str(args["path"])
+            except KeyError as exc:
+                raise ValueError(f"missing required tool argument: {exc}") from exc
+            try:
+                return DeltaDeleteCodingState.model_validate(
+                    {
+                        "artifact_id": artifact_id,
+                        "operation": "delete_file",
+                        "payload": {"path": path},
+                    }
+                )
+            except Exception as exc:
+                raise ValueError(
+                    f"tool call arguments failed DeltaDeleteCodingState validation: {exc}"
                 ) from exc
         raise ValueError(f"unexpected tool: {tool_call.name!r}")
 
