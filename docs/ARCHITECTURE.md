@@ -1,635 +1,446 @@
 # ARCHITECTURE.md
 
-This document records the **actual implemented architecture** of `bounded-adversarial-production` (`baps`) and is aligned with [SYSTEM.md](SYSTEM.md).
+This document records the **actual implemented architecture** of `bounded-adversarial-production` (`baps`), aligned with [SYSTEM.md](SYSTEM.md).
 
-Canonical runtime spine (authoritative):
+Canonical runtime spine:
 
-`config/NorthStar -> State -> StateView -> CreateGame -> GameSpec -> PlayGame -> DeltaState -> StateUpdateProposal -> StateService -> export`
+```
+config/NorthStar → State → StateView → CreateGame
+                                           ↓
+                                    DecomposeSpec? ──→ recursive sub-gaps
+                                           ↓
+                                   GameSpec (context_chain)
+                                           ↓
+                                       PlayGame
+                                           ↓
+                               DeltaState → StateUpdateProposal → StateService → export
+```
+
+---
 
 ## 1. Project Overview
 
-### IMPLEMENTED
-
-`baps` is an adapter-driven runtime for bounded, iterative project evolution over authoritative `State`.
+`baps` is an adapter-driven, multiscale runtime for bounded, iterative project evolution over authoritative `State`. NorthStar defines the target; CreateGame identifies gaps; recursive decomposition breaks large gaps into coherent sub-games; PlayGame closes leaf gaps through adversarial evaluation.
 
 Current execution behavior:
 
-1. Read config (including NorthStar content and runtime controls).
+1. Read config (NorthStar content, runtime controls, model config).
 2. Create or load authoritative `State`.
-3. Build adapter-owned `StateView` for model reasoning.
-4. Run `CreateGame` to derive a bounded `GameSpec`.
-5. Run `PlayGame` (Blue -> Red -> Referee) to obtain an accepted `DeltaState`.
-6. Convert delta to `StateUpdateProposal` and apply through `StateService`.
-7. Export materialized output via adapter.
-8. Optionally verify export via adapter and feed that evidence into next `CreateGame`.
+3. Loop until stop condition:
+   a. Call `_solve_gap(context_chain=(), depth=0)` which:
+      - Builds adapter-owned `StateView`
+      - Calls `CreateGame` (gap analysis against NorthStar)
+      - If `DecomposeSpec`: recurse into each sub-gap with extended `context_chain`
+      - If `GameSpec`: inject `context_chain`, run `PlayGame`, integrate delta, export
+   b. Stop when `iterations_remaining == 0` or a stop condition is raised
+4. Write run result JSON to workspace.
 
-Current philosophy in code:
+Current implementation philosophy:
 
-- `State` is authority.
-- `StateView` is model-facing projection.
-- Core orchestration is generic.
-- Project-specific behavior is adapter-owned.
-- Runtime is bounded by iterations and bounded PlayGame attempts.
+- `State` is authority; `StateView` is model-facing projection.
+- CreateGame is gap analysis, not step derivation.
+- Decomposition is recursive and multiscale; context flows down the full chain.
+- Core orchestration is generic; project-specific behavior is adapter-owned.
+- Runtime is bounded by `max_iterations` (leaf games) and `max_depth` (decomposition levels).
 
-### CONCEPTUAL
+---
 
-Observed conceptual direction in code/docs (not active runtime):
+## 2. System Capabilities
 
-- richer tool-mediated role execution,
-- stronger semantic quality controls,
-- blackboard reintegration as append-only process history.
+### Schemas (`src/baps/state.py`)
 
-### HISTORICAL / INACTIVE
+**Core state:**
 
-- Blackboard/proposal history paths exist but are not canonical runtime authority.
-- No alternate execution spine is active in lifecycle commands.
+- `State`, `NorthStar`, `StateArtifact`
+- `DocumentArtifact` (sections), `CodingArtifact` (files)
+- `Section`, `CodeFile`
 
-## 2. Current System Capabilities
+**Game contracts:**
 
-### Schemas
+- `GameSpec` — `objective`, `target_artifact_id`, `allowed_delta_type`, `success_condition`, `context_chain`
+- `SubGapSpec` — `description` (a gap to be recursively planned)
+- `DecomposeSpec` — `rationale`, `sub_gaps` (CreateGame decomposition response)
 
-Purpose:
+**Document deltas:**
 
-- Define authoritative state, delta contracts, game contracts, decisions, and integration payloads.
+- `DeltaDocumentState` (`append_section`) — add a new section
+- `DeltaModifyDocumentState` (`modify_section`) — rewrite an existing section
+- `DeltaDeleteDocumentState` (`delete_section`) — remove a section
 
-Key models (in `src/baps/state.py`):
+**Coding deltas:**
 
-- `State`, `NorthStar`, `StateArtifact`, `DocumentArtifact`, `CodingArtifact`, `Section`, `CodeFile`.
-- `GameSpec`.
-- `DeltaDocumentState` (`append_section`), `DeltaCodingState` (`write_file`).
-- `RedFinding`, `RefereeDecision`, `PlayGameRuntime`.
-- `StateUpdateProposal`, `StateUpdateTarget`.
+- `DeltaCodingState` (`write_file`) — write a single file
+- `DeltaCodingBatchState` (`write_files`) — write multiple files in one game
+- `DeltaDeleteCodingState` (`delete_file`) — remove a file
 
-Limitations:
+**Adversarial evaluation:**
 
-- Active delta operations in canonical adapter flow are bounded to document section append and coding file write.
+- `RedFinding` — adversarial reviewer output
+- `RefereeDecision` — adjudication output
+- `PlayGameRuntime` — attempt tracking
 
-Dependencies:
+**Integration:**
 
-- Pydantic validation and model serialization.
+- `StateUpdateProposal`, `StateUpdateTarget`
 
-Boundary:
+---
 
-- Schema layer encodes domain constraints and update application semantics.
+### Runtime (`src/baps/run.py`)
 
-### Runtime
+**Lifecycle commands:** `init`, `run`, `init_and_run`
 
-Purpose:
+**Key functions:**
 
-- Execute lifecycle commands and bounded CreateGame/PlayGame/integration/export loop.
+- `create_game(...)` — gap-analysis prompt, parsing (`GameSpec | DecomposeSpec`), validation, adapter normalization
+- `play_game(...)` — Blue/Red/Referee orchestration with bounded retries
+- `_solve_gap(context_chain, ctx, ..., depth)` — recursive gap solver; accumulates context chain; counts only leaf executions against `max_iterations`
+- `_run_project_iterations(...)` — outer loop calling `_solve_gap` at depth 0 until stop
 
-Implemented responsibilities (`src/baps/run.py`):
+**`_RunContext`:** Mutable dataclass threaded through recursion tracking current state, remaining iterations, verification result, and stop reason.
 
-- Commands: `init`, `run`, `init_and_run`.
-- `create_game(...)`: prompt generation, parsing, validation, adapter normalization, contract checks.
-- `play_game(...)`: Blue/Red/Referee orchestration with bounded retries.
-- Integration through `StateService`.
-- Export and optional adapter verification.
+**Per-role model selection:**
 
-Limitations:
+Each role can use a different model backend/model:
 
-- Prompt-only role execution.
-- No tool-execution runtime in active flow.
-- No multi-agent scheduler.
+```bash
+BAPS_{ROLE}_BACKEND=anthropic|openai|ollama
+BAPS_{ROLE}_MODEL=<model-id>
+```
 
-Dependencies:
+Roles: `BLUE`, `RED`, `REFEREE`, `CREATE_GAME`. Falls back to global `BAPS_BACKEND` / `BAPS_*_MODEL`.
 
-- `ProjectTypeAdapter`, model clients, state service/store.
+**Stop conditions:**
 
-Boundary:
+| Stop reason | Trigger |
+|---|---|
+| `iteration_limit_reached` | `max_iterations` leaf games consumed |
+| `create_game_no_new_game` | No gap at depth 0 |
+| `play_game_no_delta` | PlayGame returned no accepted delta |
+| `no_state_change` | Delta produced no state change |
+| `northstar_update_proposed` | CreateGame signalled trajectory drift |
+| `max_depth_reached` | Decomposition exceeded `max_depth` |
 
-- Core runtime orchestrates; adapters own project semantics.
+---
 
-### Adapters (`document`, `coding`)
+### Adapters
 
-Purpose:
+#### Document (`src/baps/document_adapter.py`)
 
-- Encapsulate project-type behavior behind one protocol.
+- Section-based document state
+- CreateGame StateView: renders NorthStar + current sections
+- Delta operations: `append_section`, `modify_section`, `delete_section`
+- Export: markdown file
+- Verification: structural consistency check
 
-Implemented capabilities:
+#### Coding (`src/baps/coding_adapter.py`)
 
-- initial state creation,
-- CreateGame/PlayGame `StateView` rendering,
-- prompt supplements,
-- delta parsing,
-- delta->update mapping,
-- export,
-- export verification.
+- File-based codebase state
+- CreateGame StateView: renders NorthStar + existing file contents (first 30 lines, truncated with count)
+- Delta operations: `write_file`, `write_files` (preferred), `delete_file`
+- Export: file tree + root `conftest.py`
+- Verification: `pytest` execution; result evidence feeds next CreateGame
 
-Limitations:
+Both adapters expose tools for Blue's tool-call interface in addition to JSON output.
 
-- Only `document` and `coding` project types are active.
+---
 
-Dependencies:
+### StateView (`src/baps/northstar_projection.py`)
 
-- Shared adapter protocol + state schemas.
+- `StateView`: `id`, `projection_type`, `content`, `input_fingerprint`, `metadata`
+- Content uses explicit delimiters (`=== StateView Start/End ===`)
+- Built by adapters for CreateGame and PlayGame contexts
+- Never passed as raw JSON to prompts
 
-Boundary:
+---
 
-- All project-specific logic remains in adapter implementations.
+### Model Layer (`src/baps/models.py`)
 
-### StateView
+Active backends:
 
-Purpose:
+- `AnthropicClient` — Anthropic API (Claude models)
+- `OpenAIClient` — OpenAI API (GPT models)
+- `OllamaClient` — local Ollama server
+- `FakeModelClient` — deterministic test double with queued responses and prompt capture
 
-- Provide bounded textual projection for prompts.
+`Role` wraps a client with name, output schema, and constrained-decoding flag.
 
-Implementation (`src/baps/northstar_projection.py`, adapter builders):
+---
 
-- `StateView` includes `id`, `projection_type`, `content`, `input_fingerprint`, `metadata`.
-- Active projections use textual sections with explicit delimiters.
+### Adaptive Scheduler (`src/baps/scheduler.py`)
 
-Limitations:
+Runs specs repeatedly across a model ladder with policy-guided selection:
 
-- `ProjectionType` currently active as `NORTH_STAR`.
+- EMA reward scoring: `score = 0.7 * score + 0.3 * reward`
+- Softmax model selection with temperature decay
+- Automatic escalation to stronger model on low reward
+- Underperformer dropping: models below score floor after min runs are removed
+- Multi-round support with ladder reload between rounds
+- Configurable via `BAPS_MODEL_LADDER` (comma-separated model names)
 
-Boundary:
+---
 
-- `StateView` is not authoritative state.
+### NorthStar Apply CLI (`src/baps/northstar_apply.py`)
 
-### Model Layer
+Reviews and applies approved NorthStar proposals from the blackboard:
 
-Purpose:
+```bash
+baps-apply-northstar <workspace> [--index N] [--dry-run]
+```
 
-- Provide generation interface and deterministic test doubles.
+Reads `<workspace>/blackboard/northstar_proposals.jsonl`, lists proposals interactively, writes accepted `proposed_northstar` to `baps-config.json`.
 
-Implementation (`src/baps/models.py`):
-
-- `ModelClient` interface.
-- `FakeModelClient` for deterministic queued responses and prompt capture.
-- `OllamaClient` HTTP-backed model client.
-
-Limitations:
-
-- No active tool-call execution loop in canonical runtime.
-
-### Testing
-
-Purpose:
-
-- Enforce deterministic contracts and architectural boundaries.
-
-Implementation:
-
-- Heavy `FakeModelClient` use.
-- Prompt content and parser validation tests.
-- Adapter boundary regression tests.
-- State mutation/persistence tests.
-- Export and verification behavior tests.
+---
 
 ## 3. Repository Structure
 
-### Core orchestration
+```
+src/baps/
+  run.py                  # Generic lifecycle orchestration, recursive gap solver
+  project_adapter.py      # ProjectTypeAdapter protocol, registry, Blue prompt core
+  document_adapter.py     # DocumentProjectAdapter — all document mechanics
+  coding_adapter.py       # CodingProjectAdapter — all coding mechanics
+  state.py                # Authoritative schemas, mutation, delta application
+  state_service.py        # StateService — the only mutation boundary
+  state_store.py          # JsonStateStore — JSON persistence
+  models.py               # ModelClient, backends, FakeModelClient, Role
+  northstar_projection.py # StateView, ProjectionType, projection utilities
+  scheduler.py            # Adaptive multi-model scheduler with policy learning
+  scheduler_policy.py     # ModelPolicy, EMA scoring, softmax selection
+  northstar_apply.py      # baps-apply-northstar CLI
 
-- `src/baps/run.py`
-  - Purpose: lifecycle/runtime orchestration.
-  - Responsibilities: config resolution, CreateGame/PlayGame loop, integration, export, summary/debug output.
-  - Dependencies: adapters, models, state service/store, schemas.
-  - Boundary: must remain project-type generic.
+tests/
+  test_state.py
+  test_state_service.py
+  test_state_store.py
+  test_northstar_projection.py
+  test_models.py
+  test_run.py
 
-- `src/baps/project_adapter.py`
-  - Purpose: adapter contract and dispatch.
-  - Responsibilities: `ProjectTypeAdapter` protocol, adapter registry resolution, shared Blue prompt core rendering.
-  - Dependencies: schema and model abstractions.
-  - Boundary: defines adapter seam between core and project-specific mechanics.
+docs/
+  SYSTEM.md               # Normative system contract
+  ARCHITECTURE.md         # Implementation description (this file)
+```
 
-### Adapter mechanics
-
-- `src/baps/document_adapter.py`
-  - Purpose: document-type behavior.
-  - Responsibilities: document state init/view rendering, delta parsing/mapping, markdown export, document export verification.
-  - Dependencies: schema models and adapter protocol.
-  - Boundary: document logic only.
-
-- `src/baps/coding_adapter.py`
-  - Purpose: coding-type behavior.
-  - Responsibilities: coding init/view rendering, delta parsing/mapping, code export, conftest export support, pytest verification, coding prompt supplements.
-  - Dependencies: schema models and adapter protocol.
-  - Boundary: coding logic only.
-
-### State and persistence
-
-- `src/baps/state.py`
-  - Purpose: domain schema and update semantics.
-  - Responsibilities: model definitions, validation, update application, runtime decision application.
-  - Dependencies: Pydantic.
-  - Boundary: authoritative domain contract.
-
-- `src/baps/state_service.py`
-  - Purpose: mutation boundary service.
-  - Responsibilities: load/apply/revalidate/save state updates.
-  - Dependencies: state store + registry.
-  - Boundary: only service path for durable mutation in runtime.
-
-- `src/baps/state_store.py`
-  - Purpose: persistence abstraction.
-  - Responsibilities: state load/save protocol and JSON implementation.
-  - Dependencies: filesystem + schema serialization.
-  - Boundary: persistence transport, not domain logic.
-
-### Models and projections
-
-- `src/baps/models.py`
-  - Purpose: model client abstractions and implementations.
-  - Responsibilities: `ModelClient`, `FakeModelClient`, `OllamaClient`, tool-call payload types.
-  - Dependencies: HTTP (`requests`) for Ollama.
-  - Boundary: generation transport interface.
-
-- `src/baps/northstar_projection.py`
-  - Purpose: projection schema and rendering helpers.
-  - Responsibilities: `StateView` model and projection input structures.
-  - Dependencies: schema layer.
-  - Boundary: model-facing projection structure.
+---
 
 ## 4. Canonical Runtime Flow
 
 ### Lifecycle commands
 
-- `init`
-  1. resolve config,
-  2. validate workspace is not initialized,
-  3. create initial adapter-owned `State`,
-  4. persist state JSON.
+- `init` — resolve config, validate workspace, create initial State, persist
+- `run` — load persisted state, run bounded iterations
+- `init_and_run` — initialize then immediately run
 
-- `run`
-  1. load persisted state,
-  2. run bounded iterations.
+### Iteration flow (inside `_solve_gap`)
 
-- `init_and_run`
-  1. initialize state,
-  2. immediately run bounded iterations.
+1. **CreateGame** — gap analysis
+   - Adapter builds CreateGame `StateView` (includes file contents for coding)
+   - Core renders gap-analysis prompt with optional `context_chain` from parent levels
+   - Model returns `GameSpec`, `DecomposeSpec`, `no_new_game`, or `northstar_update_needed`
+   - If `DecomposeSpec`: recurse for each sub-gap with extended context chain
 
-### Iteration flow
-
-1. **CreateGame**
-   - Adapter builds CreateGame `StateView`.
-   - Core renders generic CreateGame prompt plus adapter supplement.
-   - Model returns GameSpec JSON.
-   - Core parses and validates GameSpec.
-   - Adapter may normalize GameSpec.
-
-2. **PlayGame**
-   - Adapter builds PlayGame `StateView`.
-   - Blue produces candidate `DeltaState`.
-   - Red evaluates candidate.
-   - Referee decides accept/revise/reject.
-   - Bounded retries on rejected/invalid attempts.
+2. **PlayGame** — adversarial execution (leaf games only)
+   - Adapter builds PlayGame `StateView`
+   - Blue prompt includes full `context_chain` from all ancestor levels
+   - Blue produces candidate `DeltaState` (JSON or tool call)
+   - Red evaluates against `GameSpec`
+   - Referee decides accept/revise/reject
+   - Bounded retries with feedback on rejected attempts
 
 3. **Integration**
-   - Accepted delta is mapped to `StateUpdateProposal` by adapter.
-   - `StateService` applies update as durable mutation.
+   - Accepted delta mapped to `StateUpdateProposal` by adapter
+   - `StateService.apply_update` applies as durable mutation
+   - NorthStar artifact IDs are protected — proposals targeting them are rejected
 
 4. **Export**
-   - Adapter exports state-derived artifacts.
-   - Adapter verification may execute (coding: pytest; document: consistency check).
+   - Adapter exports state-derived artifacts to output path
+   - Adapter verification may execute (coding: pytest; document: consistency check)
+   - Verification result fed into next CreateGame call
 
-5. **Evidence carry-forward**
-   - Previous verification result is explicitly passed into subsequent CreateGame prompt context.
+### Multiscale decomposition
+
+```
+_solve_gap((), ctx, depth=0)
+  → CreateGame returns DecomposeSpec(sub_gaps=[A, B, C])
+  → _solve_gap(("A",), ctx, depth=1)
+      → CreateGame returns GameSpec for A
+      → PlayGame → integrate → export
+  → _solve_gap(("B",), ctx, depth=1)
+      → CreateGame returns DecomposeSpec(sub_gaps=[B1, B2])
+      → _solve_gap(("B", "B1"), ctx, depth=2)
+          → CreateGame returns GameSpec for B1
+          → PlayGame → integrate → export
+      → _solve_gap(("B", "B2"), ctx, depth=2)
+          → ...
+  → _solve_gap(("C",), ctx, depth=1)
+      → ...
+→ _solve_gap((), ctx, depth=0)  [outer loop re-assesses from NorthStar]
+```
+
+Only leaf PlayGame executions count against `max_iterations`. Decomposition is free.
 
 ### Persistence
 
-- Authoritative state path: `<workspace>/state/state.json`.
-- Exported output is derived materialization only.
+- Authoritative state: `<workspace>/state/state.json`
+- Blackboard (non-authoritative): `<workspace>/blackboard/northstar_proposals.jsonl`
+- Workspace config: `<workspace>/baps-config.json`
+- Run result: `<workspace>/run-result.json`
 
-### Stop conditions
-
-Implemented stop reasons include bounded-iteration completion, no usable CreateGame, no accepted PlayGame delta, and initialization-only flow.
+---
 
 ## 5. Schema Documentation
 
-### `State`
-
-- Fields: `northstar`, `artifacts`.
-- Invariants: non-empty northstar artifacts; artifact IDs unique; no overlap with NorthStar artifact IDs.
-- Relationships: root authority for all runtime operations.
-- Purpose: authoritative project condition.
-
-### `NorthStar`
-
-- Fields: `artifacts`.
-- Invariants: non-empty.
-- Relationships: nested inside `State`.
-- Purpose: intent anchor included in authority model.
-
-### `StateArtifact`
-
-- Fields: `id`, `kind`.
-- Invariants: non-empty `id`; `kind` discriminator.
-- Relationships: base class for concrete artifact types.
-- Purpose: artifact polymorphism.
-
-### `DocumentArtifact`
-
-- Fields: `id`, `kind="document"`, `sections`.
-- Invariants: section titles non-empty.
-- Relationships: concrete `StateArtifact` for document projects.
-- Purpose: ordered section-based document state.
-
-### `CodingArtifact`
-
-- Fields: `id`, `kind="coding"`, `files`.
-- Invariants: file paths unique and non-empty.
-- Relationships: concrete `StateArtifact` for coding projects.
-- Purpose: codebase file state.
-
-### `Section`
-
-- Fields: `title`, `body`.
-- Invariants: title non-empty.
-- Purpose: document unit.
-
-### `CodeFile`
-
-- Fields: `path`, `content`.
-- Invariants: `path` non-empty.
-- Purpose: coding file unit.
-
 ### `GameSpec`
 
-- Fields: `objective`, `target_artifact_id`, `allowed_delta_type`, `success_condition`.
-- Invariants: all non-empty.
-- Relationships: binding contract for PlayGame.
-- Purpose: bounded next move contract.
+- Fields: `objective`, `target_artifact_id`, `allowed_delta_type`, `success_condition`, `context_chain`
+- `context_chain`: tuple of gap descriptions from coarsest ancestor to immediate parent
+- Invariants: objective, target, delta type, success condition all non-empty
+- Purpose: binding contract for one PlayGame cycle, with full planning context
 
-### `DeltaDocumentState`
+### `DecomposeSpec`
 
-- Fields: `artifact_id`, `operation="append_section"`, `payload.section`.
-- Invariants: payload shape strict; section title/body non-empty.
-- Purpose: document mutation proposal.
+- Fields: `rationale`, `sub_gaps`
+- `sub_gaps`: ordered tuple of `SubGapSpec` — each closes a coherent portion of the parent gap
+- Invariants: rationale non-empty, at least one sub-gap
+- Purpose: CreateGame response when the gap is too large for one game
 
-### `DeltaCodingState`
+### `SubGapSpec`
 
-- Fields: `artifact_id`, `operation="write_file"`, `payload.file`.
-- Invariants: payload shape strict; path/content non-empty.
-- Purpose: coding mutation proposal.
+- Fields: `description`
+- Purpose: a gap description passed as context to the next decomposition level
+
+### `DeltaDocumentState` / `DeltaModifyDocumentState` / `DeltaDeleteDocumentState`
+
+- Operations: `append_section`, `modify_section`, `delete_section`
+- Payloads: `AppendSectionDelta`, `ModifySectionDelta`, `DeleteSectionDelta`
+
+### `DeltaCodingState` / `DeltaCodingBatchState` / `DeltaDeleteCodingState`
+
+- Operations: `write_file`, `write_files`, `delete_file`
+- Payloads: `WriteFileDelta`, `WriteFilesDelta`, `DeleteFileDelta`
 
 ### `RedFinding`
 
-- Fields: `disposition` (`accept|revise|reject`), `rationale`.
-- Purpose: adversarial review output.
+- Fields: `disposition` (accept|revise|reject), `rationale`, `success_condition_met`, `findings`
+- Purpose: adversarial review output
 
 ### `RefereeDecision`
 
-- Fields: `disposition` (`accept|revise|reject`), `rationale`.
-- Purpose: game-local adjudication output.
+- Fields: `disposition` (accept|revise|reject), `rationale`, `red_override`, `improvement_hints`
+- Purpose: game-local adjudication output
 
 ### `StateUpdateProposal`
 
-- Fields: `id`, `target`, `summary`, `payload`.
-- Purpose: mutation request envelope consumed by `StateService`.
+- Fields: `id`, `target`, `summary`, `payload`
+- Purpose: mutation request envelope consumed by `StateService`
 
-### `StateUpdateTarget`
+---
 
-- Fields: `artifact_id`.
-- Purpose: identify mutation target artifact.
+## 6. Prompt System
 
-### `StateView`
+### CreateGame prompt
 
-- Fields: `id`, `projection_type`, `content`, `input_fingerprint`, `metadata`.
-- Invariants: non-empty identifiers/content/fingerprint.
-- Purpose: bounded model-facing projection.
+Four-step gap-analysis process:
 
-### `ProjectionType`
+1. **GAP ANALYSIS** — compare StateView against NorthStar; enumerate missing pieces
+2. **PRIORITIZE** — select highest-impact gap
+3. **DECIDE** — produce `GameSpec` (direct) or `DecomposeSpec` (decompose)
+4. **SELF-CONTAIN** — fold intent into objective/success_condition or sub_gap descriptions
 
-- Values: `NORTH_STAR`.
-- Purpose: projection classifier for view semantics.
+If a `context_chain` is present, it is rendered before the steps as "Parent planning context."
 
-## 6. Blackboard Status
+### Blue prompt
 
-### IMPLEMENTED OBSERVATION
+`render_blue_prompt_core` renders:
 
-- Runtime includes `_append_northstar_proposal_to_blackboard(...)` in `run.py` for NorthStar proposal logging.
-- Filesystem location used: `<workspace>/blackboard/` with proposal JSONL logging.
+- Full `context_chain` (if non-empty): "Planning context (coarsest → finest scope)"
+- Current `StateView`
+- `GameSpec` fields: objective, target, delta type, success condition
+- Execution rules including feedback repair on retry
 
-### CANONICAL STATUS
+Adapter supplements inject delta-shape instructions and project-specific constraints.
 
-- Blackboard is not part of the canonical execution spine.
-- Blackboard is not authoritative state.
-- Lifecycle mutation authority remains `State` via `StateService`.
+### Red and Referee prompts
 
-### HISTORICAL / INACTIVE CONTEXT
+- Core Red evaluates candidate against `GameSpec.success_condition`
+- Core Referee adjudicates Red finding + candidate + GameSpec
+- Adapter supplements inject type-specific guidance
+- Verification result (if available) is passed as evidence to both
 
-- Blackboard appears as auxiliary process history/meta, not active runtime authority.
+---
 
-## 7. Artifact System
+## 7. Testing Strategy
 
-Artifact lifecycle (implemented):
+Philosophy: contract-first deterministic testing of runtime boundaries and parser behavior.
 
-1. **Initialization**: adapter creates initial artifact in `State`.
-2. **StateView rendering**: adapter projects artifact to model-facing text.
-3. **Delta parsing**: adapter parses model output to typed delta.
-4. **Update mapping**: adapter converts accepted delta to `StateUpdateProposal`.
-5. **State mutation**: `StateService` applies proposal into authoritative `State`.
-6. **Export**: adapter materializes artifact content to filesystem.
+- `FakeModelClient` provides queued responses and prompt capture
+- Autouse fixture patches `_build_model_client` and `_build_role_client` to inject fakes
+- Prompt content and parser validation tests
+- Recursive solve behavior: decompose, context chain injection, max_depth enforcement
+- Adapter boundary regression tests
+- Schema validation and update semantics
+- State persistence and service mutation
+- Export and verification paths
 
-Ownership:
+---
 
-- Adapters own artifact-specific render/parse/map/export behavior.
-- Core runtime does not own artifact semantics.
-
-Filesystem assumptions:
-
-- State is persisted to workspace state JSON.
-- Export paths are adapter-controlled under configured output path.
-- Coding export writes file tree and root `conftest.py`; document export writes markdown file.
-
-Constraints:
-
-- Export is derived and one-way.
-- Export verification is adapter-specific and evidence-only for subsequent planning.
-
-## 8. Runtime Engine
-
-Responsibilities:
-
-- deterministic command handling,
-- bounded iterative orchestration,
-- typed parsing/validation,
-- proposal integration via service boundary,
-- export and optional verification.
-
-Bounded attempts and retry behavior:
-
-- PlayGame retries bounded (`max_attempts`, default 3).
-- Invalid Blue outputs are rejected with feedback and retried within bound.
-
-Integration path:
-
-- `DeltaState` -> adapter mapping -> `StateUpdateProposal` -> `StateService.apply_update`.
-
-Deterministic testing path:
-
-- `FakeModelClient` drives deterministic prompt/response behavior.
-
-Validation boundaries:
-
-- Pydantic validation on schemas/deltas/specs.
-- Prompt/output JSON shape checks in runtime and adapters.
-- No semantic validator engine beyond explicit contract checks.
-
-## 9. Roles and Prompt System
-
-### CreateGame
-
-- Core renders a generic CreateGame prompt with strict JSON contract and bounded-game constraints.
-- Adapter supplements add project-specific rules (and verification evidence when available).
-
-### Blue prompt flow
-
-- Generic Blue core prompt from `render_blue_prompt_core(...)`.
-- Adapter supplement injects delta-shape and project-specific constraints.
-
-### Red prompt
-
-- Core Red prompt evaluates candidate against GameSpec and state view context.
-- Adapter supplement injects type-specific evaluation guidance.
-
-### Referee prompt
-
-- Core Referee prompt adjudicates Red + candidate + GameSpec context.
-- Adapter supplement injects type-specific adjudication guidance.
-
-### Model layer
-
-- `ModelClient`: interface.
-- `FakeModelClient`: deterministic testing.
-- `OllamaClient`: live generation client.
-
-### Current limitations (implemented)
-
-- no tool execution subsystem in canonical runtime loop,
-- no true multi-agent scheduler,
-- prompt-only role execution,
-- limited semantic validation beyond explicit contracts.
-
-## 10. Testing Strategy
-
-Testing philosophy:
-
-- contract-first deterministic testing of runtime boundaries and parser behavior.
-
-Deterministic execution:
-
-- `FakeModelClient` provides queued responses and prompt capture.
-
-Coverage areas:
-
-- schema validation and update semantics,
-- state persistence and service mutation,
-- runtime command and loop behavior,
-- adapter boundary behavior,
-- prompt construction and parser constraints,
-- export/verification paths.
-
-Why deterministic testing matters here:
-
-- runtime correctness depends on strict contracts at orchestration boundaries,
-- deterministic tests prevent regression in architecture invariants,
-- tests guard against drift from adapter ownership and canonical spine.
-
-## 11. Architectural Invariants
+## 8. Architectural Invariants
 
 ### Enforced / Implemented
 
 1. `State` is authoritative and persisted JSON.
-2. `StateView` is a text projection model.
-3. `NorthStar` is inside `State`.
-4. Adapter owns project-specific mechanics.
-5. `StateService` is runtime mutation boundary.
-6. Core orchestration remains project-type generic.
-7. Export is one-way from `State`.
-8. Schema validation is enforced via typed models and runtime checks.
-9. Deterministic tests enforce boundary contracts.
+2. `StateView` is a text projection — never authority.
+3. `NorthStar` is inside `State` and immutable through automated pipeline.
+4. CreateGame performs gap analysis, not step derivation.
+5. `context_chain` carries full ancestor context to every leaf game.
+6. Adapter owns all project-specific mechanics.
+7. `StateService` is the runtime mutation boundary; NorthStar artifacts are protected.
+8. Core orchestration remains project-type generic.
+9. Export is one-way from `State`.
+10. Schema validation enforced via typed models and runtime checks.
+11. Deterministic tests enforce boundary contracts.
 
-### Conceptual (not enforced as separate engine)
+---
 
-- richer semantic quality adjudication,
-- tool-execution role augmentation,
-- blackboard-centered coordination.
+## 9. Current Limitations
 
-## 12. Current Architectural Direction
+1. Decomposition branching factor is unconstrained — the model decides how many sub-gaps to produce (`max_sub_gaps` not yet enforced).
+2. No separate model role for decomposition nodes vs. leaf execution nodes.
+3. Sub-gap verification feedback does not propagate upward to re-trigger parent-level decomposition.
+4. Role execution is prompt-only (no tool-execution subsystem in canonical runtime).
+5. Only `document` and `coding` project types are active.
 
-### IMPLEMENTED DIRECTION
+---
 
-- Strengthening adapter-owned behavior and prompt supplements.
-- Strengthening bounded retry/error-handling in PlayGame.
-- Increasing contract tests for anti-drift boundaries.
-- Verification evidence propagation into CreateGame.
+## 10. Suggested Next Milestones
 
-### CONCEPTUAL DIRECTION
+1. **`max_sub_gaps` enforcement** — cap branching factor per decomposition to bound worst-case game count
+2. **Decompose model role** — separate `BAPS_DECOMPOSE_BACKEND/MODEL` so planning nodes use a lighter model than leaf execution
+3. **Residual feedback propagation** — failed leaf verifications signal back to parent level to trigger re-decomposition
+4. **Adapter expansion** — new project types register adapters without touching core orchestration
+5. **Stronger contract tests** — verify decomposition invariants and context chain integrity end-to-end
 
-- adapter expansion for additional project types,
-- stronger tool boundaries,
-- blackboard reintegration as non-authoritative process context.
+---
 
-### HISTORICAL / INACTIVE DIRECTION
-
-- non-canonical blackboard artifacts remain auxiliary and not lifecycle authority.
-
-## 13. Current Limitations
-
-1. Blackboard runtime is not part of canonical spine.
-2. Role execution is prompt-only.
-3. Active delta space is limited to document append and coding write-file.
-4. No active tool execution subsystem in canonical runtime loop.
-5. No scheduler for parallel/multi-agent role execution.
-6. Role model is bounded and sequential.
-7. Semantic validation remains limited to explicit constraints and typed checks.
-
-## 14. Suggested Next Milestones
-
-Additive milestones consistent with current architecture:
-
-1. Formalize blackboard as append-only, non-authoritative run-history interface.
-2. Introduce explicit tool boundary contracts for role execution.
-3. Add adapter-level validation hooks for stricter export/verification invariants.
-4. Add role envelope contracts for consistent evidence and rationale structure.
-5. Expand contract-test suite for canonical spine and anti-drift guarantees.
-
-## 15. Developer Workflow
-
-Expected workflow:
-
-1. Keep changes additive and boundary-preserving.
-2. Treat `SYSTEM.md` as normative contract and `ARCHITECTURE.md` as implementation evidence.
-3. Implement project-specific behavior in adapters, not in core orchestration.
-4. Add deterministic tests for any new contract behavior.
-5. Run `uv run pytest` before finalization.
-
-Development posture:
-
-- preserve canonical spine,
-- avoid introducing competing runtimes,
-- maintain `State` authority and `StateView` prompt boundary.
-
-## 16. Glossary
+## 11. Glossary
 
 - **State**: Authoritative project condition persisted as JSON.
-- **NorthStar**: Intent artifact(s) embedded inside authoritative state.
+- **NorthStar**: Intent artifact(s) embedded inside authoritative state; the target all gap analysis measures against.
 - **StateView**: Bounded text projection for model-facing prompts.
-- **GameSpec**: Bounded task contract for one PlayGame cycle.
+- **GameSpec**: Bounded task contract for one PlayGame cycle; carries `context_chain`.
+- **DecomposeSpec**: CreateGame response signalling the gap is too large; carries ordered sub-gaps.
+- **SubGapSpec**: A gap description passed down to the next decomposition level.
+- **context_chain**: Ordered tuple of ancestor gap descriptions flowing from coarsest to finest into every leaf game.
 - **DeltaState**: Proposed project mutation from role execution.
 - **artifact**: Typed state unit (document/coding) within `State`.
-- **adapter**: ProjectTypeAdapter implementation owning project-specific behavior.
+- **adapter**: `ProjectTypeAdapter` implementation owning all project-specific behavior.
 - **RedFinding**: Adversarial reviewer decision output.
 - **RefereeDecision**: Game-local adjudication output.
-- **StateUpdateProposal**: Integration envelope for mutation through service.
+- **StateUpdateProposal**: Integration envelope for mutation through `StateService`.
 - **runtime**: Lifecycle orchestration path (`init`, `run`, `init_and_run`).
-- **ModelClient**: Generation interface for model backends/test doubles.
+- **ModelClient**: Generation interface for model backends and test doubles.
+- **Role**: A named model client with schema and constrained-decoding flag.
 - **export**: One-way materialization of state to filesystem outputs.
-- **canonical spine**: `config/NorthStar -> State -> StateView -> CreateGame -> GameSpec -> PlayGame -> DeltaState -> StateUpdateProposal -> StateService -> export`.
-
-## System Contract Alignment
-
-Checked against `SYSTEM.md`:
-
-1. `State != StateView`: aligned.
-2. Prompts consume `StateView` context in runtime prompts: aligned.
-3. Core orchestration generic; project specifics adapter-owned: aligned.
-4. Adapter ownership preserved for create/view/parse/map/export/verify: aligned.
-5. `export != state`: aligned.
-6. Blackboard inactive as canonical authority: aligned.
-
-Observed mismatch/nuance:
-
-- `run.py` includes auxiliary blackboard proposal logging for NorthStar update proposals. This remains outside canonical authority and does not supersede `State`.
+- **canonical spine**: The active execution path from NorthStar through recursive gap solving to export.
+- **gap analysis**: CreateGame's process of comparing current state against NorthStar to identify what is missing.
+- **multiscale**: The property that decomposition can recurse to arbitrary depth, with each level informed by all levels above.
