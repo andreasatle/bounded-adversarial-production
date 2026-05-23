@@ -1562,6 +1562,8 @@ def _run_project_iterations(
 
 
 def main() -> None:
+    from dotenv import load_dotenv
+    load_dotenv()
     parser = argparse.ArgumentParser(description="Run one hardened deterministic baps loop.")
     parser.add_argument(
         "command",
