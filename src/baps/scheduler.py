@@ -17,22 +17,54 @@ _DEFAULT_SPECS = [
     "examples/coding-project.yaml",
 ]
 
+# All known models, ordered cheapest/fastest → most capable.
+# Referenced by short name in BAPS_MODEL_LADDER.
+_KNOWN_MODELS: dict[str, ModelConfig] = {
+    # Anthropic
+    "haiku":       ModelConfig("haiku",       "anthropic", "claude-haiku-4-5-20251001"),
+    "sonnet":      ModelConfig("sonnet",      "anthropic", "claude-sonnet-4-6"),
+    "opus":        ModelConfig("opus",        "anthropic", "claude-opus-4-7"),
+    # OpenAI
+    "gpt-4o-mini": ModelConfig("gpt-4o-mini", "openai",    "gpt-4o-mini"),
+    "gpt-4o":      ModelConfig("gpt-4o",      "openai",    "gpt-4o"),
+    # Ollama (local)
+    "deepseek":    ModelConfig("deepseek",    "ollama",    "deepseek-r1:7b"),
+    "llama3":      ModelConfig("llama3",      "ollama",    "llama3.1:8b"),
+    "qwen-coder":  ModelConfig("qwen-coder",  "ollama",    "qwen2.5-coder:7b"),
+    "phi3":        ModelConfig("phi3",        "ollama",    "phi3:14b"),
+    "gemma3":      ModelConfig("gemma3",      "ollama",    "gemma3:latest"),
+    "gemma4-e4b":  ModelConfig("gemma4-e4b",  "ollama",    "gemma4:e4b"),
+    "gemma4-26b":  ModelConfig("gemma4-26b",  "ollama",    "gemma4:26b"),
+}
+
+
+def _auto_ladder() -> list[ModelConfig]:
+    """Build a ladder from all backends where credentials are present."""
+    ladder: list[ModelConfig] = []
+    if os.getenv("ANTHROPIC_API_KEY"):
+        ladder += [_KNOWN_MODELS["haiku"], _KNOWN_MODELS["sonnet"], _KNOWN_MODELS["opus"]]
+    if os.getenv("OPENAI_API_KEY"):
+        ladder += [_KNOWN_MODELS["gpt-4o-mini"], _KNOWN_MODELS["gpt-4o"]]
+    if not ladder:
+        ladder.append(_KNOWN_MODELS["sonnet"])
+    return ladder
+
 
 def _default_model_ladder() -> list[ModelConfig]:
-    backend = os.getenv("BAPS_BACKEND", "anthropic").lower()
-    if backend == "openai":
-        return [
-            ModelConfig("gpt-4o-mini", "openai", "gpt-4o-mini"),
-            ModelConfig("gpt-4o",      "openai", "gpt-4o"),
-        ]
-    if backend == "ollama":
-        model = os.getenv("BAPS_OLLAMA_MODEL", "llama3.2")
-        return [ModelConfig("local", "ollama", model)]
-    return [
-        ModelConfig("haiku",  "anthropic", "claude-haiku-4-5-20251001"),
-        ModelConfig("sonnet", "anthropic", "claude-sonnet-4-6"),
-        ModelConfig("opus",   "anthropic", "claude-opus-4-7"),
-    ]
+    """Read BAPS_MODEL_LADDER (comma-separated names) or fall back to auto-detect."""
+    ladder_env = os.getenv("BAPS_MODEL_LADDER", "").strip()
+    if not ladder_env:
+        return _auto_ladder()
+    ladder: list[ModelConfig] = []
+    for name in (n.strip() for n in ladder_env.split(",") if n.strip()):
+        if name in _KNOWN_MODELS:
+            ladder.append(_KNOWN_MODELS[name])
+        else:
+            print(f"[scheduler] warning: unknown model name {name!r} in BAPS_MODEL_LADDER, skipping")
+    if not ladder:
+        print("[scheduler] warning: BAPS_MODEL_LADDER produced no valid models, using auto-detect")
+        return _auto_ladder()
+    return ladder
 
 
 def _env_for_model(model: ModelConfig) -> dict[str, str]:
