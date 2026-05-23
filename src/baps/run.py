@@ -10,7 +10,7 @@ from typing import Any
 
 import yaml
 
-from baps.models import ModelClient, OllamaClient
+from baps.models import ModelClient, OllamaClient, Role
 from baps.northstar_projection import ProjectionType, StateView
 from baps.project_adapter import (
     ProjectTypeAdapter,
@@ -453,14 +453,15 @@ def _build_create_game_model_client() -> ModelClient:
     return OllamaClient(model=model, base_url=base_url)
 
 
-_build_blue_model_client = _build_model_client
-_build_red_model_client = _build_model_client
-_build_referee_model_client = _build_model_client
-
-# Structured output schemas passed to Ollama's format parameter.
-# Constrained decoding prevents truncated JSON and hallucinated output shapes.
-# CreateGame uses anyOf to cover all three valid shapes.
-# Blue format is adapter-specific; see build_blue_output_format() on each adapter.
+# Role schemas.
+# constrained=True: Ollama constrained decoding enforces the schema at inference time.
+# Safe only when all string fields are enums or carry maxLength.
+# constrained=False: schema is prompt-documentation only; model is free to emit any string.
+#
+# CreateGame and Blue have unbounded free-text string fields (objective, file content)
+# and must use constrained=False.
+# Red and Referee have only enum strings plus maxLength-bounded rationale/hints,
+# so constrained=True is safe.
 _CREATE_GAME_SCHEMA: dict = {
     "type": "object",
     "properties": {
@@ -480,9 +481,9 @@ _RED_FINDING_SCHEMA: dict = {
     "type": "object",
     "properties": {
         "disposition": {"type": "string", "enum": ["accept", "reject"]},
-        "rationale": {"type": "string"},
+        "rationale": {"type": "string", "maxLength": 500},
         "success_condition_met": {"type": ["boolean", "null"]},
-        "findings": {"type": "array", "items": {"type": "string"}},
+        "findings": {"type": "array", "items": {"type": "string", "maxLength": 300}},
     },
     "required": ["disposition", "rationale"],
     "additionalProperties": False,
@@ -491,9 +492,9 @@ _REFEREE_DECISION_SCHEMA: dict = {
     "type": "object",
     "properties": {
         "disposition": {"type": "string", "enum": ["accept", "reject"]},
-        "rationale": {"type": "string"},
+        "rationale": {"type": "string", "maxLength": 500},
         "red_override": {"type": ["boolean", "null"]},
-        "improvement_hints": {"type": "array", "items": {"type": "string"}},
+        "improvement_hints": {"type": "array", "items": {"type": "string", "maxLength": 300}},
     },
     "required": ["disposition", "rationale"],
     "additionalProperties": False,
@@ -962,6 +963,7 @@ def create_game(
     )
     state_view = resolved_adapter.build_create_game_state_view(state, config)
     client = model_client if model_client is not None else _build_create_game_model_client()
+    role = Role("create_game", client, _CREATE_GAME_SCHEMA, constrained=False)
     prompt = _render_create_game_prompt(
         config=config,
         state=state,
@@ -970,7 +972,7 @@ def create_game(
         adapter=resolved_adapter,
     )
     _debug_print_create_game_prompt(prompt)
-    generated = client.generate(prompt, format=_CREATE_GAME_SCHEMA)
+    generated = role.generate(prompt)
     _debug_print_create_game_raw_model_output(generated)
     try:
         game_spec = _parse_create_game_output(generated)
@@ -1164,14 +1166,23 @@ def play_game(
     state_view = resolved_adapter.build_state_view(state, game_spec)
     runtime = PlayGameRuntime()
     previous_feedback: dict[str, Any] | None = None
-    client = model_client if model_client is not None else _build_blue_model_client()
-    red_client = (
-        red_model_client if red_model_client is not None else _build_red_model_client()
+    blue_role = Role(
+        "blue",
+        model_client if model_client is not None else _build_model_client(),
+        resolved_adapter.build_blue_output_format(),
+        constrained=False,
     )
-    referee_client = (
-        referee_model_client
-        if referee_model_client is not None
-        else _build_referee_model_client()
+    red_role = Role(
+        "red",
+        red_model_client if red_model_client is not None else _build_model_client(),
+        _RED_FINDING_SCHEMA,
+        constrained=True,
+    )
+    referee_role = Role(
+        "referee",
+        referee_model_client if referee_model_client is not None else _build_model_client(),
+        _REFEREE_DECISION_SCHEMA,
+        constrained=True,
     )
     for attempt in range(1, max_attempts + 1):
         _debug_print_play_game_attempt(attempt)
@@ -1182,7 +1193,7 @@ def play_game(
         blue_tools = resolved_adapter.build_blue_tools()
         blue_tool_call = None
         try:
-            blue_tool_call = client.generate_with_tools(blue_prompt, blue_tools)
+            blue_tool_call = blue_role.generate_with_tools(blue_prompt, blue_tools)
         except ValueError:
             pass
         if blue_tool_call is not None:
@@ -1201,9 +1212,7 @@ def play_game(
                 }
                 continue
         else:
-            blue_generated = client.generate(
-                blue_prompt, format=resolved_adapter.build_blue_output_format()
-            )
+            blue_generated = blue_role.generate(blue_prompt)
             try:
                 candidate_delta = resolved_adapter.parse_blue_delta(blue_generated)
             except ValueError as exc:
@@ -1239,7 +1248,7 @@ def play_game(
             verification_result,
             red_supplement,
         )
-        red_generated = red_client.generate(red_prompt, format=_RED_FINDING_SCHEMA)
+        red_generated = red_role.generate(red_prompt)
         red_finding = _parse_red_finding_json(red_generated)
         _debug_print_red_output(red_finding)
 
@@ -1266,7 +1275,7 @@ def play_game(
             verification_result,
             referee_supplement,
         )
-        referee_generated = referee_client.generate(referee_prompt, format=_REFEREE_DECISION_SCHEMA)
+        referee_generated = referee_role.generate(referee_prompt)
         referee_decision = _parse_referee_decision_json(referee_generated)
         _debug_print_referee_output(referee_decision)
 

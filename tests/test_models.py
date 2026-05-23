@@ -3,7 +3,7 @@ from urllib import error
 
 import pytest
 
-from baps.models import FakeModelClient, ModelClient, OllamaClient
+from baps.models import FakeModelClient, ModelClient, OllamaClient, Role
 
 
 def test_fake_model_client_returns_responses_in_order() -> None:
@@ -155,3 +155,77 @@ def test_ollama_client_generate_raises_runtime_error_on_url_error(monkeypatch) -
     monkeypatch.setattr("baps.models.request.urlopen", fake_urlopen)
     with pytest.raises(RuntimeError):
         client.generate("prompt")
+
+
+def test_role_generate_without_constrained_passes_no_format() -> None:
+    client = FakeModelClient(responses=["result"])
+    role = Role("blue", client, schema={"type": "object"}, constrained=False)
+
+    result = role.generate("prompt")
+
+    assert result == "result"
+    assert client.prompts == ["prompt"]
+
+
+def test_role_generate_with_constrained_passes_schema_as_format(monkeypatch) -> None:
+    schema = {"type": "object", "properties": {"disposition": {"type": "string", "enum": ["accept"]}}}
+    captured: dict = {}
+
+    class FakeResponse:
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+        def read(self): return b'{"response":"{\\"disposition\\":\\"accept\\"}"}'
+
+    def fake_urlopen(req):
+        captured["body"] = json.loads(req.data.decode())
+        return FakeResponse()
+
+    monkeypatch.setattr("baps.models.request.urlopen", fake_urlopen)
+    client = OllamaClient(model="llama3")
+    role = Role("red", client, schema=schema, constrained=True)
+
+    role.generate("evaluate this")
+
+    assert captured["body"]["format"] == schema
+
+
+def test_role_generate_with_constrained_false_omits_format(monkeypatch) -> None:
+    captured: dict = {}
+
+    class FakeResponse:
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+        def read(self): return b'{"response":"ok"}'
+
+    def fake_urlopen(req):
+        captured["body"] = json.loads(req.data.decode())
+        return FakeResponse()
+
+    monkeypatch.setattr("baps.models.request.urlopen", fake_urlopen)
+    client = OllamaClient(model="llama3")
+    role = Role("create_game", client, schema={"type": "object"}, constrained=False)
+
+    role.generate("plan something")
+
+    assert "format" not in captured["body"]
+
+
+def test_role_generate_with_no_schema_omits_format(monkeypatch) -> None:
+    captured: dict = {}
+
+    class FakeResponse:
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+        def read(self): return b'{"response":"ok"}'
+
+    def fake_urlopen(req):
+        captured["body"] = json.loads(req.data.decode())
+        return FakeResponse()
+
+    monkeypatch.setattr("baps.models.request.urlopen", fake_urlopen)
+    client = OllamaClient(model="llama3")
+    role = Role("blue", client, schema=None, constrained=True)
+
+    role.generate("write something")
+
+    assert "format" not in captured["body"]

@@ -29,19 +29,17 @@ def _patch_create_game_model_client(monkeypatch):
     def _fake_create_game_builder():
         return FakeModelClient([create_game_response])
 
-    def _fake_blue_builder():
-        return FakeModelClient(tool_responses=[blue_tool_response])
-
-    def _fake_red_builder():
-        return FakeModelClient([red_response])
-
-    def _fake_referee_builder():
-        return FakeModelClient([referee_response])
+    # play_game() calls _build_model_client() once each for blue, red, and referee.
+    # Each factory call returns a fresh client that works for any role:
+    # generate_with_tools → blue_tool_response; generate → accept_response (red/referee share the same text).
+    def _fake_model_client_builder():
+        return FakeModelClient(
+            responses=[red_response],
+            tool_responses=[blue_tool_response],
+        )
 
     monkeypatch.setattr("baps.run._build_create_game_model_client", _fake_create_game_builder)
-    monkeypatch.setattr("baps.run._build_blue_model_client", _fake_blue_builder)
-    monkeypatch.setattr("baps.run._build_red_model_client", _fake_red_builder)
-    monkeypatch.setattr("baps.run._build_referee_model_client", _fake_referee_builder)
+    monkeypatch.setattr("baps.run._build_model_client", _fake_model_client_builder)
 
 
 def test_main_prints_required_fields_and_no_legacy_iteration_output(
@@ -4671,6 +4669,10 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
                 state_view, game_spec, attempt_number, previous_feedback
             )
 
+        def build_blue_output_format(self):
+            self.calls.append("build_blue_output_format")
+            return self._delegate.build_blue_output_format()
+
         def build_blue_tools(self):
             self.calls.append("build_blue_tools")
             return self._delegate.build_blue_tools()
@@ -4710,6 +4712,7 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
     assert "render_create_game_prompt_supplement" in adapter.calls
     assert "build_state_view" in adapter.calls
     assert "render_blue_prompt" in adapter.calls
+    assert "build_blue_output_format" in adapter.calls
     assert "build_blue_tools" in adapter.calls
     assert "tool_call_to_delta" in adapter.calls
     assert "delta_to_state_update" in adapter.calls
@@ -5963,6 +5966,9 @@ def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
         ):
             self.calls.append("render_blue_prompt")
             return "blue-prompt"
+
+        def build_blue_output_format(self):
+            return None
 
         def build_blue_tools(self):
             self.calls.append("build_blue_tools")

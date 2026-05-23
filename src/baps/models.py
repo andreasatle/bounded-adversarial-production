@@ -150,3 +150,17 @@ class OllamaClient(ModelClient):
             except json.JSONDecodeError as exc:
                 raise ValueError(f"tool call arguments not valid JSON: {exc}") from exc
         return ToolCall(name=name, arguments=arguments)
+
+
+@dataclass(frozen=True)
+class Role:
+    name: str
+    client: ModelClient
+    schema: str | dict | None = None
+    constrained: bool = False
+
+    def generate(self, prompt: str) -> str:
+        return self.client.generate(prompt, format=self.schema if self.constrained else None)
+
+    def generate_with_tools(self, prompt: str, tools: list[ToolDefinition]) -> ToolCall:
+        return self.client.generate_with_tools(prompt, tools)
