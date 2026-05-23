@@ -1126,12 +1126,9 @@ def test_create_game_prompt_forbids_markdown_fences_and_lists_required_shape() -
     assert '"target_artifact_id"' in prompt
     assert '"allowed_delta_type"' in prompt
     assert '"success_condition"' in prompt
-    assert "GameSpec should represent one coherent task" in prompt
-    assert "structural change, local content intent, and semantic purpose may coexist" in prompt
-    assert "reject only when multiple independent tasks/features are bundled." in prompt
-    assert "VALID: One bounded artifact update with explicit intent." in prompt
-    assert "INVALID: Two independent feature changes in one GameSpec." in prompt
-    assert "INVALID: Artifact update plus export/operational task in one GameSpec." in prompt
+    assert "Do not artificially split a coherent gap into multiple games" in prompt
+    assert "fully close the selected gap" in prompt
+    assert "All files or sections that must change together to close the gap belong in one game" in prompt
 
 
 def test_create_game_broad_goal_accepts_decomposed_atomic_gamespec() -> None:
@@ -2371,26 +2368,14 @@ def test_create_game_prompt_includes_northstar_context() -> None:
     assert "projection_type" not in prompt
     assert "northstar_content" not in prompt
     assert "state_view_json:" not in prompt
-    assert "Use StateView NorthStar section as authoritative context." in prompt
-    assert "Derive the next coherent game task from projected state context, including NorthStar intent." in prompt
-    assert "GameSpec must be self-contained for PlayGame execution without independently reading full NorthStar." in prompt
-    assert "The objective must describe BOTH:" in prompt
-    assert "1. structural change" in prompt
-    assert "2. substantive local intent" in prompt
-    assert "Do not emit objectives that only describe structure." in prompt
-    assert "The GameSpec must contain enough local intent so PlayGame can execute without reading NorthStar." in prompt
-    assert "Fold relevant NorthStar intent into objective and success_condition." in prompt
-    assert "Avoid purely structural objectives when NorthStar contains substantive intent." in prompt
-    assert "BAD objective: Apply structural formatting only." in prompt
-    assert (
-        "GOOD objective: Apply one structural change with concrete local intent tied to project goals."
-        in prompt
-    )
-    assert "BAD success_condition: structure exists." in prompt
-    assert (
-        "GOOD success_condition: one bounded artifact change exists and satisfies stated local intent."
-        in prompt
-    )
+    assert "GAP ANALYSIS" in prompt
+    assert "PRIORITIZE" in prompt
+    assert "SCOPE THE GAME" in prompt
+    assert "SELF-CONTAIN" in prompt
+    assert "PlayGame has no access to NorthStar" in prompt
+    assert "name the gap being closed" in prompt
+    assert "must be verifiable from the artifact alone" in prompt
+    assert "Do not artificially split a coherent gap into multiple games" in prompt
     assert '{\"no_new_game\": true, \"reason\": \"...\"}' in prompt
     assert "state_json:" not in prompt
     assert "mandatory_sections_json" not in prompt
@@ -6648,7 +6633,7 @@ def test_create_game_prompt_includes_northstar_update_needed_instruction() -> No
     assert '"northstar_update_needed": true' in prompt
     assert '"rationale"' in prompt
     assert '"proposed_northstar"' in prompt
-    assert "trajectory does not align with NorthStar intent" in prompt
+    assert "trajectory cannot satisfy NorthStar intent without changing NorthStar" in prompt
     assert "complete updated NorthStar content" in prompt
 
 
