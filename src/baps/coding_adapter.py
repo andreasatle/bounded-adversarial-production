@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import re
@@ -177,6 +178,39 @@ def render_coding_blue_prompt(
     )
 
 
+def _fix_delta_file_content_quotes(parsed: dict) -> None:
+    """Fix residual \\\" in file content caused by model double-escaping quotes in JSON.
+
+    Models occasionally emit \\\\\\\" (double-escaped) for an intended \\\" in the JSON value,
+    producing a literal backslash-quote in the parsed content. For single-line content this is
+    always a transport artifact. For multi-line Python files we only unescape when doing so
+    fixes an otherwise invalid syntax.
+    """
+    try:
+        file_data = parsed["payload"]["file"]
+        content = file_data["content"]
+        path = file_data["path"]
+    except (KeyError, TypeError):
+        return
+    if not isinstance(content, str) or '\\"' not in content:
+        return
+    if "\n" not in content:
+        file_data["content"] = content.replace('\\"', '"')
+        return
+    if not isinstance(path, str) or not path.endswith(".py"):
+        return
+    try:
+        ast.parse(content)
+        return  # already valid, leave untouched
+    except SyntaxError:
+        candidate = content.replace('\\"', '"')
+        try:
+            ast.parse(candidate)
+            file_data["content"] = candidate
+        except SyntaxError:
+            pass  # can't fix deterministically; leave as-is
+
+
 def parse_coding_delta_json(text: str) -> DeltaCodingState:
     normalized = _normalize_json_candidate(text)
     try:
@@ -194,6 +228,8 @@ def parse_coding_delta_json(text: str) -> DeltaCodingState:
         raise ValueError(
             "blue model output must contain exactly keys: artifact_id, operation, payload"
         )
+
+    _fix_delta_file_content_quotes(parsed)
 
     try:
         delta = DeltaCodingState.model_validate(parsed)

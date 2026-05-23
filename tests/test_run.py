@@ -607,6 +607,55 @@ def test_create_game_invalid_json_without_debug_does_not_print_raw_model_output(
     assert "[DEBUG] create_game.raw_model_output:" not in out
 
 
+def test_create_game_fallback_to_executor_when_planner_returns_invalid_json(
+    monkeypatch,
+) -> None:
+    import baps.run as run_module
+
+    valid_response = (
+        '{"objective":"Advance goal","target_artifact_id":"main-document",'
+        '"allowed_delta_type":"DeltaDocumentState",'
+        '"success_condition":"section exists"}'
+    )
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "goal": "Write a short report.",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+
+    # Planner (auto-built) returns invalid JSON; executor fallback returns valid JSON.
+    monkeypatch.setattr("baps.run._build_create_game_model_client", lambda: FakeModelClient(["not-json"]))
+    monkeypatch.setattr("baps.run._build_model_client", lambda: FakeModelClient([valid_response]))
+
+    game_spec = run_module.create_game(config, state)
+
+    assert game_spec.target_artifact_id == "main-document"
+
+
+def test_create_game_explicit_model_client_does_not_use_fallback() -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "goal": "Write a short report.",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+
+    # Explicit model_client — no fallback should be attempted even if it returns invalid JSON.
+    with pytest.raises(ValueError, match="must be valid JSON"):
+        create_game(config, state, model_client=FakeModelClient(["not-json"]))
+
+
 def test_create_game_structural_validation_failure_debug_prints_raw_output(
     monkeypatch, capsys
 ) -> None:
@@ -5702,6 +5751,64 @@ def test_coding_parse_rejects_rewriting_commentary_marker() -> None:
     )
     with pytest.raises(ValueError, match="forbidden reasoning marker"):
         coding_module.parse_coding_delta_json(raw)
+
+
+def test_coding_parse_fixes_double_escaped_quotes_in_single_line_content() -> None:
+    import baps.coding_adapter as coding_module
+
+    # Model double-escaped quotes: after json.loads, content contains \" (backslash + quote)
+    # instead of the intended ". Use json.dumps to build valid JSON with that content.
+    content_with_escape = 'def greet(): return \\"hello\\"'  # literal: def greet(): return \"hello\"
+    raw = json.dumps({
+        "artifact_id": "main-codebase",
+        "operation": "write_file",
+        "payload": {"file": {"path": "src/util.py", "content": content_with_escape}},
+    })
+    delta = coding_module.parse_coding_delta_json(raw)
+    assert delta.payload.file.content == 'def greet(): return "hello"'
+
+
+def test_coding_parse_fixes_double_escaped_quotes_in_multiline_python() -> None:
+    import baps.coding_adapter as coding_module
+
+    # Multiline .py content with \" where " was intended (syntax error without fix)
+    content_with_escape = 'def test_empty():\n    assert normalize(\\"") == \\"\\"\n'
+    raw = json.dumps({
+        "artifact_id": "main-codebase",
+        "operation": "write_file",
+        "payload": {"file": {"path": "tests/test_util.py", "content": content_with_escape}},
+    })
+    delta = coding_module.parse_coding_delta_json(raw)
+    assert '\\"' not in delta.payload.file.content
+    assert 'normalize("") == ""' in delta.payload.file.content
+
+
+def test_coding_parse_leaves_valid_multiline_python_unchanged() -> None:
+    import baps.coding_adapter as coding_module
+
+    # Valid multiline Python with no backslash-quote issues
+    content = 'def test_ok():\n    assert 1 == 1\n'
+    raw = json.dumps({
+        "artifact_id": "main-codebase",
+        "operation": "write_file",
+        "payload": {"file": {"path": "tests/test_ok.py", "content": content}},
+    })
+    delta = coding_module.parse_coding_delta_json(raw)
+    assert delta.payload.file.content == content
+
+
+def test_coding_parse_does_not_fix_backslash_quotes_in_multiline_non_python_files() -> None:
+    import baps.coding_adapter as coding_module
+
+    # Multi-line non-.py file: the fix only applies to .py files for multi-line content.
+    content = 'key: \\"value\\"\nother: \\"field\\"'  # literal: key: \"value\"\nother: \"field\"
+    raw = json.dumps({
+        "artifact_id": "main-codebase",
+        "operation": "write_file",
+        "payload": {"file": {"path": "config.yaml", "content": content}},
+    })
+    delta = coding_module.parse_coding_delta_json(raw)
+    assert delta.payload.file.content == content
 
 
 def test_coding_run_no_files_keeps_output_exported_false(monkeypatch, tmp_path: Path, capsys) -> None:

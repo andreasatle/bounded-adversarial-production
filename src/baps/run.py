@@ -962,7 +962,8 @@ def create_game(
         else _resolve_project_type_adapter(config["project_type"])
     )
     state_view = resolved_adapter.build_create_game_state_view(state, config)
-    client = model_client if model_client is not None else _build_create_game_model_client()
+    use_planner = model_client is None
+    client = _build_create_game_model_client() if use_planner else model_client
     role = Role("create_game", client, _CREATE_GAME_SCHEMA, constrained=False)
     prompt = _render_create_game_prompt(
         config=config,
@@ -976,7 +977,17 @@ def create_game(
     _debug_print_create_game_raw_model_output(generated)
     try:
         game_spec = _parse_create_game_output(generated)
-    except (ValueError, NoNewAtomicGameError):
+    except ValueError as exc:
+        if "valid JSON" not in str(exc) or not use_planner:
+            raise
+        # Planner returned empty or unparseable output — retry once with executor model
+        if _debug_enabled():
+            print("[DEBUG] create_game.fallback: planner invalid JSON, retrying with executor model")
+        fallback_role = Role("create_game", _build_model_client(), _CREATE_GAME_SCHEMA, constrained=False)
+        generated = fallback_role.generate(prompt)
+        _debug_print_create_game_raw_model_output(generated)
+        game_spec = _parse_create_game_output(generated)
+    except NoNewAtomicGameError:
         raise
     game_spec = _normalize_game_spec_with_adapter(
         resolved_adapter, game_spec, state, config
