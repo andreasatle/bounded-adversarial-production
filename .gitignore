@@ -12,6 +12,9 @@ wheels/
 # Secrets
 .env
 
+# Claude Code auto-memory
+memory/
+
 # Generated runtime/workspace state
 blackboard/
 .runs/
