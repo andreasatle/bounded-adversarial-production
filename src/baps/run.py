@@ -1493,7 +1493,8 @@ def _run_project_iterations(
     create_game_verification_result: VerificationResult | None = None
     stop_reason = "iteration_limit_reached"
 
-    for _iteration in range(1, max_iterations + 1):
+    iterations_completed = 0
+    for iteration in range(1, max_iterations + 1):
         try:
             game_spec = create_game(
                 config,
@@ -1541,6 +1542,7 @@ def _run_project_iterations(
         if output_changed:
             _commit_export_with_adapter(adapter, output_path, game_spec)
         create_game_verification_result = verification_result
+        iterations_completed = iteration
         if changed_this_iteration:
             state_changed = True
             current_state = updated_state
@@ -1557,8 +1559,20 @@ def _run_project_iterations(
         "output_changed": output_changed,
         "northstar_proposal_written": northstar_proposal_written,
         "verification_result": verification_result,
+        "iterations_completed": iterations_completed,
         "stop_reason": stop_reason,
     }
+
+
+def _active_model_info() -> dict[str, str]:
+    backend = os.getenv("BAPS_BACKEND", "ollama").lower()
+    if backend == "anthropic":
+        model_id = os.getenv("BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL)
+    elif backend == "openai":
+        model_id = os.getenv("BAPS_OPENAI_MODEL", _DEFAULT_OPENAI_MODEL)
+    else:
+        model_id = os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL)
+    return {"backend": backend, "model": model_id}
 
 
 def main() -> None:
@@ -1633,6 +1647,7 @@ def main() -> None:
     verification_exit_code: int | None = None
     verification_command: str | None = None
     verification_cwd: str | None = None
+    iterations_completed = 0
     stop_reason = "not_run"
 
     try:
@@ -1660,6 +1675,7 @@ def main() -> None:
                 verification_exit_code = verification_result.exit_code
                 verification_command = verification_result.command
                 verification_cwd = verification_result.cwd
+            iterations_completed = int(results["iterations_completed"])
             stop_reason = str(results["stop_reason"])
         else:  # init_and_run
             state_service, current_state = _initialize_project(config)
@@ -1681,6 +1697,7 @@ def main() -> None:
                 verification_exit_code = verification_result.exit_code
                 verification_command = verification_result.command
                 verification_cwd = verification_result.cwd
+            iterations_completed = int(results["iterations_completed"])
             stop_reason = str(results["stop_reason"])
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -1698,11 +1715,27 @@ def main() -> None:
     print(f"output_changed={output_changed}")
     print(f"northstar_proposal_written={northstar_proposal_written}")
     print(f"verification_run={verification_run}")
+    print(f"iterations_completed={iterations_completed}")
     print(f"verification_passed={verification_passed}")
     print(f"verification_exit_code={verification_exit_code}")
     print(f"verification_command={verification_command}")
     print(f"verification_cwd={verification_cwd}")
     print(f"stop_reason={stop_reason}")
+
+    model_info = _active_model_info()
+    result_data: dict[str, object] = {
+        "stop_reason": stop_reason,
+        "verification_passed": verification_passed if verification_run else None,
+        "verification_exit_code": verification_exit_code,
+        "iterations_completed": iterations_completed,
+        "backend": model_info["backend"],
+        "model": model_info["model"],
+        "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
+    }
+    workspace.mkdir(parents=True, exist_ok=True)
+    (workspace / "run-result.json").write_text(
+        json.dumps(result_data, indent=2), encoding="utf-8"
+    )
 
 
 if __name__ == "__main__":
