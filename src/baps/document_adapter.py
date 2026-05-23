@@ -17,9 +17,11 @@ from baps.project_adapter import (
 from baps.state import (
     AppendSectionDelta,
     DeltaDocumentState,
+    DeltaModifyDocumentState,
     DeltaState,
     DocumentArtifact,
     GameSpec,
+    ModifySectionDelta,
     NorthStar,
     Section,
     State,
@@ -179,7 +181,7 @@ def render_document_blue_prompt(
         "Document delta rules:\n"
         "- section.title and section.body must be non-empty strings.\n"
         'Invalid example, do not output: "body": ""\n'
-        "Required JSON shape:\n"
+        "Use append_section to add a new section:\n"
         "{\n"
         '  "artifact_id": "<game_spec.target_artifact_id>",\n'
         '  "operation": "append_section",\n'
@@ -188,6 +190,15 @@ def render_document_blue_prompt(
         '      "title": "<section title>",\n'
         '      "body": "Concrete non-empty section body text."\n'
         "    }\n"
+        "  }\n"
+        "}\n"
+        "Use modify_section to rewrite an existing section's body:\n"
+        "{\n"
+        '  "artifact_id": "<game_spec.target_artifact_id>",\n'
+        '  "operation": "modify_section",\n'
+        '  "payload": {\n'
+        '    "section_title": "<exact title of existing section>",\n'
+        '    "new_body": "Replacement body text."\n'
         "  }\n"
         "}"
     )
@@ -200,7 +211,7 @@ def render_document_blue_prompt(
     )
 
 
-def parse_document_delta_json(text: str) -> DeltaDocumentState:
+def parse_document_delta_json(text: str) -> DeltaDocumentState | DeltaModifyDocumentState:
     normalized = _normalize_json_candidate(text)
     try:
         parsed = json.loads(normalized)
@@ -216,6 +227,15 @@ def parse_document_delta_json(text: str) -> DeltaDocumentState:
             "blue model output must contain exactly keys: artifact_id, operation, payload"
         )
 
+    operation = parsed.get("operation")
+    if operation == "modify_section":
+        try:
+            return DeltaModifyDocumentState.model_validate(parsed)
+        except Exception as exc:
+            raise ValueError(
+                f"blue model output failed DeltaModifyDocumentState validation: {exc}"
+            ) from exc
+
     try:
         return DeltaDocumentState.model_validate(parsed)
     except Exception as exc:
@@ -225,22 +245,36 @@ def parse_document_delta_json(text: str) -> DeltaDocumentState:
 
 
 def derive_document_state_update_from_delta(delta_state: DeltaState) -> StateUpdateProposal:
-    if not isinstance(delta_state, DeltaDocumentState):
-        raise ValueError(f"unsupported delta type for integration: {type(delta_state).__name__}")
-    if delta_state.operation != "append_section":
-        raise ValueError(f"unsupported delta operation for integration: {delta_state.operation}")
-    return StateUpdateProposal(
-        id=f"state-update:{delta_state.artifact_id}:append_section",
-        target=StateUpdateTarget(artifact_id=delta_state.artifact_id),
-        summary=(
-            f"Append section '{delta_state.payload.section.title}' "
-            f"to document artifact {delta_state.artifact_id}"
-        ),
-        payload={
-            "operation": "append_section",
-            "section": delta_state.payload.section.model_dump(mode="json"),
-        },
-    )
+    if isinstance(delta_state, DeltaModifyDocumentState):
+        return StateUpdateProposal(
+            id=f"state-update:{delta_state.artifact_id}:modify_section:{delta_state.payload.section_title}",
+            target=StateUpdateTarget(artifact_id=delta_state.artifact_id),
+            summary=(
+                f"Modify section '{delta_state.payload.section_title}' "
+                f"in document artifact {delta_state.artifact_id}"
+            ),
+            payload={
+                "operation": "modify_section",
+                "section_title": delta_state.payload.section_title,
+                "new_body": delta_state.payload.new_body,
+            },
+        )
+    if isinstance(delta_state, DeltaDocumentState):
+        if delta_state.operation != "append_section":
+            raise ValueError(f"unsupported delta operation for integration: {delta_state.operation}")
+        return StateUpdateProposal(
+            id=f"state-update:{delta_state.artifact_id}:append_section",
+            target=StateUpdateTarget(artifact_id=delta_state.artifact_id),
+            summary=(
+                f"Append section '{delta_state.payload.section.title}' "
+                f"to document artifact {delta_state.artifact_id}"
+            ),
+            payload={
+                "operation": "append_section",
+                "section": delta_state.payload.section.model_dump(mode="json"),
+            },
+        )
+    raise ValueError(f"unsupported delta type for integration: {type(delta_state).__name__}")
 
 
 def render_document_artifact_markdown(artifact: DocumentArtifact) -> str:
@@ -271,12 +305,19 @@ class DocumentProjectAdapter:
         verification_result: VerificationResult | None,
     ) -> str:
         del state, config, state_view
+        base = (
+            "Document CreateGame constraints:\n"
+            "- Use append_section to add a new section to the document.\n"
+            "- Use modify_section to rewrite an existing section's body (section_title must match exactly).\n"
+        )
         if verification_result is None:
-            return ""
+            return base
         return (
+            f"{base}"
             "Document CreateGame verification evidence:\n"
             "- If evidence shows missing sections, prefer a game that appends those sections.\n"
             "- If evidence shows an empty export, prefer a game that adds foundational content.\n"
+            "- If evidence shows stale or incorrect content, prefer a game that modifies the relevant section.\n"
         )
 
     def normalize_game_spec(
@@ -323,31 +364,9 @@ class DocumentProjectAdapter:
         return ""
 
     def build_blue_output_format(self) -> str | dict | None:
-        return {
-            "type": "object",
-            "properties": {
-                "artifact_id": {"type": "string"},
-                "operation": {"type": "string", "enum": ["append_section"]},
-                "payload": {
-                    "type": "object",
-                    "properties": {
-                        "section": {
-                            "type": "object",
-                            "properties": {
-                                "title": {"type": "string"},
-                                "body": {"type": "string"},
-                            },
-                            "required": ["title", "body"],
-                            "additionalProperties": False,
-                        }
-                    },
-                    "required": ["section"],
-                    "additionalProperties": False,
-                },
-            },
-            "required": ["artifact_id", "operation", "payload"],
-            "additionalProperties": False,
-        }
+        # Two valid operation shapes — return None so prompt instructions drive format
+        # rather than a single rigid constrained-decoding schema.
+        return None
 
     def build_blue_tools(self) -> list[ToolDefinition]:
         return [
@@ -372,31 +391,72 @@ class DocumentProjectAdapter:
                     },
                     "required": ["artifact_id", "title", "body"],
                 },
-            )
+            ),
+            ToolDefinition(
+                name="modify_section",
+                description="Rewrite the body of an existing section in the document artifact.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "artifact_id": {
+                            "type": "string",
+                            "description": "Target document artifact ID",
+                        },
+                        "section_title": {
+                            "type": "string",
+                            "description": "Exact title of the section to modify",
+                        },
+                        "new_body": {
+                            "type": "string",
+                            "description": "Replacement body text (non-empty)",
+                        },
+                    },
+                    "required": ["artifact_id", "section_title", "new_body"],
+                },
+            ),
         ]
 
     def tool_call_to_delta(self, tool_call: ToolCall) -> DeltaState:
-        if tool_call.name != "append_section":
-            raise ValueError(f"unexpected tool: {tool_call.name!r}")
         args = tool_call.arguments
-        try:
-            artifact_id = str(args["artifact_id"])
-            title = str(args["title"])
-            body = str(args["body"])
-        except KeyError as exc:
-            raise ValueError(f"missing required tool argument: {exc}") from exc
-        try:
-            return DeltaDocumentState.model_validate(
-                {
-                    "artifact_id": artifact_id,
-                    "operation": "append_section",
-                    "payload": {"section": {"title": title, "body": body}},
-                }
-            )
-        except Exception as exc:
-            raise ValueError(
-                f"tool call arguments failed DeltaDocumentState validation: {exc}"
-            ) from exc
+        if tool_call.name == "modify_section":
+            try:
+                artifact_id = str(args["artifact_id"])
+                section_title = str(args["section_title"])
+                new_body = str(args["new_body"])
+            except KeyError as exc:
+                raise ValueError(f"missing required tool argument: {exc}") from exc
+            try:
+                return DeltaModifyDocumentState.model_validate(
+                    {
+                        "artifact_id": artifact_id,
+                        "operation": "modify_section",
+                        "payload": {"section_title": section_title, "new_body": new_body},
+                    }
+                )
+            except Exception as exc:
+                raise ValueError(
+                    f"tool call arguments failed DeltaModifyDocumentState validation: {exc}"
+                ) from exc
+        if tool_call.name == "append_section":
+            try:
+                artifact_id = str(args["artifact_id"])
+                title = str(args["title"])
+                body = str(args["body"])
+            except KeyError as exc:
+                raise ValueError(f"missing required tool argument: {exc}") from exc
+            try:
+                return DeltaDocumentState.model_validate(
+                    {
+                        "artifact_id": artifact_id,
+                        "operation": "append_section",
+                        "payload": {"section": {"title": title, "body": body}},
+                    }
+                )
+            except Exception as exc:
+                raise ValueError(
+                    f"tool call arguments failed DeltaDocumentState validation: {exc}"
+                ) from exc
+        raise ValueError(f"unexpected tool: {tool_call.name!r}")
 
     def parse_blue_delta(self, text: str) -> DeltaState:
         return parse_document_delta_json(text)

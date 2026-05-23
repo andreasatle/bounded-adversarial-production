@@ -66,8 +66,27 @@ class AppendSectionDelta(BaseModel):
     section: Section
 
 
+class ModifySectionDelta(BaseModel):
+    section_title: str
+    new_body: str
+
+    _validate_section_title = field_validator("section_title")(_require_non_empty)
+    _validate_new_body = field_validator("new_body")(_require_non_empty)
+
+
 class WriteFileDelta(BaseModel):
     file: CodeFile
+
+
+class WriteFilesDelta(BaseModel):
+    files: tuple[CodeFile, ...]
+
+    @field_validator("files")
+    @classmethod
+    def _validate_non_empty(cls, files: tuple) -> tuple:
+        if not files:
+            raise ValueError("write_files payload must contain at least one file")
+        return files
 
 
 class DeltaState(BaseModel):
@@ -81,9 +100,19 @@ class DeltaDocumentState(DeltaState):
     payload: AppendSectionDelta
 
 
+class DeltaModifyDocumentState(DeltaState):
+    operation: Literal["modify_section"]
+    payload: ModifySectionDelta
+
+
 class DeltaCodingState(DeltaState):
     operation: Literal["write_file"]
     payload: WriteFileDelta
+
+
+class DeltaCodingBatchState(DeltaState):
+    operation: Literal["write_files"]
+    payload: WriteFilesDelta
 
 
 class GameSpec(BaseModel):
@@ -308,6 +337,20 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
         )
         return _replace_artifact_in_state(state, target_artifact_id, replacement)
 
+    if operation == "write_files":
+        target_artifact_id = proposal.target.artifact_id
+        existing = find_state_artifact(state, target_artifact_id)
+        if not isinstance(existing, CodingArtifact):
+            raise ValueError("write_files operation requires a CodingArtifact target")
+        if "files" not in proposal.payload:
+            raise ValueError("write_files operation requires payload['files']")
+        incoming_files = [CodeFile.model_validate(f) for f in proposal.payload["files"]]
+        files_by_path = {f.path: f for f in existing.files}
+        for incoming_file in incoming_files:
+            files_by_path[incoming_file.path] = incoming_file
+        replacement = CodingArtifact(id=existing.id, files=tuple(files_by_path.values()))
+        return _replace_artifact_in_state(state, target_artifact_id, replacement)
+
     if operation == "append_section":
         target_artifact_id = proposal.target.artifact_id
         existing = find_state_artifact(state, target_artifact_id)
@@ -319,6 +362,30 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
         replacement = DocumentArtifact(
             id=existing.id,
             sections=(*existing.sections, appended_section),
+        )
+        return _replace_artifact_in_state(state, target_artifact_id, replacement)
+
+    if operation == "modify_section":
+        target_artifact_id = proposal.target.artifact_id
+        existing = find_state_artifact(state, target_artifact_id)
+        if not isinstance(existing, DocumentArtifact):
+            raise ValueError("modify_section operation requires a DocumentArtifact target")
+        if "section_title" not in proposal.payload or "new_body" not in proposal.payload:
+            raise ValueError(
+                "modify_section operation requires payload['section_title'] and payload['new_body']"
+            )
+        section_title = str(proposal.payload["section_title"])
+        new_body = str(proposal.payload["new_body"])
+        if not any(s.title == section_title for s in existing.sections):
+            raise ValueError(
+                f"modify_section: no section with title {section_title!r} found in artifact {target_artifact_id!r}"
+            )
+        replacement = DocumentArtifact(
+            id=existing.id,
+            sections=tuple(
+                Section(title=s.title, body=new_body) if s.title == section_title else s
+                for s in existing.sections
+            ),
         )
         return _replace_artifact_in_state(state, target_artifact_id, replacement)
 
@@ -343,7 +410,8 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
     if operation != "replace_artifact":
         raise NotImplementedError(
             "unsupported state update operation: "
-            f"{operation!r}; supported: 'replace_artifact', 'add_artifact', 'append_section', 'write_file'"
+            f"{operation!r}; supported: 'replace_artifact', 'add_artifact', "
+            "'append_section', 'modify_section', 'write_file', 'write_files'"
         )
 
     if "artifact" not in proposal.payload:

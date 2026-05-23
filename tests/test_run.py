@@ -4877,7 +4877,7 @@ def test_coding_blue_prompt_supplement_prefers_src_and_pytest_layout() -> None:
     assert "tests/test_*.py" in prompt
 
 
-def test_coding_create_game_prompt_includes_one_file_per_game_guidance() -> None:
+def test_coding_create_game_prompt_includes_multi_file_guidance() -> None:
     import baps.run as run_module
 
     config = {
@@ -4899,9 +4899,9 @@ def test_coding_create_game_prompt_includes_one_file_per_game_guidance() -> None
         state_view=state_view,
         adapter=adapter,
     )
-    assert "DeltaCodingState write_file changes exactly one file per game." in prompt
-    assert "Choose exactly one missing file task per GameSpec." in prompt
-    assert "Do not request multiple files in one GameSpec." in prompt
+    assert "write_files" in prompt
+    assert "Group logically related files" in prompt
+    assert "Prefer production files under src/" in prompt
 
 
 def test_coding_create_game_prompt_includes_previous_verification_evidence() -> None:
@@ -5765,7 +5765,7 @@ def test_commit_export_with_adapter_skips_adapter_without_method(tmp_path: Path)
     assert result is False
 
 
-def test_document_adapter_render_create_game_prompt_supplement_empty_when_no_verification() -> None:
+def test_document_adapter_render_create_game_prompt_supplement_includes_delta_guidance() -> None:
     import baps.run as run_module
 
     adapter = run_module.DocumentProjectAdapter()
@@ -5787,7 +5787,8 @@ def test_document_adapter_render_create_game_prompt_supplement_empty_when_no_ver
         state_view=state_view,
         verification_result=None,
     )
-    assert result == ""
+    assert "append_section" in result
+    assert "modify_section" in result
 
 
 def test_document_adapter_render_create_game_prompt_supplement_includes_guidance_on_failure() -> None:
@@ -6951,3 +6952,198 @@ def test_build_role_client_uses_global_anthropic_model_when_only_backend_set(mon
     client = _real_build_role_client("blue")
     assert isinstance(client, AnthropicClient)
     assert client.model == "claude-sonnet-4-6"
+
+
+# --- write_files adapter tests ---
+
+def test_coding_adapter_maps_write_files_batch_delta_to_state_update() -> None:
+    import baps.run as run_module
+
+    adapter = run_module.CodingProjectAdapter()
+    delta = state_module.DeltaCodingBatchState(
+        artifact_id="main-codebase",
+        operation="write_files",
+        payload=state_module.WriteFilesDelta(
+            files=(
+                state_module.CodeFile(path="src/a.py", content="a"),
+                state_module.CodeFile(path="src/b.py", content="b"),
+            )
+        ),
+    )
+    proposal = adapter.delta_to_state_update(delta)
+    assert proposal.payload["operation"] == "write_files"
+    assert len(proposal.payload["files"]) == 2
+    assert proposal.payload["files"][0]["path"] == "src/a.py"
+
+
+def test_parse_coding_delta_json_handles_write_files_operation() -> None:
+    import json
+    from baps.coding_adapter import parse_coding_delta_json
+
+    text = json.dumps({
+        "artifact_id": "main-codebase",
+        "operation": "write_files",
+        "payload": {
+            "files": [
+                {"path": "src/a.py", "content": "print('a')"},
+                {"path": "src/b.py", "content": "print('b')"},
+            ]
+        },
+    })
+    delta = parse_coding_delta_json(text)
+    assert isinstance(delta, state_module.DeltaCodingBatchState)
+    assert delta.operation == "write_files"
+    assert len(delta.payload.files) == 2
+
+
+def test_parse_coding_delta_json_still_accepts_write_file_operation() -> None:
+    import json
+    from baps.coding_adapter import parse_coding_delta_json
+
+    text = json.dumps({
+        "artifact_id": "main-codebase",
+        "operation": "write_file",
+        "payload": {"file": {"path": "src/a.py", "content": "x"}},
+    })
+    delta = parse_coding_delta_json(text)
+    assert isinstance(delta, state_module.DeltaCodingState)
+    assert delta.operation == "write_file"
+
+
+def test_parse_coding_delta_json_rejects_write_files_with_empty_files_list() -> None:
+    import json
+    from baps.coding_adapter import parse_coding_delta_json
+
+    text = json.dumps({
+        "artifact_id": "main-codebase",
+        "operation": "write_files",
+        "payload": {"files": []},
+    })
+    with pytest.raises(ValueError, match="DeltaCodingBatchState"):
+        parse_coding_delta_json(text)
+
+
+def test_coding_adapter_tool_call_write_files_returns_batch_delta() -> None:
+    import baps.run as run_module
+    from baps.models import ToolCall
+
+    adapter = run_module.CodingProjectAdapter()
+    tool_call = ToolCall(
+        name="write_files",
+        arguments={
+            "artifact_id": "main-codebase",
+            "files": [
+                {"path": "src/a.py", "content": "a"},
+                {"path": "src/b.py", "content": "b"},
+            ],
+        },
+    )
+    delta = adapter.tool_call_to_delta(tool_call)
+    assert isinstance(delta, state_module.DeltaCodingBatchState)
+    assert len(delta.payload.files) == 2
+
+
+# --- modify_section adapter tests ---
+
+def test_parse_document_delta_json_handles_modify_section_operation() -> None:
+    import json
+    from baps.document_adapter import parse_document_delta_json
+
+    text = json.dumps({
+        "artifact_id": "main-document",
+        "operation": "modify_section",
+        "payload": {"section_title": "Intro", "new_body": "Updated intro."},
+    })
+    delta = parse_document_delta_json(text)
+    assert isinstance(delta, state_module.DeltaModifyDocumentState)
+    assert delta.payload.section_title == "Intro"
+    assert delta.payload.new_body == "Updated intro."
+
+
+def test_parse_document_delta_json_still_accepts_append_section() -> None:
+    import json
+    from baps.document_adapter import parse_document_delta_json
+
+    text = json.dumps({
+        "artifact_id": "main-document",
+        "operation": "append_section",
+        "payload": {"section": {"title": "New", "body": "Body."}},
+    })
+    delta = parse_document_delta_json(text)
+    assert isinstance(delta, state_module.DeltaDocumentState)
+
+
+def test_document_adapter_maps_modify_section_delta_to_state_update() -> None:
+    import baps.run as run_module
+
+    adapter = run_module.DocumentProjectAdapter()
+    delta = state_module.DeltaModifyDocumentState(
+        artifact_id="main-document",
+        operation="modify_section",
+        payload=state_module.ModifySectionDelta(
+            section_title="Intro",
+            new_body="Updated intro.",
+        ),
+    )
+    proposal = adapter.delta_to_state_update(delta)
+    assert proposal.payload["operation"] == "modify_section"
+    assert proposal.payload["section_title"] == "Intro"
+    assert proposal.payload["new_body"] == "Updated intro."
+
+
+def test_document_adapter_tool_call_modify_section_returns_correct_delta() -> None:
+    import baps.run as run_module
+    from baps.models import ToolCall
+
+    adapter = run_module.DocumentProjectAdapter()
+    tool_call = ToolCall(
+        name="modify_section",
+        arguments={
+            "artifact_id": "main-document",
+            "section_title": "Intro",
+            "new_body": "New body.",
+        },
+    )
+    delta = adapter.tool_call_to_delta(tool_call)
+    assert isinstance(delta, state_module.DeltaModifyDocumentState)
+    assert delta.payload.section_title == "Intro"
+
+
+def test_document_blue_prompt_includes_modify_section_shape() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "goal": "Write a report.",
+        "northstar_markdown": "# Goal\n\nWrite a report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.create_state(config)
+    adapter = run_module.DocumentProjectAdapter()
+    state_view = adapter.build_state_view(
+        state,
+        state_module.GameSpec(
+            objective="Test",
+            target_artifact_id="main-document",
+            allowed_delta_type="DeltaDocumentState",
+            success_condition="ok",
+        ),
+    )
+    prompt = adapter.render_blue_prompt(
+        state_view=state_view,
+        game_spec=state_module.GameSpec(
+            objective="Test",
+            target_artifact_id="main-document",
+            allowed_delta_type="DeltaDocumentState",
+            success_condition="ok",
+        ),
+        attempt_number=1,
+        previous_feedback=None,
+    )
+    assert "modify_section" in prompt
+    assert "section_title" in prompt
+    assert "new_body" in prompt

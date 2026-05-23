@@ -158,6 +158,25 @@ async def _run_spec(
             command = "run"
 
 
+_SCORE_FLOOR = 0.2       # models scoring below this after min_runs are dropped from the ladder
+_FLOOR_MIN_RUNS = 5      # minimum runs before a model is eligible for floor-dropping
+
+
+def _drop_underperformers(policy: ModelPolicy) -> list[str]:
+    """Remove models that score below the floor after enough runs. Returns names of dropped models."""
+    dropped = []
+    survivors = []
+    for m in policy.models:
+        s = policy._stats[m.name]
+        if s.runs >= _FLOOR_MIN_RUNS and s.score < _SCORE_FLOOR:
+            dropped.append(m.name)
+        else:
+            survivors.append(m)
+    if dropped and len(survivors) > 0:
+        policy.models = survivors
+    return dropped if len(survivors) > 0 else []
+
+
 def _print_summary(policy: ModelPolicy) -> None:
     print("\n[scheduler] policy state:")
     for m in policy.models:
@@ -184,6 +203,10 @@ def main() -> None:
         "--policy", default=str(_DEFAULT_POLICY_PATH),
         help="Path to policy state JSON.",
     )
+    parser.add_argument(
+        "--rounds", type=int, default=1,
+        help="Number of rounds to run each spec (reloads ladder from BAPS_MODEL_LADDER each round).",
+    )
     args = parser.parse_args()
 
     specs = args.specs or _DEFAULT_SPECS
@@ -196,24 +219,41 @@ def main() -> None:
 
     print(f"[scheduler] backend={os.getenv('BAPS_BACKEND', 'anthropic')}")
     print(f"[scheduler] ladder={[m.name for m in models]}")
-    print(f"[scheduler] concurrency={args.concurrency}  threshold={args.escalation_threshold}")
+    print(f"[scheduler] concurrency={args.concurrency}  threshold={args.escalation_threshold}  rounds={args.rounds}")
     print(f"[scheduler] specs={specs}")
     print(f"[scheduler] temperature={policy.temperature:.3f}  total_runs={policy.total_runs}")
 
     semaphore = asyncio.Semaphore(args.concurrency)
 
-    async def _run_all() -> None:
-        await asyncio.gather(*[
-            _run_spec(
-                spec,
-                policy,
-                Path(f".baps-workspace/{Path(spec).stem}"),
-                semaphore,
-                args.escalation_threshold,
-                policy_path,
-            )
-            for spec in specs
-        ])
+    for round_num in range(1, args.rounds + 1):
+        if args.rounds > 1:
+            # Reload ladder from env — allows live tuning of BAPS_MODEL_LADDER between rounds.
+            # Re-create policy from the new ladder, then restore persisted scores.
+            models = _default_model_ladder()
+            policy = ModelPolicy(models)
+            policy.load_stats(policy_path)
+            print(f"\n[scheduler] round {round_num}/{args.rounds}  ladder={[m.name for m in policy.models]}")
+        else:
+            print(f"\n[scheduler] round 1/1  ladder={[m.name for m in policy.models]}")
 
-    asyncio.run(_run_all())
+        async def _run_all() -> None:
+            await asyncio.gather(*[
+                _run_spec(
+                    spec,
+                    policy,
+                    Path(f".baps-workspace/{Path(spec).stem}"),
+                    semaphore,
+                    args.escalation_threshold,
+                    policy_path,
+                )
+                for spec in specs
+            ])
+
+        asyncio.run(_run_all())
+
+        dropped = _drop_underperformers(policy)
+        if dropped:
+            print(f"[scheduler] dropped underperforming models: {dropped}")
+            policy.save(policy_path)
+
     _print_summary(policy)

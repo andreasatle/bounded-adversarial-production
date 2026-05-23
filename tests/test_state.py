@@ -8,6 +8,8 @@ from baps.state import (
     build_default_state_artifact_registry,
     CodeFile,
     CodingArtifact,
+    DeltaCodingBatchState,
+    DeltaModifyDocumentState,
     DeltaState,
     DeltaDocumentState,
     DocumentArtifact,
@@ -15,6 +17,7 @@ from baps.state import (
     find_state_artifact,
     fingerprint_state,
     GameSpec,
+    ModifySectionDelta,
     PlayGameRuntime,
     RedFinding,
     RefereeDecision,
@@ -27,6 +30,7 @@ from baps.state import (
     StateProjection,
     StateUpdateProposal,
     StateUpdateTarget,
+    WriteFilesDelta,
     project_state,
     validate_update_base_state,
     validate_state_artifacts,
@@ -1523,3 +1527,183 @@ def test_project_state_does_not_mutate_input_state() -> None:
 
     after = state.model_dump(mode="json")
     assert after == before
+
+
+# --- write_files delta schema ---
+
+def test_write_files_delta_requires_non_empty_files() -> None:
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        WriteFilesDelta(files=())
+
+
+def test_write_files_delta_accepts_multiple_files() -> None:
+    delta = WriteFilesDelta(files=(
+        CodeFile(path="a.py", content="x"),
+        CodeFile(path="b.py", content="y"),
+    ))
+    assert len(delta.files) == 2
+
+
+def test_delta_coding_batch_state_validates() -> None:
+    delta = DeltaCodingBatchState.model_validate({
+        "artifact_id": "art",
+        "operation": "write_files",
+        "payload": {"files": [{"path": "a.py", "content": "x"}]},
+    })
+    assert delta.operation == "write_files"
+    assert delta.payload.files[0].path == "a.py"
+
+
+# --- apply_state_update write_files ---
+
+def test_apply_state_update_write_files_adds_new_files() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=()),
+        artifacts=(CodingArtifact(id="code", files=(CodeFile(path="existing.py", content="old"),)),),
+    )
+    proposal = StateUpdateProposal(
+        id="u1",
+        target=StateUpdateTarget(artifact_id="code"),
+        summary="write two files",
+        payload={
+            "operation": "write_files",
+            "files": [
+                {"path": "new1.py", "content": "a"},
+                {"path": "new2.py", "content": "b"},
+            ],
+        },
+    )
+    updated = apply_state_update(state, proposal)
+    artifact = next(a for a in updated.artifacts if a.id == "code")
+    assert isinstance(artifact, CodingArtifact)
+    paths = {f.path for f in artifact.files}
+    assert paths == {"existing.py", "new1.py", "new2.py"}
+
+
+def test_apply_state_update_write_files_overwrites_existing_file() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=()),
+        artifacts=(CodingArtifact(id="code", files=(CodeFile(path="a.py", content="old"),)),),
+    )
+    proposal = StateUpdateProposal(
+        id="u1",
+        target=StateUpdateTarget(artifact_id="code"),
+        summary="overwrite",
+        payload={
+            "operation": "write_files",
+            "files": [{"path": "a.py", "content": "new"}],
+        },
+    )
+    updated = apply_state_update(state, proposal)
+    artifact = next(a for a in updated.artifacts if a.id == "code")
+    assert isinstance(artifact, CodingArtifact)
+    assert artifact.files[0].content == "new"
+    assert len(artifact.files) == 1
+
+
+def test_apply_state_update_write_files_requires_coding_artifact() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=()),
+        artifacts=(DocumentArtifact(id="doc", sections=()),),
+    )
+    proposal = StateUpdateProposal(
+        id="u1",
+        target=StateUpdateTarget(artifact_id="doc"),
+        summary="bad",
+        payload={"operation": "write_files", "files": [{"path": "a.py", "content": "x"}]},
+    )
+    with pytest.raises(ValueError, match="CodingArtifact"):
+        apply_state_update(state, proposal)
+
+
+# --- modify_section delta schema ---
+
+def test_modify_section_delta_requires_non_empty_fields() -> None:
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        ModifySectionDelta(section_title="", new_body="body")
+    with pytest.raises(ValidationError):
+        ModifySectionDelta(section_title="Title", new_body="")
+
+
+def test_delta_modify_document_state_validates() -> None:
+    delta = DeltaModifyDocumentState.model_validate({
+        "artifact_id": "doc",
+        "operation": "modify_section",
+        "payload": {"section_title": "Intro", "new_body": "new content"},
+    })
+    assert delta.operation == "modify_section"
+    assert delta.payload.section_title == "Intro"
+    assert delta.payload.new_body == "new content"
+
+
+# --- apply_state_update modify_section ---
+
+def test_apply_state_update_modify_section_replaces_body() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=()),
+        artifacts=(DocumentArtifact(
+            id="doc",
+            sections=(
+                Section(title="Intro", body="old intro"),
+                Section(title="Details", body="details text"),
+            ),
+        ),),
+    )
+    proposal = StateUpdateProposal(
+        id="u1",
+        target=StateUpdateTarget(artifact_id="doc"),
+        summary="modify intro",
+        payload={
+            "operation": "modify_section",
+            "section_title": "Intro",
+            "new_body": "new intro",
+        },
+    )
+    updated = apply_state_update(state, proposal)
+    artifact = next(a for a in updated.artifacts if a.id == "doc")
+    assert isinstance(artifact, DocumentArtifact)
+    assert artifact.sections[0].body == "new intro"
+    assert artifact.sections[1].body == "details text"
+
+
+def test_apply_state_update_modify_section_raises_if_title_not_found() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=()),
+        artifacts=(DocumentArtifact(
+            id="doc",
+            sections=(Section(title="Intro", body="body"),),
+        ),),
+    )
+    proposal = StateUpdateProposal(
+        id="u1",
+        target=StateUpdateTarget(artifact_id="doc"),
+        summary="modify missing",
+        payload={
+            "operation": "modify_section",
+            "section_title": "Nonexistent",
+            "new_body": "x",
+        },
+    )
+    with pytest.raises(ValueError, match="Nonexistent"):
+        apply_state_update(state, proposal)
+
+
+def test_apply_state_update_modify_section_requires_document_artifact() -> None:
+    state = State(
+        northstar=NorthStar(artifacts=()),
+        artifacts=(CodingArtifact(id="code", files=()),),
+    )
+    proposal = StateUpdateProposal(
+        id="u1",
+        target=StateUpdateTarget(artifact_id="code"),
+        summary="bad",
+        payload={
+            "operation": "modify_section",
+            "section_title": "Intro",
+            "new_body": "x",
+        },
+    )
+    with pytest.raises(ValueError, match="DocumentArtifact"):
+        apply_state_update(state, proposal)

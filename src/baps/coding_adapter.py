@@ -21,6 +21,7 @@ from baps.project_adapter import (
 from baps.state import (
     CodingArtifact,
     CodeFile,
+    DeltaCodingBatchState,
     DeltaCodingState,
     DeltaState,
     DocumentArtifact,
@@ -30,6 +31,7 @@ from baps.state import (
     StateUpdateProposal,
     StateUpdateTarget,
     WriteFileDelta,
+    WriteFilesDelta,
 )
 from baps.document_adapter import build_northstar_artifact_from_markdown
 
@@ -159,7 +161,9 @@ def render_coding_blue_prompt(
 ) -> str:
     coding_delta_instructions = (
         "Coding delta rules:\n"
-        "- file.path and file.content must be non-empty strings.\n"
+        "- Use write_files (plural) to write one or more files in a single delta — preferred.\n"
+        "- Use write_file (singular) only when writing exactly one file.\n"
+        "- file paths and content must be non-empty strings.\n"
         "- Prefer production code under src/.\n"
         "- Prefer tests under tests/.\n"
         "- Prefer pytest-discoverable tests at tests/test_*.py.\n"
@@ -167,11 +171,21 @@ def render_coding_blue_prompt(
         "- Test files must NOT redefine or duplicate production functions.\n"
         "- Keep code and tests as separate files (do not embed unittest in production file).\n"
         "- content must be a valid JSON string: escape internal double quotes as \\\" and newlines as \\n.\n"
-        "- write_file content MUST contain final artifact content only.\n"
-        "- write_file content MUST NOT include reasoning, planning notes, self-corrections, or alternative explanations.\n"
+        "- File content MUST contain final artifact content only — no reasoning, planning notes, self-corrections, or alternative explanations.\n"
         f"- Forbidden markers in content include: {', '.join(repr(m) for m in _BLUE_CONTENT_FORBIDDEN_MARKERS)}.\n"
         "- Return one complete JSON object with balanced braces.\n"
-        "Required JSON shape:\n"
+        "Preferred JSON shape (write_files — one or more files):\n"
+        "{\n"
+        '  "artifact_id": "<game_spec.target_artifact_id>",\n'
+        '  "operation": "write_files",\n'
+        '  "payload": {\n'
+        '    "files": [\n'
+        '      {"path": "<relative path>", "content": "<full file content>"},\n'
+        '      {"path": "<another path>", "content": "<full file content>"}\n'
+        "    ]\n"
+        "  }\n"
+        "}\n"
+        "Alternative shape (write_file — single file only):\n"
         "{\n"
         '  "artifact_id": "<game_spec.target_artifact_id>",\n'
         '  "operation": "write_file",\n'
@@ -192,20 +206,10 @@ def render_coding_blue_prompt(
     )
 
 
-def _fix_delta_file_content_quotes(parsed: dict) -> None:
-    """Fix residual \\\" in file content caused by model double-escaping quotes in JSON.
-
-    Models occasionally emit \\\\\\\" (double-escaped) for an intended \\\" in the JSON value,
-    producing a literal backslash-quote in the parsed content. For single-line content this is
-    always a transport artifact. For multi-line Python files we only unescape when doing so
-    fixes an otherwise invalid syntax.
-    """
-    try:
-        file_data = parsed["payload"]["file"]
-        content = file_data["content"]
-        path = file_data["path"]
-    except (KeyError, TypeError):
-        return
+def _fix_one_file_content_quotes(file_data: dict) -> None:
+    """Fix residual \\\" in a single file's content caused by model double-escaping."""
+    content = file_data.get("content")
+    path = file_data.get("path")
     if not isinstance(content, str) or '\\"' not in content:
         return
     if "\n" not in content:
@@ -215,17 +219,41 @@ def _fix_delta_file_content_quotes(parsed: dict) -> None:
         return
     try:
         ast.parse(content)
-        return  # already valid, leave untouched
+        return  # already valid
     except SyntaxError:
         candidate = content.replace('\\"', '"')
         try:
             ast.parse(candidate)
             file_data["content"] = candidate
         except SyntaxError:
-            pass  # can't fix deterministically; leave as-is
+            pass
 
 
-def parse_coding_delta_json(text: str) -> DeltaCodingState:
+def _fix_delta_file_content_quotes(parsed: dict) -> None:
+    """Fix residual \\\" in file content caused by model double-escaping quotes in JSON.
+
+    Handles both write_file (single file) and write_files (multiple files).
+    For single-line content this is always a transport artifact. For multi-line
+    Python files we only unescape when doing so fixes an otherwise invalid syntax.
+    """
+    operation = parsed.get("operation")
+    payload = parsed.get("payload")
+    if not isinstance(payload, dict):
+        return
+    if operation == "write_files":
+        files = payload.get("files")
+        if not isinstance(files, list):
+            return
+        for file_data in files:
+            if isinstance(file_data, dict):
+                _fix_one_file_content_quotes(file_data)
+        return
+    file_data = payload.get("file")
+    if isinstance(file_data, dict):
+        _fix_one_file_content_quotes(file_data)
+
+
+def parse_coding_delta_json(text: str) -> DeltaCodingState | DeltaCodingBatchState:
     normalized = _normalize_json_candidate(text)
     try:
         parsed = json.loads(normalized)
@@ -244,6 +272,17 @@ def parse_coding_delta_json(text: str) -> DeltaCodingState:
         )
 
     _fix_delta_file_content_quotes(parsed)
+
+    operation = parsed.get("operation")
+    if operation == "write_files":
+        try:
+            delta = DeltaCodingBatchState.model_validate(parsed)
+        except Exception as exc:
+            raise ValueError(
+                f"blue model output failed DeltaCodingBatchState validation: {exc}"
+            ) from exc
+        _validate_coding_write_files_purity(delta)
+        return delta
 
     try:
         delta = DeltaCodingState.model_validate(parsed)
@@ -264,6 +303,17 @@ def _validate_coding_write_file_artifact_purity(delta: DeltaCodingState) -> None
                 "blue model output failed DeltaCodingState validation: "
                 f"write_file content contains forbidden reasoning marker {marker!r}"
             )
+
+
+def _validate_coding_write_files_purity(delta: DeltaCodingBatchState) -> None:
+    for code_file in delta.payload.files:
+        lowered = code_file.content.lower()
+        for marker in _BLUE_CONTENT_FORBIDDEN_MARKERS:
+            if marker.lower() in lowered:
+                raise ValueError(
+                    "blue model output failed DeltaCodingBatchState validation: "
+                    f"write_files file {code_file.path!r} contains forbidden reasoning marker {marker!r}"
+                )
 
 
 def _normalize_coding_export_content(content: str) -> str:
@@ -344,7 +394,8 @@ def _render_coding_evaluation_supplement(verification_result: VerificationResult
     base = (
         "Coding evaluation guidance:\n"
         "- target_artifact_id is the artifact id, not a file path.\n"
-        "- File path belongs in DeltaCodingState.payload.file.path.\n"
+        "- For write_file: file path belongs in payload.file.path.\n"
+        "- For write_files: file paths belong in payload.files[].path.\n"
         "- Pytest tests containing assert statements are not empty.\n"
         "- Do not reject tests as empty if assertions are present.\n"
         "- If success_condition only requires non-empty tests, basic asserted tests satisfy that condition.\n"
@@ -356,22 +407,34 @@ def _render_coding_evaluation_supplement(verification_result: VerificationResult
 
 
 def derive_coding_state_update_from_delta(delta_state: DeltaState) -> StateUpdateProposal:
-    if not isinstance(delta_state, DeltaCodingState):
-        raise ValueError(f"unsupported delta type for integration: {type(delta_state).__name__}")
-    if delta_state.operation != "write_file":
-        raise ValueError(f"unsupported delta operation for integration: {delta_state.operation}")
-    return StateUpdateProposal(
-        id=f"state-update:{delta_state.artifact_id}:write_file:{delta_state.payload.file.path}",
-        target=StateUpdateTarget(artifact_id=delta_state.artifact_id),
-        summary=(
-            f"Write file '{delta_state.payload.file.path}' "
-            f"in coding artifact {delta_state.artifact_id}"
-        ),
-        payload={
-            "operation": "write_file",
-            "file": delta_state.payload.file.model_dump(mode="json"),
-        },
-    )
+    if isinstance(delta_state, DeltaCodingBatchState):
+        paths = ", ".join(f.path for f in delta_state.payload.files)
+        return StateUpdateProposal(
+            id=f"state-update:{delta_state.artifact_id}:write_files:{len(delta_state.payload.files)}",
+            target=StateUpdateTarget(artifact_id=delta_state.artifact_id),
+            summary=(
+                f"Write {len(delta_state.payload.files)} file(s) "
+                f"({paths}) in coding artifact {delta_state.artifact_id}"
+            ),
+            payload={
+                "operation": "write_files",
+                "files": [f.model_dump(mode="json") for f in delta_state.payload.files],
+            },
+        )
+    if isinstance(delta_state, DeltaCodingState):
+        return StateUpdateProposal(
+            id=f"state-update:{delta_state.artifact_id}:write_file:{delta_state.payload.file.path}",
+            target=StateUpdateTarget(artifact_id=delta_state.artifact_id),
+            summary=(
+                f"Write file '{delta_state.payload.file.path}' "
+                f"in coding artifact {delta_state.artifact_id}"
+            ),
+            payload={
+                "operation": "write_file",
+                "file": delta_state.payload.file.model_dump(mode="json"),
+            },
+        )
+    raise ValueError(f"unsupported delta type for integration: {type(delta_state).__name__}")
 
 
 class CodingProjectAdapter:
@@ -398,9 +461,8 @@ class CodingProjectAdapter:
     ) -> str:
         base = (
             "Coding CreateGame constraints:\n"
-            "- DeltaCodingState write_file changes exactly one file per game.\n"
-            "- Choose exactly one missing file task per GameSpec.\n"
-            "- Do not request multiple files in one GameSpec.\n"
+            "- Blue can write one or more files per game using write_files (preferred) or write_file.\n"
+            "- Group logically related files (e.g. a module and its tests) into one GameSpec.\n"
             "- File paths must be derived from the NorthStar spec, not invented.\n"
             "- Prefer production files under src/ before writing test files.\n"
         )
@@ -491,37 +553,44 @@ class CodingProjectAdapter:
         return _render_coding_evaluation_supplement(verification_result)
 
     def build_blue_output_format(self) -> str | dict | None:
-        return {
-            "type": "object",
-            "properties": {
-                "artifact_id": {"type": "string"},
-                "operation": {"type": "string", "enum": ["write_file"]},
-                "payload": {
-                    "type": "object",
-                    "properties": {
-                        "file": {
-                            "type": "object",
-                            "properties": {
-                                "path": {"type": "string"},
-                                "content": {"type": "string"},
-                            },
-                            "required": ["path", "content"],
-                            "additionalProperties": False,
-                        }
-                    },
-                    "required": ["file"],
-                    "additionalProperties": False,
-                },
-            },
-            "required": ["artifact_id", "operation", "payload"],
-            "additionalProperties": False,
-        }
+        # Constrained decoding schema — Blue may use write_file or write_files.
+        # The payload shape differs per operation; returning None here lets the
+        # prompt instructions drive the format rather than a single rigid schema.
+        return None
 
     def build_blue_tools(self) -> list[ToolDefinition]:
+        _file_schema = {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Relative file path (non-empty)"},
+                "content": {"type": "string", "description": "Full file content"},
+            },
+            "required": ["path", "content"],
+        }
         return [
             ToolDefinition(
+                name="write_files",
+                description="Write one or more files to the coding artifact in a single delta.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "artifact_id": {
+                            "type": "string",
+                            "description": "Target coding artifact ID",
+                        },
+                        "files": {
+                            "type": "array",
+                            "items": _file_schema,
+                            "minItems": 1,
+                            "description": "List of files to write (path + content each)",
+                        },
+                    },
+                    "required": ["artifact_id", "files"],
+                },
+            ),
+            ToolDefinition(
                 name="write_file",
-                description="Write a file to the coding artifact.",
+                description="Write a single file to the coding artifact.",
                 parameters={
                     "type": "object",
                     "properties": {
@@ -540,31 +609,51 @@ class CodingProjectAdapter:
                     },
                     "required": ["artifact_id", "path", "content"],
                 },
-            )
+            ),
         ]
 
     def tool_call_to_delta(self, tool_call: ToolCall) -> DeltaState:
-        if tool_call.name != "write_file":
-            raise ValueError(f"unexpected tool: {tool_call.name!r}")
         args = tool_call.arguments
-        try:
-            artifact_id = str(args["artifact_id"])
-            path = str(args["path"])
-            content = str(args["content"])
-        except KeyError as exc:
-            raise ValueError(f"missing required tool argument: {exc}") from exc
-        try:
-            return DeltaCodingState.model_validate(
-                {
-                    "artifact_id": artifact_id,
-                    "operation": "write_file",
-                    "payload": {"file": {"path": path, "content": content}},
-                }
-            )
-        except Exception as exc:
-            raise ValueError(
-                f"tool call arguments failed DeltaCodingState validation: {exc}"
-            ) from exc
+        if tool_call.name == "write_files":
+            try:
+                artifact_id = str(args["artifact_id"])
+                files = args["files"]
+            except KeyError as exc:
+                raise ValueError(f"missing required tool argument: {exc}") from exc
+            if not isinstance(files, list):
+                raise ValueError("write_files tool argument 'files' must be a list")
+            try:
+                return DeltaCodingBatchState.model_validate(
+                    {
+                        "artifact_id": artifact_id,
+                        "operation": "write_files",
+                        "payload": {"files": files},
+                    }
+                )
+            except Exception as exc:
+                raise ValueError(
+                    f"tool call arguments failed DeltaCodingBatchState validation: {exc}"
+                ) from exc
+        if tool_call.name == "write_file":
+            try:
+                artifact_id = str(args["artifact_id"])
+                path = str(args["path"])
+                content = str(args["content"])
+            except KeyError as exc:
+                raise ValueError(f"missing required tool argument: {exc}") from exc
+            try:
+                return DeltaCodingState.model_validate(
+                    {
+                        "artifact_id": artifact_id,
+                        "operation": "write_file",
+                        "payload": {"file": {"path": path, "content": content}},
+                    }
+                )
+            except Exception as exc:
+                raise ValueError(
+                    f"tool call arguments failed DeltaCodingState validation: {exc}"
+                ) from exc
+        raise ValueError(f"unexpected tool: {tool_call.name!r}")
 
     def parse_blue_delta(self, text: str) -> DeltaState:
         return parse_coding_delta_json(text)
