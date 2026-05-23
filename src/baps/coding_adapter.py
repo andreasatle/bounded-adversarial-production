@@ -34,6 +34,20 @@ from baps.state import (
 from baps.document_adapter import build_northstar_artifact_from_markdown
 
 
+_BLUE_CONTENT_FORBIDDEN_MARKERS: tuple[str, ...] = (
+    "Note:",
+    "Correction:",
+    "Correcting",
+    "Re-writing",
+    "Rewriting",
+    "self-contained issue",
+    "Re-reading context",
+)
+
+_CONFTEST_CONTENT = (
+    "import sys, os\n"
+    'sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))\n'
+)
 
 
 def coding_artifact_from_state(state: State, artifact_id: str) -> CodingArtifact:
@@ -155,7 +169,7 @@ def render_coding_blue_prompt(
         "- content must be a valid JSON string: escape internal double quotes as \\\" and newlines as \\n.\n"
         "- write_file content MUST contain final artifact content only.\n"
         "- write_file content MUST NOT include reasoning, planning notes, self-corrections, or alternative explanations.\n"
-        "- Forbidden markers in content include: 'Note:', 'Correction:', 'Correcting', 'Re-writing', 'Rewriting', 'self-contained issue', 'Re-reading context'.\n"
+        f"- Forbidden markers in content include: {', '.join(repr(m) for m in _BLUE_CONTENT_FORBIDDEN_MARKERS)}.\n"
         "- Return one complete JSON object with balanced braces.\n"
         "Required JSON shape:\n"
         "{\n"
@@ -244,17 +258,8 @@ def parse_coding_delta_json(text: str) -> DeltaCodingState:
 def _validate_coding_write_file_artifact_purity(delta: DeltaCodingState) -> None:
     content = delta.payload.file.content
     lowered = content.lower()
-    forbidden_markers = (
-        "note:",
-        "correction:",
-        "correcting",
-        "re-writing",
-        "rewriting",
-        "re-reading context",
-        "self-contained issue",
-    )
-    for marker in forbidden_markers:
-        if marker in lowered:
+    for marker in _BLUE_CONTENT_FORBIDDEN_MARKERS:
+        if marker.lower() in lowered:
             raise ValueError(
                 "blue model output failed DeltaCodingState validation: "
                 f"write_file content contains forbidden reasoning marker {marker!r}"
@@ -333,6 +338,21 @@ def _recover_malformed_coding_delta_json(text: str) -> dict[str, object] | None:
     if not isinstance(parsed, dict):
         return None
     return parsed
+
+
+def _render_coding_evaluation_supplement(verification_result: VerificationResult | None) -> str:
+    base = (
+        "Coding evaluation guidance:\n"
+        "- target_artifact_id is the artifact id, not a file path.\n"
+        "- File path belongs in DeltaCodingState.payload.file.path.\n"
+        "- Pytest tests containing assert statements are not empty.\n"
+        "- Do not reject tests as empty if assertions are present.\n"
+        "- If success_condition only requires non-empty tests, basic asserted tests satisfy that condition.\n"
+        "- If verification evidence exists, reason from exit_code/stdout/stderr.\n"
+    )
+    if verification_result is not None:
+        return base + "- If pytest discovered tests, do not claim test files are empty.\n"
+    return base
 
 
 def derive_coding_state_update_from_delta(delta_state: DeltaState) -> StateUpdateProposal:
@@ -458,18 +478,7 @@ class CodingProjectAdapter:
         verification_result: VerificationResult | None,
     ) -> str:
         del state_view, game_spec, delta_state
-        base = (
-            "Coding evaluation guidance:\n"
-            "- target_artifact_id is the artifact id, not a file path.\n"
-            "- File path belongs in DeltaCodingState.payload.file.path.\n"
-            "- Pytest tests containing assert statements are not empty.\n"
-            "- Do not reject tests as empty if assertions are present.\n"
-            "- If success_condition only requires non-empty tests, basic asserted tests satisfy that condition.\n"
-            "- If verification evidence exists, reason from exit_code/stdout/stderr.\n"
-        )
-        if verification_result is not None:
-            return base + "- If pytest discovered tests, do not claim test files are empty.\n"
-        return base
+        return _render_coding_evaluation_supplement(verification_result)
 
     def render_referee_prompt_supplement(
         self,
@@ -479,18 +488,7 @@ class CodingProjectAdapter:
         verification_result: VerificationResult | None,
     ) -> str:
         del state_view, game_spec, delta_state
-        base = (
-            "Coding evaluation guidance:\n"
-            "- target_artifact_id is the artifact id, not a file path.\n"
-            "- File path belongs in DeltaCodingState.payload.file.path.\n"
-            "- Pytest tests containing assert statements are not empty.\n"
-            "- Do not reject tests as empty if assertions are present.\n"
-            "- If success_condition only requires non-empty tests, basic asserted tests satisfy that condition.\n"
-            "- If verification evidence exists, reason from exit_code/stdout/stderr.\n"
-        )
-        if verification_result is not None:
-            return base + "- If pytest discovered tests, do not claim test files are empty.\n"
-        return base
+        return _render_coding_evaluation_supplement(verification_result)
 
     def build_blue_output_format(self) -> str | dict | None:
         return {
@@ -580,15 +578,11 @@ class CodingProjectAdapter:
         changed = False
 
         conftest_path = output_path / "conftest.py"
-        conftest_content = (
-            "import sys, os\n"
-            'sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))\n'
-        )
         conftest_before = (
             conftest_path.read_text(encoding="utf-8") if conftest_path.exists() else None
         )
-        if conftest_before != conftest_content:
-            conftest_path.write_text(conftest_content, encoding="utf-8")
+        if conftest_before != _CONFTEST_CONTENT:
+            conftest_path.write_text(_CONFTEST_CONTENT, encoding="utf-8")
             changed = True
 
         for code_file in artifact.files:

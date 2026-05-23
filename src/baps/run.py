@@ -39,6 +39,15 @@ from baps.state import (
 from baps.state_service import StateService
 from baps.state_store import JsonStateStore
 
+_DEFAULT_OLLAMA_MODEL = "llama3.2"
+_DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
+_DEFAULT_WORKSPACE = ".baps-workspace"
+_DEFAULT_MAX_PLAY_GAME_ATTEMPTS = 3
+_BLACKBOARD_DIR = "blackboard"
+_NORTHSTAR_PROPOSALS_FILE = "northstar_proposals.jsonl"
+_WORKSPACE_CONFIG_FILE = "baps-config.json"
+
+
 class NoNewAtomicGameError(ValueError):
     """Raised when the model explicitly indicates no new atomic game is available."""
 
@@ -439,17 +448,17 @@ def _debug_print_verification_result(result: VerificationResult | None) -> None:
 
 
 def _build_model_client() -> ModelClient:
-    model = os.getenv("BAPS_OLLAMA_MODEL", "llama3.2")
-    base_url = os.getenv("BAPS_OLLAMA_BASE_URL", "http://localhost:11434")
+    model = os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL)
+    base_url = os.getenv("BAPS_OLLAMA_BASE_URL", _DEFAULT_OLLAMA_BASE_URL)
     return OllamaClient(model=model, base_url=base_url)
 
 
 def _build_create_game_model_client() -> ModelClient:
     model = (
         os.getenv("BAPS_OLLAMA_PLANNER_MODEL")
-        or os.getenv("BAPS_OLLAMA_MODEL", "llama3.2")
+        or os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL)
     )
-    base_url = os.getenv("BAPS_OLLAMA_BASE_URL", "http://localhost:11434")
+    base_url = os.getenv("BAPS_OLLAMA_BASE_URL", _DEFAULT_OLLAMA_BASE_URL)
     return OllamaClient(model=model, base_url=base_url)
 
 
@@ -550,7 +559,7 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
     workspace_raw = (
         args.workspace
         if args.workspace is not None
-        else spec_data.get("workspace", ".baps-workspace")
+        else spec_data.get("workspace", _DEFAULT_WORKSPACE)
     )
 
     workspace_config: dict[str, Any] = {}
@@ -1164,7 +1173,7 @@ def play_game(
     red_model_client: ModelClient | None = None,
     referee_model_client: ModelClient | None = None,
     verification_result: VerificationResult | None = None,
-    max_attempts: int = 3,
+    max_attempts: int = _DEFAULT_MAX_PLAY_GAME_ATTEMPTS,
 ) -> DeltaState | None:
     if max_attempts < 1:
         raise ValueError("max_attempts must be >= 1")
@@ -1324,7 +1333,7 @@ def _verify_export_with_adapter(
 def _append_northstar_proposal_to_blackboard(
     workspace: Path, rationale: str, proposed_northstar: str
 ) -> None:
-    blackboard_dir = workspace / "blackboard"
+    blackboard_dir = workspace / _BLACKBOARD_DIR
     blackboard_dir.mkdir(parents=True, exist_ok=True)
     entry = {
         "event": "northstar_update_proposal",
@@ -1332,7 +1341,7 @@ def _append_northstar_proposal_to_blackboard(
         "proposed_northstar": proposed_northstar,
         "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
     }
-    proposals_path = blackboard_dir / "northstar_proposals.jsonl"
+    proposals_path = blackboard_dir / _NORTHSTAR_PROPOSALS_FILE
     with proposals_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
 
@@ -1342,7 +1351,7 @@ def _state_path_for_workspace(workspace: Path) -> Path:
 
 
 def _workspace_config_path(workspace: Path) -> Path:
-    return workspace / "baps-config.json"
+    return workspace / _WORKSPACE_CONFIG_FILE
 
 
 _WORKSPACE_CONFIG_FIELDS = ("project_type", "artifact_id", "northstar_markdown", "goal", "output")

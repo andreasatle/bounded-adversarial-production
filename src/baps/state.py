@@ -264,6 +264,22 @@ def find_state_artifact(state: State, artifact_id: str) -> StateArtifact:
     raise ValueError(f"artifact id not found in state: {resolved_artifact_id}")
 
 
+def _replace_artifact_in_state(
+    state: State, artifact_id: str, replacement: StateArtifact
+) -> State:
+    new_northstar = tuple(
+        replacement if a.id == artifact_id else a
+        for a in state.northstar.artifacts
+    )
+    if any(a is replacement for a in new_northstar):
+        return State(northstar=NorthStar(artifacts=new_northstar), artifacts=state.artifacts)
+    new_artifacts = tuple(
+        replacement if a.id == artifact_id else a
+        for a in state.artifacts
+    )
+    return State(northstar=state.northstar, artifacts=new_artifacts)
+
+
 def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
     operation = proposal.payload.get("operation")
     if operation == "write_file":
@@ -290,33 +306,7 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
             id=existing.id,
             files=tuple(updated_files),
         )
-
-        northstar_replaced = False
-        new_northstar_artifacts: list[StateArtifact] = []
-        for artifact in state.northstar.artifacts:
-            if artifact.id == target_artifact_id:
-                new_northstar_artifacts.append(replacement)
-                northstar_replaced = True
-            else:
-                new_northstar_artifacts.append(artifact)
-
-        if northstar_replaced:
-            return State(
-                northstar=NorthStar(artifacts=tuple(new_northstar_artifacts)),
-                artifacts=state.artifacts,
-            )
-
-        new_state_artifacts: list[StateArtifact] = []
-        for artifact in state.artifacts:
-            if artifact.id == target_artifact_id:
-                new_state_artifacts.append(replacement)
-            else:
-                new_state_artifacts.append(artifact)
-
-        return State(
-            northstar=state.northstar,
-            artifacts=tuple(new_state_artifacts),
-        )
+        return _replace_artifact_in_state(state, target_artifact_id, replacement)
 
     if operation == "append_section":
         target_artifact_id = proposal.target.artifact_id
@@ -330,33 +320,7 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
             id=existing.id,
             sections=(*existing.sections, appended_section),
         )
-
-        northstar_replaced = False
-        new_northstar_artifacts: list[StateArtifact] = []
-        for artifact in state.northstar.artifacts:
-            if artifact.id == target_artifact_id:
-                new_northstar_artifacts.append(replacement)
-                northstar_replaced = True
-            else:
-                new_northstar_artifacts.append(artifact)
-
-        if northstar_replaced:
-            return State(
-                northstar=NorthStar(artifacts=tuple(new_northstar_artifacts)),
-                artifacts=state.artifacts,
-            )
-
-        new_state_artifacts: list[StateArtifact] = []
-        for artifact in state.artifacts:
-            if artifact.id == target_artifact_id:
-                new_state_artifacts.append(replacement)
-            else:
-                new_state_artifacts.append(artifact)
-
-        return State(
-            northstar=state.northstar,
-            artifacts=tuple(new_state_artifacts),
-        )
+        return _replace_artifact_in_state(state, target_artifact_id, replacement)
 
     if operation == "add_artifact":
         if "artifact" not in proposal.payload:
@@ -397,32 +361,7 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
             f"expected {existing.kind}, got {replacement.kind}"
         )
 
-    northstar_replaced = False
-    new_northstar_artifacts: list[StateArtifact] = []
-    for artifact in state.northstar.artifacts:
-        if artifact.id == target_artifact_id:
-            new_northstar_artifacts.append(replacement)
-            northstar_replaced = True
-        else:
-            new_northstar_artifacts.append(artifact)
-
-    if northstar_replaced:
-        return State(
-            northstar=NorthStar(artifacts=tuple(new_northstar_artifacts)),
-            artifacts=state.artifacts,
-        )
-
-    new_state_artifacts: list[StateArtifact] = []
-    for artifact in state.artifacts:
-        if artifact.id == target_artifact_id:
-            new_state_artifacts.append(replacement)
-        else:
-            new_state_artifacts.append(artifact)
-
-    return State(
-        northstar=state.northstar,
-        artifacts=tuple(new_state_artifacts),
-    )
+    return _replace_artifact_in_state(state, target_artifact_id, replacement)
 
 
 def validate_state_artifacts(state: State, registry: StateArtifactRegistry) -> State:
