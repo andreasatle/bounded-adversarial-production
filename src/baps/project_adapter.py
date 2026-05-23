@@ -162,8 +162,15 @@ def render_blue_prompt_core(
     import json
 
     previous_feedback_json = json.dumps(previous_feedback, sort_keys=True)
+    context_block = ""
+    if game_spec.context_chain:
+        lines = ["Planning context (coarsest → finest scope):"]
+        for i, desc in enumerate(game_spec.context_chain):
+            lines.append(f"  [{i + 1}] {desc}")
+        context_block = "\n".join(lines) + "\n\n"
     return (
         "Produce exactly one delta JSON object allowed by GameSpec.allowed_delta_type.\n\n"
+        f"{context_block}"
         "Input:\n"
         "- state_view:\n"
         "\n"
@@ -177,6 +184,7 @@ def render_blue_prompt_core(
         f"- success_condition: {game_spec.success_condition}\n\n"
         "Execution rules:\n"
         "- Produce one delta that satisfies objective and success_condition.\n"
+        "- Use context chain (if present) to understand the broader plan your work belongs to.\n"
         "- Use StateView as the current artifact context.\n"
         "- Do not duplicate existing artifact content.\n"
         "- Do not rewrite unrelated existing state.\n"

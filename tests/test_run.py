@@ -361,7 +361,7 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
     captured: dict[str, object] = {}
     original_create_game = run_module.create_game
 
-    def _capturing_create_game(config, state, adapter=None, verification_result=None):
+    def _capturing_create_game(config, state, adapter=None, verification_result=None, context_chain=()):
         captured.setdefault("state", state)
         return original_create_game(
             config,
@@ -1127,8 +1127,8 @@ def test_create_game_prompt_forbids_markdown_fences_and_lists_required_shape() -
     assert '"allowed_delta_type"' in prompt
     assert '"success_condition"' in prompt
     assert "Do not artificially split a coherent gap into multiple games" in prompt
-    assert "fully close the selected gap" in prompt
-    assert "All files or sections that must change together to close the gap belong in one game" in prompt
+    assert "All files or sections that must change together to close a gap belong in one game" in prompt
+    assert "decompose" in prompt
 
 
 def test_create_game_broad_goal_accepts_decomposed_atomic_gamespec() -> None:
@@ -2370,11 +2370,11 @@ def test_create_game_prompt_includes_northstar_context() -> None:
     assert "state_view_json:" not in prompt
     assert "GAP ANALYSIS" in prompt
     assert "PRIORITIZE" in prompt
-    assert "SCOPE THE GAME" in prompt
+    assert "DECIDE" in prompt
     assert "SELF-CONTAIN" in prompt
-    assert "PlayGame has no access to NorthStar" in prompt
+    assert "decompose" in prompt
     assert "name the gap being closed" in prompt
-    assert "must be verifiable from the artifact alone" in prompt
+    assert "verifiable from the artifact alone" in prompt
     assert "Do not artificially split a coherent gap into multiple games" in prompt
     assert '{\"no_new_game\": true, \"reason\": \"...\"}' in prompt
     assert "state_json:" not in prompt
@@ -3677,7 +3677,7 @@ def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_pa
     monkeypatch.setattr(
         run_module,
         "create_game",
-        lambda config, state, adapter=None, verification_result=None: expected,
+        lambda config, state, adapter=None, verification_result=None, context_chain=(): expected,
     )
 
     def _capture_play_game(state, spec, adapter=None):
@@ -3705,7 +3705,7 @@ def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_pa
 
     run_module.main()
 
-    assert captured["spec"] is expected
+    assert captured["spec"] == expected
     assert captured["state"] is not None
 
 
@@ -3738,7 +3738,7 @@ def test_main_max_iterations_two_runs_two_iterations_with_state_carry_forward(
 
     create_game_seen_sections: list[list[str]] = []
 
-    def _create_game(config, state, adapter=None, verification_result=None):
+    def _create_game(config, state, adapter=None, verification_result=None, context_chain=()):
         del verification_result
         document = next(a for a in state.artifacts if a.id == "main-document")
         section_titles = [s.title for s in document.sections]
@@ -3828,7 +3828,7 @@ def test_main_stops_when_create_game_cannot_produce_new_game(
 
     calls = {"count": 0}
 
-    def _create_game(_config, _state, adapter=None, verification_result=None):
+    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=()):
         del verification_result
         calls["count"] += 1
         if calls["count"] == 1:
@@ -3866,7 +3866,7 @@ def test_main_stop_reason_iteration_limit_reached_after_all_iterations_used(
 
     create_game_calls = {"n": 0}
 
-    def _create_game(_config, _state, adapter=None, verification_result=None):
+    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=()):
         create_game_calls["n"] += 1
         return run_module.GameSpec(
             objective="Add a section",
@@ -3924,7 +3924,7 @@ def test_main_no_state_change_stops_loop_before_max_iterations(
 
     create_game_calls = {"n": 0}
 
-    def _create_game(_config, _state, adapter=None, verification_result=None):
+    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=()):
         create_game_calls["n"] += 1
         return run_module.GameSpec(
             objective="Add a section",
@@ -3991,7 +3991,7 @@ def test_main_create_game_parse_error_is_not_swallowed_as_no_game(
 ) -> None:
     import baps.run as run_module
 
-    def _broken_create_game(_config, _state, adapter=None, verification_result=None):
+    def _broken_create_game(_config, _state, adapter=None, verification_result=None, context_chain=()):
         del verification_result
         raise ValueError("create_game model output must be valid JSON")
 
@@ -4319,7 +4319,7 @@ def test_second_run_sees_previous_state(monkeypatch, tmp_path: Path) -> None:
     workspace = tmp_path / "ws-second-run-state"
     seen_titles: list[list[str]] = []
 
-    def _create_game(config, state, adapter=None, verification_result=None):
+    def _create_game(config, state, adapter=None, verification_result=None, context_chain=()):
         del verification_result
         doc = next(a for a in state.artifacts if a.id == "main-document")
         titles = [s.title for s in doc.sections]
@@ -6346,7 +6346,7 @@ def test_coding_iteration_two_does_not_receive_stale_verification_result(
     verification_seen: list[object] = []
     call_counter = {"count": 0}
 
-    def _create_game(_config, _state, adapter=None, verification_result=None):
+    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=()):
         del verification_result
         call_counter["count"] += 1
         if call_counter["count"] == 1:
@@ -6365,7 +6365,7 @@ def test_coding_iteration_two_does_not_receive_stale_verification_result(
             )
         raise run_module.NoNewGameError("done")
 
-    def _play_game(_state, spec, adapter=None, verification_result=None):
+    def _play_game(_state, spec, adapter=None, verification_result=None, context_chain=()):
         verification_seen.append(verification_result)
         if "src/fibonacci.py" in spec.objective:
             return state_module.DeltaCodingState(
@@ -6425,7 +6425,7 @@ def test_coding_create_game_receives_previous_verification_result_second_iterati
     seen: list[run_module.VerificationResult | None] = []
     create_count = {"n": 0}
 
-    def _create_game(_config, _state, adapter=None, verification_result=None):
+    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=()):
         del adapter
         seen.append(verification_result)
         create_count["n"] += 1
@@ -6445,7 +6445,7 @@ def test_coding_create_game_receives_previous_verification_result_second_iterati
             )
         raise run_module.NoNewGameError("done")
 
-    def _play_game(_state, spec, adapter=None, verification_result=None):
+    def _play_game(_state, spec, adapter=None, verification_result=None, context_chain=()):
         del adapter, verification_result
         if "src/fibonacci.py" in spec.objective:
             return state_module.DeltaCodingState(
@@ -6633,7 +6633,7 @@ def test_create_game_prompt_includes_northstar_update_needed_instruction() -> No
     assert '"northstar_update_needed": true' in prompt
     assert '"rationale"' in prompt
     assert '"proposed_northstar"' in prompt
-    assert "trajectory cannot satisfy NorthStar intent without changing NorthStar" in prompt
+    assert "cannot satisfy NorthStar without changing NorthStar itself" in prompt
     assert "complete updated NorthStar content" in prompt
 
 
@@ -6672,7 +6672,7 @@ def test_run_iterations_northstar_update_proposed_writes_blackboard_and_stops(
 
     workspace = tmp_path / "ws-northstar-proposal"
 
-    def _create_game_raises(_config, _state, adapter=None, verification_result=None):
+    def _create_game_raises(_config, _state, adapter=None, verification_result=None, context_chain=()):
         raise run_module.NorthStarUpdateNeededError(
             rationale="Game direction contradicts NorthStar.",
             proposed_northstar="# Revised NorthStar\n\nNew direction.",
@@ -6713,7 +6713,7 @@ def test_run_iterations_northstar_update_proposed_does_not_apply_state_update(
 
     workspace = tmp_path / "ws-northstar-no-update"
 
-    def _create_game_raises(_config, _state, adapter=None, verification_result=None):
+    def _create_game_raises(_config, _state, adapter=None, verification_result=None, context_chain=()):
         raise run_module.NorthStarUpdateNeededError(
             rationale="Direction mismatch.",
             proposed_northstar="# New NorthStar",
@@ -6762,7 +6762,7 @@ def test_run_iterations_northstar_proposal_appends_on_multiple_signals(
         encoding="utf-8",
     )
 
-    def _create_game_raises(_config, _state, adapter=None, verification_result=None):
+    def _create_game_raises(_config, _state, adapter=None, verification_result=None, context_chain=()):
         raise run_module.NorthStarUpdateNeededError(
             rationale="New mismatch.",
             proposed_northstar="# Newer NorthStar",
@@ -7278,3 +7278,296 @@ def test_coding_create_game_state_view_truncates_long_files() -> None:
     assert "more lines" in view.content
     assert "line_0 = 0" in view.content
     assert "line_99 = 99" not in view.content
+
+
+# ---------------------------------------------------------------------------
+# Multiscale / decompose tests
+# ---------------------------------------------------------------------------
+
+def test_parse_create_game_output_returns_decompose_spec() -> None:
+    import baps.run as run_module
+
+    text = json.dumps({
+        "decompose": True,
+        "rationale": "Gap is too large",
+        "sub_gaps": [
+            {"description": "Implement auth module"},
+            {"description": "Implement user model"},
+        ],
+    })
+    result = run_module._parse_create_game_output(text)
+    assert isinstance(result, run_module.DecomposeSpec)
+    assert result.rationale == "Gap is too large"
+    assert len(result.sub_gaps) == 2
+    assert result.sub_gaps[0].description == "Implement auth module"
+    assert result.sub_gaps[1].description == "Implement user model"
+
+
+def test_parse_create_game_output_decompose_requires_non_empty_sub_gaps() -> None:
+    import baps.run as run_module
+    import pytest
+
+    text = json.dumps({
+        "decompose": True,
+        "rationale": "Too large",
+        "sub_gaps": [],
+    })
+    with pytest.raises(ValueError, match="non-empty list"):
+        run_module._parse_create_game_output(text)
+
+
+def test_parse_create_game_output_decompose_requires_rationale() -> None:
+    import baps.run as run_module
+    import pytest
+
+    text = json.dumps({
+        "decompose": True,
+        "rationale": "",
+        "sub_gaps": [{"description": "x"}],
+    })
+    with pytest.raises(ValueError, match="rationale must be non-empty"):
+        run_module._parse_create_game_output(text)
+
+
+def test_create_game_prompt_includes_context_chain_when_provided() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "northstar_markdown": "# Goal\n\nWrite a report.",
+        "goal": "Write a report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.create_state(config)
+    adapter = run_module.DocumentProjectAdapter()
+    state_view = adapter.build_create_game_state_view(state, config)
+    prompt = run_module._render_create_game_prompt(
+        config, state, state_view, adapter=adapter,
+        context_chain=("Implement auth subsystem", "Implement JWT token generation"),
+    )
+    assert "Parent planning context" in prompt
+    assert "[1] Implement auth subsystem" in prompt
+    assert "[2] Implement JWT token generation" in prompt
+    assert "[current] Plan within this scope" in prompt
+
+
+def test_create_game_prompt_no_context_block_when_chain_empty() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "northstar_markdown": "# Goal\n\nWrite a report.",
+        "goal": "Write a report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.create_state(config)
+    adapter = run_module.DocumentProjectAdapter()
+    state_view = adapter.build_create_game_state_view(state, config)
+    prompt = run_module._render_create_game_prompt(
+        config, state, state_view, adapter=adapter,
+    )
+    assert "Parent planning context" not in prompt
+    assert "[current]" not in prompt
+
+
+def test_blue_prompt_includes_context_chain_from_game_spec() -> None:
+    from baps.project_adapter import render_blue_prompt_core
+    from baps.state import GameSpec
+    from baps.northstar_projection import StateView, ProjectionType
+
+    game_spec = GameSpec(
+        objective="Write jwt_utils.py",
+        target_artifact_id="main-codebase",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="jwt_utils.py exists",
+        context_chain=("Auth subsystem missing", "JWT generation missing"),
+    )
+    state_view = StateView(
+        id="sv-1",
+        projection_type=ProjectionType.NORTH_STAR,
+        content="=== StateView Start ===\ncontent\n=== StateView End ===",
+        input_fingerprint="fp-1",
+    )
+    prompt = render_blue_prompt_core(state_view, game_spec, 1, None)
+    assert "Planning context (coarsest → finest scope):" in prompt
+    assert "[1] Auth subsystem missing" in prompt
+    assert "[2] JWT generation missing" in prompt
+
+
+def test_blue_prompt_no_context_block_when_chain_empty() -> None:
+    from baps.project_adapter import render_blue_prompt_core
+    from baps.state import GameSpec
+    from baps.northstar_projection import StateView, ProjectionType
+
+    game_spec = GameSpec(
+        objective="Write something",
+        target_artifact_id="main-codebase",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="file exists",
+    )
+    state_view = StateView(
+        id="sv-1",
+        projection_type=ProjectionType.NORTH_STAR,
+        content="=== StateView Start ===\ncontent\n=== StateView End ===",
+        input_fingerprint="fp-1",
+    )
+    prompt = render_blue_prompt_core(state_view, game_spec, 1, None)
+    assert "Planning context" not in prompt
+
+
+def test_solve_gap_decompose_then_play(monkeypatch, tmp_path: Path) -> None:
+    """Decompose at depth 0 → two sub-games played at depth 1, then no_new_game."""
+    import baps.run as run_module
+    import baps.state as state_module
+
+    played: list[str] = []
+    top_calls = [0]
+
+    def _fake_create_game(config, state, adapter=None, verification_result=None, context_chain=()):
+        if not context_chain:
+            top_calls[0] += 1
+            if top_calls[0] > 1:
+                raise run_module.NoNewGameError("all gaps closed")
+            return run_module.DecomposeSpec(
+                rationale="Too large",
+                sub_gaps=(
+                    run_module.SubGapSpec(description="Sub-gap A"),
+                    run_module.SubGapSpec(description="Sub-gap B"),
+                ),
+            )
+        # leaf — return a game spec for each sub-gap
+        return run_module.GameSpec(
+            objective=f"Do {context_chain[-1]}",
+            target_artifact_id="main-document",
+            allowed_delta_type="DeltaDocumentState",
+            success_condition="done",
+        )
+
+    def _fake_play_game(state, game_spec, adapter=None, **kwargs):
+        played.append(game_spec.objective)
+        return state_module.DeltaDocumentState(
+            artifact_id="main-document",
+            operation="append_section",
+            payload=state_module.AppendSectionDelta(
+                section=state_module.Section(title=game_spec.objective, body="body"),
+            ),
+        )
+
+    monkeypatch.setattr(run_module, "create_game", _fake_create_game)
+    monkeypatch.setattr(run_module, "play_game", _fake_play_game)
+
+    config = {
+        "workspace": tmp_path / "ws",
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "northstar_markdown": "# Goal",
+        "goal": "Write something",
+        "output_path": tmp_path / "ws" / "output" / "report.md",
+        "max_iterations": 10,
+        "max_depth": 2,
+        "spec_path": None,
+    }
+    service, state = run_module._initialize_project(config)
+    adapter = run_module.DocumentProjectAdapter()
+
+    result = run_module._run_project_iterations(config, adapter, service, state)
+
+    assert len(played) == 2
+    assert "Sub-gap A" in played[0]
+    assert "Sub-gap B" in played[1]
+    assert result["iterations_completed"] == 2
+
+
+def test_solve_gap_context_chain_injected_into_game_spec(monkeypatch, tmp_path: Path) -> None:
+    """The context chain accumulated through decomposition reaches Blue's GameSpec."""
+    import baps.run as run_module
+    import baps.state as state_module
+
+    captured_chain: list[tuple[str, ...]] = []
+    top_calls = [0]
+
+    def _fake_create_game(config, state, adapter=None, verification_result=None, context_chain=()):
+        if not context_chain:
+            top_calls[0] += 1
+            if top_calls[0] > 1:
+                raise run_module.NoNewGameError("done")
+            return run_module.DecomposeSpec(
+                rationale="Top level too large",
+                sub_gaps=(run_module.SubGapSpec(description="Level-1 gap"),),
+            )
+        return run_module.GameSpec(
+            objective="Leaf game",
+            target_artifact_id="main-document",
+            allowed_delta_type="DeltaDocumentState",
+            success_condition="done",
+        )
+
+    def _fake_play_game(state, game_spec, adapter=None, **kwargs):
+        captured_chain.append(game_spec.context_chain)
+        return state_module.DeltaDocumentState(
+            artifact_id="main-document",
+            operation="append_section",
+            payload=state_module.AppendSectionDelta(
+                section=state_module.Section(title="Leaf game", body="body"),
+            ),
+        )
+
+    monkeypatch.setattr(run_module, "create_game", _fake_create_game)
+    monkeypatch.setattr(run_module, "play_game", _fake_play_game)
+
+    config = {
+        "workspace": tmp_path / "ws",
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "northstar_markdown": "# Goal",
+        "goal": "Write something",
+        "output_path": tmp_path / "ws" / "output" / "report.md",
+        "max_iterations": 5,
+        "max_depth": 3,
+        "spec_path": None,
+    }
+    service, state = run_module._initialize_project(config)
+    adapter = run_module.DocumentProjectAdapter()
+    run_module._run_project_iterations(config, adapter, service, state)
+
+    assert len(captured_chain) == 1
+    assert captured_chain[0] == ("Level-1 gap",)
+
+
+def test_solve_gap_max_depth_stops_recursion(monkeypatch, tmp_path: Path) -> None:
+    """Decompose always → max_depth_reached stop reason."""
+    import baps.run as run_module
+
+    def _always_decompose(config, state, adapter=None, verification_result=None, context_chain=()):
+        return run_module.DecomposeSpec(
+            rationale="Always decompose",
+            sub_gaps=(run_module.SubGapSpec(description="inner"),),
+        )
+
+    monkeypatch.setattr(run_module, "create_game", _always_decompose)
+
+    config = {
+        "workspace": tmp_path / "ws",
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "northstar_markdown": "# Goal",
+        "goal": "Write something",
+        "output_path": tmp_path / "ws" / "output" / "report.md",
+        "max_iterations": 5,
+        "max_depth": 2,
+        "spec_path": None,
+    }
+    service, state = run_module._initialize_project(config)
+    adapter = run_module.DocumentProjectAdapter()
+    result = run_module._run_project_iterations(config, adapter, service, state)
+
+    assert result["stop_reason"] == "max_depth_reached"
+    assert result["iterations_completed"] == 0

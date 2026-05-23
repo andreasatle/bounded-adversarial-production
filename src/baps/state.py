@@ -142,11 +142,23 @@ class GameSpec(BaseModel):
     target_artifact_id: str
     allowed_delta_type: str
     success_condition: str
+    context_chain: tuple[str, ...] = ()
 
     _validate_objective = field_validator("objective")(_require_non_empty)
     _validate_target_artifact_id = field_validator("target_artifact_id")(_require_non_empty)
     _validate_allowed_delta_type = field_validator("allowed_delta_type")(_require_non_empty)
     _validate_success_condition = field_validator("success_condition")(_require_non_empty)
+
+
+class SubGapSpec(BaseModel):
+    description: str
+    _validate_description = field_validator("description")(_require_non_empty)
+
+
+class DecomposeSpec(BaseModel):
+    rationale: str
+    sub_gaps: tuple[SubGapSpec, ...]
+    _validate_rationale = field_validator("rationale")(_require_non_empty)
 
 
 class RedFinding(BaseModel):

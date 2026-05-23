@@ -25,6 +25,7 @@ from baps.project_adapter import (
 from baps.document_adapter import DocumentProjectAdapter
 from baps.coding_adapter import CodingProjectAdapter
 from baps.state import (
+    DecomposeSpec,
     DeltaState,
     GameSpec,
     PlayGameRuntime,
@@ -32,6 +33,7 @@ from baps.state import (
     RefereeDecision,
     State,
     StateUpdateProposal,
+    SubGapSpec,
     fingerprint_state,
     apply_referee_decision_to_runtime,
     build_default_state_artifact_registry,
@@ -47,6 +49,7 @@ _DEFAULT_OPENAI_MODEL = "gpt-4o"
 _DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 _DEFAULT_WORKSPACE = ".baps-workspace"
 _DEFAULT_MAX_PLAY_GAME_ATTEMPTS = 3
+_DEFAULT_MAX_DEPTH = 3
 _BLACKBOARD_DIR = "blackboard"
 _NORTHSTAR_PROPOSALS_FILE = "northstar_proposals.jsonl"
 _WORKSPACE_CONFIG_FILE = "baps-config.json"
@@ -751,6 +754,7 @@ def _render_create_game_prompt(
     state_view: StateView,
     verification_result: VerificationResult | None = None,
     adapter: ProjectTypeAdapter | None = None,
+    context_chain: tuple[str, ...] = (),
 ) -> str:
     resolved_adapter = (
         adapter
@@ -781,8 +785,16 @@ def _render_create_game_prompt(
             f"{verification_json}\n"
             "- previous_verification_result_json applies only to the previous exported state.\n\n"
         )
+    context_block = ""
+    if context_chain:
+        lines = ["Parent planning context (gap decomposition chain, coarsest → finest):"]
+        for i, desc in enumerate(context_chain):
+            lines.append(f"  [{i + 1}] {desc}")
+        lines.append("  [current] Plan within this scope.\n")
+        context_block = "\n".join(lines) + "\n"
     return (
         "Create a GameSpec JSON object that closes the highest-priority gap between current state and NorthStar.\n\n"
+        f"{context_block}"
         "Input:\n"
         f"- goal: {config['goal']}\n"
         "- state_view:\n"
@@ -791,35 +803,34 @@ def _render_create_game_prompt(
         "\n"
         f"- artifact_id: {_config_artifact_id(config)}\n\n"
         f"{verification_block}"
-        "Process — work through these steps before producing the GameSpec:\n\n"
+        "Process — work through these steps before producing output:\n\n"
         "STEP 1 — GAP ANALYSIS:\n"
-        "  Compare the current state (state_view) against NorthStar intent.\n"
-        "  Enumerate what NorthStar requires that is absent, incomplete, or incorrect in current state.\n"
+        "  Compare the current state (state_view) against NorthStar intent (and parent context if present).\n"
+        "  Enumerate what is absent, incomplete, or incorrect within your current scope.\n"
         "  Be specific: name the missing pieces, not just categories.\n\n"
         "STEP 2 — PRIORITIZE:\n"
-        "  Select the single highest-impact gap — the one whose closure most directly advances\n"
-        "  the project toward NorthStar and unblocks the most downstream work.\n"
-        "  If the gap is too large to close coherently in one turn, decompose it into the\n"
-        "  largest coherent sub-gap that can be closed completely.\n\n"
-        "STEP 3 — SCOPE THE GAME:\n"
-        "  Design the game to fully close the selected gap — not one small step toward it.\n"
-        "  Do not artificially split a coherent gap into multiple games.\n"
-        "  All files or sections that must change together to close the gap belong in one game.\n\n"
+        "  Select the single highest-impact gap — the one that unblocks the most downstream work.\n\n"
+        "STEP 3 — DECIDE: direct game or decompose?\n"
+        "  If the gap can be closed coherently by Blue in one turn: produce a GameSpec.\n"
+        "  If the gap is too large or spans multiple independent concerns: decompose it.\n\n"
         "STEP 4 — SELF-CONTAIN:\n"
-        "  Fold all relevant NorthStar intent into objective and success_condition.\n"
-        "  PlayGame has no access to NorthStar — it only sees the GameSpec.\n\n"
+        "  Fold all relevant intent into objective and success_condition (GameSpec).\n"
+        "  Or into sub_gap descriptions (decompose). Each sub_gap must be specific enough\n"
+        "  to recursively plan from, and together they must fully close the parent gap.\n\n"
         "Return only a JSON object.\n"
         "Do not wrap output in markdown.\n"
         "Do not use triple-backtick fences.\n"
         "Do not include prose before or after JSON.\n"
         "No extra fields.\n\n"
-        "If all gaps are closed and NorthStar intent is fully satisfied, return exactly:\n"
+        "If all gaps in current scope are closed, return exactly:\n"
         '{\"no_new_game\": true, \"reason\": \"...\"}\n\n'
-        "If the current project trajectory cannot satisfy NorthStar intent without changing NorthStar, return exactly:\n"
+        "If this gap is too large or spans independent concerns, return exactly:\n"
+        '{\"decompose\": true, \"rationale\": \"...\", \"sub_gaps\": [{\"description\": \"...\"}, ...]}\n'
+        "Sub-gaps must partition the current gap: together they close it, individually they are coherent.\n\n"
+        "If the current trajectory cannot satisfy NorthStar without changing NorthStar itself, return exactly:\n"
         '{\"northstar_update_needed\": true, \"rationale\": \"...\", \"proposed_northstar\": \"...\"}\n'
-        "Use northstar_update_needed only when NorthStar itself needs to change, not when the current state is merely incomplete.\n"
         "proposed_northstar must contain the complete updated NorthStar content as a plain string.\n\n"
-        "Required JSON shape:\n"
+        "GameSpec JSON shape:\n"
         "{\n"
         '  "objective": "...",\n'
         '  "target_artifact_id": "...",\n'
@@ -827,7 +838,9 @@ def _render_create_game_prompt(
         '  "success_condition": "..."\n'
         "}\n\n"
         "objective: name the gap being closed and what the closed state looks like.\n"
-        "success_condition: must be verifiable from the artifact alone — state what specifically must be present or true.\n"
+        "success_condition: verifiable from the artifact alone — state what must be present or true.\n"
+        "Do not artificially split a coherent gap into multiple games — use decompose instead.\n"
+        "All files or sections that must change together to close a gap belong in one game.\n"
         f"For this project type, allowed_delta_type must be {resolved_adapter.supported_delta_type}.\n"
         f"{supplement}"
     )
@@ -867,7 +880,7 @@ def _parse_game_spec_json(text: str) -> GameSpec:
         raise ValueError("create_game model output failed GameSpec validation") from exc
 
 
-def _parse_create_game_output(text: str) -> GameSpec:
+def _parse_create_game_output(text: str) -> GameSpec | DecomposeSpec:
     normalized = _normalize_json_candidate(text)
     try:
         parsed = json.loads(normalized)
@@ -905,6 +918,24 @@ def _parse_create_game_output(text: str) -> GameSpec:
         raise NorthStarUpdateNeededError(
             rationale=rationale, proposed_northstar=proposed_northstar
         )
+
+    if set(parsed.keys()) == {"decompose", "rationale", "sub_gaps"}:
+        if parsed["decompose"] is not True:
+            raise ValueError("create_game decompose response must set decompose=true")
+        rationale = str(parsed["rationale"]).strip()
+        if not rationale:
+            raise ValueError("create_game decompose response rationale must be non-empty")
+        sub_gaps_raw = parsed["sub_gaps"]
+        if not isinstance(sub_gaps_raw, list) or not sub_gaps_raw:
+            raise ValueError("create_game decompose response sub_gaps must be a non-empty list")
+        sub_gaps = tuple(
+            SubGapSpec(description=str(sg.get("description", "")).strip())
+            for sg in sub_gaps_raw
+            if isinstance(sg, dict)
+        )
+        if not sub_gaps:
+            raise ValueError("create_game decompose response sub_gaps contained no valid entries")
+        return DecomposeSpec(rationale=rationale, sub_gaps=sub_gaps)
 
     return _parse_game_spec_json(normalized)
 
@@ -1030,7 +1061,8 @@ def create_game(
     model_client: ModelClient | None = None,
     adapter: ProjectTypeAdapter | None = None,
     verification_result: VerificationResult | None = None,
-) -> GameSpec:
+    context_chain: tuple[str, ...] = (),
+) -> GameSpec | DecomposeSpec:
     _debug_print_create_game_input(state)
     resolved_adapter = (
         adapter
@@ -1047,12 +1079,13 @@ def create_game(
         state_view=state_view,
         verification_result=verification_result,
         adapter=resolved_adapter,
+        context_chain=context_chain,
     )
     _debug_print_create_game_prompt(prompt)
     generated = role.generate(prompt)
     _debug_print_create_game_raw_model_output(generated)
     try:
-        game_spec = _parse_create_game_output(generated)
+        result = _parse_create_game_output(generated)
     except ValueError as exc:
         if "valid JSON" not in str(exc) or not use_planner:
             raise
@@ -1062,11 +1095,16 @@ def create_game(
         fallback_role = Role("create_game", _build_role_client("create_game"), _CREATE_GAME_SCHEMA, constrained=False)
         generated = fallback_role.generate(prompt)
         _debug_print_create_game_raw_model_output(generated)
-        game_spec = _parse_create_game_output(generated)
+        result = _parse_create_game_output(generated)
     except NoNewGameError:
         raise
+
+    if isinstance(result, DecomposeSpec):
+        _debug_print_create_game_output(result)
+        return result
+
     game_spec = _normalize_game_spec_with_adapter(
-        resolved_adapter, game_spec, state, config
+        resolved_adapter, result, state, config
     )
     try:
         _validate_game_spec(game_spec)
@@ -1502,6 +1540,127 @@ def _load_project_service(workspace: Path) -> StateService:
     )
 
 
+class _RunContext:
+    """Mutable execution context threaded through recursive gap solving."""
+
+    def __init__(self, initial_state: State, max_iterations: int) -> None:
+        self.current_state = initial_state
+        self.iterations_remaining = max_iterations
+        self.iterations_completed = 0
+        self.update_applied = False
+        self.state_changed = False
+        self.output_exported = False
+        self.output_changed = False
+        self.northstar_proposal_written = False
+        self.verification_result: VerificationResult | None = None
+        self.stop_reason: str | None = None
+
+
+def _solve_gap(
+    context_chain: tuple[str, ...],
+    ctx: _RunContext,
+    config: dict[str, Any],
+    adapter: ProjectTypeAdapter,
+    state_service: StateService,
+    output_path: Path,
+    artifact_id: str,
+    max_depth: int,
+    depth: int,
+) -> None:
+    """Recursively plan and execute within a gap scope. Mutates ctx."""
+    if ctx.stop_reason is not None:
+        return
+
+    try:
+        result = create_game(
+            config,
+            ctx.current_state,
+            adapter=adapter,
+            verification_result=ctx.verification_result,
+            context_chain=context_chain,
+        )
+    except NoNewGameError:
+        if depth == 0:
+            ctx.stop_reason = "create_game_no_new_game"
+        return
+    except NorthStarUpdateNeededError as exc:
+        _debug_print_northstar_update_proposal(exc.rationale, exc.proposed_northstar)
+        _append_northstar_proposal_to_blackboard(
+            workspace=config["workspace"],
+            rationale=exc.rationale,
+            proposed_northstar=exc.proposed_northstar,
+        )
+        ctx.northstar_proposal_written = True
+        ctx.stop_reason = "northstar_update_proposed"
+        return
+
+    if isinstance(result, DecomposeSpec):
+        if depth >= max_depth:
+            print(
+                f"[solve_gap] max_depth={max_depth} reached, cannot decompose further; stopping.",
+                flush=True,
+            )
+            ctx.stop_reason = "max_depth_reached"
+            return
+        print(
+            f"[solve_gap] depth={depth} decomposing into {len(result.sub_gaps)} sub-gaps: "
+            f"{result.rationale}",
+            flush=True,
+        )
+        for sub_gap in result.sub_gaps:
+            _solve_gap(
+                context_chain + (sub_gap.description,),
+                ctx,
+                config,
+                adapter,
+                state_service,
+                output_path,
+                artifact_id,
+                max_depth,
+                depth + 1,
+            )
+            if ctx.stop_reason is not None:
+                return
+        return
+
+    # Leaf: GameSpec — inject full context chain and execute
+    game_spec = result.model_copy(update={"context_chain": context_chain})
+    if context_chain:
+        print(
+            f"[solve_gap] depth={depth} playing leaf game: {game_spec.objective[:80]}",
+            flush=True,
+        )
+
+    delta_state = play_game(ctx.current_state, game_spec, adapter=adapter)
+    if delta_state is None:
+        ctx.stop_reason = "play_game_no_delta"
+        return
+
+    before_state = state_service.load_state()
+    proposal = _derive_state_update_from_delta(delta_state, adapter=adapter)
+    updated_state = state_service.apply_update(proposal)
+    changed = fingerprint_state(before_state) != fingerprint_state(updated_state)
+
+    ctx.output_changed = adapter.export_state(updated_state, output_path, artifact_id)
+    ctx.output_exported = ctx.output_exported or ctx.output_changed
+    ctx.verification_result = _verify_export_with_adapter(
+        adapter, output_path, updated_state, artifact_id
+    )
+    _debug_print_verification_result(ctx.verification_result)
+    if ctx.output_changed:
+        _commit_export_with_adapter(adapter, output_path, game_spec)
+
+    ctx.update_applied = True
+    ctx.iterations_completed += 1
+    ctx.iterations_remaining -= 1
+    ctx.current_state = updated_state
+
+    if changed:
+        ctx.state_changed = True
+    else:
+        ctx.stop_reason = "no_state_change"
+
+
 def _run_project_iterations(
     config: dict[str, Any],
     adapter: ProjectTypeAdapter,
@@ -1511,85 +1670,35 @@ def _run_project_iterations(
     output_path = config["output_path"]
     max_iterations = config["max_iterations"]
     artifact_id = _config_artifact_id(config)
+    max_depth = int(config.get("max_depth", _DEFAULT_MAX_DEPTH))
 
-    current_state = initial_state
-    update_applied = False
-    state_changed = False
-    output_exported = False
-    output_changed = False
-    northstar_proposal_written = False
-    verification_result: VerificationResult | None = None
-    create_game_verification_result: VerificationResult | None = None
-    stop_reason = "iteration_limit_reached"
+    ctx = _RunContext(initial_state=initial_state, max_iterations=max_iterations)
 
-    iterations_completed = 0
-    for iteration in range(1, max_iterations + 1):
-        try:
-            game_spec = create_game(
-                config,
-                current_state,
-                adapter=adapter,
-                verification_result=create_game_verification_result,
-            )
-        except NoNewGameError:
-            stop_reason = "create_game_no_new_game"
-            break
-        except NorthStarUpdateNeededError as exc:
-            _debug_print_northstar_update_proposal(exc.rationale, exc.proposed_northstar)
-            _append_northstar_proposal_to_blackboard(
-                workspace=config["workspace"],
-                rationale=exc.rationale,
-                proposed_northstar=exc.proposed_northstar,
-            )
-            northstar_proposal_written = True
-            stop_reason = "northstar_update_proposed"
-            break
-
-        delta_state = play_game(
-            current_state,
-            game_spec,
+    while ctx.iterations_remaining > 0 and ctx.stop_reason is None:
+        _solve_gap(
+            context_chain=(),
+            ctx=ctx,
+            config=config,
             adapter=adapter,
+            state_service=state_service,
+            output_path=output_path,
+            artifact_id=artifact_id,
+            max_depth=max_depth,
+            depth=0,
         )
-        if delta_state is None:
-            stop_reason = "play_game_no_delta"
-            break
 
-        before_state = state_service.load_state()
-        proposal = _derive_state_update_from_delta(delta_state, adapter=adapter)
-        updated_state = state_service.apply_update(proposal)
-
-        changed_this_iteration = (
-            fingerprint_state(before_state) != fingerprint_state(updated_state)
-        )
-        update_applied = True
-        output_changed = adapter.export_state(updated_state, output_path, artifact_id)
-        output_exported = output_exported or output_changed
-        verification_result = _verify_export_with_adapter(
-            adapter, output_path, updated_state, artifact_id
-        )
-        _debug_print_verification_result(verification_result)
-        if output_changed:
-            _commit_export_with_adapter(adapter, output_path, game_spec)
-        create_game_verification_result = verification_result
-        iterations_completed = iteration
-        if changed_this_iteration:
-            state_changed = True
-            current_state = updated_state
-            continue
-
-        stop_reason = "no_state_change"
-        current_state = updated_state
-        break
+    if ctx.stop_reason is None:
+        ctx.stop_reason = "iteration_limit_reached"
 
     return {
-        "update_applied": update_applied,
-        "state_changed": state_changed,
-        "output_exported": output_exported,
-        "output_changed": output_changed,
-        "northstar_proposal_written": northstar_proposal_written,
-        "verification_result": verification_result,
-        "iterations_completed": iterations_completed,
-        "stop_reason": stop_reason,
+        "update_applied": ctx.update_applied,
+        "state_changed": ctx.state_changed,
+        "output_exported": ctx.output_exported,
+        "output_changed": ctx.output_changed,
+        "northstar_proposal_written": ctx.northstar_proposal_written,
+        "verification_result": ctx.verification_result,
+        "iterations_completed": ctx.iterations_completed,
+        "stop_reason": ctx.stop_reason,
     }
 
 
