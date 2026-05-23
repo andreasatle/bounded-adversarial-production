@@ -361,7 +361,7 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
     captured: dict[str, object] = {}
     original_create_game = run_module.create_game
 
-    def _capturing_create_game(config, state, adapter=None, verification_result=None, context_chain=()):
+    def _capturing_create_game(config, state, adapter=None, verification_result=None, context_chain=(), depth=0):
         captured.setdefault("state", state)
         return original_create_game(
             config,
@@ -3677,7 +3677,7 @@ def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_pa
     monkeypatch.setattr(
         run_module,
         "create_game",
-        lambda config, state, adapter=None, verification_result=None, context_chain=(): expected,
+        lambda config, state, adapter=None, verification_result=None, context_chain=(), depth=0: expected,
     )
 
     def _capture_play_game(state, spec, adapter=None):
@@ -3738,7 +3738,7 @@ def test_main_max_iterations_two_runs_two_iterations_with_state_carry_forward(
 
     create_game_seen_sections: list[list[str]] = []
 
-    def _create_game(config, state, adapter=None, verification_result=None, context_chain=()):
+    def _create_game(config, state, adapter=None, verification_result=None, context_chain=(), depth=0):
         del verification_result
         document = next(a for a in state.artifacts if a.id == "main-document")
         section_titles = [s.title for s in document.sections]
@@ -3828,7 +3828,7 @@ def test_main_stops_when_create_game_cannot_produce_new_game(
 
     calls = {"count": 0}
 
-    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=()):
+    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0):
         del verification_result
         calls["count"] += 1
         if calls["count"] == 1:
@@ -3866,7 +3866,7 @@ def test_main_stop_reason_iteration_limit_reached_after_all_iterations_used(
 
     create_game_calls = {"n": 0}
 
-    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=()):
+    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0):
         create_game_calls["n"] += 1
         return run_module.GameSpec(
             objective="Add a section",
@@ -3924,7 +3924,7 @@ def test_main_no_state_change_stops_loop_before_max_iterations(
 
     create_game_calls = {"n": 0}
 
-    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=()):
+    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0):
         create_game_calls["n"] += 1
         return run_module.GameSpec(
             objective="Add a section",
@@ -3991,7 +3991,7 @@ def test_main_create_game_parse_error_is_not_swallowed_as_no_game(
 ) -> None:
     import baps.run as run_module
 
-    def _broken_create_game(_config, _state, adapter=None, verification_result=None, context_chain=()):
+    def _broken_create_game(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0):
         del verification_result
         raise ValueError("create_game model output must be valid JSON")
 
@@ -4319,7 +4319,7 @@ def test_second_run_sees_previous_state(monkeypatch, tmp_path: Path) -> None:
     workspace = tmp_path / "ws-second-run-state"
     seen_titles: list[list[str]] = []
 
-    def _create_game(config, state, adapter=None, verification_result=None, context_chain=()):
+    def _create_game(config, state, adapter=None, verification_result=None, context_chain=(), depth=0):
         del verification_result
         doc = next(a for a in state.artifacts if a.id == "main-document")
         titles = [s.title for s in doc.sections]
@@ -6346,7 +6346,7 @@ def test_coding_iteration_two_does_not_receive_stale_verification_result(
     verification_seen: list[object] = []
     call_counter = {"count": 0}
 
-    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=()):
+    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0):
         del verification_result
         call_counter["count"] += 1
         if call_counter["count"] == 1:
@@ -6365,7 +6365,7 @@ def test_coding_iteration_two_does_not_receive_stale_verification_result(
             )
         raise run_module.NoNewGameError("done")
 
-    def _play_game(_state, spec, adapter=None, verification_result=None, context_chain=()):
+    def _play_game(_state, spec, adapter=None, verification_result=None, context_chain=(), depth=0):
         verification_seen.append(verification_result)
         if "src/fibonacci.py" in spec.objective:
             return state_module.DeltaCodingState(
@@ -6425,7 +6425,7 @@ def test_coding_create_game_receives_previous_verification_result_second_iterati
     seen: list[run_module.VerificationResult | None] = []
     create_count = {"n": 0}
 
-    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=()):
+    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0):
         del adapter
         seen.append(verification_result)
         create_count["n"] += 1
@@ -6445,7 +6445,7 @@ def test_coding_create_game_receives_previous_verification_result_second_iterati
             )
         raise run_module.NoNewGameError("done")
 
-    def _play_game(_state, spec, adapter=None, verification_result=None, context_chain=()):
+    def _play_game(_state, spec, adapter=None, verification_result=None, context_chain=(), depth=0):
         del adapter, verification_result
         if "src/fibonacci.py" in spec.objective:
             return state_module.DeltaCodingState(
@@ -6672,7 +6672,7 @@ def test_run_iterations_northstar_update_proposed_writes_blackboard_and_stops(
 
     workspace = tmp_path / "ws-northstar-proposal"
 
-    def _create_game_raises(_config, _state, adapter=None, verification_result=None, context_chain=()):
+    def _create_game_raises(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0):
         raise run_module.NorthStarUpdateNeededError(
             rationale="Game direction contradicts NorthStar.",
             proposed_northstar="# Revised NorthStar\n\nNew direction.",
@@ -6713,7 +6713,7 @@ def test_run_iterations_northstar_update_proposed_does_not_apply_state_update(
 
     workspace = tmp_path / "ws-northstar-no-update"
 
-    def _create_game_raises(_config, _state, adapter=None, verification_result=None, context_chain=()):
+    def _create_game_raises(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0):
         raise run_module.NorthStarUpdateNeededError(
             rationale="Direction mismatch.",
             proposed_northstar="# New NorthStar",
@@ -6762,7 +6762,7 @@ def test_run_iterations_northstar_proposal_appends_on_multiple_signals(
         encoding="utf-8",
     )
 
-    def _create_game_raises(_config, _state, adapter=None, verification_result=None, context_chain=()):
+    def _create_game_raises(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0):
         raise run_module.NorthStarUpdateNeededError(
             rationale="New mismatch.",
             proposed_northstar="# Newer NorthStar",
@@ -7431,7 +7431,7 @@ def test_solve_gap_decompose_then_play(monkeypatch, tmp_path: Path) -> None:
     played: list[str] = []
     top_calls = [0]
 
-    def _fake_create_game(config, state, adapter=None, verification_result=None, context_chain=()):
+    def _fake_create_game(config, state, adapter=None, verification_result=None, context_chain=(), depth=0):
         if not context_chain:
             top_calls[0] += 1
             if top_calls[0] > 1:
@@ -7494,7 +7494,7 @@ def test_solve_gap_context_chain_injected_into_game_spec(monkeypatch, tmp_path: 
     captured_chain: list[tuple[str, ...]] = []
     top_calls = [0]
 
-    def _fake_create_game(config, state, adapter=None, verification_result=None, context_chain=()):
+    def _fake_create_game(config, state, adapter=None, verification_result=None, context_chain=(), depth=0):
         if not context_chain:
             top_calls[0] += 1
             if top_calls[0] > 1:
@@ -7546,7 +7546,7 @@ def test_solve_gap_max_depth_stops_recursion(monkeypatch, tmp_path: Path) -> Non
     """Decompose always → max_depth_reached stop reason."""
     import baps.run as run_module
 
-    def _always_decompose(config, state, adapter=None, verification_result=None, context_chain=()):
+    def _always_decompose(config, state, adapter=None, verification_result=None, context_chain=(), depth=0):
         return run_module.DecomposeSpec(
             rationale="Always decompose",
             sub_gaps=(run_module.SubGapSpec(description="inner"),),

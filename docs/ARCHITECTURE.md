@@ -107,7 +107,9 @@ BAPS_{ROLE}_BACKEND=anthropic|openai|ollama
 BAPS_{ROLE}_MODEL=<model-id>
 ```
 
-Roles: `BLUE`, `RED`, `REFEREE`, `CREATE_GAME`. Falls back to global `BAPS_BACKEND` / `BAPS_*_MODEL`.
+Roles: `BLUE`, `RED`, `REFEREE`, `CREATE_GAME`, `DECOMPOSE`. Falls back to global `BAPS_BACKEND` / `BAPS_*_MODEL`.
+
+**`DECOMPOSE` role** — used for CreateGame calls at decomposition nodes (`depth > 0`). These are structural planning tasks (splitting large gaps into sub-gaps) that require less raw capability than leaf execution. When `BAPS_DECOMPOSE_*` is unset, falls back to the `CREATE_GAME` client. A typical local-first setup might assign a small fast model to `DECOMPOSE` and a stronger model to `BLUE`.
 
 **Stop conditions:**
 
@@ -405,20 +407,19 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 ## 9. Current Limitations
 
 1. Decomposition branching factor is unconstrained — the model decides how many sub-gaps to produce (`max_sub_gaps` not yet enforced).
-2. No separate model role for decomposition nodes vs. leaf execution nodes.
-3. Sub-gap verification feedback does not propagate upward to re-trigger parent-level decomposition.
-4. Role execution is prompt-only (no tool-execution subsystem in canonical runtime).
-5. Only `document` and `coding` project types are active.
+2. Sub-gap verification feedback does not propagate upward to re-trigger parent-level decomposition.
+3. Role execution is prompt-only (no tool-execution subsystem in canonical runtime).
+4. Only `document` and `coding` project types are active.
 
 ---
 
 ## 10. Suggested Next Milestones
 
 1. **`max_sub_gaps` enforcement** — cap branching factor per decomposition to bound worst-case game count
-2. **Decompose model role** — separate `BAPS_DECOMPOSE_BACKEND/MODEL` so planning nodes use a lighter model than leaf execution
-3. **Residual feedback propagation** — failed leaf verifications signal back to parent level to trigger re-decomposition
-4. **Adapter expansion** — new project types register adapters without touching core orchestration
-5. **Stronger contract tests** — verify decomposition invariants and context chain integrity end-to-end
+2. **Residual feedback propagation** — failed leaf verifications signal back to parent level to trigger re-decomposition
+3. **Adapter expansion** — new project types register adapters without touching core orchestration
+4. **Stronger contract tests** — verify decomposition invariants and context chain integrity end-to-end
+5. **Prompt-complexity routing** — extend DECOMPOSE role to select model based on StateView size or estimated task complexity within a role
 
 ---
 

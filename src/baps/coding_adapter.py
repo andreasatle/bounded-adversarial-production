@@ -52,6 +52,18 @@ _CONFTEST_CONTENT = (
     'sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))\n'
 )
 
+_GITIGNORE_CONTENT = (
+    "__pycache__/\n"
+    "*.pyc\n"
+    "*.pyo\n"
+    ".pytest_cache/\n"
+    "*.egg-info/\n"
+    "dist/\n"
+    "build/\n"
+    ".venv/\n"
+    "uv.lock\n"
+)
+
 
 def coding_artifact_from_state(state: State, artifact_id: str) -> CodingArtifact:
     artifact = next((a for a in state.artifacts if a.id == artifact_id), None)
@@ -748,6 +760,14 @@ class CodingProjectAdapter:
             conftest_path.write_text(_CONFTEST_CONTENT, encoding="utf-8")
             changed = True
 
+        gitignore_path = output_path / ".gitignore"
+        gitignore_before = (
+            gitignore_path.read_text(encoding="utf-8") if gitignore_path.exists() else None
+        )
+        if gitignore_before != _GITIGNORE_CONTENT:
+            gitignore_path.write_text(_GITIGNORE_CONTENT, encoding="utf-8")
+            changed = True
+
         for code_file in artifact.files:
             file_path = output_path / code_file.path
             file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -762,7 +782,7 @@ class CodingProjectAdapter:
         try:
             if not (output_path / ".git").exists():
                 subprocess.run(
-                    ["git", "init"],
+                    ["git", "init", "-b", "main"],
                     cwd=output_path,
                     capture_output=True,
                     check=True,

@@ -503,6 +503,20 @@ def _build_create_game_model_client() -> ModelClient:
     )
 
 
+def _build_decompose_client() -> ModelClient:
+    """Build a model client for the decompose role.
+
+    Checks BAPS_DECOMPOSE_BACKEND / BAPS_DECOMPOSE_MODEL first.
+    Falls back to the create_game client when no decompose-specific vars are set,
+    so the decompose role is a transparent no-op by default.
+    """
+    role_backend = os.getenv("BAPS_DECOMPOSE_BACKEND", "").strip().lower()
+    role_model = os.getenv("BAPS_DECOMPOSE_MODEL", "").strip()
+    if role_backend or role_model:
+        return _build_role_client("decompose")
+    return _build_create_game_model_client()
+
+
 def _build_role_client(role: str) -> ModelClient:
     """Build a model client for a named role (blue, red, referee, create_game).
 
@@ -1065,6 +1079,7 @@ def create_game(
     adapter: ProjectTypeAdapter | None = None,
     verification_result: VerificationResult | None = None,
     context_chain: tuple[str, ...] = (),
+    depth: int = 0,
 ) -> GameSpec | DecomposeSpec:
     _debug_print_create_game_input(state)
     resolved_adapter = (
@@ -1074,8 +1089,12 @@ def create_game(
     )
     state_view = resolved_adapter.build_create_game_state_view(state, config)
     use_planner = model_client is None
-    client = _build_create_game_model_client() if use_planner else model_client
-    role = Role("create_game", client, _CREATE_GAME_SCHEMA, constrained=False)
+    if use_planner:
+        client = _build_decompose_client() if depth > 0 else _build_create_game_model_client()
+    else:
+        client = model_client
+    role_name = "decompose" if depth > 0 else "create_game"
+    role = Role(role_name, client, _CREATE_GAME_SCHEMA, constrained=False)
     prompt = _render_create_game_prompt(
         config=config,
         state=state,
@@ -1094,8 +1113,8 @@ def create_game(
             raise
         # Planner returned empty or unparseable output — retry once with executor model
         if _debug_enabled():
-            print("[DEBUG] create_game.fallback: planner invalid JSON, retrying with executor model")
-        fallback_role = Role("create_game", _build_role_client("create_game"), _CREATE_GAME_SCHEMA, constrained=False)
+            print(f"[DEBUG] {role_name}.fallback: planner invalid JSON, retrying with executor model")
+        fallback_role = Role(role_name, _build_role_client("create_game"), _CREATE_GAME_SCHEMA, constrained=False)
         generated = fallback_role.generate(prompt)
         _debug_print_create_game_raw_model_output(generated)
         result = _parse_create_game_output(generated)
@@ -1581,6 +1600,7 @@ def _solve_gap(
             adapter=adapter,
             verification_result=ctx.verification_result,
             context_chain=context_chain,
+            depth=depth,
         )
     except NoNewGameError:
         if depth == 0:

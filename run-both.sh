@@ -40,7 +40,7 @@ echo "writing log to: $LOGFILE"
   echo "time: $(date)"
   echo "============================================================"
 
-  BAPS_DEBUG=1 uv run baps-run init_and_run \
+  BAPS_DEBUG=0 uv run baps-run init_and_run \
       --spec examples/document-project.yaml
 
   echo
@@ -57,7 +57,7 @@ echo "writing log to: $LOGFILE"
   echo "time: $(date)"
   echo "============================================================"
 
-  BAPS_DEBUG=1 uv run baps-run init_and_run \
+  BAPS_DEBUG=0 uv run baps-run init_and_run \
       --spec examples/coding-project.yaml
 
   echo

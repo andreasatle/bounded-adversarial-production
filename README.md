@@ -232,7 +232,11 @@ BAPS_REFEREE_BACKEND=anthropic
 BAPS_REFEREE_MODEL=claude-haiku-4-5-20251001
 BAPS_CREATE_GAME_BACKEND=anthropic
 BAPS_CREATE_GAME_MODEL=claude-opus-4-7
+BAPS_DECOMPOSE_BACKEND=ollama
+BAPS_DECOMPOSE_MODEL=llama3.2
 ```
+
+The `DECOMPOSE` role handles CreateGame calls at decomposition nodes (depth > 0) — the structural planning tasks that split a large gap into sub-gaps. It requires less capability than leaf execution and can use a lighter/faster model. When `BAPS_DECOMPOSE_*` is unset, the decompose role falls back to the `CREATE_GAME` client transparently.
 
 Keys are loaded from `.env` at startup.
 
