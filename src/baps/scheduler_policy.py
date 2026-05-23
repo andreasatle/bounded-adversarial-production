@@ -22,6 +22,7 @@ _STOP_REASON_BASE: dict[str, float] = {
     "northstar_update_proposed": 0.4,
     "play_game_no_delta":        0.1,
     "initialized_only":          0.5,
+    "error":                     0.2,  # transient failure; low but doesn't permanently tank score
 }
 
 

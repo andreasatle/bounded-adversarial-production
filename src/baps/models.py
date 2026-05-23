@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from urllib import error, request
+
+_RETRY_DELAYS = (5.0, 15.0, 30.0)  # seconds to wait on 429, per attempt
 
 
 @dataclass(frozen=True)
@@ -83,25 +86,31 @@ class AnthropicClient(ModelClient):
         self.base_url = base_url.rstrip("/")
 
     def _post(self, payload: dict) -> dict:
-        body = json.dumps(payload).encode("utf-8")
-        req = request.Request(
-            url=f"{self.base_url}/v1/messages",
-            data=body,
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": self.api_key,
-                "anthropic-version": _ANTHROPIC_API_VERSION,
-            },
-            method="POST",
-        )
-        try:
-            with request.urlopen(req) as resp:
-                return json.loads(resp.read().decode("utf-8"))
-        except error.HTTPError as exc:
-            body_text = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"anthropic request failed [{exc.code}]: {body_text}") from exc
-        except error.URLError as exc:
-            raise RuntimeError(f"anthropic request failed: {exc}") from exc
+        for attempt, delay in enumerate((*_RETRY_DELAYS, None)):
+            body = json.dumps(payload).encode("utf-8")
+            req = request.Request(
+                url=f"{self.base_url}/v1/messages",
+                data=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "x-api-key": self.api_key,
+                    "anthropic-version": _ANTHROPIC_API_VERSION,
+                },
+                method="POST",
+            )
+            try:
+                with request.urlopen(req) as resp:
+                    return json.loads(resp.read().decode("utf-8"))
+            except error.HTTPError as exc:
+                if exc.code == 429 and delay is not None:
+                    print(f"[anthropic] rate limited, retrying in {delay}s (attempt {attempt + 1})")
+                    time.sleep(delay)
+                    continue
+                body_text = exc.read().decode("utf-8", errors="replace")
+                raise RuntimeError(f"anthropic request failed [{exc.code}]: {body_text}") from exc
+            except error.URLError as exc:
+                raise RuntimeError(f"anthropic request failed: {exc}") from exc
+        raise RuntimeError("anthropic request failed: rate limit retries exhausted")
 
     def generate(self, prompt: str, format: str | dict | None = None) -> str:
         if not prompt.strip():
@@ -164,24 +173,30 @@ class OpenAIClient(ModelClient):
         self.base_url = base_url.rstrip("/")
 
     def _post(self, payload: dict) -> dict:
-        body = json.dumps(payload).encode("utf-8")
-        req = request.Request(
-            url=f"{self.base_url}/chat/completions",
-            data=body,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}",
-            },
-            method="POST",
-        )
-        try:
-            with request.urlopen(req) as resp:
-                return json.loads(resp.read().decode("utf-8"))
-        except error.HTTPError as exc:
-            body_text = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"openai request failed [{exc.code}]: {body_text}") from exc
-        except error.URLError as exc:
-            raise RuntimeError(f"openai request failed: {exc}") from exc
+        for attempt, delay in enumerate((*_RETRY_DELAYS, None)):
+            body = json.dumps(payload).encode("utf-8")
+            req = request.Request(
+                url=f"{self.base_url}/chat/completions",
+                data=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self.api_key}",
+                },
+                method="POST",
+            )
+            try:
+                with request.urlopen(req) as resp:
+                    return json.loads(resp.read().decode("utf-8"))
+            except error.HTTPError as exc:
+                if exc.code == 429 and delay is not None:
+                    print(f"[openai] rate limited, retrying in {delay}s (attempt {attempt + 1})")
+                    time.sleep(delay)
+                    continue
+                body_text = exc.read().decode("utf-8", errors="replace")
+                raise RuntimeError(f"openai request failed [{exc.code}]: {body_text}") from exc
+            except error.URLError as exc:
+                raise RuntimeError(f"openai request failed: {exc}") from exc
+        raise RuntimeError("openai request failed: rate limit retries exhausted")
 
     def generate(self, prompt: str, format: str | dict | None = None) -> str:
         if not prompt.strip():

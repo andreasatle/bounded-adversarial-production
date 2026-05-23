@@ -1699,8 +1699,23 @@ def main() -> None:
                 verification_cwd = verification_result.cwd
             iterations_completed = int(results["iterations_completed"])
             stop_reason = str(results["stop_reason"])
-    except ValueError as exc:
+    except (ValueError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
+        stop_reason = "error"
+        model_info = _active_model_info()
+        workspace.mkdir(parents=True, exist_ok=True)
+        (workspace / "run-result.json").write_text(
+            json.dumps({
+                "stop_reason": stop_reason,
+                "verification_passed": None,
+                "verification_exit_code": None,
+                "iterations_completed": iterations_completed,
+                "backend": model_info["backend"],
+                "model": model_info["model"],
+                "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
+            }, indent=2),
+            encoding="utf-8",
+        )
         raise SystemExit(2) from exc
 
     print(f"workspace={workspace}")
