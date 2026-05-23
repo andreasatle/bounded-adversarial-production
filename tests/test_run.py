@@ -7,9 +7,16 @@ import subprocess
 
 import pytest
 
-from baps.models import FakeModelClient, ToolCall
+from baps.models import AnthropicClient, FakeModelClient, OllamaClient, OpenAIClient, ToolCall
 from baps.run import create_game, create_state, main, play_game
+import baps.run as _real_run
 import baps.state as state_module
+
+# Captured before autouse fixtures patch them — used by backend dispatch tests.
+_real_build_model_client = _real_run._build_model_client
+_real_build_create_game_model_client = _real_run._build_create_game_model_client
+_real_build_anthropic_client = _real_run._build_anthropic_client
+_real_build_openai_client = _real_run._build_openai_client
 
 
 @pytest.fixture(autouse=True)
@@ -6792,3 +6799,73 @@ def test_run_iterations_northstar_proposal_appends_on_multiple_signals(
     second = json.loads(lines[1])
     assert first["rationale"] == "Earlier proposal."
     assert second["rationale"] == "New mismatch."
+
+
+# ---------------------------------------------------------------------------
+# Backend dispatch tests
+# ---------------------------------------------------------------------------
+
+def test_build_model_client_returns_ollama_by_default(monkeypatch) -> None:
+    monkeypatch.delenv("BAPS_BACKEND", raising=False)
+    monkeypatch.setenv("BAPS_OLLAMA_MODEL", "llama3.2")
+    client = _real_build_model_client()
+    assert isinstance(client, OllamaClient)
+    assert client.model == "llama3.2"
+
+
+def test_build_model_client_returns_anthropic_when_backend_set(monkeypatch) -> None:
+    monkeypatch.setenv("BAPS_BACKEND", "anthropic")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    monkeypatch.setenv("BAPS_ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
+    client = _real_build_model_client()
+    assert isinstance(client, AnthropicClient)
+    assert client.model == "claude-haiku-4-5-20251001"
+    assert client.api_key == "sk-ant-test"
+
+
+def test_build_model_client_returns_openai_when_backend_set(monkeypatch) -> None:
+    monkeypatch.setenv("BAPS_BACKEND", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-test")
+    monkeypatch.setenv("BAPS_OPENAI_MODEL", "gpt-4o-mini")
+    client = _real_build_model_client()
+    assert isinstance(client, OpenAIClient)
+    assert client.model == "gpt-4o-mini"
+    assert client.api_key == "sk-openai-test"
+
+
+def test_build_anthropic_client_raises_without_api_key(monkeypatch) -> None:
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    with pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
+        _real_build_anthropic_client()
+
+
+def test_build_openai_client_raises_without_api_key(monkeypatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with pytest.raises(ValueError, match="OPENAI_API_KEY"):
+        _real_build_openai_client()
+
+
+def test_build_create_game_client_uses_cloud_client_without_planner_split(monkeypatch) -> None:
+    monkeypatch.setenv("BAPS_BACKEND", "anthropic")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    monkeypatch.delenv("BAPS_OLLAMA_PLANNER_MODEL", raising=False)
+    client = _real_build_create_game_model_client()
+    assert isinstance(client, AnthropicClient)
+
+
+def test_build_create_game_client_uses_ollama_planner_model_when_set(monkeypatch) -> None:
+    monkeypatch.delenv("BAPS_BACKEND", raising=False)
+    monkeypatch.setenv("BAPS_OLLAMA_PLANNER_MODEL", "mistral")
+    monkeypatch.setenv("BAPS_OLLAMA_MODEL", "llama3.2")
+    client = _real_build_create_game_model_client()
+    assert isinstance(client, OllamaClient)
+    assert client.model == "mistral"
+
+
+def test_build_create_game_client_falls_back_to_ollama_model_when_no_planner(monkeypatch) -> None:
+    monkeypatch.delenv("BAPS_BACKEND", raising=False)
+    monkeypatch.delenv("BAPS_OLLAMA_PLANNER_MODEL", raising=False)
+    monkeypatch.setenv("BAPS_OLLAMA_MODEL", "llama3.2")
+    client = _real_build_create_game_model_client()
+    assert isinstance(client, OllamaClient)
+    assert client.model == "llama3.2"

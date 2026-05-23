@@ -10,7 +10,7 @@ from typing import Any
 
 import yaml
 
-from baps.models import ModelClient, OllamaClient, Role
+from baps.models import AnthropicClient, ModelClient, OllamaClient, OpenAIClient, Role
 from baps.northstar_projection import ProjectionType, StateView
 from baps.project_adapter import (
     ProjectTypeAdapter,
@@ -41,6 +41,10 @@ from baps.state_store import JsonStateStore
 
 _DEFAULT_OLLAMA_MODEL = "llama3.2"
 _DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
+_DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
+_DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com"
+_DEFAULT_OPENAI_MODEL = "gpt-4o"
+_DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 _DEFAULT_WORKSPACE = ".baps-workspace"
 _DEFAULT_MAX_PLAY_GAME_ATTEMPTS = 3
 _BLACKBOARD_DIR = "blackboard"
@@ -447,19 +451,53 @@ def _debug_print_verification_result(result: VerificationResult | None) -> None:
     print()
 
 
+def _build_anthropic_client() -> ModelClient:
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key.strip():
+        raise ValueError("ANTHROPIC_API_KEY must be set when BAPS_BACKEND=anthropic")
+    return AnthropicClient(
+        model=os.getenv("BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL),
+        api_key=api_key,
+        base_url=os.getenv("BAPS_ANTHROPIC_BASE_URL", _DEFAULT_ANTHROPIC_BASE_URL),
+    )
+
+
+def _build_openai_client() -> ModelClient:
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    if not api_key.strip():
+        raise ValueError("OPENAI_API_KEY must be set when BAPS_BACKEND=openai")
+    return OpenAIClient(
+        model=os.getenv("BAPS_OPENAI_MODEL", _DEFAULT_OPENAI_MODEL),
+        api_key=api_key,
+        base_url=os.getenv("BAPS_OPENAI_BASE_URL", _DEFAULT_OPENAI_BASE_URL),
+    )
+
+
 def _build_model_client() -> ModelClient:
-    model = os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL)
-    base_url = os.getenv("BAPS_OLLAMA_BASE_URL", _DEFAULT_OLLAMA_BASE_URL)
-    return OllamaClient(model=model, base_url=base_url)
+    backend = os.getenv("BAPS_BACKEND", "ollama").lower()
+    if backend == "anthropic":
+        return _build_anthropic_client()
+    if backend == "openai":
+        return _build_openai_client()
+    return OllamaClient(
+        model=os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL),
+        base_url=os.getenv("BAPS_OLLAMA_BASE_URL", _DEFAULT_OLLAMA_BASE_URL),
+    )
 
 
 def _build_create_game_model_client() -> ModelClient:
-    model = (
-        os.getenv("BAPS_OLLAMA_PLANNER_MODEL")
-        or os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL)
+    backend = os.getenv("BAPS_BACKEND", "ollama").lower()
+    if backend == "anthropic":
+        return _build_anthropic_client()
+    if backend == "openai":
+        return _build_openai_client()
+    return OllamaClient(
+        model=(
+            os.getenv("BAPS_OLLAMA_PLANNER_MODEL")
+            or os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL)
+        ),
+        base_url=os.getenv("BAPS_OLLAMA_BASE_URL", _DEFAULT_OLLAMA_BASE_URL),
     )
-    base_url = os.getenv("BAPS_OLLAMA_BASE_URL", _DEFAULT_OLLAMA_BASE_URL)
-    return OllamaClient(model=model, base_url=base_url)
 
 
 # Role schemas.

@@ -3,7 +3,7 @@ from urllib import error
 
 import pytest
 
-from baps.models import FakeModelClient, ModelClient, OllamaClient, Role
+from baps.models import AnthropicClient, FakeModelClient, ModelClient, OllamaClient, OpenAIClient, Role
 
 
 def test_fake_model_client_returns_responses_in_order() -> None:
@@ -229,3 +229,197 @@ def test_role_generate_with_no_schema_omits_format(monkeypatch) -> None:
     role.generate("write something")
 
     assert "format" not in captured["body"]
+
+
+# ---------------------------------------------------------------------------
+# Test helpers
+# ---------------------------------------------------------------------------
+
+def _make_fake_urlopen(response_body: bytes):
+    class _Resp:
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+        def read(self): return response_body
+    return lambda req: _Resp()
+
+
+def _make_capturing_urlopen(response_body: bytes, captured: dict):
+    class _Resp:
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+        def read(self): return response_body
+    def _urlopen(req):
+        captured["url"] = req.full_url
+        captured["method"] = req.get_method()
+        captured["headers"] = dict(req.headers)
+        captured["body"] = json.loads(req.data.decode("utf-8"))
+        return _Resp()
+    return _urlopen
+
+
+# ---------------------------------------------------------------------------
+# AnthropicClient
+# ---------------------------------------------------------------------------
+
+def test_anthropic_client_rejects_empty_model() -> None:
+    with pytest.raises(ValueError):
+        AnthropicClient(model="   ", api_key="key")
+
+
+def test_anthropic_client_rejects_empty_api_key() -> None:
+    with pytest.raises(ValueError):
+        AnthropicClient(model="claude-sonnet-4-6", api_key="   ")
+
+
+def test_anthropic_client_generate_plain_text(monkeypatch) -> None:
+    body = json.dumps({"content": [{"type": "text", "text": "hello world"}]}).encode()
+    monkeypatch.setattr("baps.models.request.urlopen", _make_fake_urlopen(body))
+    client = AnthropicClient(model="claude-sonnet-4-6", api_key="test-key")
+    result = client.generate("say hello")
+    assert result == "hello world"
+
+
+def test_anthropic_client_generate_sends_correct_headers(monkeypatch) -> None:
+    body = json.dumps({"content": [{"type": "text", "text": "ok"}]}).encode()
+    captured: dict = {}
+    monkeypatch.setattr("baps.models.request.urlopen", _make_capturing_urlopen(body, captured))
+    client = AnthropicClient(model="claude-sonnet-4-6", api_key="sk-ant-123", base_url="https://api.anthropic.com")
+    client.generate("prompt")
+    assert captured["url"] == "https://api.anthropic.com/v1/messages"
+    assert captured["headers"].get("X-api-key") == "sk-ant-123"
+    assert "Anthropic-version" in captured["headers"]
+
+
+def test_anthropic_client_generate_with_schema_uses_tool_use(monkeypatch) -> None:
+    output_data = {"disposition": "accept", "rationale": "good"}
+    body = json.dumps({
+        "content": [{"type": "tool_use", "name": "output", "input": output_data}],
+        "stop_reason": "tool_use",
+    }).encode()
+    captured: dict = {}
+    monkeypatch.setattr("baps.models.request.urlopen", _make_capturing_urlopen(body, captured))
+    client = AnthropicClient(model="claude-sonnet-4-6", api_key="key")
+    schema = {"type": "object", "properties": {"disposition": {"type": "string"}}}
+    result = client.generate("evaluate", format=schema)
+    assert json.loads(result) == output_data
+    assert captured["body"]["tool_choice"] == {"type": "tool", "name": "output"}
+    assert captured["body"]["tools"][0]["name"] == "output"
+    assert captured["body"]["tools"][0]["input_schema"] == schema
+
+
+def test_anthropic_client_generate_raises_on_http_error(monkeypatch) -> None:
+    def fake_urlopen(req):
+        fp = __import__("io").BytesIO(b'{"error": "unauthorized"}')
+        raise error.HTTPError(req.full_url, 401, "Unauthorized", {}, fp)
+    monkeypatch.setattr("baps.models.request.urlopen", fake_urlopen)
+    client = AnthropicClient(model="claude-sonnet-4-6", api_key="bad-key")
+    with pytest.raises(RuntimeError, match="401"):
+        client.generate("prompt")
+
+
+def test_anthropic_client_generate_with_tools(monkeypatch) -> None:
+    from baps.models import ToolDefinition
+    body = json.dumps({
+        "content": [{"type": "tool_use", "name": "write_file", "input": {"path": "src/x.py", "content": "pass"}}],
+    }).encode()
+    captured: dict = {}
+    monkeypatch.setattr("baps.models.request.urlopen", _make_capturing_urlopen(body, captured))
+    client = AnthropicClient(model="claude-sonnet-4-6", api_key="key")
+    tools = [ToolDefinition(name="write_file", description="Write a file", parameters={"type": "object"})]
+    result = client.generate_with_tools("write something", tools)
+    assert result.name == "write_file"
+    assert result.arguments == {"path": "src/x.py", "content": "pass"}
+    assert captured["body"]["tool_choice"] == {"type": "any"}
+    assert captured["body"]["tools"][0]["input_schema"] == {"type": "object"}
+
+
+def test_anthropic_client_generate_with_tools_raises_when_no_tool_called(monkeypatch) -> None:
+    from baps.models import ToolDefinition
+    body = json.dumps({"content": [{"type": "text", "text": "I cannot help."}]}).encode()
+    monkeypatch.setattr("baps.models.request.urlopen", _make_fake_urlopen(body))
+    client = AnthropicClient(model="claude-sonnet-4-6", api_key="key")
+    tools = [ToolDefinition(name="write_file", description="Write", parameters={})]
+    with pytest.raises(ValueError, match="tool"):
+        client.generate_with_tools("do something", tools)
+
+
+# ---------------------------------------------------------------------------
+# OpenAIClient
+# ---------------------------------------------------------------------------
+
+def test_openai_client_rejects_empty_model() -> None:
+    with pytest.raises(ValueError):
+        OpenAIClient(model="   ", api_key="key")
+
+
+def test_openai_client_rejects_empty_api_key() -> None:
+    with pytest.raises(ValueError):
+        OpenAIClient(model="gpt-4o", api_key="   ")
+
+
+def test_openai_client_generate_plain_text(monkeypatch) -> None:
+    body = json.dumps({"choices": [{"message": {"content": "hello world"}}]}).encode()
+    monkeypatch.setattr("baps.models.request.urlopen", _make_fake_urlopen(body))
+    client = OpenAIClient(model="gpt-4o", api_key="key")
+    result = client.generate("say hello")
+    assert result == "hello world"
+
+
+def test_openai_client_generate_sends_correct_headers(monkeypatch) -> None:
+    body = json.dumps({"choices": [{"message": {"content": "ok"}}]}).encode()
+    captured: dict = {}
+    monkeypatch.setattr("baps.models.request.urlopen", _make_capturing_urlopen(body, captured))
+    client = OpenAIClient(model="gpt-4o", api_key="sk-openai-123", base_url="https://api.openai.com/v1")
+    client.generate("prompt")
+    assert captured["url"] == "https://api.openai.com/v1/chat/completions"
+    assert captured["headers"].get("Authorization") == "Bearer sk-openai-123"
+
+
+def test_openai_client_generate_with_schema_sends_json_schema_format(monkeypatch) -> None:
+    output = '{"disposition": "accept", "rationale": "good"}'
+    body = json.dumps({"choices": [{"message": {"content": output}}]}).encode()
+    captured: dict = {}
+    monkeypatch.setattr("baps.models.request.urlopen", _make_capturing_urlopen(body, captured))
+    client = OpenAIClient(model="gpt-4o", api_key="key")
+    schema = {"type": "object", "properties": {"disposition": {"type": "string"}}}
+    result = client.generate("evaluate", format=schema)
+    assert result == output
+    rf = captured["body"]["response_format"]
+    assert rf["type"] == "json_schema"
+    assert rf["json_schema"]["schema"] == schema
+
+
+def test_openai_client_generate_raises_on_http_error(monkeypatch) -> None:
+    def fake_urlopen(req):
+        fp = __import__("io").BytesIO(b'{"error": {"message": "invalid key"}}')
+        raise error.HTTPError(req.full_url, 401, "Unauthorized", {}, fp)
+    monkeypatch.setattr("baps.models.request.urlopen", fake_urlopen)
+    client = OpenAIClient(model="gpt-4o", api_key="bad-key")
+    with pytest.raises(RuntimeError, match="401"):
+        client.generate("prompt")
+
+
+def test_openai_client_generate_with_tools(monkeypatch) -> None:
+    from baps.models import ToolDefinition
+    args_json = json.dumps({"path": "src/x.py", "content": "pass"})
+    body = json.dumps({
+        "choices": [{"message": {"tool_calls": [{"function": {"name": "write_file", "arguments": args_json}}]}}]
+    }).encode()
+    captured: dict = {}
+    monkeypatch.setattr("baps.models.request.urlopen", _make_capturing_urlopen(body, captured))
+    client = OpenAIClient(model="gpt-4o", api_key="key")
+    tools = [ToolDefinition(name="write_file", description="Write a file", parameters={"type": "object"})]
+    result = client.generate_with_tools("write something", tools)
+    assert result.name == "write_file"
+    assert result.arguments == {"path": "src/x.py", "content": "pass"}
+    assert captured["body"]["tool_choice"] == "required"
+
+
+def test_openai_client_generate_with_tools_raises_when_no_tool_called(monkeypatch) -> None:
+    from baps.models import ToolDefinition
+    body = json.dumps({"choices": [{"message": {"content": "I cannot help.", "tool_calls": []}}]}).encode()
+    monkeypatch.setattr("baps.models.request.urlopen", _make_fake_urlopen(body))
+    client = OpenAIClient(model="gpt-4o", api_key="key")
+    tools = [ToolDefinition(name="write_file", description="Write", parameters={})]
+    with pytest.raises(ValueError, match="tool"):
+        client.generate_with_tools("do something", tools)
