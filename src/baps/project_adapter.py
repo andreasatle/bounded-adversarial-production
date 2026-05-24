@@ -130,10 +130,12 @@ class ProjectTypeAdapter(Protocol):
 def build_default_project_type_adapters() -> dict[str, ProjectTypeAdapter]:
     from baps.coding_adapter import CodingProjectAdapter
     from baps.document_adapter import DocumentProjectAdapter
+    from baps.audit_adapter import AuditProjectAdapter
 
     return {
         DocumentProjectAdapter.project_type: DocumentProjectAdapter(),
         CodingProjectAdapter.project_type: CodingProjectAdapter(),
+        AuditProjectAdapter.project_type: AuditProjectAdapter(),
     }
 
 
