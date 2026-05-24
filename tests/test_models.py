@@ -3,7 +3,7 @@ from urllib import error
 
 import pytest
 
-from baps.models import AnthropicClient, FakeModelClient, FallbackClient, ModelClient, OllamaClient, OpenAIClient, Role, ToolCall, ToolDefinition
+from baps.models import AnthropicClient, FakeModelClient, FallbackClient, ModelClient, OllamaClient, OpenAIClient, Role, ToolCall, ToolCallRecord, ToolDefinition
 
 
 def test_fake_model_client_returns_responses_in_order() -> None:
@@ -503,3 +503,119 @@ def test_openai_client_generate_with_tools_raises_when_no_tool_called(monkeypatc
     tools = [ToolDefinition(name="write_file", description="Write", parameters={})]
     with pytest.raises(ValueError, match="tool"):
         client.generate_with_tools("do something", tools)
+
+
+# ---------------------------------------------------------------------------
+# generate_agentic — FakeModelClient
+# ---------------------------------------------------------------------------
+
+class _FakeExecutor:
+    def __init__(self, results: dict[str, str] | None = None) -> None:
+        self._results = results or {}
+        self.calls: list[tuple[str, dict]] = []
+
+    def execute(self, tool_name: str, arguments: dict) -> str:
+        self.calls.append((tool_name, arguments))
+        return self._results.get(tool_name, f"result_of_{tool_name}")
+
+
+def test_fake_client_generate_agentic_no_sequences_returns_empty() -> None:
+    client = FakeModelClient()
+    executor = _FakeExecutor()
+    text, records = client.generate_agentic("prompt", [], executor)
+    assert text == ""
+    assert records == []
+
+
+def test_fake_client_generate_agentic_text_only_sequence() -> None:
+    client = FakeModelClient(agentic_sequences=[["research complete"]])
+    executor = _FakeExecutor()
+    text, records = client.generate_agentic("prompt", [], executor)
+    assert text == "research complete"
+    assert records == []
+
+
+def test_fake_client_generate_agentic_tool_then_text() -> None:
+    tc = ToolCall(name="web_search", arguments={"query": "CVE-2024-1234"})
+    client = FakeModelClient(agentic_sequences=[[tc, "found vulnerability info"]])
+    executor = _FakeExecutor({"web_search": "CVE details here"})
+    text, records = client.generate_agentic("prompt", [], executor, role_name="red")
+    assert text == "found vulnerability info"
+    assert len(records) == 1
+    assert records[0].tool_name == "web_search"
+    assert records[0].result == "CVE details here"
+    assert records[0].role == "red"
+
+
+def test_fake_client_generate_agentic_multiple_tool_calls() -> None:
+    tc1 = ToolCall(name="web_search", arguments={"query": "q1"})
+    tc2 = ToolCall(name="fetch_url", arguments={"url": "https://example.com"})
+    client = FakeModelClient(agentic_sequences=[[tc1, tc2, "done"]])
+    executor = _FakeExecutor({"web_search": "r1", "fetch_url": "r2"})
+    text, records = client.generate_agentic("prompt", [], executor)
+    assert text == "done"
+    assert len(records) == 2
+    assert records[0].tool_name == "web_search"
+    assert records[1].tool_name == "fetch_url"
+
+
+def test_fake_client_generate_agentic_executor_called_with_correct_args() -> None:
+    tc = ToolCall(name="fetch_url", arguments={"url": "https://example.com/page"})
+    client = FakeModelClient(agentic_sequences=[[tc, "done"]])
+    executor = _FakeExecutor()
+    client.generate_agentic("prompt", [], executor, role_name="blue")
+    assert executor.calls == [("fetch_url", {"url": "https://example.com/page"})]
+
+
+def test_fake_client_generate_agentic_sequence_ends_without_text_returns_empty_string() -> None:
+    tc = ToolCall(name="web_search", arguments={"query": "q"})
+    client = FakeModelClient(agentic_sequences=[[tc]])
+    executor = _FakeExecutor()
+    text, records = client.generate_agentic("prompt", [], executor)
+    assert text == ""
+    assert len(records) == 1
+
+
+def test_fake_client_generate_agentic_multiple_sequences_consumed_in_order() -> None:
+    client = FakeModelClient(agentic_sequences=[["first"], ["second"]])
+    executor = _FakeExecutor()
+    t1, _ = client.generate_agentic("p", [], executor)
+    t2, _ = client.generate_agentic("p", [], executor)
+    assert t1 == "first"
+    assert t2 == "second"
+
+
+def test_fake_client_generate_agentic_records_prompt() -> None:
+    client = FakeModelClient(agentic_sequences=[["done"]])
+    executor = _FakeExecutor()
+    client.generate_agentic("my research prompt", [], executor)
+    assert "my research prompt" in client.agentic_prompts
+
+
+def test_fake_client_generate_agentic_rejects_empty_prompt() -> None:
+    client = FakeModelClient(agentic_sequences=[["done"]])
+    executor = _FakeExecutor()
+    with pytest.raises(ValueError, match="non-empty"):
+        client.generate_agentic("   ", [], executor)
+
+
+# ---------------------------------------------------------------------------
+# Role.generate_agentic
+# ---------------------------------------------------------------------------
+
+def test_role_generate_agentic_delegates_to_client() -> None:
+    client = FakeModelClient(agentic_sequences=[["role result"]])
+    executor = _FakeExecutor()
+    role = Role(name="blue", client=client, schema=None, constrained=False)
+    text, records = role.generate_agentic("prompt", [], executor)
+    assert text == "role result"
+    assert records == []
+
+
+def test_role_generate_agentic_passes_role_name_to_records() -> None:
+    tc = ToolCall(name="web_search", arguments={"query": "q"})
+    client = FakeModelClient(agentic_sequences=[[tc, "done"]])
+    executor = _FakeExecutor()
+    role = Role(name="referee", client=client, schema=None, constrained=False)
+    _, records = role.generate_agentic("prompt", [], executor)
+    assert records[0].role == "referee"

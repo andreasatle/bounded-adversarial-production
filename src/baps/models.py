@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
+from typing import Any
 from urllib import error, request
 
 _RETRY_DELAYS = (5.0, 15.0, 30.0)  # seconds to wait on 429, per attempt
@@ -21,11 +22,31 @@ class ToolCall:
     arguments: dict
 
 
+@dataclass(frozen=True)
+class ToolCallRecord:
+    """Immutable record of one tool call made during an agentic role turn."""
+    role: str
+    tool_name: str
+    arguments: dict
+    result: str
+    created_at: str
+
+
 class ModelClient:
     def generate(self, prompt: str, format: str | dict | None = None) -> str:
         raise NotImplementedError
 
     def generate_with_tools(self, prompt: str, tools: list[ToolDefinition]) -> ToolCall:
+        raise NotImplementedError
+
+    def generate_agentic(
+        self,
+        prompt: str,
+        tools: list[ToolDefinition],
+        executor: Any,
+        role_name: str = "",
+        max_tool_calls: int = 10,
+    ) -> tuple[str, list[ToolCallRecord]]:
         raise NotImplementedError
 
 
@@ -34,13 +55,18 @@ class FakeModelClient(ModelClient):
         self,
         responses: list[str] | None = None,
         tool_responses: list[ToolCall | None] | None = None,
+        agentic_sequences: list[list[ToolCall | str]] | None = None,
     ):
         self.responses = list(responses) if responses is not None else []
         self.tool_responses = list(tool_responses) if tool_responses is not None else []
         self.prompts: list[str] = []
         self.tool_prompts: list[str] = []
+        self.agentic_prompts: list[str] = []
         self._response_index = 0
         self._tool_response_index = 0
+        self._agentic_sequences: list[list[ToolCall | str]] = (
+            [list(seq) for seq in agentic_sequences] if agentic_sequences is not None else []
+        )
 
     def generate(self, prompt: str, format: str | dict | None = None) -> str:
         if not prompt.strip():
@@ -67,6 +93,35 @@ class FakeModelClient(ModelClient):
         if response is None:
             raise ValueError("model did not invoke any tool")
         return response
+
+    def generate_agentic(
+        self,
+        prompt: str,
+        tools: list[ToolDefinition],
+        executor: Any,
+        role_name: str = "",
+        max_tool_calls: int = 10,
+    ) -> tuple[str, list[ToolCallRecord]]:
+        if not prompt.strip():
+            raise ValueError("prompt must be a non-empty string")
+        self.agentic_prompts.append(prompt)
+        if not self._agentic_sequences:
+            return ("", [])
+        sequence = self._agentic_sequences.pop(0)
+        records: list[ToolCallRecord] = []
+        for item in sequence:
+            if isinstance(item, ToolCall):
+                result = executor.execute(item.name, item.arguments)
+                records.append(ToolCallRecord(
+                    role=role_name,
+                    tool_name=item.name,
+                    arguments=item.arguments,
+                    result=result,
+                    created_at="2024-01-01T00:00:00+00:00",
+                ))
+            else:
+                return (str(item), records)
+        return ("", records)
 
 
 _ANTHROPIC_API_VERSION = "2023-06-01"
@@ -158,6 +213,55 @@ class AnthropicClient(ModelClient):
             if block.get("type") == "tool_use":
                 return ToolCall(name=block["name"], arguments=block.get("input", {}))
         raise ValueError("model did not invoke any tool")
+
+    def generate_agentic(
+        self,
+        prompt: str,
+        tools: list[ToolDefinition],
+        executor: Any,
+        role_name: str = "",
+        max_tool_calls: int = 10,
+    ) -> tuple[str, list[ToolCallRecord]]:
+        import datetime
+        if not prompt.strip():
+            raise ValueError("prompt must be a non-empty string")
+        tool_schemas = [
+            {"name": t.name, "description": t.description, "input_schema": t.parameters}
+            for t in tools
+        ]
+        messages: list[dict] = [{"role": "user", "content": prompt}]
+        records: list[ToolCallRecord] = []
+        for _ in range(max_tool_calls + 1):
+            data = self._post({
+                "model": self.model,
+                "max_tokens": _ANTHROPIC_MAX_TOKENS,
+                "tools": tool_schemas,
+                "messages": messages,
+            })
+            content = data.get("content", [])
+            stop_reason = data.get("stop_reason", "")
+            tool_blocks = [b for b in content if b.get("type") == "tool_use"]
+            text_blocks = [b for b in content if b.get("type") == "text"]
+            if not tool_blocks or stop_reason == "end_turn":
+                text = text_blocks[0].get("text", "") if text_blocks else ""
+                return (text, records)
+            tool_results = []
+            for block in tool_blocks:
+                tool_id = block.get("id", "")
+                name = block.get("name", "")
+                arguments = block.get("input", {})
+                result = executor.execute(name, arguments)
+                records.append(ToolCallRecord(
+                    role=role_name,
+                    tool_name=name,
+                    arguments=arguments,
+                    result=result,
+                    created_at=datetime.datetime.now(datetime.UTC).isoformat(),
+                ))
+                tool_results.append({"type": "tool_result", "tool_use_id": tool_id, "content": result})
+            messages.append({"role": "assistant", "content": content})
+            messages.append({"role": "user", "content": tool_results})
+        return ("", records)
 
 
 class OpenAIClient(ModelClient):
@@ -254,6 +358,49 @@ class OpenAIClient(ModelClient):
                 raise ValueError(f"tool call arguments not valid JSON: {exc}") from exc
         return ToolCall(name=name, arguments=arguments)
 
+    def generate_agentic(
+        self,
+        prompt: str,
+        tools: list[ToolDefinition],
+        executor: Any,
+        role_name: str = "",
+        max_tool_calls: int = 10,
+    ) -> tuple[str, list[ToolCallRecord]]:
+        import datetime
+        if not prompt.strip():
+            raise ValueError("prompt must be a non-empty string")
+        tool_schemas = [
+            {"type": "function", "function": {"name": t.name, "description": t.description, "parameters": t.parameters}}
+            for t in tools
+        ]
+        messages: list[dict] = [{"role": "user", "content": prompt}]
+        records: list[ToolCallRecord] = []
+        for _ in range(max_tool_calls + 1):
+            payload: dict = {"model": self.model, "messages": messages, "tools": tool_schemas}
+            data = self._post(payload)
+            choices = data.get("choices", [])
+            if not choices:
+                return ("", records)
+            msg = choices[0].get("message", {})
+            finish_reason = choices[0].get("finish_reason", "")
+            tool_calls = msg.get("tool_calls") or []
+            if not tool_calls or finish_reason == "stop":
+                return (msg.get("content", "") or "", records)
+            messages.append({"role": "assistant", "content": None, "tool_calls": tool_calls})
+            for tc in tool_calls:
+                call_id = tc.get("id", "")
+                fn = tc.get("function", {})
+                name = fn.get("name", "")
+                raw_args = fn.get("arguments", {})
+                arguments = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                result = executor.execute(name, arguments)
+                records.append(ToolCallRecord(
+                    role=role_name, tool_name=name, arguments=arguments, result=result,
+                    created_at=datetime.datetime.now(datetime.UTC).isoformat(),
+                ))
+                messages.append({"role": "tool", "tool_call_id": call_id, "content": result})
+        return ("", records)
+
 
 class OllamaClient(ModelClient):
     def __init__(self, model: str, base_url: str = "http://localhost:11434"):
@@ -340,6 +487,58 @@ class OllamaClient(ModelClient):
                 raise ValueError(f"tool call arguments not valid JSON: {exc}") from exc
         return ToolCall(name=name, arguments=arguments)
 
+    def generate_agentic(
+        self,
+        prompt: str,
+        tools: list[ToolDefinition],
+        executor: Any,
+        role_name: str = "",
+        max_tool_calls: int = 10,
+    ) -> tuple[str, list[ToolCallRecord]]:
+        import datetime
+        if not prompt.strip():
+            raise ValueError("prompt must be a non-empty string")
+        tool_schemas = [
+            {"type": "function", "function": {"name": t.name, "description": t.description, "parameters": t.parameters}}
+            for t in tools
+        ]
+        messages: list[dict] = [{"role": "user", "content": prompt}]
+        records: list[ToolCallRecord] = []
+        for _ in range(max_tool_calls + 1):
+            payload = {"model": self.model, "messages": messages, "tools": tool_schemas, "stream": False}
+            body = json.dumps(payload).encode("utf-8")
+            req = request.Request(
+                url=f"{self.base_url}/api/chat", data=body,
+                headers={"Content-Type": "application/json"}, method="POST",
+            )
+            try:
+                with request.urlopen(req) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+            except (error.HTTPError, error.URLError) as exc:
+                raise RuntimeError(f"ollama request failed: {exc}") from exc
+            msg = data.get("message", {})
+            done = data.get("done", False)
+            tool_calls = msg.get("tool_calls") or []
+            if not tool_calls or done:
+                return (msg.get("content", "") or "", records)
+            for tc in tool_calls:
+                fn = tc.get("function", {})
+                name = fn.get("name", "")
+                arguments = fn.get("arguments", {})
+                if isinstance(arguments, str):
+                    try:
+                        arguments = json.loads(arguments)
+                    except json.JSONDecodeError:
+                        arguments = {}
+                result = executor.execute(name, arguments)
+                records.append(ToolCallRecord(
+                    role=role_name, tool_name=name, arguments=arguments, result=result,
+                    created_at=datetime.datetime.now(datetime.UTC).isoformat(),
+                ))
+            messages.append({"role": "assistant", "content": "", "tool_calls": tool_calls})
+            messages.append({"role": "tool", "content": "\n".join(r.result for r in records[-len(tool_calls):])})
+        return ("", records)
+
 
 class FallbackClient(ModelClient):
     """Tries each client in order, falling back on RuntimeError (transport/billing failures).
@@ -383,6 +582,28 @@ class FallbackClient(ModelClient):
             f"all {len(self._clients)} fallback clients failed; last: {last_exc}"
         ) from last_exc
 
+    def generate_agentic(
+        self,
+        prompt: str,
+        tools: list[ToolDefinition],
+        executor: Any,
+        role_name: str = "",
+        max_tool_calls: int = 10,
+    ) -> tuple[str, list[ToolCallRecord]]:
+        last_exc: Exception | None = None
+        for i, client in enumerate(self._clients):
+            try:
+                return client.generate_agentic(prompt, tools, executor, role_name=role_name, max_tool_calls=max_tool_calls)
+            except RuntimeError as exc:
+                print(
+                    f"[fallback] client {i} ({type(client).__name__}) failed: {exc}; trying next",
+                    flush=True,
+                )
+                last_exc = exc
+        raise RuntimeError(
+            f"all {len(self._clients)} fallback clients failed; last: {last_exc}"
+        ) from last_exc
+
 
 @dataclass(frozen=True)
 class Role:
@@ -396,3 +617,14 @@ class Role:
 
     def generate_with_tools(self, prompt: str, tools: list[ToolDefinition]) -> ToolCall:
         return self.client.generate_with_tools(prompt, tools)
+
+    def generate_agentic(
+        self,
+        prompt: str,
+        tools: list[ToolDefinition],
+        executor: Any,
+        max_tool_calls: int = 10,
+    ) -> tuple[str, list[ToolCallRecord]]:
+        return self.client.generate_agentic(
+            prompt, tools, executor, role_name=self.name, max_tool_calls=max_tool_calls
+        )
