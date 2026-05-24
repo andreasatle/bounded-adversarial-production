@@ -1,0 +1,16 @@
+# audit-baps.yaml
+project_type: audit
+artifact_id: baps-security-report
+source_path: /Users/andreasatle/Projects/bounded-adversarial-production/src/baps
+northstar_markdown: |
+  # baps Security Audit
+
+  Find vulnerabilities in the baps framework. Focus on:
+  - Prompt injection paths (model output trusted without validation)
+  - State mutation bypasses (changes reaching State without going through StateService)
+  - StateView/State boundary violations (raw State internals leaking into prompts)
+  - Delta parsing weaknesses (malformed model output accepted as valid)
+  - Export path traversal (file paths in deltas escaping the output directory)
+goal: Produce a structured security audit report for the baps framework.
+output: reports/baps-security-report.md
+max_iterations: 6
