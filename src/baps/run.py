@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 import yaml
 
 from baps.models import AnthropicClient, FallbackClient, ModelClient, OllamaClient, OpenAIClient, Role, ToolCallRecord
@@ -1004,7 +1006,7 @@ def _parse_game_spec_json(text: str) -> GameSpec:
 
     try:
         return GameSpec.model_validate(parsed)
-    except Exception as exc:
+    except ValidationError as exc:
         raise ValueError("create_game model output failed GameSpec validation") from exc
 
 
@@ -1155,7 +1157,7 @@ def _parse_red_finding_json(text: str) -> RedFinding:
 
     try:
         return RedFinding.model_validate(parsed)
-    except Exception as exc:
+    except ValidationError as exc:
         raise ValueError("red model output failed RedFinding validation") from exc
 
 
@@ -1179,7 +1181,7 @@ def _parse_referee_decision_json(text: str) -> RefereeDecision:
 
     try:
         return RefereeDecision.model_validate(parsed)
-    except Exception as exc:
+    except ValidationError as exc:
         raise ValueError("referee model output failed RefereeDecision validation") from exc
 
 

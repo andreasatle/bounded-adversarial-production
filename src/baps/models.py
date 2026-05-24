@@ -192,7 +192,10 @@ class AnthropicClient(ModelClient):
         content = data.get("content", [])
         if not content:
             raise RuntimeError("anthropic response missing content")
-        return content[0].get("text", "")
+        text = content[0].get("text")
+        if text is None:
+            raise RuntimeError("anthropic response content block missing 'text' field")
+        return text
 
     def generate_with_tools(self, prompt: str, tools: list[ToolDefinition]) -> ToolCall:
         if not prompt.strip():
@@ -243,7 +246,12 @@ class AnthropicClient(ModelClient):
             tool_blocks = [b for b in content if b.get("type") == "tool_use"]
             text_blocks = [b for b in content if b.get("type") == "text"]
             if not tool_blocks or stop_reason == "end_turn":
-                text = text_blocks[0].get("text", "") if text_blocks else ""
+                if text_blocks:
+                    text = text_blocks[0].get("text")
+                    if text is None:
+                        raise RuntimeError("anthropic agentic response text block missing 'text' field")
+                else:
+                    text = ""
                 return (text, records)
             tool_results = []
             for block in tool_blocks:
