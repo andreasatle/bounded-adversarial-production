@@ -4022,7 +4022,8 @@ def test_main_stop_reason_no_state_change_when_applied_delta_has_no_effect(
 ) -> None:
     import baps.run as run_module
 
-    monkeypatch.setattr(run_module, "fingerprint_state", lambda _state: "constant-fp")
+    import baps.state_service as ss_module
+    monkeypatch.setattr(ss_module.StateService, "states_differ", lambda self, _b, _a: False)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -4057,8 +4058,9 @@ def test_main_no_state_change_stops_loop_before_max_iterations(
             success_condition="Section exists.",
         )
 
+    import baps.state_service as ss_module
     monkeypatch.setattr(run_module, "create_game", _create_game)
-    monkeypatch.setattr(run_module, "fingerprint_state", lambda _state: "constant-fp")
+    monkeypatch.setattr(ss_module.StateService, "states_differ", lambda self, _b, _a: False)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -4084,15 +4086,14 @@ def test_main_no_state_change_after_prior_state_change_reports_state_changed_tru
 
     call_count = {"n": 0}
 
-    def _fingerprint(_state):
+    def _states_differ(self, _before, _after):
         call_count["n"] += 1
-        # Calls 1 and 2: before/after iteration 1 — return different values (state changes)
-        # Calls 3 and 4: before/after iteration 2 — return same value (no state change)
-        if call_count["n"] <= 2:
-            return f"fp-{call_count['n']}"
-        return "constant-fp"
+        # Call 1: iteration 1 — state changed
+        # Call 2: iteration 2 — no state change
+        return call_count["n"] <= 1
 
-    monkeypatch.setattr(run_module, "fingerprint_state", _fingerprint)
+    import baps.state_service as ss_module
+    monkeypatch.setattr(ss_module.StateService, "states_differ", _states_differ)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -6318,7 +6319,7 @@ def test_coding_example_output_path_resolves_under_workspace() -> None:
     )
     config = run_module.resolve_run_config(args)
     assert config["workspace"] == Path(".baps-workspace/coding-project")
-    assert config["output_path"] == Path(".baps-workspace/coding-project/output/project")
+    assert config["output_path"] == Path(".baps-workspace/coding-project/output/project").resolve()
 
 def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
     import baps.run as run_module

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 import re
+import types
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -9,6 +10,30 @@ from typing import Any, Protocol
 from baps.models import ToolCall, ToolDefinition
 from baps.northstar_projection import StateView
 from baps.state import DeltaState, GameSpec, State, StateUpdateProposal
+
+
+_MODEL_INJECTION_RE = re.compile(
+    r"(ignore|disregard|forget|override)\s+(all\s+)?(previous|prior|above|earlier)\s+"
+    r"(instructions?|prompts?|context|rules?)"
+    r"|^[\t ]*system\s*:",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def sanitize_model_string(text: str) -> str:
+    """Strip injection patterns from model-generated content before embedding in prompts."""
+    return _MODEL_INJECTION_RE.sub("[content removed]", text)
+
+
+def sanitize_model_title(text: str) -> str:
+    """Sanitize a model-generated string used as a markdown heading label.
+
+    Collapses to a single line (newlines would escape heading context) and
+    strips leading # characters that would create nested headings.
+    """
+    single_line = " ".join(text.splitlines()).strip()
+    single_line = single_line.lstrip("#").strip()
+    return sanitize_model_string(single_line)
 
 
 def _config_artifact_id(config: dict[str, Any]) -> str:
@@ -143,8 +168,8 @@ def build_default_project_type_adapters() -> dict[str, ProjectTypeAdapter]:
 
 
 @functools.lru_cache(maxsize=None)
-def _cached_default_adapters() -> dict[str, ProjectTypeAdapter]:
-    return build_default_project_type_adapters()
+def _cached_default_adapters() -> types.MappingProxyType:
+    return types.MappingProxyType(build_default_project_type_adapters())
 
 
 def resolve_project_type_adapter(project_type: str) -> ProjectTypeAdapter:

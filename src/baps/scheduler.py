@@ -210,7 +210,11 @@ def main() -> None:
     args = parser.parse_args()
 
     specs = args.specs or _DEFAULT_SPECS
-    policy_path = Path(args.policy)
+    policy_path = Path(args.policy).resolve()
+    if not policy_path.is_relative_to(Path.cwd().resolve()):
+        import sys as _sys
+        print(f"[scheduler] error: --policy path must be within the current directory: {policy_path}", file=_sys.stderr)
+        _sys.exit(1)
     policy_path.parent.mkdir(parents=True, exist_ok=True)
 
     models = _default_model_ladder()

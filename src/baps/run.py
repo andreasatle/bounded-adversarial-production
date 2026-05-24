@@ -35,7 +35,6 @@ from baps.state import (
     State,
     StateUpdateProposal,
     SubGapSpec,
-    fingerprint_state,
     apply_referee_decision_to_runtime,
     build_default_state_artifact_registry,
 )
@@ -681,8 +680,8 @@ def _load_spec(spec_path: Path) -> dict[str, Any]:
 def _resolve_output_path(workspace: Path, output_value: str) -> Path:
     output_candidate = Path(output_value)
     if output_candidate.is_absolute():
-        return output_candidate
-    return workspace / output_candidate
+        return output_candidate.resolve()
+    return (workspace / output_candidate).resolve()
 
 
 def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
@@ -1982,7 +1981,7 @@ def _solve_gap(
 
     before_state = state_service.load_state()
     updated_state = state_service.apply_delta(delta_state)
-    changed = fingerprint_state(before_state) != fingerprint_state(updated_state)
+    changed = state_service.states_differ(before_state, updated_state)
 
     ctx.output_changed = adapter.export_state(updated_state, output_path, artifact_id)
     ctx.output_exported = ctx.output_exported or ctx.output_changed

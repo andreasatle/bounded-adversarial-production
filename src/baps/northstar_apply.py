@@ -34,6 +34,9 @@ def _load_workspace_config(workspace: Path) -> dict:
 
 def _save_workspace_config(workspace: Path, config: dict) -> None:
     path = workspace / _WORKSPACE_CONFIG_FILE
+    resolved = path.resolve()
+    if not resolved.is_relative_to(workspace.resolve()):
+        raise ValueError(f"config path escapes workspace: {path}")
     path.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
 
@@ -77,7 +80,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    workspace = Path(args.workspace)
+    workspace = Path(args.workspace).resolve()
     if not workspace.exists():
         print(f"[apply-northstar] workspace not found: {workspace}", file=sys.stderr)
         sys.exit(1)

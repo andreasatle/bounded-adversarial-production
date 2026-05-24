@@ -13,6 +13,8 @@ from baps.project_adapter import (
     _config_northstar_markdown,
     normalize_json_candidate,
     render_blue_prompt_core,
+    sanitize_model_string,
+    sanitize_model_title,
 )
 from baps.state import (
     AppendSectionDelta,
@@ -57,21 +59,17 @@ def build_document_create_game_state_view(state: State, config: dict[str, Any]) 
         for section in target_artifact.sections
     ]
     metadata = {
-        "northstar_content": northstar_content,
         "target_artifact": {
             "id": target_artifact.id,
             "kind": target_artifact.kind,
             "sections": section_summaries,
         },
-        "state_summary": {
-            "artifact_ids": [artifact.id for artifact in state.artifacts],
-        },
     }
     section_lines: list[str] = []
     if target_artifact.sections:
         for section in target_artifact.sections:
-            section_lines.append(f"### {section.title}")
-            section_lines.append(section.body)
+            section_lines.append(f"### {sanitize_model_title(section.title)}")
+            section_lines.append(sanitize_model_string(section.body))
             section_lines.append("")
     else:
         section_lines.append("No sections.")
@@ -132,9 +130,9 @@ def build_document_state_view(state: State, game_spec: GameSpec) -> StateView:
     section_lines: list[str] = []
     if target_artifact.sections:
         for section in target_artifact.sections:
-            section_lines.append(f"### {section.title}")
+            section_lines.append(f"### {sanitize_model_title(section.title)}")
             section_lines.append("")
-            section_lines.append(section.body)
+            section_lines.append(sanitize_model_string(section.body))
             section_lines.append("")
     else:
         section_lines.append("No sections.")

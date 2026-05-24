@@ -7,6 +7,7 @@ from baps.state import (
     StateUpdateProposal,
     apply_state_delta,
     apply_state_update,
+    fingerprint_state,
     validate_state_artifacts,
     validate_update_base_state,
 )
@@ -33,6 +34,9 @@ class StateService:
         validated_updated = validate_state_artifacts(updated, self.registry)
         self.store.save(validated_updated)
         return validated_updated
+
+    def states_differ(self, before: State, after: State) -> bool:
+        return fingerprint_state(before) != fingerprint_state(after)
 
     def apply_update(self, proposal: StateUpdateProposal) -> State:
         current = self.store.load()

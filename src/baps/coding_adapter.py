@@ -17,6 +17,7 @@ from baps.project_adapter import (
     _config_northstar_markdown,
     normalize_json_candidate,
     render_blue_prompt_core,
+    sanitize_model_title,
 )
 from baps.state import (
     CodingArtifact,
@@ -32,6 +33,22 @@ from baps.state import (
     WriteFileDelta,
     WriteFilesDelta,
 )
+
+
+_UNSAFE_PATH_CHARS_RE = re.compile(r'[;&|`$<>!\x00]')
+
+
+def _validate_file_path(path: str) -> None:
+    """Reject file paths that could escape the output directory or inject into shell commands."""
+    if not path or not path.strip():
+        raise ValueError("file path must be non-empty")
+    p = Path(path)
+    if p.is_absolute():
+        raise ValueError(f"file path must be relative, not absolute: {path!r}")
+    if ".." in p.parts:
+        raise ValueError(f"file path must not contain '..' components: {path!r}")
+    if _UNSAFE_PATH_CHARS_RE.search(path):
+        raise ValueError(f"file path contains unsafe characters: {path!r}")
 
 
 _BLUE_CONTENT_FORBIDDEN_MARKERS: tuple[str, ...] = (
@@ -81,14 +98,16 @@ def build_coding_create_game_state_view(state: State, config: dict[str, Any]) ->
     file_lines: list[str] = []
     if target_artifact.files:
         for file in target_artifact.files:
-            file_lines.append(f"### {file.path}")
+            file_lines.append(f"### {sanitize_model_title(file.path)}")
             file_lines.append("")
             lines = file.content.splitlines()
-            if len(lines) <= _MAX_LINES_PER_FILE:
-                file_lines.extend(lines)
-            else:
-                file_lines.extend(lines[:_MAX_LINES_PER_FILE])
+            displayed = lines[:_MAX_LINES_PER_FILE] if len(lines) > _MAX_LINES_PER_FILE else lines
+            fence = "````" if "```" in "\n".join(displayed) else "```"
+            file_lines.append(fence)
+            file_lines.extend(displayed)
+            if len(lines) > _MAX_LINES_PER_FILE:
                 file_lines.append(f"... ({len(lines) - _MAX_LINES_PER_FILE} more lines)")
+            file_lines.append(fence)
             file_lines.append("")
     else:
         file_lines.append("No files.")
@@ -132,9 +151,12 @@ def build_coding_state_view(state: State, game_spec: GameSpec) -> StateView:
     file_lines: list[str] = []
     if artifact.files:
         for file in artifact.files:
-            file_lines.append(f"### {file.path}")
+            file_lines.append(f"### {sanitize_model_title(file.path)}")
             file_lines.append("")
+            fence = "````" if "```" in file.content else "```"
+            file_lines.append(fence)
             file_lines.append(file.content)
+            file_lines.append(fence)
             file_lines.append("")
     else:
         file_lines.append("No files.")
@@ -353,11 +375,13 @@ def parse_coding_delta_json(text: str) -> DeltaCodingState | DeltaCodingBatchSta
 
     if operation == "delete_file":
         try:
-            return DeltaDeleteCodingState.model_validate(parsed)
+            delta_delete = DeltaDeleteCodingState.model_validate(parsed)
         except Exception as exc:
             raise ValueError(
                 f"blue model output failed DeltaDeleteCodingState validation: {exc}"
             ) from exc
+        _validate_file_path(delta_delete.payload.path)
+        return delta_delete
 
     try:
         delta = DeltaCodingState.model_validate(parsed)
@@ -370,6 +394,7 @@ def parse_coding_delta_json(text: str) -> DeltaCodingState | DeltaCodingBatchSta
 
 
 def _validate_coding_write_file_artifact_purity(delta: DeltaCodingState) -> None:
+    _validate_file_path(delta.payload.file.path)
     content = delta.payload.file.content
     lowered = content.lower()
     for marker in _BLUE_CONTENT_FORBIDDEN_MARKERS:
@@ -382,6 +407,7 @@ def _validate_coding_write_file_artifact_purity(delta: DeltaCodingState) -> None
 
 def _validate_coding_write_files_purity(delta: DeltaCodingBatchState) -> None:
     for code_file in delta.payload.files:
+        _validate_file_path(code_file.path)
         lowered = code_file.content.lower()
         for marker in _BLUE_CONTENT_FORBIDDEN_MARKERS:
             if marker.lower() in lowered:
@@ -761,7 +787,7 @@ class CodingProjectAdapter:
             if not isinstance(files, list):
                 raise ValueError("write_files tool argument 'files' must be a list")
             try:
-                return DeltaCodingBatchState.model_validate(
+                delta_batch = DeltaCodingBatchState.model_validate(
                     {
                         "artifact_id": artifact_id,
                         "operation": "write_files",
@@ -772,6 +798,8 @@ class CodingProjectAdapter:
                 raise ValueError(
                     f"tool call arguments failed DeltaCodingBatchState validation: {exc}"
                 ) from exc
+            _validate_coding_write_files_purity(delta_batch)
+            return delta_batch
         if tool_call.name == "write_file":
             try:
                 artifact_id = str(args["artifact_id"])
@@ -780,7 +808,7 @@ class CodingProjectAdapter:
             except KeyError as exc:
                 raise ValueError(f"missing required tool argument: {exc}") from exc
             try:
-                return DeltaCodingState.model_validate(
+                delta_single = DeltaCodingState.model_validate(
                     {
                         "artifact_id": artifact_id,
                         "operation": "write_file",
@@ -791,12 +819,15 @@ class CodingProjectAdapter:
                 raise ValueError(
                     f"tool call arguments failed DeltaCodingState validation: {exc}"
                 ) from exc
+            _validate_coding_write_file_artifact_purity(delta_single)
+            return delta_single
         if tool_call.name == "delete_file":
             try:
                 artifact_id = str(args["artifact_id"])
                 path = str(args["path"])
             except KeyError as exc:
                 raise ValueError(f"missing required tool argument: {exc}") from exc
+            _validate_file_path(path)
             try:
                 return DeltaDeleteCodingState.model_validate(
                     {
@@ -838,13 +869,18 @@ class CodingProjectAdapter:
             gitignore_path.write_text(_GITIGNORE_CONTENT, encoding="utf-8")
             changed = True
 
+        resolved_root = output_path.resolve()
         for code_file in artifact.files:
-            file_path = output_path / code_file.path
-            file_path.parent.mkdir(parents=True, exist_ok=True)
+            dest = (output_path / code_file.path).resolve()
+            if not dest.is_relative_to(resolved_root):
+                raise ValueError(
+                    f"file path escapes output directory: {code_file.path!r}"
+                )
+            dest.parent.mkdir(parents=True, exist_ok=True)
             materialized = _normalize_coding_export_content(code_file.content)
-            before = file_path.read_text(encoding="utf-8") if file_path.exists() else None
+            before = dest.read_text(encoding="utf-8") if dest.exists() else None
             if before != materialized:
-                file_path.write_text(materialized, encoding="utf-8")
+                dest.write_text(materialized, encoding="utf-8")
                 changed = True
         return changed
 
@@ -943,10 +979,15 @@ class CodingProjectAdapter:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
             (tmp_path / "conftest.py").write_text(_CONFTEST_CONTENT, encoding="utf-8")
+            resolved_tmp = tmp_path.resolve()
             for code_file in candidate_files:
-                file_path = tmp_path / code_file.path
-                file_path.parent.mkdir(parents=True, exist_ok=True)
-                file_path.write_text(
+                dest = (tmp_path / code_file.path).resolve()
+                if not dest.is_relative_to(resolved_tmp):
+                    raise ValueError(
+                        f"file path escapes temp directory: {code_file.path!r}"
+                    )
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(
                     _normalize_coding_export_content(code_file.content), encoding="utf-8"
                 )
             command_args: list[str]

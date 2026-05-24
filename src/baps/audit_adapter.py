@@ -12,6 +12,8 @@ from baps.project_adapter import (
     _config_artifact_id,
     _config_northstar_markdown,
     render_blue_prompt_core,
+    sanitize_model_string,
+    sanitize_model_title,
 )
 from baps.state import (
     DeltaState,
@@ -155,8 +157,9 @@ def build_audit_create_game_state_view(state: State, config: dict[str, Any]) -> 
     section_lines: list[str] = []
     if artifact.sections:
         for section in artifact.sections:
-            section_lines.append(f"### {section.title}")
-            section_lines.append(section.body[:300] + ("..." if len(section.body) > 300 else ""))
+            section_lines.append(f"### {sanitize_model_title(section.title)}")
+            body_preview = section.body[:300] + ("..." if len(section.body) > 300 else "")
+            section_lines.append(sanitize_model_string(body_preview))
             section_lines.append("")
     else:
         section_lines.append("No findings yet.")
@@ -213,9 +216,9 @@ def build_audit_play_game_state_view(state: State, game_spec: GameSpec) -> State
     section_lines: list[str] = []
     if artifact.sections:
         for section in artifact.sections:
-            section_lines.append(f"### {section.title}")
+            section_lines.append(f"### {sanitize_model_title(section.title)}")
             section_lines.append("")
-            section_lines.append(section.body)
+            section_lines.append(sanitize_model_string(section.body))
             section_lines.append("")
     else:
         section_lines.append("No findings yet.")
