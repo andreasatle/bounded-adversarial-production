@@ -47,6 +47,7 @@ class StateArtifact(BaseModel):
 class Section(BaseModel):
     title: str
     body: str
+    source_hash: str | None = None
 
     _validate_title = field_validator("title")(_require_non_empty)
     _validate_body = field_validator("body")(_require_non_empty)

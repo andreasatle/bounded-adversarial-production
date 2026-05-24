@@ -408,6 +408,7 @@ def test_derive_state_update_from_delta_converts_append_section() -> None:
     assert proposal.payload["section"] == {
         "title": "Introduction",
         "body": "Body text",
+        "source_hash": None,
     }
 
 

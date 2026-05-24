@@ -77,6 +77,17 @@ def _extract_source_path(northstar_markdown: str) -> Path | None:
     return Path(content[start:end])
 
 
+def _compute_source_hash(source_path: Path, patterns: tuple[str, ...]) -> str:
+    files = _collect_source_files(source_path, patterns)
+    h = hashlib.sha256()
+    for f in files:
+        try:
+            h.update(f.read_bytes())
+        except OSError:
+            pass
+    return h.hexdigest()[:16]
+
+
 def _collect_source_files(
     source_path: Path, patterns: tuple[str, ...]
 ) -> list[Path]:
@@ -148,22 +159,34 @@ def build_audit_create_game_state_view(state: State, config: dict[str, Any]) -> 
     if source_path is not None and source_path.exists():
         patterns = tuple(config.get("source_include") or _DEFAULT_SOURCE_PATTERNS)
         files = _collect_source_files(source_path, patterns)
+        current_hash = _compute_source_hash(source_path, patterns)
         source_block = _render_source_listing(files, source_path)
         source_header = f"Source root: {source_path}"
     else:
+        current_hash = None
         source_block = "(source_path not configured or does not exist)"
         source_header = "Source root: (unknown)"
 
     section_lines: list[str] = []
+    stale_count = 0
     if artifact.sections:
         for section in artifact.sections:
-            section_lines.append(f"### {sanitize_model_title(section.title)}")
+            is_stale = (
+                current_hash is not None
+                and section.source_hash is not None
+                and section.source_hash != current_hash
+            )
+            if is_stale:
+                stale_count += 1
+            stale_marker = " [STALE — source changed]" if is_stale else ""
+            section_lines.append(f"### {sanitize_model_title(section.title)}{stale_marker}")
             body_preview = section.body[:300] + ("..." if len(section.body) > 300 else "")
             section_lines.append(sanitize_model_string(body_preview))
             section_lines.append("")
     else:
         section_lines.append("No findings yet.")
 
+    stale_note = f", {stale_count} stale" if stale_count else ""
     content = "\n".join([
         "=== StateView Start ===",
         "",
@@ -179,7 +202,7 @@ def build_audit_create_game_state_view(state: State, config: dict[str, Any]) -> 
         "--- Audit Report (current) ---",
         "",
         f"## Artifact: {artifact.id}",
-        f"findings so far: {len(artifact.sections)}",
+        f"findings so far: {len(artifact.sections)}{stale_note}",
         "",
         *section_lines,
         "=== StateView End ===",
@@ -194,6 +217,7 @@ def build_audit_create_game_state_view(state: State, config: dict[str, Any]) -> 
         metadata={
             "target_artifact_id": artifact.id,
             "findings_count": len(artifact.sections),
+            "stale_findings_count": stale_count,
         },
     )
 
@@ -322,6 +346,9 @@ class AuditProjectAdapter:
     project_type = "audit"
     supported_delta_type = "DeltaDocumentState"
 
+    def __init__(self) -> None:
+        self._current_source_hash: str | None = None
+
     def create_initial_state(self, config: dict[str, object]) -> State:
         northstar_markdown = _config_northstar_markdown(config)
         source_path = str(config.get("source_path", ""))
@@ -360,6 +387,11 @@ class AuditProjectAdapter:
         return game_spec
 
     def build_state_view(self, state: State, game_spec: GameSpec) -> StateView:
+        source_path = _extract_source_path(_get_northstar_from_state(state))
+        if source_path is not None and source_path.exists():
+            self._current_source_hash = _compute_source_hash(source_path, _DEFAULT_SOURCE_PATTERNS)
+        else:
+            self._current_source_hash = None
         return build_audit_play_game_state_view(state, game_spec)
 
     def render_blue_prompt(
@@ -470,7 +502,7 @@ class AuditProjectAdapter:
                 return DeltaDocumentState.model_validate({
                     "artifact_id": artifact_id,
                     "operation": "append_section",
-                    "payload": {"section": {"title": title, "body": body}},
+                    "payload": {"section": {"title": title, "body": body, "source_hash": self._current_source_hash}},
                 })
             except Exception as exc:
                 raise ValueError(f"tool call failed DeltaDocumentState validation: {exc}") from exc
@@ -500,7 +532,7 @@ class AuditProjectAdapter:
                 return DeltaDocumentState.model_validate({
                     "artifact_id": artifact_id,
                     "operation": "append_section",
-                    "payload": {"section": {"title": f"Audited: {file}", "body": rationale}},
+                    "payload": {"section": {"title": f"Audited: {file}", "body": rationale, "source_hash": self._current_source_hash}},
                 })
             except Exception as exc:
                 raise ValueError(f"tool call failed DeltaDocumentState validation: {exc}") from exc
@@ -523,7 +555,7 @@ class AuditProjectAdapter:
             return DeltaDocumentState.model_validate({
                 "artifact_id": artifact_id,
                 "operation": "append_section",
-                "payload": {"section": {"title": f"Audited: {file}", "body": rationale}},
+                "payload": {"section": {"title": f"Audited: {file}", "body": rationale, "source_hash": self._current_source_hash}},
             })
         return parse_document_delta_json(text)
 
