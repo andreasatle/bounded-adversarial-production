@@ -10,7 +10,8 @@ from typing import Any
 
 import yaml
 
-from baps.models import AnthropicClient, FallbackClient, ModelClient, OllamaClient, OpenAIClient, Role
+from baps.models import AnthropicClient, FallbackClient, ModelClient, OllamaClient, OpenAIClient, Role, ToolCallRecord
+from baps.tools import ToolExecutor, build_default_tool_executor
 from baps.northstar_projection import ProjectionType, StateView
 from baps.project_adapter import (
     ProjectTypeAdapter,
@@ -1436,6 +1437,58 @@ def _render_referee_prompt(
     )
 
 
+def _get_research_tools(adapter: ProjectTypeAdapter, role: str) -> list:
+    getter = getattr(adapter, "build_research_tools", None)
+    if getter is None:
+        return []
+    return getter(role) or []
+
+
+def _render_tool_session_block(sessions: list[tuple[str, list[ToolCallRecord], str]]) -> str:
+    """Render one or more (role, records, summary) tuples as a readable context block."""
+    if not sessions:
+        return ""
+    parts: list[str] = []
+    for role_name, records, summary in sessions:
+        if not records and not summary:
+            continue
+        parts.append(f"=== {role_name.upper()} Research Session ===")
+        for r in records:
+            args_str = json.dumps(r.arguments, sort_keys=True)
+            parts.append(f"[Tool: {r.tool_name}] {args_str}")
+            parts.append(f"Result: {r.result}")
+        if summary:
+            parts.append(f"Summary: {summary}")
+        parts.append(f"=== End {role_name.upper()} Research ===")
+    return "\n".join(parts)
+
+
+def _render_research_prompt(
+    role_name: str,
+    state_view: StateView,
+    game_spec: GameSpec,
+    prior_sessions: list[tuple[str, list[ToolCallRecord], str]],
+) -> str:
+    prior_block = _render_tool_session_block(prior_sessions)
+    prior_section = f"\nPrior research from other roles:\n{prior_block}\n" if prior_block else ""
+    return (
+        f"You are the {role_name} role. Before producing your evaluation, "
+        "research any claims or facts you need to verify.\n\n"
+        "Use web_search and fetch_url to look up:\n"
+        "- CVEs, security advisories, package vulnerabilities\n"
+        "- Documentation, specifications, or standards referenced in the code\n"
+        "- Any specific claim you intend to make or challenge\n\n"
+        f"Objective: {game_spec.objective}\n"
+        f"Success condition: {game_spec.success_condition}\n"
+        f"{prior_section}"
+        "State view excerpt (for context):\n"
+        f"{state_view.content[:2000]}\n\n"
+        "When you have finished researching, write a brief summary of what you found. "
+        "If you found nothing relevant, say so explicitly.\n"
+        "Do not produce your final evaluation here — only research and summarize."
+    )
+
+
 def play_game(
     state: State,
     game_spec: GameSpec,
@@ -1445,6 +1498,7 @@ def play_game(
     referee_model_client: ModelClient | None = None,
     verification_result: VerificationResult | None = None,
     max_attempts: int = _DEFAULT_MAX_PLAY_GAME_ATTEMPTS,
+    executor: ToolExecutor | None = None,
 ) -> DeltaState | None:
     if max_attempts < 1:
         raise ValueError("max_attempts must be >= 1")
@@ -1486,16 +1540,31 @@ def play_game(
     )
     for attempt in range(1, max_attempts + 1):
         _debug_print_play_game_attempt(attempt)
+
+        # Research phase — each role researches before producing output
+        blue_session: list[ToolCallRecord] = []
+        blue_summary = ""
+        if executor is not None:
+            blue_research_tools = _get_research_tools(resolved_adapter, "blue")
+            if blue_research_tools:
+                research_prompt = _render_research_prompt("blue", state_view, game_spec, [])
+                blue_summary, blue_session = blue_role.generate_agentic(
+                    research_prompt, blue_research_tools, executor
+                )
+
         _debug_print_blue_input(state_view, game_spec, attempt, previous_feedback)
         blue_prompt = resolved_adapter.render_blue_prompt(
             state_view, game_spec, attempt, previous_feedback
         )
+        if blue_session or blue_summary:
+            blue_prompt = _render_tool_session_block([("blue", blue_session, blue_summary)]) + "\n\n" + blue_prompt
         blue_tools = resolved_adapter.build_blue_tools()
         blue_tool_call = None
-        try:
-            blue_tool_call = blue_role.generate_with_tools(blue_prompt, blue_tools)
-        except ValueError:
-            pass
+        if blue_tools:
+            try:
+                blue_tool_call = blue_role.generate_with_tools(blue_prompt, blue_tools)
+            except ValueError:
+                pass
         if blue_tool_call is not None:
             try:
                 candidate_delta = resolved_adapter.tool_call_to_delta(blue_tool_call)
@@ -1528,6 +1597,18 @@ def play_game(
                 continue
         _debug_print_blue_output(candidate_delta)
 
+        # Red research — sees Blue's tool session for transparency
+        red_session: list[ToolCallRecord] = []
+        red_summary = ""
+        if executor is not None:
+            red_research_tools = _get_research_tools(resolved_adapter, "red")
+            if red_research_tools:
+                prior = [("blue", blue_session, blue_summary)] if blue_session or blue_summary else []
+                research_prompt = _render_research_prompt("red", state_view, game_spec, prior)
+                red_summary, red_session = red_role.generate_agentic(
+                    research_prompt, red_research_tools, executor
+                )
+
         if verification_result is None:
             _debug_print_red_input(state_view, game_spec, candidate_delta)
         else:
@@ -1541,16 +1622,42 @@ def play_game(
             candidate_delta,
             verification_result,
         )
+        tool_context = _render_tool_session_block([
+            s for s in [("blue", blue_session, blue_summary), ("red", red_session, red_summary)]
+            if s[1] or s[2]
+        ])
+        red_supplement_with_tools = (
+            (tool_context + "\n\nTool-use enforcement: treat any claim referencing external "
+             "information not supported by the tool call log above as unverified. "
+             "If Blue claims to have verified something externally but has no tool calls to show it, "
+             "flag that as a finding.\n\n")
+            if tool_context else ""
+        ) + red_supplement
         red_prompt = _render_red_prompt(
             state_view,
             game_spec,
             candidate_delta,
             verification_result,
-            red_supplement,
+            red_supplement_with_tools,
         )
         red_generated = red_role.generate(red_prompt)
         red_finding = _parse_red_finding_json(red_generated)
         _debug_print_red_output(red_finding)
+
+        # Referee research — sees both Blue and Red sessions
+        referee_session: list[ToolCallRecord] = []
+        referee_summary = ""
+        if executor is not None:
+            referee_research_tools = _get_research_tools(resolved_adapter, "referee")
+            if referee_research_tools:
+                prior = [s for s in [
+                    ("blue", blue_session, blue_summary),
+                    ("red", red_session, red_summary),
+                ] if s[1] or s[2]]
+                research_prompt = _render_research_prompt("referee", state_view, game_spec, prior)
+                referee_summary, referee_session = referee_role.generate_agentic(
+                    research_prompt, referee_research_tools, executor
+                )
 
         if verification_result is None:
             _debug_print_referee_input(
@@ -1567,13 +1674,25 @@ def play_game(
             candidate_delta,
             verification_result,
         )
+        all_sessions = [s for s in [
+            ("blue", blue_session, blue_summary),
+            ("red", red_session, red_summary),
+            ("referee", referee_session, referee_summary),
+        ] if s[1] or s[2]]
+        referee_tool_context = _render_tool_session_block(all_sessions)
+        referee_supplement_with_tools = (
+            (referee_tool_context + "\n\nTool-use enforcement: any claim referencing external "
+             "information not supported by the tool call logs above must be treated as unverified "
+             "and rejected.\n\n")
+            if referee_tool_context else ""
+        ) + referee_supplement
         referee_prompt = _render_referee_prompt(
             state_view,
             game_spec,
             candidate_delta,
             red_finding,
             verification_result,
-            referee_supplement,
+            referee_supplement_with_tools,
         )
         referee_generated = referee_role.generate(referee_prompt)
         referee_decision = _parse_referee_decision_json(referee_generated)
@@ -1844,6 +1963,7 @@ def _solve_gap(
         game_spec,
         adapter=adapter,
         verification_result=ctx.verification_result,
+        executor=build_default_tool_executor(),
     )
     if delta_state is None:
         ctx.stop_reason = "play_game_no_delta"

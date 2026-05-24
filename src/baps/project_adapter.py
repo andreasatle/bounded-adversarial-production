@@ -109,6 +109,9 @@ class ProjectTypeAdapter(Protocol):
     def build_blue_tools(self) -> list[ToolDefinition]:
         ...
 
+    def build_research_tools(self, role: str) -> list[ToolDefinition]:
+        ...
+
     def tool_call_to_delta(self, tool_call: ToolCall) -> DeltaState:
         ...
 
