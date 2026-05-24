@@ -170,12 +170,54 @@ def build_coding_state_view(state: State, game_spec: GameSpec) -> StateView:
     )
 
 
+def _render_verification_feedback_section(previous_feedback: dict[str, object] | None) -> str:
+    if previous_feedback is None:
+        return ""
+    section = ""
+    if "prior_export_verification" in previous_feedback:
+        pv = previous_feedback["prior_export_verification"]
+        exit_code = pv.get("exit_code", "?")
+        stdout = str(pv.get("stdout", ""))
+        failures = _parse_pytest_failures(stdout)
+        if failures:
+            lines = "\n".join(f"  - {f['test_id']}: {f['reason']}" for f in failures)
+            section += (
+                f"\nPrevious export verification failed (exit_code={exit_code}):\n"
+                f"{lines}\n"
+                "- Fix these specific test failures in your delta.\n"
+            )
+        elif exit_code not in (0, "0"):
+            section += (
+                f"\nPrevious export verification failed (exit_code={exit_code}).\n"
+                "- Inspect prior_export_verification in previous_feedback_json and repair the cause.\n"
+            )
+    if "candidate_verification" in previous_feedback:
+        cv = previous_feedback["candidate_verification"]
+        exit_code = cv.get("exit_code", "?")
+        stdout = str(cv.get("stdout", ""))
+        failures = _parse_pytest_failures(stdout)
+        if failures:
+            lines = "\n".join(f"  - {f['test_id']}: {f['reason']}" for f in failures)
+            section += (
+                f"\nCandidate verification failed (exit_code={exit_code}) — your last delta did not pass tests:\n"
+                f"{lines}\n"
+                "- Repair these test failures in this attempt.\n"
+            )
+        elif exit_code not in (0, "0"):
+            section += (
+                f"\nCandidate verification failed (exit_code={exit_code}).\n"
+                "- Inspect candidate_verification in previous_feedback_json and repair the cause.\n"
+            )
+    return section
+
+
 def render_coding_blue_prompt(
     state_view: StateView,
     game_spec: GameSpec,
     attempt_number: int,
     previous_feedback: dict[str, object] | None,
 ) -> str:
+    verification_section = _render_verification_feedback_section(previous_feedback)
     coding_delta_instructions = (
         "Coding delta rules:\n"
         "- Use write_files (plural) to write one or more files in a single delta — preferred.\n"
@@ -222,6 +264,7 @@ def render_coding_blue_prompt(
         '    "path": "<relative path to delete>"\n'
         "  }\n"
         "}"
+        f"{verification_section}"
     )
     return render_blue_prompt_core(
         state_view=state_view,
@@ -424,6 +467,26 @@ def _recover_malformed_coding_delta_json(text: str) -> dict[str, object] | None:
     return parsed
 
 
+def _parse_pytest_failures(stdout: str) -> list[dict[str, str]]:
+    failures = []
+    for line in stdout.splitlines():
+        if line.startswith("FAILED "):
+            rest = line[len("FAILED "):]
+            if " - " in rest:
+                test_id, reason = rest.split(" - ", 1)
+            else:
+                test_id, reason = rest, ""
+            failures.append({"test_id": test_id.strip(), "reason": reason.strip()})
+    return failures
+
+
+def _truncate_lines(text: str, max_lines: int) -> str:
+    lines = text.splitlines()
+    if len(lines) <= max_lines:
+        return text
+    return "\n".join(lines[:max_lines]) + f"\n... ({len(lines) - max_lines} more lines)"
+
+
 def _render_coding_evaluation_supplement(verification_result: VerificationResult | None) -> str:
     base = (
         "Coding evaluation guidance:\n"
@@ -479,6 +542,24 @@ def derive_coding_state_update_from_delta(delta_state: DeltaState) -> StateUpdat
             },
         )
     raise ValueError(f"unsupported delta type for integration: {type(delta_state).__name__}")
+
+
+def _apply_delta_to_files(
+    current_files: tuple[CodeFile, ...],
+    delta: DeltaState,
+) -> list[CodeFile]:
+    files = list(current_files)
+    if isinstance(delta, DeltaCodingBatchState):
+        for new_file in delta.payload.files:
+            files = [f for f in files if f.path != new_file.path]
+            files.append(new_file)
+    elif isinstance(delta, DeltaCodingState):
+        new_file = delta.payload.file
+        files = [f for f in files if f.path != new_file.path]
+        files.append(new_file)
+    elif isinstance(delta, DeltaDeleteCodingState):
+        files = [f for f in files if f.path != delta.payload.path]
+    return files
 
 
 class CodingProjectAdapter:
@@ -847,3 +928,59 @@ class CodingProjectAdapter:
             stderr=completed.stderr,
             passed=completed.returncode == 0,
         )
+
+    def verify_candidate(
+        self,
+        delta_state: DeltaState,
+        state: State,
+        artifact_id: str,
+    ) -> VerificationResult | None:
+        import tempfile
+
+        artifact = coding_artifact_from_state(state, artifact_id)
+        candidate_files = _apply_delta_to_files(artifact.files, delta_state)
+        has_tests = any(
+            f.path.startswith("tests/") or f.path.startswith("test_")
+            for f in candidate_files
+        )
+        if not has_tests:
+            return None
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            (tmp_path / "conftest.py").write_text(_CONFTEST_CONTENT, encoding="utf-8")
+            for code_file in candidate_files:
+                file_path = tmp_path / code_file.path
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+                file_path.write_text(
+                    _normalize_coding_export_content(code_file.content), encoding="utf-8"
+                )
+            command_args: list[str]
+            command: str
+            try:
+                command_args = ["uv", "run", "pytest"]
+                command = "uv run pytest"
+                completed = subprocess.run(
+                    command_args,
+                    cwd=tmp_path,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+            except FileNotFoundError:
+                command_args = [sys.executable, "-m", "pytest"]
+                command = f"{sys.executable} -m pytest"
+                completed = subprocess.run(
+                    command_args,
+                    cwd=tmp_path,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+            return VerificationResult(
+                command=command,
+                cwd=str(tmp_path),
+                exit_code=completed.returncode,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+                passed=completed.returncode == 0,
+            )

@@ -1330,6 +1330,15 @@ def play_game(
     state_view = resolved_adapter.build_state_view(state, game_spec)
     runtime = PlayGameRuntime()
     previous_feedback: dict[str, Any] | None = None
+    if verification_result is not None:
+        previous_feedback = {
+            "prior_export_verification": {
+                "exit_code": verification_result.exit_code,
+                "passed": verification_result.passed,
+                "stdout": verification_result.stdout,
+                "stderr": verification_result.stderr,
+            }
+        }
     blue_role = Role(
         "blue",
         model_client if model_client is not None else _build_role_client("blue"),
@@ -1449,6 +1458,25 @@ def play_game(
             decision=referee_decision,
         )
         if referee_decision.disposition == "accept":
+            candidate_result = _verify_candidate_with_adapter(
+                resolved_adapter, candidate_delta, state, game_spec.target_artifact_id
+            )
+            if (
+                candidate_result is not None
+                and not candidate_result.passed
+                and attempt < max_attempts
+            ):
+                previous_feedback = {
+                    "red_finding": red_finding.model_dump(mode="json"),
+                    "referee_decision": referee_decision.model_dump(mode="json"),
+                    "candidate_verification": {
+                        "exit_code": candidate_result.exit_code,
+                        "passed": False,
+                        "stdout": candidate_result.stdout,
+                        "stderr": candidate_result.stderr,
+                    },
+                }
+                continue
             _debug_print_play_game_output(runtime.current_best_delta)
             return runtime.current_best_delta
         previous_feedback = {
@@ -1472,6 +1500,18 @@ def _verify_export_with_adapter(
     if verifier is None:
         return None
     return verifier(output_path, state, artifact_id)
+
+
+def _verify_candidate_with_adapter(
+    adapter: ProjectTypeAdapter,
+    delta_state: DeltaState,
+    state: State,
+    artifact_id: str,
+) -> VerificationResult | None:
+    verifier = getattr(adapter, "verify_candidate", None)
+    if verifier is None:
+        return None
+    return verifier(delta_state, state, artifact_id)
 
 
 def _commit_export_with_adapter(
@@ -1671,7 +1711,12 @@ def _solve_gap(
             flush=True,
         )
 
-    delta_state = play_game(ctx.current_state, game_spec, adapter=adapter)
+    delta_state = play_game(
+        ctx.current_state,
+        game_spec,
+        adapter=adapter,
+        verification_result=ctx.verification_result,
+    )
     if delta_state is None:
         ctx.stop_reason = "play_game_no_delta"
         return

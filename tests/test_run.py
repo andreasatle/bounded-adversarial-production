@@ -478,7 +478,7 @@ def test_main_unsupported_delta_operation_fails_explicitly(monkeypatch, capsys, 
     monkeypatch.setattr(
         run_module,
         "play_game",
-        lambda _state, _spec, adapter=None: state_module.DeltaCodingState(
+        lambda _state, _spec, adapter=None, verification_result=None: state_module.DeltaCodingState(
             artifact_id="main-document",
             operation="write_file",
             payload=state_module.WriteFileDelta(
@@ -3680,7 +3680,7 @@ def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_pa
         lambda config, state, adapter=None, verification_result=None, context_chain=(), depth=0: expected,
     )
 
-    def _capture_play_game(state, spec, adapter=None):
+    def _capture_play_game(state, spec, adapter=None, verification_result=None):
         captured["state"] = state
         captured["spec"] = spec
         return state_module.DeltaDocumentState(
@@ -3712,7 +3712,7 @@ def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_pa
 def test_main_exits_cleanly_if_play_game_returns_none(monkeypatch, capsys, tmp_path: Path) -> None:
     import baps.run as run_module
 
-    monkeypatch.setattr(run_module, "play_game", lambda _state, _spec, adapter=None: None)
+    monkeypatch.setattr(run_module, "play_game", lambda _state, _spec, adapter=None, verification_result=None: None)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -3754,7 +3754,7 @@ def test_main_max_iterations_two_runs_two_iterations_with_state_carry_forward(
             success_condition=objective,
         )
 
-    def _play_game(_state, spec, adapter=None):
+    def _play_game(_state, spec, adapter=None, verification_result=None):
         title = "Introduction" if "introduction" in spec.objective.lower() else "Conclusion"
         return state_module.DeltaDocumentState(
             artifact_id="main-document",
@@ -4335,7 +4335,7 @@ def test_second_run_sees_previous_state(monkeypatch, tmp_path: Path) -> None:
             success_condition=objective,
         )
 
-    def _play_game(_state, spec, adapter=None):
+    def _play_game(_state, spec, adapter=None, verification_result=None):
         title = "Introduction" if "introduction" in spec.objective.lower() else "Conclusion"
         return state_module.DeltaDocumentState(
             artifact_id="main-document",
@@ -6100,7 +6100,7 @@ def test_coding_init_and_run_exports_fibonacci_files(monkeypatch, tmp_path: Path
 
     call_counter = {"count": 0}
 
-    def _play_game(_state, _game_spec, adapter=None):
+    def _play_game(_state, _game_spec, adapter=None, verification_result=None):
         call_counter["count"] += 1
         if call_counter["count"] == 1:
             return state_module.DeltaCodingState(
@@ -6412,7 +6412,8 @@ def test_coding_iteration_two_does_not_receive_stale_verification_result(
         ],
     )
     run_module.main()
-    assert verification_seen == [None, None]
+    assert verification_seen[0] is None  # first iteration: no prior export yet
+    assert isinstance(verification_seen[1], run_module.VerificationResult)  # second iteration: receives prior export result
 
 
 def test_coding_create_game_receives_previous_verification_result_second_iteration(
@@ -7570,3 +7571,385 @@ def test_solve_gap_max_depth_stops_recursion(monkeypatch, tmp_path: Path) -> Non
 
     assert result["stop_reason"] == "max_depth_reached"
     assert result["iterations_completed"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: _parse_pytest_failures
+# ---------------------------------------------------------------------------
+
+def test_parse_pytest_failures_empty_stdout() -> None:
+    from baps.coding_adapter import _parse_pytest_failures
+    assert _parse_pytest_failures("") == []
+
+
+def test_parse_pytest_failures_no_failures() -> None:
+    from baps.coding_adapter import _parse_pytest_failures
+    stdout = "collected 3 items\n\n3 passed in 0.1s\n"
+    assert _parse_pytest_failures(stdout) == []
+
+
+def test_parse_pytest_failures_single_failure_with_reason() -> None:
+    from baps.coding_adapter import _parse_pytest_failures
+    stdout = "FAILED tests/test_foo.py::test_bar - AssertionError: expected 1 got 2\n"
+    result = _parse_pytest_failures(stdout)
+    assert result == [{"test_id": "tests/test_foo.py::test_bar", "reason": "AssertionError: expected 1 got 2"}]
+
+
+def test_parse_pytest_failures_multiple_failures() -> None:
+    from baps.coding_adapter import _parse_pytest_failures
+    stdout = (
+        "FAILED tests/test_a.py::test_one - AssertionError: wrong\n"
+        "FAILED tests/test_b.py::test_two - TypeError: bad type\n"
+    )
+    result = _parse_pytest_failures(stdout)
+    assert len(result) == 2
+    assert result[0]["test_id"] == "tests/test_a.py::test_one"
+    assert result[1]["test_id"] == "tests/test_b.py::test_two"
+
+
+def test_parse_pytest_failures_no_reason_separator() -> None:
+    from baps.coding_adapter import _parse_pytest_failures
+    stdout = "FAILED tests/test_foo.py::test_bar\n"
+    result = _parse_pytest_failures(stdout)
+    assert result == [{"test_id": "tests/test_foo.py::test_bar", "reason": ""}]
+
+
+def test_truncate_lines_short_text_unchanged() -> None:
+    from baps.coding_adapter import _truncate_lines
+    text = "line1\nline2\nline3"
+    assert _truncate_lines(text, max_lines=5) == text
+
+
+def test_truncate_lines_truncates_at_limit() -> None:
+    from baps.coding_adapter import _truncate_lines
+    text = "\n".join(f"line{i}" for i in range(10))
+    result = _truncate_lines(text, max_lines=3)
+    assert result.startswith("line0\nline1\nline2")
+    assert "7 more lines" in result
+
+
+# ---------------------------------------------------------------------------
+# Phase 1: Blue receives prior export verification in its initial prompt
+# ---------------------------------------------------------------------------
+
+def test_coding_blue_prompt_includes_prior_export_failures() -> None:
+    from baps.coding_adapter import render_coding_blue_prompt
+    from baps.northstar_projection import ProjectionType, StateView
+    import baps.run as run_module
+    import hashlib
+
+    state_view = StateView(
+        id="sv:test",
+        projection_type=ProjectionType.NORTH_STAR,
+        content="=== StateView Start ===\n=== StateView End ===",
+        input_fingerprint="abc",
+        metadata={},
+    )
+    game_spec = run_module.GameSpec(
+        objective="Fix failing tests",
+        target_artifact_id="main-codebase",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="tests pass",
+    )
+    previous_feedback = {
+        "prior_export_verification": {
+            "exit_code": 1,
+            "passed": False,
+            "stdout": "FAILED tests/test_foo.py::test_bar - AssertionError: wrong\n",
+            "stderr": "",
+        }
+    }
+    prompt = render_coding_blue_prompt(
+        state_view=state_view,
+        game_spec=game_spec,
+        attempt_number=1,
+        previous_feedback=previous_feedback,
+    )
+    assert "tests/test_foo.py::test_bar" in prompt
+    assert "AssertionError: wrong" in prompt
+    assert "Fix these specific test failures" in prompt
+
+
+def test_coding_blue_prompt_no_verification_section_when_feedback_is_none() -> None:
+    from baps.coding_adapter import render_coding_blue_prompt
+    from baps.northstar_projection import ProjectionType, StateView
+    import baps.run as run_module
+
+    state_view = StateView(
+        id="sv:test",
+        projection_type=ProjectionType.NORTH_STAR,
+        content="=== StateView Start ===\n=== StateView End ===",
+        input_fingerprint="abc",
+        metadata={},
+    )
+    game_spec = run_module.GameSpec(
+        objective="Write code",
+        target_artifact_id="main-codebase",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="code written",
+    )
+    prompt = render_coding_blue_prompt(
+        state_view=state_view,
+        game_spec=game_spec,
+        attempt_number=1,
+        previous_feedback=None,
+    )
+    assert "Prior export verification" not in prompt
+    assert "Fix these specific test failures" not in prompt
+
+
+def test_play_game_pre_seeds_verification_result_as_previous_feedback(monkeypatch) -> None:
+    import baps.run as run_module
+
+    captured_feedback: list[object] = []
+
+    class _CapturingAdapter:
+        project_type = "coding"
+        supported_delta_type = "DeltaCodingState"
+
+        def build_state_view(self, state, game_spec):
+            from baps.northstar_projection import ProjectionType, StateView
+            return StateView(
+                id="sv", projection_type=ProjectionType.NORTH_STAR,
+                content="view", input_fingerprint="fp", metadata={}
+            )
+
+        def render_blue_prompt(self, state_view, game_spec, attempt_number, previous_feedback):
+            captured_feedback.append(previous_feedback)
+            return "blue prompt"
+
+        def build_blue_output_format(self):
+            return None
+
+        def build_blue_tools(self):
+            return []
+
+        def parse_blue_delta(self, text):
+            raise ValueError("no delta — max_attempts=1 so this exhausts attempts")
+
+        def render_red_prompt_supplement(self, *a, **kw):
+            return ""
+
+        def render_referee_prompt_supplement(self, *a, **kw):
+            return ""
+
+        def delta_to_state_update(self, delta):
+            raise ValueError("unused")
+
+    vr = run_module.VerificationResult(
+        command="uv run pytest", cwd="/tmp", exit_code=1,
+        stdout="FAILED tests/test_foo.py::test_x - AssertionError\n",
+        stderr="", passed=False,
+    )
+    state = state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(id="main-codebase", files=()),),
+    )
+    game_spec = run_module.GameSpec(
+        objective="Fix tests",
+        target_artifact_id="main-codebase",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="tests pass",
+    )
+
+    # tool_responses=[None] makes generate_with_tools return None → falls through to generate().
+    # parse_blue_delta raises ValueError → attempt exhausted → returns None.
+    result = run_module.play_game(
+        state, game_spec,
+        adapter=_CapturingAdapter(),
+        model_client=FakeModelClient(tool_responses=[None], responses=["not valid json"]),
+        red_model_client=FakeModelClient(responses=[]),
+        referee_model_client=FakeModelClient(responses=[]),
+        verification_result=vr,
+        max_attempts=1,
+    )
+
+    assert result is None
+    assert len(captured_feedback) >= 1
+    fb = captured_feedback[0]
+    assert fb is not None
+    assert "prior_export_verification" in fb
+    assert fb["prior_export_verification"]["exit_code"] == 1
+    assert fb["prior_export_verification"]["passed"] is False
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: Candidate verification within PlayGame
+# ---------------------------------------------------------------------------
+
+def test_apply_delta_to_files_write_file() -> None:
+    from baps.coding_adapter import _apply_delta_to_files
+
+    existing = (
+        state_module.CodeFile(path="src/a.py", content="old"),
+    )
+    delta = state_module.DeltaCodingState(
+        artifact_id="art",
+        operation="write_file",
+        payload=state_module.WriteFileDelta(
+            file=state_module.CodeFile(path="src/a.py", content="new")
+        ),
+    )
+    result = _apply_delta_to_files(existing, delta)
+    assert len(result) == 1
+    assert result[0].content == "new"
+
+
+def test_apply_delta_to_files_write_files_adds_and_replaces() -> None:
+    from baps.coding_adapter import _apply_delta_to_files
+
+    existing = (
+        state_module.CodeFile(path="src/a.py", content="old_a"),
+    )
+    delta = state_module.DeltaCodingBatchState(
+        artifact_id="art",
+        operation="write_files",
+        payload=state_module.WriteFilesDelta(files=[
+            state_module.CodeFile(path="src/a.py", content="new_a"),
+            state_module.CodeFile(path="src/b.py", content="b_content"),
+        ]),
+    )
+    result = _apply_delta_to_files(existing, delta)
+    paths = {f.path for f in result}
+    assert paths == {"src/a.py", "src/b.py"}
+    a = next(f for f in result if f.path == "src/a.py")
+    assert a.content == "new_a"
+
+
+def test_apply_delta_to_files_delete_file() -> None:
+    from baps.coding_adapter import _apply_delta_to_files
+
+    existing = (
+        state_module.CodeFile(path="src/a.py", content="a"),
+        state_module.CodeFile(path="src/b.py", content="b"),
+    )
+    delta = state_module.DeltaDeleteCodingState(
+        artifact_id="art",
+        operation="delete_file",
+        payload=state_module.DeleteFileDelta(path="src/a.py"),
+    )
+    result = _apply_delta_to_files(existing, delta)
+    assert len(result) == 1
+    assert result[0].path == "src/b.py"
+
+
+def test_verify_candidate_returns_none_when_no_test_files() -> None:
+    from baps.coding_adapter import CodingProjectAdapter
+
+    state = state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(
+            id="art",
+            files=(state_module.CodeFile(path="src/foo.py", content="x = 1"),),
+        ),),
+    )
+    delta = state_module.DeltaCodingState(
+        artifact_id="art",
+        operation="write_file",
+        payload=state_module.WriteFileDelta(
+            file=state_module.CodeFile(path="src/bar.py", content="y = 2")
+        ),
+    )
+    result = CodingProjectAdapter().verify_candidate(delta, state, "art")
+    assert result is None
+
+
+def test_verify_candidate_passes_when_tests_pass(tmp_path) -> None:
+    from baps.coding_adapter import CodingProjectAdapter
+
+    state = state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(
+            id="art",
+            files=(state_module.CodeFile(path="src/calc.py", content="def add(a, b):\n    return a + b\n"),),
+        ),),
+    )
+    delta = state_module.DeltaCodingState(
+        artifact_id="art",
+        operation="write_file",
+        payload=state_module.WriteFileDelta(
+            file=state_module.CodeFile(
+                path="tests/test_calc.py",
+                content=(
+                    "import sys, os\n"
+                    "sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))\n"
+                    "from calc import add\n"
+                    "def test_add():\n"
+                    "    assert add(1, 2) == 3\n"
+                ),
+            )
+        ),
+    )
+    result = CodingProjectAdapter().verify_candidate(delta, state, "art")
+    assert result is not None
+    assert result.passed is True
+    assert result.exit_code == 0
+
+
+def test_verify_candidate_fails_when_tests_fail() -> None:
+    from baps.coding_adapter import CodingProjectAdapter
+
+    state = state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(
+            id="art",
+            files=(state_module.CodeFile(path="src/calc.py", content="def add(a, b):\n    return 99\n"),),
+        ),),
+    )
+    delta = state_module.DeltaCodingState(
+        artifact_id="art",
+        operation="write_file",
+        payload=state_module.WriteFileDelta(
+            file=state_module.CodeFile(
+                path="tests/test_calc.py",
+                content=(
+                    "import sys, os\n"
+                    "sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))\n"
+                    "from calc import add\n"
+                    "def test_add():\n"
+                    "    assert add(1, 2) == 3\n"
+                ),
+            )
+        ),
+    )
+    result = CodingProjectAdapter().verify_candidate(delta, state, "art")
+    assert result is not None
+    assert result.passed is False
+    assert result.exit_code == 1
+
+
+def test_coding_blue_prompt_includes_candidate_verification_failures() -> None:
+    from baps.coding_adapter import render_coding_blue_prompt
+    from baps.northstar_projection import ProjectionType, StateView
+    import baps.run as run_module
+
+    state_view = StateView(
+        id="sv:test",
+        projection_type=ProjectionType.NORTH_STAR,
+        content="=== StateView Start ===\n=== StateView End ===",
+        input_fingerprint="abc",
+        metadata={},
+    )
+    game_spec = run_module.GameSpec(
+        objective="Fix failing tests",
+        target_artifact_id="main-codebase",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="tests pass",
+    )
+    previous_feedback = {
+        "candidate_verification": {
+            "exit_code": 1,
+            "passed": False,
+            "stdout": "FAILED tests/test_calc.py::test_add - AssertionError: assert 99 == 3\n",
+            "stderr": "",
+        }
+    }
+    prompt = render_coding_blue_prompt(
+        state_view=state_view,
+        game_spec=game_spec,
+        attempt_number=2,
+        previous_feedback=previous_feedback,
+    )
+    assert "tests/test_calc.py::test_add" in prompt
+    assert "Candidate verification failed" in prompt
+    assert "Repair these test failures" in prompt
