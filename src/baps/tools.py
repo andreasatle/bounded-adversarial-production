@@ -56,6 +56,17 @@ def _strip_html(text: str) -> str:
     return text.strip()
 
 
+_INJECTION_PATTERNS = re.compile(
+    r"(ignore|disregard|forget|override)\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions?|prompts?|context|rules?)"
+    r"|^[\t ]*system\s*:",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _sanitize_external_content(text: str) -> str:
+    return _INJECTION_PATTERNS.sub("[content removed]", text)
+
+
 def fetch_url(url: str) -> str:
     """Fetch a public HTTP/HTTPS URL and return its text content (HTML stripped, max 50 KB)."""
     parsed = urllib.parse.urlparse(url)
@@ -70,8 +81,8 @@ def fetch_url(url: str) -> str:
     except Exception as exc:
         return f"fetch_error: {exc}"
     if "<html" in raw[:1000].lower() or "<!doctype" in raw[:500].lower():
-        return _strip_html(raw)
-    return raw
+        return _sanitize_external_content(_strip_html(raw))
+    return _sanitize_external_content(raw)
 
 
 def web_search(query: str) -> str:
@@ -86,20 +97,29 @@ def web_search(query: str) -> str:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
         return f"search_error: invalid JSON response: {exc}"
+    if not isinstance(data, dict):
+        return "search_error: unexpected response format"
     parts: list[str] = []
-    if data.get("AbstractText"):
-        parts.append(f"Summary: {data['AbstractText']}")
-        if data.get("AbstractURL"):
-            parts.append(f"Source: {data['AbstractURL']}")
+    abstract = data.get("AbstractText")
+    if isinstance(abstract, str) and abstract.strip():
+        parts.append(f"Summary: {abstract}")
+        source = data.get("AbstractURL")
+        if isinstance(source, str) and source.startswith("http"):
+            parts.append(f"Source: {source}")
     for topic in data.get("RelatedTopics", [])[:5]:
-        if isinstance(topic, dict) and topic.get("Text"):
-            line = f"- {topic['Text']}"
-            if topic.get("FirstURL"):
-                line += f"\n  URL: {topic['FirstURL']}"
-            parts.append(line)
+        if not isinstance(topic, dict):
+            continue
+        text = topic.get("Text")
+        if not isinstance(text, str) or not text.strip():
+            continue
+        line = f"- {text}"
+        url = topic.get("FirstURL")
+        if isinstance(url, str) and url.startswith("http"):
+            line += f"\n  URL: {url}"
+        parts.append(line)
     if not parts:
         return "(no results — try fetch_url with a direct URL if you know where to look)"
-    return "\n".join(parts)
+    return _sanitize_external_content("\n".join(parts))
 
 
 FETCH_URL_DEFINITION = ToolDefinition(

@@ -8385,5 +8385,7 @@ def test_render_tool_session_block_formats_records() -> None:
     assert "BLUE" in block
     assert "web_search" in block
     assert "CVE-2024" in block
+    assert "UNTRUSTED EXTERNAL CONTENT" in block
     assert "found it" in block
+    assert "END UNTRUSTED EXTERNAL CONTENT" in block
     assert "summary text" in block
