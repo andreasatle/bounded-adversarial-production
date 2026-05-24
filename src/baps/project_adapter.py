@@ -179,6 +179,11 @@ def render_blue_prompt_core(
         for i, desc in enumerate(game_spec.context_chain):
             lines.append(f"  [{i + 1}] {desc}")
         context_block = "\n".join(lines) + "\n\n"
+    max_words_input = f"- max_words: {game_spec.max_words}\n" if game_spec.max_words else ""
+    max_words_rule = (
+        "- Hard word budget: your output must not exceed max_words words. Cut, do not pad.\n"
+        if game_spec.max_words else ""
+    )
     return (
         "Produce exactly one delta JSON object allowed by GameSpec.allowed_delta_type.\n\n"
         f"{context_block}"
@@ -192,14 +197,16 @@ def render_blue_prompt_core(
         f"- objective: {game_spec.objective}\n"
         f"- target_artifact_id: {game_spec.target_artifact_id}\n"
         f"- allowed_delta_type: {game_spec.allowed_delta_type}\n"
-        f"- success_condition: {game_spec.success_condition}\n\n"
-        "Execution rules:\n"
+        f"- success_condition: {game_spec.success_condition}\n"
+        f"{max_words_input}"
+        "\nExecution rules:\n"
         "- Produce one delta that satisfies objective and success_condition.\n"
         "- Use context chain (if present) to understand the broader plan your work belongs to.\n"
         "- Use StateView as the current artifact context.\n"
         "- Do not duplicate existing artifact content.\n"
         "- Do not rewrite unrelated existing state.\n"
         "- Do not emit placeholder or filler content.\n"
+        f"{max_words_rule}"
         "- If previous_feedback_json contains validation errors, repair those exact errors in this attempt.\n"
         "- Do not repeat outputs that fail previously reported validation constraints.\n"
         "- When attempt_number > 1, treat previous_feedback_json as mandatory correction requirements.\n\n"

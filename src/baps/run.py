@@ -613,6 +613,7 @@ _CREATE_GAME_SCHEMA: dict = {
         "target_artifact_id": {"type": "string"},
         "allowed_delta_type": {"type": "string"},
         "success_condition": {"type": "string"},
+        "max_words": {"type": ["integer", "null"]},
         "no_new_game": {"type": "boolean"},
         "reason": {"type": "string"},
         "northstar_update_needed": {"type": "boolean"},
@@ -912,10 +913,13 @@ def _render_create_game_prompt(
         '  "objective": "...",\n'
         '  "target_artifact_id": "...",\n'
         '  "allowed_delta_type": "...",\n'
-        '  "success_condition": "..."\n'
+        '  "success_condition": "...",\n'
+        '  "max_words": <integer or null>\n'
         "}\n\n"
         "objective: name the gap being closed and what the closed state looks like.\n"
         "success_condition: verifiable from the artifact alone — state what must be present or true.\n"
+        "max_words: set a word budget for Blue's output when scope should be tightly bounded "
+        "(e.g. a focused section, a single function). Omit (null) only when scope is inherently open-ended.\n"
         "Do not artificially split a coherent gap into multiple games — use decompose instead.\n"
         "All files or sections that must change together to close a gap belong in one game.\n"
         f"For this project type, allowed_delta_type must be {resolved_adapter.supported_delta_type}.\n"
@@ -1418,7 +1422,8 @@ def _render_referee_prompt(
         "- Do not invent stronger requirements than objective/success_condition.\n"
         "- Do not require broader coverage/comprehensiveness unless explicitly required by GameSpec.\n"
         "- Do not add stricter standards such as 'more comprehensive', 'better coverage', 'stronger tests', or 'more complete' unless those words (or equivalent requirements) are explicit in GameSpec.\n"
-        "- Do NOT choose revise merely because state changed.\n\n"
+        "- Do NOT choose revise merely because state changed.\n"
+        "- Flag any quantitative claim (percentages, rates, counts, benchmark figures) in the delta that has no explicit attribution or 'based on X' qualifier as an evidence failure — treat as grounds for revise.\n\n"
         "Return only a JSON object.\n"
         "Do not wrap output in markdown.\n"
         "Do not use triple-backtick fences.\n"
