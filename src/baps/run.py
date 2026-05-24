@@ -21,6 +21,7 @@ from baps.project_adapter import (
     _config_artifact_id,
     _config_northstar_markdown,
     normalize_json_candidate,
+    sanitize_model_string,
     build_default_project_type_adapters,
     resolve_adapter_for_allowed_delta_type,
     resolve_project_type_adapter,
@@ -1342,10 +1343,10 @@ def _render_red_prompt(
         "Input:\n"
         f"- state_view_json: {state_view_json}\n"
         f"- delta_state_json: {delta_state_json}\n"
-        f"- objective: {game_spec.objective}\n"
+        f"- objective: {sanitize_model_string(game_spec.objective)}\n"
         f"- target_artifact_id: {game_spec.target_artifact_id}\n"
         f"- allowed_delta_type: {game_spec.allowed_delta_type}\n"
-        f"- success_condition: {game_spec.success_condition}\n\n"
+        f"- success_condition: {sanitize_model_string(game_spec.success_condition)}\n\n"
         f"{verification_block}"
         "Evaluation policy:\n"
         "- Treat GameSpec.success_condition as authoritative acceptance contract.\n"
@@ -1414,10 +1415,10 @@ def _render_referee_prompt(
         f"- state_view_json: {state_view_json}\n"
         f"- delta_state_json: {delta_state_json}\n"
         f"- red_finding_json: {red_finding_json}\n"
-        f"- objective: {game_spec.objective}\n"
+        f"- objective: {sanitize_model_string(game_spec.objective)}\n"
         f"- target_artifact_id: {game_spec.target_artifact_id}\n"
         f"- allowed_delta_type: {game_spec.allowed_delta_type}\n"
-        f"- success_condition: {game_spec.success_condition}\n\n"
+        f"- success_condition: {sanitize_model_string(game_spec.success_condition)}\n\n"
         f"{verification_block}"
         "Referee authority scope:\n"
         "- You are the game-local authority for this PlayGame decision.\n"
@@ -1729,8 +1730,8 @@ def play_game(
                 and attempt < max_attempts
             ):
                 previous_feedback = {
-                    "red_finding": red_finding.model_dump(mode="json"),
-                    "referee_decision": referee_decision.model_dump(mode="json"),
+                    "red_finding": _sanitize_feedback_dict(red_finding.model_dump(mode="json")),
+                    "referee_decision": _sanitize_feedback_dict(referee_decision.model_dump(mode="json")),
                     "candidate_verification": {
                         "exit_code": candidate_result.exit_code,
                         "passed": False,
@@ -1742,11 +1743,26 @@ def play_game(
             _debug_print_play_game_output(runtime.current_best_delta)
             return runtime.current_best_delta
         previous_feedback = {
-            "red_finding": red_finding.model_dump(mode="json"),
-            "referee_decision": referee_decision.model_dump(mode="json"),
+            "red_finding": _sanitize_feedback_dict(red_finding.model_dump(mode="json")),
+            "referee_decision": _sanitize_feedback_dict(referee_decision.model_dump(mode="json")),
         }
     _debug_print_play_game_output(runtime.current_best_delta)
     return runtime.current_best_delta
+
+
+def _sanitize_feedback_dict(d: dict) -> dict:
+    """Sanitize model-generated strings in a feedback dict before re-embedding in prompts."""
+    result = {}
+    for k, v in d.items():
+        if isinstance(v, str):
+            result[k] = sanitize_model_string(v)
+        elif isinstance(v, list):
+            result[k] = [sanitize_model_string(i) if isinstance(i, str) else i for i in v]
+        elif isinstance(v, dict):
+            result[k] = _sanitize_feedback_dict(v)
+        else:
+            result[k] = v
+    return result
 
 
 def _derive_state_update_from_delta(
@@ -1795,8 +1811,8 @@ def _append_northstar_proposal_to_blackboard(
     blackboard_dir.mkdir(parents=True, exist_ok=True)
     entry = {
         "event": "northstar_update_proposal",
-        "rationale": rationale,
-        "proposed_northstar": proposed_northstar,
+        "rationale": sanitize_model_string(rationale),
+        "proposed_northstar": sanitize_model_string(proposed_northstar),
         "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
     }
     proposals_path = blackboard_dir / _NORTHSTAR_PROPOSALS_FILE

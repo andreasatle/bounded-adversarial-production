@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import re
 import types
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -22,7 +23,8 @@ _MODEL_INJECTION_RE = re.compile(
 
 def sanitize_model_string(text: str) -> str:
     """Strip injection patterns from model-generated content before embedding in prompts."""
-    return _MODEL_INJECTION_RE.sub("[content removed]", text)
+    normalized = unicodedata.normalize("NFKC", text)
+    return _MODEL_INJECTION_RE.sub("[content removed]", normalized)
 
 
 def sanitize_model_title(text: str) -> str:
@@ -52,7 +54,14 @@ def _config_northstar_markdown(config: dict[str, Any]) -> str:
     return value
 
 
+_MAX_DELTA_BYTES = 65536
+
+
 def normalize_json_candidate(text: str) -> str:
+    if len(text.encode("utf-8")) > _MAX_DELTA_BYTES:
+        raise ValueError(
+            f"model response exceeds maximum allowed size ({_MAX_DELTA_BYTES} bytes)"
+        )
     normalized = text.strip()
     fence_pattern = re.compile(
         r"\A```(?:json)?[ \t]*\n(?P<body>[\s\S]*?)\n```[ \t]*\Z",

@@ -5,7 +5,7 @@ import json
 from enum import Enum
 from typing import Literal, Protocol
 
-from pydantic import BaseModel, Field, SerializeAsAny, model_validator, field_validator
+from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, model_validator, field_validator
 
 
 class Disposition(str, Enum):
@@ -133,10 +133,12 @@ class CodingArtifact(StateArtifact):
 
 
 class AppendSectionDelta(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     section: Section
 
 
 class ModifySectionDelta(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     section_title: str
     new_body: str
 
@@ -145,16 +147,19 @@ class ModifySectionDelta(BaseModel):
 
 
 class DeleteSectionDelta(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     section_title: str
 
     _validate_section_title = field_validator("section_title")(_require_non_empty)
 
 
 class WriteFileDelta(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     file: CodeFile
 
 
 class WriteFilesDelta(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     files: tuple[CodeFile, ...]
 
     @field_validator("files")
@@ -166,6 +171,7 @@ class WriteFilesDelta(BaseModel):
 
 
 class DeleteFileDelta(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     path: str
 
     _validate_path = field_validator("path")(_require_non_empty)

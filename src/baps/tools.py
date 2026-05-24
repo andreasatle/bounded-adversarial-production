@@ -4,6 +4,7 @@ import gzip
 import ipaddress
 import json
 import re
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -89,7 +90,8 @@ _INJECTION_PATTERNS = re.compile(
 
 
 def _sanitize_external_content(text: str) -> str:
-    return _INJECTION_PATTERNS.sub("[content removed]", text)
+    normalized = unicodedata.normalize("NFKC", text)
+    return _INJECTION_PATTERNS.sub("[content removed]", normalized)
 
 
 def fetch_url(url: str) -> str:

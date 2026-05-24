@@ -17,6 +17,7 @@ from baps.project_adapter import (
     _config_northstar_markdown,
     normalize_json_candidate,
     render_blue_prompt_core,
+    sanitize_model_string,
     sanitize_model_title,
 )
 from baps.state import (
@@ -104,7 +105,7 @@ def build_coding_create_game_state_view(state: State, config: dict[str, Any]) ->
             displayed = lines[:_MAX_LINES_PER_FILE] if len(lines) > _MAX_LINES_PER_FILE else lines
             fence = "````" if "```" in "\n".join(displayed) else "```"
             file_lines.append(fence)
-            file_lines.extend(displayed)
+            file_lines.extend(sanitize_model_string(line) for line in displayed)
             if len(lines) > _MAX_LINES_PER_FILE:
                 file_lines.append(f"... ({len(lines) - _MAX_LINES_PER_FILE} more lines)")
             file_lines.append(fence)
@@ -155,7 +156,7 @@ def build_coding_state_view(state: State, game_spec: GameSpec) -> StateView:
             file_lines.append("")
             fence = "````" if "```" in file.content else "```"
             file_lines.append(fence)
-            file_lines.append(file.content)
+            file_lines.append(sanitize_model_string(file.content))
             file_lines.append(fence)
             file_lines.append("")
     else:
