@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import ipaddress
 import json
 import re
@@ -39,7 +40,10 @@ _OPENER = urllib.request.build_opener(_SafeRedirectHandler)
 def _raw_fetch(url: str, max_bytes: int) -> str:
     req = urllib.request.Request(url, headers={"User-Agent": "baps-research/1.0"}, method="GET")
     with _OPENER.open(req, timeout=_FETCH_TIMEOUT) as resp:
-        return resp.read(max_bytes).decode("utf-8", errors="replace")
+        raw = resp.read(max_bytes)
+        if resp.headers.get("Content-Encoding") == "gzip":
+            raw = gzip.decompress(raw)
+        return raw.decode("utf-8", errors="replace")
 
 
 def _strip_html(text: str) -> str:

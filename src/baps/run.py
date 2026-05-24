@@ -993,10 +993,14 @@ def _parse_game_spec_json(text: str) -> GameSpec:
         "allowed_delta_type",
         "success_condition",
     }
-    if set(parsed.keys()) != required_keys:
+    optional_keys = {"max_words", "context_chain"}
+    present_keys = set(parsed.keys())
+    unknown_keys = present_keys - required_keys - optional_keys
+    if not required_keys.issubset(present_keys) or unknown_keys:
         raise ValueError(
             "create_game model output must contain exactly keys: "
             "objective, target_artifact_id, allowed_delta_type, success_condition"
+            + (f" (unexpected keys: {sorted(unknown_keys)})" if unknown_keys else "")
         )
 
     try:
