@@ -1,0 +1,42 @@
+# audit-coverage.yaml
+project_type: audit
+artifact_id: baps-coverage-report
+source_path: /Users/andreasatle/Projects/bounded-adversarial-production
+source_include:
+  - "*.py"
+northstar_markdown: |
+  # baps Test Coverage Audit
+
+  Identify gaps between the test suite (tests/) and the source code (src/baps/).
+  Focus on paths that are security-critical, recently changed, or load-bearing for
+  the canonical execution spine.
+
+  A finding is a specific untested or under-tested code path — not a general comment
+  about coverage philosophy. Every finding must cite the exact source function and the
+  exact test file (or absence of one) that leaves it uncovered.
+
+  Priority areas:
+
+  - **File path validation** — `_validate_file_path` in coding_adapter.py and the
+    anchor checks in `export_state` / `verify_candidate`: are traversal, absolute,
+    and shell-metachar cases tested?
+  - **Prompt sanitization** — `sanitize_model_string` and `sanitize_model_title` in
+    project_adapter.py: are injection patterns and multi-line title collapsing tested?
+  - **StateService boundary** — `states_differ`, `apply_delta`, `apply_update`: are
+    fingerprint-mismatch and NorthStar-protection paths covered?
+  - **Exception narrowing** — the `except ValidationError` blocks in run.py for
+    GameSpec, RedFinding, and RefereeDecision: is behaviour on unexpected error types
+    tested?
+  - **JS-render detection** — `_is_js_rendered` in tools.py: are the marker-based and
+    word-count heuristic paths tested?
+  - **Adapter parse paths** — `tool_call_to_delta` and `parse_blue_delta` in
+    coding_adapter.py and audit_adapter.py: are malformed inputs and boundary cases
+    covered?
+  - **northstar_apply and scheduler** — the workspace path anchoring and policy path
+    validation added in the security hardening: any tests at all?
+
+  A no_finding is acceptable when genuine inspection confirms coverage exists.
+  Do not record a no_finding without citing the specific test(s) that provide it.
+goal: Produce a structured test coverage gap report for the baps framework.
+output: reports/baps-coverage-report.md
+max_iterations: 8
