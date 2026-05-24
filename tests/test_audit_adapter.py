@@ -10,6 +10,7 @@ from baps.audit_adapter import (
     _embed_source_path,
     _extract_source_path,
     _collect_source_files,
+    _fence_lang,
     _render_source_listing,
     _render_source_content,
     build_audit_create_game_state_view,
@@ -465,3 +466,58 @@ def _append_finding(
         from baps.document_adapter import derive_document_state_update_from_delta
         proposal = derive_document_state_update_from_delta(delta)
         return service.apply_update(proposal)
+
+
+# ---------------------------------------------------------------------------
+# _fence_lang — file-type agnostic fencing
+# ---------------------------------------------------------------------------
+
+def test_fence_lang_known_extensions() -> None:
+    assert _fence_lang(Path("foo.py")) == "python"
+    assert _fence_lang(Path("foo.go")) == "go"
+    assert _fence_lang(Path("foo.rs")) == "rust"
+    assert _fence_lang(Path("foo.yaml")) == "yaml"
+    assert _fence_lang(Path("foo.yml")) == "yaml"
+    assert _fence_lang(Path("foo.json")) == "json"
+    assert _fence_lang(Path("foo.tf")) == "hcl"
+    assert _fence_lang(Path("foo.sh")) == "bash"
+    assert _fence_lang(Path("foo.md")) == "markdown"
+
+
+def test_fence_lang_unknown_extension_returns_empty() -> None:
+    assert _fence_lang(Path("foo.xyz")) == ""
+    assert _fence_lang(Path("Makefile")) == ""
+
+
+def test_render_source_content_uses_correct_fence_for_yaml(tmp_path: Path) -> None:
+    f = tmp_path / "config.yaml"
+    f.write_text("key: value\n")
+    content = _render_source_content([f], tmp_path, max_file_lines=50, max_total_lines=500)
+    assert "```yaml" in content
+
+
+def test_render_source_content_uses_correct_fence_for_python(tmp_path: Path) -> None:
+    f = tmp_path / "mod.py"
+    f.write_text("x = 1\n")
+    content = _render_source_content([f], tmp_path, max_file_lines=50, max_total_lines=500)
+    assert "```python" in content
+
+
+def test_render_source_content_unknown_extension_uses_empty_fence(tmp_path: Path) -> None:
+    f = tmp_path / "Makefile"
+    f.write_text("all:\n\techo done\n")
+    content = _render_source_content([f], tmp_path, max_file_lines=50, max_total_lines=500)
+    assert "```\n" in content
+
+
+# ---------------------------------------------------------------------------
+# Default patterns cover multiple file types
+# ---------------------------------------------------------------------------
+
+def test_default_source_patterns_cover_common_types(tmp_path: Path) -> None:
+    from baps.audit_adapter import _DEFAULT_SOURCE_PATTERNS
+    for name in ["mod.py", "main.go", "lib.rs", "app.js", "infra.tf", "config.yaml"]:
+        (tmp_path / name).write_text("content")
+    files = _collect_source_files(tmp_path, _DEFAULT_SOURCE_PATTERNS)
+    names = {f.name for f in files}
+    assert {"mod.py", "main.go", "lib.rs", "app.js", "infra.tf", "config.yaml"}.issubset(names)

@@ -31,8 +31,22 @@ from baps.document_adapter import (
 
 
 _SOURCE_PATH_MARKER = "<!-- audit:source_path="
-_DEFAULT_SOURCE_PATTERNS = ("*.py",)
+_DEFAULT_SOURCE_PATTERNS = (
+    "*.py", "*.go", "*.rs", "*.js", "*.ts", "*.java", "*.c", "*.cpp", "*.h",
+    "*.yaml", "*.yml", "*.json", "*.toml", "*.tf", "*.sh", "*.md", "*.txt",
+)
 _DEFAULT_MAX_FILE_LINES = 150
+
+_FENCE_LANGUAGE: dict[str, str] = {
+    ".py": "python", ".go": "go", ".rs": "rust", ".js": "javascript",
+    ".ts": "typescript", ".java": "java", ".c": "c", ".cpp": "cpp", ".h": "c",
+    ".yaml": "yaml", ".yml": "yaml", ".json": "json", ".toml": "toml",
+    ".tf": "hcl", ".sh": "bash", ".md": "markdown",
+}
+
+
+def _fence_lang(path: Path) -> str:
+    return _FENCE_LANGUAGE.get(path.suffix.lower(), "")
 _DEFAULT_MAX_TOTAL_LINES = 3000
 
 
@@ -106,7 +120,8 @@ def _render_source_content(
         else:
             body = raw
             total += len(lines)
-        parts.append(f"### {rel}\n\n```python\n{body}\n```")
+        lang = _fence_lang(f)
+        parts.append(f"### {rel}\n\n```{lang}\n{body}\n```")
     return "\n\n".join(parts)
 
 
@@ -224,32 +239,32 @@ def build_audit_play_game_state_view(state: State, game_spec: GameSpec) -> State
 
 _FINDING_FORMAT = (
     "Audit finding format (append_section or modify_section delta):\n"
-    "- title: concise vulnerability name (e.g. 'Prompt injection via unvalidated model output')\n"
+    "- title: concise issue name (e.g. 'Prompt injection via unvalidated model output')\n"
     "- body must contain all of the following:\n"
     "    Location: file path and relevant line numbers\n"
     "    Severity: Critical / High / Medium / Low\n"
-    "    Description: what the vulnerability is and how it can be exploited\n"
-    "    Evidence: quoted code snippet from the source shown in StateView\n"
+    "    Description: what the issue is and how it can be exploited or misused\n"
+    "    Evidence: exact excerpt from the source shown in StateView\n"
     "    Recommendation: specific, actionable fix\n"
-    "- One finding per delta. Do not bundle multiple vulnerabilities into one section.\n"
-    "- Do not invent vulnerabilities — every finding must cite specific code evidence.\n"
+    "- One finding per delta. Do not bundle multiple issues into one section.\n"
+    "- Do not invent findings — every finding must cite a specific excerpt from the source.\n"
     "- Do not repeat findings already present in the report.\n"
-    "- Source code is read-only context — do not propose code changes in the finding body.\n"
+    "- Source is read-only context — do not propose changes to it in the finding body.\n"
 )
 
 _RED_SUPPLEMENT = (
     "Security adversarial review:\n"
-    "- Verify that every code snippet quoted in Evidence actually appears in the source shown in StateView.\n"
-    "- Challenge whether the finding is exploitable in practice, not just theoretically possible.\n"
+    "- Verify that every excerpt quoted in Evidence actually appears verbatim in the source shown in StateView.\n"
+    "- Challenge whether the finding is exploitable or harmful in practice, not just theoretically possible.\n"
     "- Challenge the Severity — is it overstated (raise that) or understated (raise that too)?\n"
     "- Verify the Recommendation actually addresses the root cause, not just a symptom.\n"
-    "- Note if a related, more severe vulnerability was missed that Blue should have caught.\n"
+    "- Note if a related, more severe issue was missed that Blue should have caught.\n"
     "- Reject vague findings that lack specific file:line evidence.\n"
 )
 
 _REFEREE_SUPPLEMENT = (
     "Audit referee criteria:\n"
-    "- Accept if: finding cites specific code, the vulnerability is plausible, "
+    "- Accept if: finding cites a specific excerpt, the issue is plausible, "
     "severity is justified by the evidence, and recommendation is concrete.\n"
     "- Reject if: finding is vague or hypothetical, evidence is fabricated or misquotes source, "
     "or finding duplicates an existing report section.\n"
@@ -258,11 +273,8 @@ _REFEREE_SUPPLEMENT = (
 
 _CREATE_GAME_SUPPLEMENT = (
     "Audit CreateGame constraints:\n"
-    "- Each game targets one specific attack surface or code area — do not create broad games.\n"
+    "- Each game targets one specific area or subsystem — do not create broad games.\n"
     "- Prefer areas not yet covered by existing report sections.\n"
-    "- Attack surfaces to consider: prompt injection paths, model output trust boundaries, "
-    "state mutation bypasses, NorthStar/StateView boundary violations, export path traversal, "
-    "input validation gaps, delta parsing weaknesses, adapter contract violations.\n"
     "- The game objective should name the specific file or subsystem to analyze.\n"
     "- success_condition should require a finding with Location, Severity, Evidence, and Recommendation.\n"
 )
