@@ -341,6 +341,49 @@ class OllamaClient(ModelClient):
         return ToolCall(name=name, arguments=arguments)
 
 
+class FallbackClient(ModelClient):
+    """Tries each client in order, falling back on RuntimeError (transport/billing failures).
+
+    ValueError (e.g. model did not invoke a tool) is not a transport failure and propagates
+    immediately without trying the next client.
+    """
+
+    def __init__(self, clients: list[ModelClient]) -> None:
+        if not clients:
+            raise ValueError("clients must be non-empty")
+        self._clients = list(clients)
+
+    def generate(self, prompt: str, format: str | dict | None = None) -> str:
+        last_exc: Exception | None = None
+        for i, client in enumerate(self._clients):
+            try:
+                return client.generate(prompt, format=format)
+            except RuntimeError as exc:
+                print(
+                    f"[fallback] client {i} ({type(client).__name__}) failed: {exc}; trying next",
+                    flush=True,
+                )
+                last_exc = exc
+        raise RuntimeError(
+            f"all {len(self._clients)} fallback clients failed; last: {last_exc}"
+        ) from last_exc
+
+    def generate_with_tools(self, prompt: str, tools: list[ToolDefinition]) -> ToolCall:
+        last_exc: Exception | None = None
+        for i, client in enumerate(self._clients):
+            try:
+                return client.generate_with_tools(prompt, tools)
+            except RuntimeError as exc:
+                print(
+                    f"[fallback] client {i} ({type(client).__name__}) failed: {exc}; trying next",
+                    flush=True,
+                )
+                last_exc = exc
+        raise RuntimeError(
+            f"all {len(self._clients)} fallback clients failed; last: {last_exc}"
+        ) from last_exc
+
+
 @dataclass(frozen=True)
 class Role:
     name: str

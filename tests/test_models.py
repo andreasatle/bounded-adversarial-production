@@ -3,7 +3,7 @@ from urllib import error
 
 import pytest
 
-from baps.models import AnthropicClient, FakeModelClient, ModelClient, OllamaClient, OpenAIClient, Role
+from baps.models import AnthropicClient, FakeModelClient, FallbackClient, ModelClient, OllamaClient, OpenAIClient, Role, ToolCall, ToolDefinition
 
 
 def test_fake_model_client_returns_responses_in_order() -> None:
@@ -413,6 +413,86 @@ def test_openai_client_generate_with_tools(monkeypatch) -> None:
     assert result.name == "write_file"
     assert result.arguments == {"path": "src/x.py", "content": "pass"}
     assert captured["body"]["tool_choice"] == "required"
+
+
+# ---------------------------------------------------------------------------
+# FallbackClient
+# ---------------------------------------------------------------------------
+
+def test_fallback_client_rejects_empty_client_list() -> None:
+    with pytest.raises(ValueError):
+        FallbackClient([])
+
+
+def test_fallback_client_returns_first_client_result_when_successful() -> None:
+    primary = FakeModelClient(responses=["primary result"])
+    secondary = FakeModelClient(responses=["secondary result"])
+    client = FallbackClient([primary, secondary])
+    assert client.generate("prompt") == "primary result"
+    assert secondary.prompts == []
+
+
+def test_fallback_client_falls_back_on_runtime_error() -> None:
+    class FailingClient(ModelClient):
+        def generate(self, prompt: str, format=None) -> str:
+            raise RuntimeError("billing failure")
+
+    secondary = FakeModelClient(responses=["fallback result"])
+    client = FallbackClient([FailingClient(), secondary])
+    assert client.generate("prompt") == "fallback result"
+
+
+def test_fallback_client_raises_when_all_clients_fail() -> None:
+    class FailingClient(ModelClient):
+        def generate(self, prompt: str, format=None) -> str:
+            raise RuntimeError("failure")
+
+    client = FallbackClient([FailingClient(), FailingClient()])
+    with pytest.raises(RuntimeError, match="all 2 fallback clients failed"):
+        client.generate("prompt")
+
+
+def test_fallback_client_does_not_fallback_on_value_error() -> None:
+    class BadLogicClient(ModelClient):
+        def generate(self, prompt: str, format=None) -> str:
+            raise ValueError("model did not invoke any tool")
+
+    secondary = FakeModelClient(responses=["should not reach"])
+    client = FallbackClient([BadLogicClient(), secondary])
+    with pytest.raises(ValueError, match="model did not invoke any tool"):
+        client.generate("prompt")
+    assert secondary.prompts == []
+
+
+def test_fallback_client_generate_with_tools_falls_back_on_runtime_error() -> None:
+    class FailingClient(ModelClient):
+        def generate_with_tools(self, prompt: str, tools) -> ToolCall:
+            raise RuntimeError("transport error")
+
+    class SucceedingClient(ModelClient):
+        def generate_with_tools(self, prompt: str, tools) -> ToolCall:
+            return ToolCall(name="write_file", arguments={"path": "x.py"})
+
+    client = FallbackClient([FailingClient(), SucceedingClient()])
+    result = client.generate_with_tools("prompt", [])
+    assert result.name == "write_file"
+
+
+def test_fallback_client_generate_with_tools_does_not_fallback_on_value_error() -> None:
+    class BadLogicClient(ModelClient):
+        def generate_with_tools(self, prompt: str, tools) -> ToolCall:
+            raise ValueError("model did not invoke any tool")
+
+    class SucceedingClient(ModelClient):
+        called = False
+        def generate_with_tools(self, prompt: str, tools) -> ToolCall:
+            SucceedingClient.called = True
+            return ToolCall(name="write_file", arguments={})
+
+    client = FallbackClient([BadLogicClient(), SucceedingClient()])
+    with pytest.raises(ValueError):
+        client.generate_with_tools("prompt", [])
+    assert not SucceedingClient.called
 
 
 def test_openai_client_generate_with_tools_raises_when_no_tool_called(monkeypatch) -> None:

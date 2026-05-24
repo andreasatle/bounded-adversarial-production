@@ -10,7 +10,7 @@ from typing import Any
 
 import yaml
 
-from baps.models import AnthropicClient, ModelClient, OllamaClient, OpenAIClient, Role
+from baps.models import AnthropicClient, FallbackClient, ModelClient, OllamaClient, OpenAIClient, Role
 from baps.northstar_projection import ProjectionType, StateView
 from baps.project_adapter import (
     ProjectTypeAdapter,
@@ -454,6 +454,17 @@ def _debug_print_verification_result(result: VerificationResult | None) -> None:
     print()
 
 
+def _build_client_for_backend(backend: str) -> ModelClient:
+    if backend == "anthropic":
+        return _build_anthropic_client()
+    if backend == "openai":
+        return _build_openai_client()
+    return OllamaClient(
+        model=os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL),
+        base_url=os.getenv("BAPS_OLLAMA_BASE_URL", _DEFAULT_OLLAMA_BASE_URL),
+    )
+
+
 def _build_anthropic_client() -> ModelClient:
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key.strip():
@@ -477,18 +488,24 @@ def _build_openai_client() -> ModelClient:
 
 
 def _build_model_client() -> ModelClient:
-    backend = os.getenv("BAPS_BACKEND", "ollama").lower()
-    if backend == "anthropic":
-        return _build_anthropic_client()
-    if backend == "openai":
-        return _build_openai_client()
-    return OllamaClient(
-        model=os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL),
-        base_url=os.getenv("BAPS_OLLAMA_BASE_URL", _DEFAULT_OLLAMA_BASE_URL),
-    )
+    backends_raw = os.getenv("BAPS_BACKENDS", "").strip()
+    if backends_raw:
+        backends = [b.strip().lower() for b in backends_raw.split(",") if b.strip()]
+        if not backends:
+            raise ValueError("BAPS_BACKENDS must contain at least one backend")
+        clients = [_build_client_for_backend(b) for b in backends]
+        return FallbackClient(clients) if len(clients) > 1 else clients[0]
+    return _build_client_for_backend(os.getenv("BAPS_BACKEND", "ollama").lower())
 
 
 def _build_planner_model_client() -> ModelClient:
+    backends_raw = os.getenv("BAPS_BACKENDS", "").strip()
+    if backends_raw:
+        backends = [b.strip().lower() for b in backends_raw.split(",") if b.strip()]
+        if not backends:
+            raise ValueError("BAPS_BACKENDS must contain at least one backend")
+        clients = [_build_client_for_backend(b) for b in backends]
+        return FallbackClient(clients) if len(clients) > 1 else clients[0]
     backend = os.getenv("BAPS_BACKEND", "ollama").lower()
     if backend == "anthropic":
         return _build_anthropic_client()
@@ -1725,6 +1742,10 @@ def _run_project_iterations(
 
 
 def _active_model_info() -> dict[str, str]:
+    backends_raw = os.getenv("BAPS_BACKENDS", "").strip()
+    if backends_raw:
+        backends = [b.strip().lower() for b in backends_raw.split(",") if b.strip()]
+        return {"backend": ",".join(backends), "model": "fallback-chain"}
     backend = os.getenv("BAPS_BACKEND", "ollama").lower()
     if backend == "anthropic":
         model_id = os.getenv("BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL)
