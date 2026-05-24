@@ -146,7 +146,7 @@ def build_audit_create_game_state_view(state: State, config: dict[str, Any]) -> 
     source_path_str = str(config.get("source_path", "")).strip()
     source_path = Path(source_path_str) if source_path_str else None
     if source_path is not None and source_path.exists():
-        patterns = tuple(config.get("source_include", _DEFAULT_SOURCE_PATTERNS))
+        patterns = tuple(config.get("source_include") or _DEFAULT_SOURCE_PATTERNS)
         files = _collect_source_files(source_path, patterns)
         source_block = _render_source_listing(files, source_path)
         source_header = f"Source root: {source_path}"

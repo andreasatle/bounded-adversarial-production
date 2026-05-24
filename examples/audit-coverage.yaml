@@ -1,6 +1,7 @@
 # audit-coverage.yaml
 project_type: audit
 artifact_id: baps-coverage-report
+workspace: .baps-workspace-coverage
 source_path: /Users/andreasatle/Projects/bounded-adversarial-production
 source_include:
   - "*.py"

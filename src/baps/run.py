@@ -1962,7 +1962,9 @@ def _solve_gap(
                 max_depth,
                 depth + 1,
             )
-            if ctx.stop_reason is not None:
+            if ctx.stop_reason == "play_game_no_delta":
+                ctx.stop_reason = None  # leaf found nothing; continue sibling sub-gaps
+            elif ctx.stop_reason is not None:
                 return
         return
 

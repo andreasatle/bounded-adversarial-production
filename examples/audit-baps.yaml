@@ -1,6 +1,7 @@
 # audit-baps.yaml
 project_type: audit
 artifact_id: baps-security-report
+workspace: .baps-workspace-security
 source_path: /Users/andreasatle/Projects/bounded-adversarial-production/src/baps
 northstar_markdown: |
   # baps Security Audit
