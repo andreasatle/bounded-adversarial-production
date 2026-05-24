@@ -46,6 +46,27 @@ def _raw_fetch(url: str, max_bytes: int) -> str:
         return raw.decode("utf-8", errors="replace")
 
 
+_JS_RENDER_MARKERS = re.compile(
+    r'<div[^>]+id=["\'](?:root|app|__next|__nuxt|ember-application)["\']'
+    r'|<div[^>]+data-reactroot'
+    r'|window\.__INITIAL_STATE__'
+    r'|window\.__REDUX_STATE__'
+    r'|\bng-version='
+    r'|data-server-rendered=["\']false["\']',
+    re.IGNORECASE,
+)
+
+_MIN_MEANINGFUL_CHARS = 150
+
+
+def _is_js_rendered(raw_html: str, stripped: str) -> bool:
+    """Return True when the page is likely a client-side SPA with no useful server content."""
+    if _JS_RENDER_MARKERS.search(raw_html):
+        return True
+    meaningful = len(stripped.split())
+    return meaningful < _MIN_MEANINGFUL_CHARS and len(raw_html) > 2000
+
+
 def _strip_html(text: str) -> str:
     text = re.sub(r"<script[^>]*>.*?</script>", "", text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL | re.IGNORECASE)
@@ -85,7 +106,14 @@ def fetch_url(url: str) -> str:
     except Exception as exc:
         return f"fetch_error: {exc}"
     if "<html" in raw[:1000].lower() or "<!doctype" in raw[:500].lower():
-        return _sanitize_external_content(_strip_html(raw))
+        stripped = _strip_html(raw)
+        if _is_js_rendered(raw, stripped):
+            return (
+                "fetch_error: page appears to be JavaScript-rendered — "
+                "no readable content was returned by the server. "
+                "Try a direct API endpoint, raw file URL, RSS feed, or cached version instead."
+            )
+        return _sanitize_external_content(stripped)
     return _sanitize_external_content(raw)
 
 
