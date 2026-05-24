@@ -637,6 +637,7 @@ _KNOWN_SPEC_KEYS = frozenset({
     "goal",
     "output",
     "max_iterations",
+    "source_path",
 })
 
 
@@ -746,6 +747,9 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
     if max_iterations < 1:
         raise ValueError("max_iterations must be >= 1")
 
+    source_path_raw = _resolve(None, "source_path")
+    source_path = str(source_path_raw) if source_path_raw is not None else None
+
     config = {
         "workspace": workspace,
         "project_type": project_type,
@@ -755,6 +759,7 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
         "output_path": output_path,
         "max_iterations": max_iterations,
         "spec_path": spec_path,
+        "source_path": source_path,
     }
     _debug_print_read_config(args=args, spec_data=spec_data, config=config)
     return config
@@ -1821,7 +1826,7 @@ def main() -> None:
     parser.add_argument(
         "--project-type",
         default=None,
-        help="Project type (currently supported: document, coding).",
+        help="Project type (currently supported: document, coding, audit).",
     )
     parser.add_argument(
         "--artifact-id",
