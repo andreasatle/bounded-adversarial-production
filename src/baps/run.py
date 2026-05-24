@@ -416,6 +416,29 @@ def _debug_print_create_game_raw_model_output(raw_text: str) -> None:
     print()
 
 
+def _debug_print_create_game_red_input(state_view: StateView, game_spec: GameSpec) -> None:
+    if not _debug_enabled():
+        return
+    print("[DEBUG] create_game_red.input:")
+    payload = {
+        "game_spec": game_spec.model_dump(mode="json"),
+        "state_view_id": state_view.id,
+    }
+    for line in _format_debug_yaml_like(payload, indent=2):
+        print(line)
+    print()
+
+
+def _debug_print_create_game_red_output(red_finding: RedFinding) -> None:
+    if not _debug_enabled():
+        return
+    print("[DEBUG] create_game_red.output:")
+    payload = {"red_finding": red_finding.model_dump(mode="json")}
+    for line in _format_debug_yaml_like(payload, indent=2):
+        print(line)
+    print()
+
+
 def _debug_print_create_game_validation_input(game_spec: GameSpec) -> None:
     if not _debug_enabled():
         return
@@ -791,6 +814,7 @@ def _render_create_game_prompt(
     verification_result: VerificationResult | None = None,
     adapter: ProjectTypeAdapter | None = None,
     context_chain: tuple[str, ...] = (),
+    create_game_red_feedback: dict[str, Any] | None = None,
 ) -> str:
     resolved_adapter = (
         adapter
@@ -803,6 +827,19 @@ def _render_create_game_prompt(
         state_view=state_view,
         verification_result=verification_result,
     )
+    red_feedback_block = ""
+    if create_game_red_feedback is not None:
+        findings = create_game_red_feedback.get("findings") or []
+        findings_str = (
+            "\n".join(f"    - {f}" for f in findings) if findings else "    (none listed)"
+        )
+        red_feedback_block = (
+            "\nPrevious GameSpec was challenged by adversarial review:\n"
+            f"  disposition: {create_game_red_feedback.get('disposition', 'unknown')}\n"
+            f"  rationale: {create_game_red_feedback.get('rationale', '')}\n"
+            f"  findings:\n{findings_str}\n"
+            "Address the above issues in your revised GameSpec.\n"
+        )
     verification_block = ""
     if verification_result is not None:
         verification_json = json.dumps(
@@ -881,7 +918,51 @@ def _render_create_game_prompt(
         "Do not artificially split a coherent gap into multiple games — use decompose instead.\n"
         "All files or sections that must change together to close a gap belong in one game.\n"
         f"For this project type, allowed_delta_type must be {resolved_adapter.supported_delta_type}.\n"
+        f"{red_feedback_block}"
         f"{supplement}"
+    )
+
+
+def _render_create_game_red_prompt(
+    state_view: StateView,
+    game_spec: GameSpec,
+    config: dict[str, Any],
+) -> str:
+    game_spec_json = json.dumps(game_spec.model_dump(mode="json"), sort_keys=True)
+    return (
+        "Review the proposed GameSpec and determine whether it represents the right game to play.\n\n"
+        "Input:\n"
+        f"- goal: {config['goal']}\n"
+        "- state_view:\n"
+        "\n"
+        f"{state_view.content}\n"
+        "\n"
+        f"- proposed_game_spec_json: {game_spec_json}\n\n"
+        "Evaluation criteria — challenge each:\n"
+        "1. Priority: Is this genuinely the highest-impact gap to close next? "
+        "Does it unblock downstream work, or is there a more important gap?\n"
+        "2. Scope: Is the objective specific and bounded — small enough for Blue to close in one turn?\n"
+        "3. Success condition: Is it verifiable from the artifact alone, "
+        "without external knowledge or ambiguous judgment?\n"
+        "4. Advancement: Does closing this game meaningfully advance toward the goal and NorthStar intent?\n\n"
+        "Return accept if the GameSpec is sound on all four criteria.\n"
+        "Return revise if it is on the right track but the objective, scope, or "
+        "success_condition needs sharpening.\n"
+        "Return reject if a materially better game exists or the GameSpec is fundamentally wrong.\n\n"
+        "Return only a JSON object.\n"
+        "Do not wrap output in markdown.\n"
+        "Do not use triple-backtick fences.\n"
+        "Do not include prose before JSON.\n"
+        "Do not include prose after JSON.\n"
+        "Required JSON shape:\n"
+        "{\n"
+        '  "disposition": "accept" | "revise" | "reject",\n'
+        '  "rationale": "...",\n'
+        '  "success_condition_met": null,\n'
+        '  "findings": ["<specific issue 1>", "<specific issue 2>"]\n'
+        "}\n"
+        "success_condition_met must be null (not applicable at game-spec stage). "
+        "findings must be empty for accept.\n"
     )
 
 
@@ -1102,6 +1183,8 @@ def create_game(
     verification_result: VerificationResult | None = None,
     context_chain: tuple[str, ...] = (),
     depth: int = 0,
+    create_game_red_client: ModelClient | None = None,
+    max_create_game_attempts: int = 2,
 ) -> GameSpec | DecomposeSpec:
     _debug_print_create_game_input(state)
     resolved_adapter = (
@@ -1117,58 +1200,97 @@ def create_game(
         client = model_client
     role_name = "decompose" if depth > 0 else "create_game"
     role = Role(role_name, client, _CREATE_GAME_SCHEMA, constrained=False)
-    prompt = _render_create_game_prompt(
-        config=config,
-        state=state,
-        state_view=state_view,
-        verification_result=verification_result,
-        adapter=resolved_adapter,
-        context_chain=context_chain,
+    red_role = (
+        Role("create_game_red", create_game_red_client, _RED_FINDING_SCHEMA, constrained=True)
+        if create_game_red_client is not None
+        else None
     )
-    _debug_print_create_game_prompt(prompt)
-    generated = role.generate(prompt)
-    _debug_print_create_game_raw_model_output(generated)
-    try:
-        result = _parse_create_game_output(generated)
-    except ValueError as exc:
-        if "valid JSON" not in str(exc) or not use_planner:
-            raise
-        # Planner returned empty or unparseable output — retry once with executor model
-        if _debug_enabled():
-            print(f"[DEBUG] {role_name}.fallback: planner invalid JSON, retrying with executor model")
-        fallback_role = Role(role_name, _build_role_client("create_game"), _CREATE_GAME_SCHEMA, constrained=False)
-        generated = fallback_role.generate(prompt)
+
+    red_feedback: dict[str, Any] | None = None
+    last_valid_game_spec: GameSpec | None = None
+
+    for attempt in range(1, max_create_game_attempts + 1):
+        prompt = _render_create_game_prompt(
+            config=config,
+            state=state,
+            state_view=state_view,
+            verification_result=verification_result,
+            adapter=resolved_adapter,
+            context_chain=context_chain,
+            create_game_red_feedback=red_feedback,
+        )
+        _debug_print_create_game_prompt(prompt)
+        generated = role.generate(prompt)
         _debug_print_create_game_raw_model_output(generated)
-        result = _parse_create_game_output(generated)
-    except NoNewGameError:
-        raise
+        try:
+            result = _parse_create_game_output(generated)
+        except ValueError as exc:
+            if "valid JSON" not in str(exc) or not use_planner:
+                raise
+            # Planner returned invalid JSON — retry once with executor model (first attempt only)
+            if red_feedback is None:
+                if _debug_enabled():
+                    print(f"[DEBUG] {role_name}.fallback: planner invalid JSON, retrying with executor model")
+                fallback_role = Role(role_name, _build_role_client("create_game"), _CREATE_GAME_SCHEMA, constrained=False)
+                generated = fallback_role.generate(prompt)
+                _debug_print_create_game_raw_model_output(generated)
+                result = _parse_create_game_output(generated)
+            else:
+                raise
+        except NoNewGameError:
+            raise
 
-    if isinstance(result, DecomposeSpec):
-        _debug_print_create_game_output(result)
-        return result
+        if isinstance(result, DecomposeSpec):
+            _debug_print_create_game_output(result)
+            return result
 
-    game_spec = _normalize_game_spec_with_adapter(
-        resolved_adapter, result, state, config
-    )
-    try:
-        _validate_game_spec(game_spec)
-    except ValueError as exc:
-        _debug_print_create_game_validation_failure(str(exc))
-        raise
-    expected_artifact_id = _config_artifact_id(config)
-    if game_spec.target_artifact_id != expected_artifact_id:
-        raise ValueError(
-            "create_game target artifact must match configured artifact_id: "
-            f"expected {expected_artifact_id}, got {game_spec.target_artifact_id}"
-        )
-    _ensure_target_artifact_exists(state, game_spec.target_artifact_id)
-    if game_spec.allowed_delta_type != resolved_adapter.supported_delta_type:
-        raise ValueError(
-            "create_game allowed_delta_type must match project adapter: "
-            f"expected {resolved_adapter.supported_delta_type}, got {game_spec.allowed_delta_type}"
-        )
-    _debug_print_create_game_output(game_spec)
-    return game_spec
+        game_spec = _normalize_game_spec_with_adapter(resolved_adapter, result, state, config)
+        try:
+            _validate_game_spec(game_spec)
+        except ValueError as exc:
+            _debug_print_create_game_validation_failure(str(exc))
+            raise
+        expected_artifact_id = _config_artifact_id(config)
+        if game_spec.target_artifact_id != expected_artifact_id:
+            raise ValueError(
+                "create_game target artifact must match configured artifact_id: "
+                f"expected {expected_artifact_id}, got {game_spec.target_artifact_id}"
+            )
+        _ensure_target_artifact_exists(state, game_spec.target_artifact_id)
+        if game_spec.allowed_delta_type != resolved_adapter.supported_delta_type:
+            raise ValueError(
+                "create_game allowed_delta_type must match project adapter: "
+                f"expected {resolved_adapter.supported_delta_type}, got {game_spec.allowed_delta_type}"
+            )
+        last_valid_game_spec = game_spec
+
+        # Red challenge — only when a Red client is wired and this is not the final attempt
+        if red_role is not None and attempt < max_create_game_attempts:
+            red_prompt = _render_create_game_red_prompt(state_view, game_spec, config)
+            _debug_print_create_game_red_input(state_view, game_spec)
+            red_generated = red_role.generate(red_prompt)
+            try:
+                red_finding = _parse_red_finding_json(red_generated)
+            except ValueError:
+                # Unparseable Red output — accept the GameSpec as-is
+                _debug_print_create_game_output(game_spec)
+                return game_spec
+            _debug_print_create_game_red_output(red_finding)
+            if red_finding.disposition == "accept":
+                _debug_print_create_game_output(game_spec)
+                return game_spec
+            # Red rejects/revises — inject feedback and retry
+            red_feedback = red_finding.model_dump(mode="json")
+            continue
+
+        _debug_print_create_game_output(game_spec)
+        return game_spec
+
+    # All attempts exhausted — return best available spec
+    if last_valid_game_spec is not None:
+        _debug_print_create_game_output(last_valid_game_spec)
+        return last_valid_game_spec
+    raise ValueError("create_game failed to produce a valid GameSpec after all attempts")
 
 
 
@@ -1663,6 +1785,7 @@ def _solve_gap(
             verification_result=ctx.verification_result,
             context_chain=context_chain,
             depth=depth,
+            create_game_red_client=_build_role_client("create_game_red"),
         )
     except NoNewGameError:
         if depth == 0:

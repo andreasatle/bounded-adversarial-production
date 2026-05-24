@@ -361,7 +361,7 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
     captured: dict[str, object] = {}
     original_create_game = run_module.create_game
 
-    def _capturing_create_game(config, state, adapter=None, verification_result=None, context_chain=(), depth=0):
+    def _capturing_create_game(config, state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
         captured.setdefault("state", state)
         return original_create_game(
             config,
@@ -501,6 +501,22 @@ def test_main_unsupported_delta_operation_fails_explicitly(monkeypatch, capsys, 
     assert exc.value.code == 2
     err = capsys.readouterr().err
     assert "DocumentArtifact does not support delta type" in err
+
+
+def _make_doc_config(
+    artifact_id: str = "main-document",
+    goal: str = "Write a short report.",
+) -> dict:
+    return {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": artifact_id,
+        "goal": goal,
+        "northstar_markdown": f"# Goal\n\n{goal}",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
 
 
 def test_create_game_receives_input_and_state_and_outputs_game_spec() -> None:
@@ -1211,6 +1227,144 @@ def test_create_game_multi_feature_wording_is_structurally_valid() -> None:
         ),
     )
     assert game_spec.objective == "implement parser and tests"
+
+
+def test_create_game_red_accepts_game_spec_immediately() -> None:
+    config = _make_doc_config()
+    state = create_state(config)
+    game_spec_json = (
+        '{"objective":"Write introduction","target_artifact_id":"main-document",'
+        '"allowed_delta_type":"DeltaDocumentState","success_condition":"Introduction present."}'
+    )
+    red_accept_json = '{"disposition":"accept","rationale":"Good scope.","success_condition_met":null,"findings":[]}'
+    game_spec = create_game(
+        config,
+        state,
+        model_client=FakeModelClient([game_spec_json]),
+        create_game_red_client=FakeModelClient([red_accept_json]),
+    )
+    assert game_spec.objective == "Write introduction"
+
+
+def test_create_game_red_reject_triggers_retry_with_feedback() -> None:
+    config = _make_doc_config()
+    state = create_state(config)
+    first_spec = (
+        '{"objective":"Write everything","target_artifact_id":"main-document",'
+        '"allowed_delta_type":"DeltaDocumentState","success_condition":"All done."}'
+    )
+    second_spec = (
+        '{"objective":"Write introduction section","target_artifact_id":"main-document",'
+        '"allowed_delta_type":"DeltaDocumentState","success_condition":"Introduction present."}'
+    )
+    red_reject = (
+        '{"disposition":"reject","rationale":"Too broad.","success_condition_met":null,'
+        '"findings":["Objective spans multiple concerns"]}'
+    )
+    # CreateGame is called twice; Red is called once (only on attempt 1)
+    game_spec = create_game(
+        config,
+        state,
+        model_client=FakeModelClient([first_spec, second_spec]),
+        create_game_red_client=FakeModelClient([red_reject]),
+        max_create_game_attempts=2,
+    )
+    assert game_spec.objective == "Write introduction section"
+
+
+def test_create_game_red_feedback_appears_in_retry_prompt() -> None:
+    config = _make_doc_config()
+    state = create_state(config)
+    spec_json = (
+        '{"objective":"Write everything","target_artifact_id":"main-document",'
+        '"allowed_delta_type":"DeltaDocumentState","success_condition":"All done."}'
+    )
+    red_reject = (
+        '{"disposition":"reject","rationale":"Too broad.","success_condition_met":null,'
+        '"findings":["Scope too wide"]}'
+    )
+    prompts_seen: list[str] = []
+    real_generate = FakeModelClient([spec_json, spec_json]).generate
+
+    class CapturingClient:
+        responses = iter([spec_json, spec_json])
+
+        def generate(self, prompt: str, format=None) -> str:
+            prompts_seen.append(prompt)
+            return next(self.responses)
+
+        def generate_with_tools(self, prompt, tools):
+            return None
+
+    create_game(
+        config,
+        state,
+        model_client=CapturingClient(),
+        create_game_red_client=FakeModelClient([red_reject]),
+        max_create_game_attempts=2,
+    )
+    assert len(prompts_seen) == 2
+    assert "Too broad" in prompts_seen[1]
+    assert "Scope too wide" in prompts_seen[1]
+
+
+def test_create_game_red_client_none_skips_challenge() -> None:
+    config = _make_doc_config()
+    state = create_state(config)
+    spec_json = (
+        '{"objective":"Write introduction","target_artifact_id":"main-document",'
+        '"allowed_delta_type":"DeltaDocumentState","success_condition":"Introduction present."}'
+    )
+    # No create_game_red_client — should return immediately after one CreateGame call
+    game_spec = create_game(
+        config,
+        state,
+        model_client=FakeModelClient([spec_json]),
+        create_game_red_client=None,
+    )
+    assert game_spec.objective == "Write introduction"
+
+
+def test_create_game_red_unparseable_output_falls_back_to_accept() -> None:
+    config = _make_doc_config()
+    state = create_state(config)
+    spec_json = (
+        '{"objective":"Write introduction","target_artifact_id":"main-document",'
+        '"allowed_delta_type":"DeltaDocumentState","success_condition":"Introduction present."}'
+    )
+    game_spec = create_game(
+        config,
+        state,
+        model_client=FakeModelClient([spec_json]),
+        create_game_red_client=FakeModelClient(["not valid json at all"]),
+    )
+    assert game_spec.objective == "Write introduction"
+
+
+def test_create_game_red_revise_triggers_retry() -> None:
+    config = _make_doc_config()
+    state = create_state(config)
+    first_spec = (
+        '{"objective":"Write intro","target_artifact_id":"main-document",'
+        '"allowed_delta_type":"DeltaDocumentState","success_condition":"Vague."}'
+    )
+    second_spec = (
+        '{"objective":"Write introduction section","target_artifact_id":"main-document",'
+        '"allowed_delta_type":"DeltaDocumentState",'
+        '"success_condition":"Introduction section present with title and 2+ paragraphs."}'
+    )
+    red_revise = (
+        '{"disposition":"revise","rationale":"Success condition too vague.","success_condition_met":null,'
+        '"findings":["success_condition lacks specificity"]}'
+    )
+    game_spec = create_game(
+        config,
+        state,
+        model_client=FakeModelClient([first_spec, second_spec]),
+        create_game_red_client=FakeModelClient([red_revise]),
+        max_create_game_attempts=2,
+    )
+    assert "2+ paragraphs" in game_spec.success_condition
 
 
 def test_play_game_returns_delta_document_state() -> None:
@@ -3677,7 +3831,7 @@ def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_pa
     monkeypatch.setattr(
         run_module,
         "create_game",
-        lambda config, state, adapter=None, verification_result=None, context_chain=(), depth=0: expected,
+        lambda config, state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs: expected,
     )
 
     def _capture_play_game(state, spec, adapter=None, verification_result=None):
@@ -3738,7 +3892,7 @@ def test_main_max_iterations_two_runs_two_iterations_with_state_carry_forward(
 
     create_game_seen_sections: list[list[str]] = []
 
-    def _create_game(config, state, adapter=None, verification_result=None, context_chain=(), depth=0):
+    def _create_game(config, state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
         del verification_result
         document = next(a for a in state.artifacts if a.id == "main-document")
         section_titles = [s.title for s in document.sections]
@@ -3828,7 +3982,7 @@ def test_main_stops_when_create_game_cannot_produce_new_game(
 
     calls = {"count": 0}
 
-    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0):
+    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
         del verification_result
         calls["count"] += 1
         if calls["count"] == 1:
@@ -3866,7 +4020,7 @@ def test_main_stop_reason_iteration_limit_reached_after_all_iterations_used(
 
     create_game_calls = {"n": 0}
 
-    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0):
+    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
         create_game_calls["n"] += 1
         return run_module.GameSpec(
             objective="Add a section",
@@ -3924,7 +4078,7 @@ def test_main_no_state_change_stops_loop_before_max_iterations(
 
     create_game_calls = {"n": 0}
 
-    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0):
+    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
         create_game_calls["n"] += 1
         return run_module.GameSpec(
             objective="Add a section",
@@ -3991,7 +4145,7 @@ def test_main_create_game_parse_error_is_not_swallowed_as_no_game(
 ) -> None:
     import baps.run as run_module
 
-    def _broken_create_game(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0):
+    def _broken_create_game(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
         del verification_result
         raise ValueError("create_game model output must be valid JSON")
 
@@ -4319,7 +4473,7 @@ def test_second_run_sees_previous_state(monkeypatch, tmp_path: Path) -> None:
     workspace = tmp_path / "ws-second-run-state"
     seen_titles: list[list[str]] = []
 
-    def _create_game(config, state, adapter=None, verification_result=None, context_chain=(), depth=0):
+    def _create_game(config, state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
         del verification_result
         doc = next(a for a in state.artifacts if a.id == "main-document")
         titles = [s.title for s in doc.sections]
@@ -6345,7 +6499,7 @@ def test_coding_iteration_two_does_not_receive_stale_verification_result(
     verification_seen: list[object] = []
     call_counter = {"count": 0}
 
-    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0):
+    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
         del verification_result
         call_counter["count"] += 1
         if call_counter["count"] == 1:
@@ -6364,7 +6518,7 @@ def test_coding_iteration_two_does_not_receive_stale_verification_result(
             )
         raise run_module.NoNewGameError("done")
 
-    def _play_game(_state, spec, adapter=None, verification_result=None, context_chain=(), depth=0):
+    def _play_game(_state, spec, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
         verification_seen.append(verification_result)
         if "src/fibonacci.py" in spec.objective:
             return state_module.DeltaCodingState(
@@ -6425,7 +6579,7 @@ def test_coding_create_game_receives_previous_verification_result_second_iterati
     seen: list[run_module.VerificationResult | None] = []
     create_count = {"n": 0}
 
-    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0):
+    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
         del adapter
         seen.append(verification_result)
         create_count["n"] += 1
@@ -6445,7 +6599,7 @@ def test_coding_create_game_receives_previous_verification_result_second_iterati
             )
         raise run_module.NoNewGameError("done")
 
-    def _play_game(_state, spec, adapter=None, verification_result=None, context_chain=(), depth=0):
+    def _play_game(_state, spec, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
         del adapter, verification_result
         if "src/fibonacci.py" in spec.objective:
             return state_module.DeltaCodingState(
@@ -6672,7 +6826,7 @@ def test_run_iterations_northstar_update_proposed_writes_blackboard_and_stops(
 
     workspace = tmp_path / "ws-northstar-proposal"
 
-    def _create_game_raises(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0):
+    def _create_game_raises(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
         raise run_module.NorthStarUpdateNeededError(
             rationale="Game direction contradicts NorthStar.",
             proposed_northstar="# Revised NorthStar\n\nNew direction.",
@@ -6713,7 +6867,7 @@ def test_run_iterations_northstar_update_proposed_does_not_apply_state_update(
 
     workspace = tmp_path / "ws-northstar-no-update"
 
-    def _create_game_raises(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0):
+    def _create_game_raises(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
         raise run_module.NorthStarUpdateNeededError(
             rationale="Direction mismatch.",
             proposed_northstar="# New NorthStar",
@@ -6762,7 +6916,7 @@ def test_run_iterations_northstar_proposal_appends_on_multiple_signals(
         encoding="utf-8",
     )
 
-    def _create_game_raises(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0):
+    def _create_game_raises(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
         raise run_module.NorthStarUpdateNeededError(
             rationale="New mismatch.",
             proposed_northstar="# Newer NorthStar",
@@ -7431,7 +7585,7 @@ def test_solve_gap_decompose_then_play(monkeypatch, tmp_path: Path) -> None:
     played: list[str] = []
     top_calls = [0]
 
-    def _fake_create_game(config, state, adapter=None, verification_result=None, context_chain=(), depth=0):
+    def _fake_create_game(config, state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
         if not context_chain:
             top_calls[0] += 1
             if top_calls[0] > 1:
@@ -7494,7 +7648,7 @@ def test_solve_gap_context_chain_injected_into_game_spec(monkeypatch, tmp_path: 
     captured_chain: list[tuple[str, ...]] = []
     top_calls = [0]
 
-    def _fake_create_game(config, state, adapter=None, verification_result=None, context_chain=(), depth=0):
+    def _fake_create_game(config, state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
         if not context_chain:
             top_calls[0] += 1
             if top_calls[0] > 1:
@@ -7546,7 +7700,7 @@ def test_solve_gap_max_depth_stops_recursion(monkeypatch, tmp_path: Path) -> Non
     """Decompose always → max_depth_reached stop reason."""
     import baps.run as run_module
 
-    def _always_decompose(config, state, adapter=None, verification_result=None, context_chain=(), depth=0):
+    def _always_decompose(config, state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
         return run_module.DecomposeSpec(
             rationale="Always decompose",
             sub_gaps=(run_module.SubGapSpec(description="inner"),),
