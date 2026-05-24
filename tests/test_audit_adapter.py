@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -385,6 +386,88 @@ def test_audit_tool_call_unexpected_tool_raises() -> None:
     tool_call = ToolCall(name="write_file", arguments={"path": "evil.py", "content": "rm -rf"})
     with pytest.raises(ValueError, match="unexpected tool"):
         adapter.tool_call_to_delta(tool_call)
+
+
+def test_audit_tool_call_no_finding_produces_append_section() -> None:
+    adapter = AuditProjectAdapter()
+    tool_call = ToolCall(
+        name="no_finding",
+        arguments={
+            "artifact_id": "report",
+            "file": "src/baps/state.py",
+            "rationale": "Checked State.apply_update and StateService boundary — no bypass paths found.",
+        },
+    )
+    delta = adapter.tool_call_to_delta(tool_call)
+    assert isinstance(delta, state_module.DeltaDocumentState)
+    assert delta.operation == "append_section"
+    assert delta.payload.section.title == "Audited: src/baps/state.py"
+    assert "no bypass paths found" in delta.payload.section.body
+
+
+def test_audit_tool_call_no_finding_missing_file_raises() -> None:
+    adapter = AuditProjectAdapter()
+    tool_call = ToolCall(
+        name="no_finding",
+        arguments={"artifact_id": "report", "rationale": "Looks fine."},
+    )
+    with pytest.raises(ValueError, match="missing required tool argument"):
+        adapter.tool_call_to_delta(tool_call)
+
+
+def test_audit_tool_call_no_finding_missing_rationale_raises() -> None:
+    adapter = AuditProjectAdapter()
+    tool_call = ToolCall(
+        name="no_finding",
+        arguments={"artifact_id": "report", "file": "run.py"},
+    )
+    with pytest.raises(ValueError, match="missing required tool argument"):
+        adapter.tool_call_to_delta(tool_call)
+
+
+def test_audit_parse_blue_delta_no_finding_json() -> None:
+    adapter = AuditProjectAdapter()
+    text = json.dumps({
+        "artifact_id": "report",
+        "operation": "no_finding",
+        "file": "src/baps/run.py",
+        "rationale": "Checked orchestration loop — all mutation goes through StateService.",
+    })
+    delta = adapter.parse_blue_delta(text)
+    assert isinstance(delta, state_module.DeltaDocumentState)
+    assert delta.operation == "append_section"
+    assert delta.payload.section.title == "Audited: src/baps/run.py"
+    assert "StateService" in delta.payload.section.body
+
+
+def test_audit_parse_blue_delta_no_finding_missing_fields_raises() -> None:
+    adapter = AuditProjectAdapter()
+    text = json.dumps({
+        "artifact_id": "report",
+        "operation": "no_finding",
+        "file": "run.py",
+    })
+    with pytest.raises(ValueError, match="no_finding delta missing required field"):
+        adapter.parse_blue_delta(text)
+
+
+def test_audit_blue_tools_includes_no_finding() -> None:
+    adapter = AuditProjectAdapter()
+    tools = adapter.build_blue_tools()
+    names = {t.name for t in tools}
+    assert "no_finding" in names
+    assert "append_section" in names
+    assert "modify_section" in names
+
+
+def test_audit_no_finding_tool_requires_file_and_rationale() -> None:
+    adapter = AuditProjectAdapter()
+    tools = {t.name: t for t in adapter.build_blue_tools()}
+    no_finding = tools["no_finding"]
+    required = no_finding.parameters["required"]
+    assert "file" in required
+    assert "rationale" in required
+    assert "artifact_id" in required
 
 
 # ---------------------------------------------------------------------------

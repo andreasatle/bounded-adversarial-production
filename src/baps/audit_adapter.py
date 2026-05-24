@@ -238,7 +238,9 @@ def build_audit_play_game_state_view(state: State, game_spec: GameSpec) -> State
 
 
 _FINDING_FORMAT = (
-    "Audit finding format (append_section or modify_section delta):\n"
+    "Produce exactly one of the following delta types:\n"
+    "\n"
+    "OPTION A — append_section (vulnerability found):\n"
     "- title: concise issue name (e.g. 'Prompt injection via unvalidated model output')\n"
     "- body must contain all of the following:\n"
     "    Location: file path and relevant line numbers\n"
@@ -247,36 +249,56 @@ _FINDING_FORMAT = (
     "    Evidence: exact excerpt from the source shown in StateView\n"
     "    Recommendation: specific, actionable fix\n"
     "- One finding per delta. Do not bundle multiple issues into one section.\n"
-    "- Do not invent findings — every finding must cite a specific excerpt from the source.\n"
+    "- Do not invent findings — every finding must cite a specific excerpt.\n"
     "- Do not repeat findings already present in the report.\n"
-    "- Source is read-only context — do not propose changes to it in the finding body.\n"
+    "\n"
+    "OPTION B — no_finding (nothing actionable found):\n"
+    "- Use this when you have genuinely inspected the target and found no exploitable issue.\n"
+    "- file: the specific file or subsystem you audited\n"
+    "- rationale: what you checked and why it is safe — must reference specific code paths,\n"
+    "  not a generic statement. Red will reject vague rationales.\n"
+    "- Do not use no_finding as a shortcut — a weak rationale will be rejected.\n"
+    "\n"
+    "Source is read-only context — do not propose changes to it in any delta body.\n"
 )
 
 _RED_SUPPLEMENT = (
     "Security adversarial review:\n"
-    "- Verify that every excerpt quoted in Evidence actually appears verbatim in the source shown in StateView.\n"
-    "- Challenge whether the finding is exploitable or harmful in practice, not just theoretically possible.\n"
+    "\n"
+    "For finding deltas (append_section / modify_section):\n"
+    "- Verify every excerpt quoted in Evidence appears verbatim in the source shown in StateView.\n"
+    "- Challenge whether the finding is exploitable in practice, not just theoretically possible.\n"
     "- Challenge the Severity — is it overstated (raise that) or understated (raise that too)?\n"
-    "- Verify the Recommendation actually addresses the root cause, not just a symptom.\n"
-    "- Note if a related, more severe issue was missed that Blue should have caught.\n"
+    "- Verify the Recommendation addresses the root cause, not just a symptom.\n"
+    "- Note if a related, more severe issue was missed.\n"
     "- Reject vague findings that lack specific file:line evidence.\n"
+    "\n"
+    "For no_finding deltas:\n"
+    "- Challenge whether Blue actually inspected the relevant code paths.\n"
+    "- Reject if the rationale does not reference specific functions, variables, or control flow.\n"
+    "- Reject if a real vulnerability is visible in the source shown in StateView.\n"
+    "- Accept only if the rationale is specific and the inspection appears genuine.\n"
 )
 
 _REFEREE_SUPPLEMENT = (
     "Audit referee criteria:\n"
-    "- Accept if: finding cites a specific excerpt, the issue is plausible, "
-    "severity is justified by the evidence, and recommendation is concrete.\n"
-    "- Reject if: finding is vague or hypothetical, evidence is fabricated or misquotes source, "
-    "or finding duplicates an existing report section.\n"
-    "- Revise if: finding identifies a real issue but severity or recommendation needs correction.\n"
+    "\n"
+    "For finding deltas (append_section / modify_section):\n"
+    "- Accept if: specific excerpt cited, issue is plausible, severity justified, recommendation concrete.\n"
+    "- Reject if: vague, hypothetical, fabricated/misquoted evidence, or duplicates existing section.\n"
+    "- Revise if: real issue but severity or recommendation needs correction.\n"
+    "\n"
+    "For no_finding deltas:\n"
+    "- Accept if: rationale names specific code paths checked and explains why they are safe.\n"
+    "- Reject if: rationale is generic, cursory, or misses an obvious issue in the source.\n"
 )
 
 _CREATE_GAME_SUPPLEMENT = (
     "Audit CreateGame constraints:\n"
     "- Each game targets one specific area or subsystem — do not create broad games.\n"
-    "- Prefer areas not yet covered by existing report sections.\n"
+    "- Prefer areas not yet covered by existing report sections (findings or no_finding coverage notes).\n"
     "- The game objective should name the specific file or subsystem to analyze.\n"
-    "- success_condition should require a finding with Location, Severity, Evidence, and Recommendation.\n"
+    "- success_condition should require either a finding with evidence or a no_finding with specific rationale.\n"
 )
 
 
@@ -387,6 +409,29 @@ class AuditProjectAdapter:
                     "required": ["artifact_id", "section_title", "new_body"],
                 },
             ),
+            ToolDefinition(
+                name="no_finding",
+                description=(
+                    "Record that a file or subsystem was audited and no actionable finding was identified. "
+                    "Use only when you have genuinely inspected the target. "
+                    "Red will reject vague or generic rationales."
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "artifact_id": {"type": "string", "description": "Target audit report artifact ID"},
+                        "file": {"type": "string", "description": "File or subsystem audited"},
+                        "rationale": {
+                            "type": "string",
+                            "description": (
+                                "What was checked and why it is safe — "
+                                "must reference specific functions, variables, or control flow"
+                            ),
+                        },
+                    },
+                    "required": ["artifact_id", "file", "rationale"],
+                },
+            ),
         ]
 
     def tool_call_to_delta(self, tool_call: ToolCall) -> DeltaState:
@@ -422,9 +467,42 @@ class AuditProjectAdapter:
                 })
             except Exception as exc:
                 raise ValueError(f"tool call failed DeltaModifyDocumentState validation: {exc}") from exc
+        if tool_call.name == "no_finding":
+            try:
+                artifact_id = str(args["artifact_id"])
+                file = str(args["file"])
+                rationale = str(args["rationale"])
+            except KeyError as exc:
+                raise ValueError(f"missing required tool argument: {exc}") from exc
+            try:
+                return DeltaDocumentState.model_validate({
+                    "artifact_id": artifact_id,
+                    "operation": "append_section",
+                    "payload": {"section": {"title": f"Audited: {file}", "body": rationale}},
+                })
+            except Exception as exc:
+                raise ValueError(f"tool call failed DeltaDocumentState validation: {exc}") from exc
         raise ValueError(f"unexpected tool: {tool_call.name!r}")
 
     def parse_blue_delta(self, text: str) -> DeltaState:
+        from baps.project_adapter import normalize_json_candidate
+        from baps.state import DeltaDocumentState
+        normalized = normalize_json_candidate(text)
+        try:
+            raw = json.loads(normalized)
+        except json.JSONDecodeError:
+            return parse_document_delta_json(text)
+        if isinstance(raw, dict) and raw.get("operation") == "no_finding":
+            file = str(raw.get("file", ""))
+            rationale = str(raw.get("rationale", ""))
+            artifact_id = str(raw.get("artifact_id", ""))
+            if not file or not rationale or not artifact_id:
+                raise ValueError("no_finding delta missing required field (artifact_id, file, rationale)")
+            return DeltaDocumentState.model_validate({
+                "artifact_id": artifact_id,
+                "operation": "append_section",
+                "payload": {"section": {"title": f"Audited: {file}", "body": rationale}},
+            })
         return parse_document_delta_json(text)
 
     def delta_to_state_update(self, delta_state: DeltaState) -> StateUpdateProposal:
