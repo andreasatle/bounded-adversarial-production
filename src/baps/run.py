@@ -664,6 +664,7 @@ _KNOWN_SPEC_KEYS = frozenset({
     "output",
     "max_iterations",
     "source_path",
+    "source_include",
 })
 
 
@@ -775,6 +776,8 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
 
     source_path_raw = _resolve(None, "source_path")
     source_path = str(source_path_raw) if source_path_raw is not None else None
+    source_include_raw = spec_data.get("source_include")
+    source_include = list(source_include_raw) if isinstance(source_include_raw, list) else None
 
     config = {
         "workspace": workspace,
@@ -786,6 +789,7 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
         "max_iterations": max_iterations,
         "spec_path": spec_path,
         "source_path": source_path,
+        "source_include": source_include,
     }
     _debug_print_read_config(args=args, spec_data=spec_data, config=config)
     return config
