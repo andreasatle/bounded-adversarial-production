@@ -1712,7 +1712,7 @@ def _solve_gap(
     game_spec = result.model_copy(update={"context_chain": context_chain})
     if context_chain:
         print(
-            f"[solve_gap] depth={depth} playing leaf game: {game_spec.objective[:80]}",
+            f"[solve_gap] depth={depth} playing leaf game: {game_spec.objective}",
             flush=True,
         )
 
