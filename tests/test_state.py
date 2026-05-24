@@ -141,7 +141,6 @@ def test_delta_document_state_serialization_is_deterministic() -> None:
 
 def test_delta_document_state_does_not_mutate_state() -> None:
     state = State(
-        northstar=NorthStar(artifacts=()),
         artifacts=(DocumentArtifact(id="main-document", sections=()),),
     )
     before = state.model_dump(mode="json")
@@ -323,7 +322,6 @@ def test_document_artifact_is_subclass_and_instance_of_state_artifact() -> None:
 
 def test_state_accepts_document_artifact_in_artifacts() -> None:
     state = State(
-        northstar=NorthStar(artifacts=()),
         artifacts=(DocumentArtifact(id="main-document", sections=()),),
     )
     assert len(state.artifacts) == 1
@@ -347,19 +345,13 @@ def test_northstar_is_not_instance_or_subclass_of_state_artifact() -> None:
     assert not issubclass(NorthStar, StateArtifact)
 
 
-def test_state_requires_northstar() -> None:
-    with pytest.raises(ValidationError):
-        State.model_validate({})
-
-
 def test_state_artifacts_defaults_to_empty_tuple() -> None:
-    state = State(northstar=NorthStar(artifacts=(StateArtifact(id="a1", kind="document"),)))
+    state = State()
     assert state.artifacts == ()
 
 
 def test_state_artifacts_accepts_state_artifact_instances() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
         artifacts=(
             StateArtifact(id="a1", kind="document"),
             StateArtifact(id="a2", kind="git_repository"),
@@ -435,7 +427,6 @@ def test_northstar_rejects_duplicate_artifact_ids() -> None:
 def test_state_rejects_duplicate_ordinary_artifact_ids() -> None:
     with pytest.raises(ValidationError, match="state artifact ids must be unique"):
         State(
-            northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
             artifacts=(
                 StateArtifact(id="dup", kind="document"),
                 StateArtifact(id="dup", kind="git_repository"),
@@ -446,7 +437,6 @@ def test_state_rejects_duplicate_ordinary_artifact_ids() -> None:
 def test_state_rejects_duplicate_ids_with_document_artifact() -> None:
     with pytest.raises(ValidationError, match="state artifact ids must be unique"):
         State(
-            northstar=NorthStar(artifacts=()),
             artifacts=(
                 DocumentArtifact(id="main-document", sections=()),
                 StateArtifact(id="main-document", kind="document"),
@@ -454,35 +444,13 @@ def test_state_rejects_duplicate_ids_with_document_artifact() -> None:
         )
 
 
-def test_state_rejects_overlap_between_northstar_and_state_artifact_ids() -> None:
-    with pytest.raises(
-        ValidationError,
-        match="northstar and state artifacts must not share ids",
-    ):
-        State(
-            northstar=NorthStar(artifacts=(StateArtifact(id="shared", kind="document"),)),
-            artifacts=(StateArtifact(id="shared", kind="git_repository"),),
-        )
-
-
-def test_state_accepts_distinct_northstar_and_state_artifact_ids() -> None:
+def test_state_accepts_multiple_artifacts_with_distinct_ids() -> None:
     state = State(
-        northstar=NorthStar(
-            artifacts=(
-                StateArtifact(id="northstar-1", kind="document"),
-                StateArtifact(id="northstar-2", kind="git_repository"),
-            )
-        ),
         artifacts=(
             StateArtifact(id="state-1", kind="document"),
             StateArtifact(id="state-2", kind="git_repository"),
         ),
     )
-
-    assert [artifact.id for artifact in state.northstar.artifacts] == [
-        "northstar-1",
-        "northstar-2",
-    ]
     assert [artifact.id for artifact in state.artifacts] == ["state-1", "state-2"]
 
 
@@ -588,12 +556,6 @@ def test_state_update_proposal_rejects_empty_base_state_fingerprint(
 
 def test_fingerprint_state_is_deterministic_for_repeated_calls() -> None:
     state = State(
-        northstar=NorthStar(
-            artifacts=(
-                StateArtifact(id="northstar-1", kind="document"),
-                StateArtifact(id="northstar-2", kind="git_repository"),
-            )
-        ),
         artifacts=(
             StateArtifact(id="state-1", kind="document"),
             StateArtifact(id="state-2", kind="git_repository"),
@@ -608,14 +570,12 @@ def test_fingerprint_state_is_deterministic_for_repeated_calls() -> None:
 
 def test_fingerprint_state_changes_when_artifact_order_changes() -> None:
     first_state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
         artifacts=(
             StateArtifact(id="state-1", kind="document"),
             StateArtifact(id="state-2", kind="git_repository"),
         ),
     )
     second_state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
         artifacts=(
             StateArtifact(id="state-2", kind="git_repository"),
             StateArtifact(id="state-1", kind="document"),
@@ -627,11 +587,9 @@ def test_fingerprint_state_changes_when_artifact_order_changes() -> None:
 
 def test_fingerprint_state_changes_when_artifact_id_changes() -> None:
     first_state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
         artifacts=(StateArtifact(id="state-1", kind="document"),),
     )
     second_state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
         artifacts=(StateArtifact(id="state-2", kind="document"),),
     )
 
@@ -640,38 +598,18 @@ def test_fingerprint_state_changes_when_artifact_id_changes() -> None:
 
 def test_fingerprint_state_changes_when_artifact_kind_changes() -> None:
     first_state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
         artifacts=(StateArtifact(id="state-1", kind="document"),),
     )
     second_state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
         artifacts=(StateArtifact(id="state-1", kind="git_repository"),),
     )
 
     assert fingerprint_state(first_state) != fingerprint_state(second_state)
 
 
-def test_fingerprint_state_changes_when_northstar_artifacts_change() -> None:
-    first_state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
-        artifacts=(StateArtifact(id="state-1", kind="document"),),
-    )
-    second_state = State(
-        northstar=NorthStar(
-            artifacts=(
-                StateArtifact(id="northstar-1", kind="document"),
-                StateArtifact(id="northstar-2", kind="git_repository"),
-            )
-        ),
-        artifacts=(StateArtifact(id="state-1", kind="document"),),
-    )
-
-    assert fingerprint_state(first_state) != fingerprint_state(second_state)
-
 
 def test_validate_update_base_state_without_fingerprint_returns_true() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)),
     )
     proposal = StateUpdateProposal(
         id="proposal-1",
@@ -684,7 +622,6 @@ def test_validate_update_base_state_without_fingerprint_returns_true() -> None:
 
 def test_validate_update_base_state_with_matching_fingerprint_returns_true() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)),
     )
     proposal = StateUpdateProposal(
         id="proposal-1",
@@ -698,7 +635,6 @@ def test_validate_update_base_state_with_matching_fingerprint_returns_true() -> 
 
 def test_validate_update_base_state_with_non_matching_fingerprint_returns_false() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)),
     )
     proposal = StateUpdateProposal(
         id="proposal-1",
@@ -712,7 +648,6 @@ def test_validate_update_base_state_with_non_matching_fingerprint_returns_false(
 
 def test_validate_update_base_state_does_not_mutate_inputs() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="ns-1", kind="document"),)),
         artifacts=(StateArtifact(id="artifact-1", kind="git_repository"),),
     )
     proposal = StateUpdateProposal(
@@ -731,24 +666,20 @@ def test_validate_update_base_state_does_not_mutate_inputs() -> None:
     assert proposal.model_dump(mode="json") == proposal_before
 
 
-def test_find_state_artifact_finds_northstar_artifact() -> None:
+def test_find_state_artifact_finds_artifact_by_id() -> None:
     state = State(
-        northstar=NorthStar(
-            artifacts=(
-                StateArtifact(id="northstar-1", kind="document"),
-                StateArtifact(id="northstar-2", kind="git_repository"),
-            )
+        artifacts=(
+            StateArtifact(id="artifact-1", kind="document"),
+            StateArtifact(id="artifact-2", kind="git_repository"),
         ),
-        artifacts=(StateArtifact(id="state-1", kind="document"),),
     )
-    artifact = find_state_artifact(state, "northstar-2")
-    assert artifact.id == "northstar-2"
+    artifact = find_state_artifact(state, "artifact-2")
+    assert artifact.id == "artifact-2"
     assert artifact.kind == "git_repository"
 
 
 def test_find_state_artifact_finds_ordinary_state_artifact() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
         artifacts=(StateArtifact(id="state-1", kind="git_repository"),),
     )
     artifact = find_state_artifact(state, "state-1")
@@ -761,7 +692,6 @@ def test_find_state_artifact_rejects_empty_or_whitespace_artifact_id(
     bad_artifact_id: str,
 ) -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
     )
     with pytest.raises(ValueError, match="non-empty string"):
         find_state_artifact(state, bad_artifact_id)
@@ -769,7 +699,6 @@ def test_find_state_artifact_rejects_empty_or_whitespace_artifact_id(
 
 def test_find_state_artifact_raises_for_missing_artifact_id() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
         artifacts=(StateArtifact(id="state-1", kind="git_repository"),),
     )
     with pytest.raises(ValueError, match="artifact id not found in state"):
@@ -778,7 +707,6 @@ def test_find_state_artifact_raises_for_missing_artifact_id() -> None:
 
 def test_apply_state_update_raises_value_error_for_missing_target_artifact() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
     )
     proposal = StateUpdateProposal(
         id="proposal-1",
@@ -789,36 +717,31 @@ def test_apply_state_update_raises_value_error_for_missing_target_artifact() -> 
         apply_state_update(state, proposal)
 
 
-def test_apply_state_update_replace_artifact_updates_northstar_artifact() -> None:
+def test_apply_state_update_replace_artifact_updates_target_artifact() -> None:
     state = State(
-        northstar=NorthStar(
-            artifacts=(
-                StateArtifact(id="northstar-1", kind="document"),
-                StateArtifact(id="northstar-2", kind="git_repository"),
-            )
+        artifacts=(
+            StateArtifact(id="artifact-1", kind="document"),
+            StateArtifact(id="artifact-2", kind="git_repository"),
         ),
-        artifacts=(StateArtifact(id="state-1", kind="document"),),
     )
     proposal = StateUpdateProposal(
         id="proposal-1",
-        target=StateUpdateTarget(artifact_id="northstar-1"),
-        summary="Replace known northstar artifact.",
+        target=StateUpdateTarget(artifact_id="artifact-1"),
+        summary="Replace known artifact.",
         payload={
             "operation": "replace_artifact",
-            "artifact": {"id": "northstar-1", "kind": "document"},
+            "artifact": {"id": "artifact-1", "kind": "document"},
         },
     )
     updated = apply_state_update(state, proposal)
-    assert [artifact.id for artifact in updated.northstar.artifacts] == [
-        "northstar-1",
-        "northstar-2",
+    assert [artifact.id for artifact in updated.artifacts] == [
+        "artifact-1",
+        "artifact-2",
     ]
-    assert [artifact.id for artifact in updated.artifacts] == ["state-1"]
 
 
 def test_apply_state_update_replace_artifact_updates_ordinary_artifact() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
         artifacts=(
             StateArtifact(id="state-1", kind="git_repository"),
             StateArtifact(id="state-2", kind="document"),
@@ -834,13 +757,11 @@ def test_apply_state_update_replace_artifact_updates_ordinary_artifact() -> None
         },
     )
     updated = apply_state_update(state, proposal)
-    assert [artifact.id for artifact in updated.northstar.artifacts] == ["northstar-1"]
     assert [artifact.id for artifact in updated.artifacts] == ["state-1", "state-2"]
 
 
 def test_apply_state_update_add_artifact_appends_one_ordinary_artifact() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
         artifacts=(StateArtifact(id="state-1", kind="document"),),
     )
     proposal = StateUpdateProposal(
@@ -855,13 +776,11 @@ def test_apply_state_update_add_artifact_appends_one_ordinary_artifact() -> None
 
     updated = apply_state_update(state, proposal)
 
-    assert [artifact.id for artifact in updated.northstar.artifacts] == ["northstar-1"]
     assert [artifact.id for artifact in updated.artifacts] == ["state-1", "state-2"]
 
 
 def test_apply_state_update_add_artifact_rejects_duplicate_ordinary_artifact_id() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
         artifacts=(StateArtifact(id="state-1", kind="document"),),
     )
     proposal = StateUpdateProposal(
@@ -878,31 +797,9 @@ def test_apply_state_update_add_artifact_rejects_duplicate_ordinary_artifact_id(
         apply_state_update(state, proposal)
 
 
-def test_apply_state_update_add_artifact_rejects_northstar_overlap_id() -> None:
-    state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
-        artifacts=(StateArtifact(id="state-1", kind="document"),),
-    )
-    proposal = StateUpdateProposal(
-        id="proposal-add-overlap",
-        target=StateUpdateTarget(artifact_id="state-1"),
-        summary="Attempt northstar overlap id",
-        payload={
-            "operation": "add_artifact",
-            "artifact": {"id": "northstar-1", "kind": "git_repository"},
-        },
-    )
-
-    with pytest.raises(
-        ValidationError,
-        match="northstar and state artifacts must not share ids",
-    ):
-        apply_state_update(state, proposal)
-
 
 def test_apply_state_update_replace_artifact_remains_pure_replace() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
         artifacts=(
             StateArtifact(id="state-1", kind="document"),
             StateArtifact(id="state-2", kind="git_repository"),
@@ -926,12 +823,6 @@ def test_apply_state_update_replace_artifact_remains_pure_replace() -> None:
 
 def test_apply_state_update_replacement_preserves_ordering() -> None:
     state = State(
-        northstar=NorthStar(
-            artifacts=(
-                StateArtifact(id="n1", kind="document"),
-                StateArtifact(id="n2", kind="git_repository"),
-            )
-        ),
         artifacts=(
             StateArtifact(id="s1", kind="document"),
             StateArtifact(id="s2", kind="git_repository"),
@@ -941,39 +832,19 @@ def test_apply_state_update_replacement_preserves_ordering() -> None:
     proposal = StateUpdateProposal(
         id="proposal-1",
         target=StateUpdateTarget(artifact_id="s2"),
-        summary="Replace middle ordinary artifact.",
+        summary="Replace middle artifact.",
         payload={
             "operation": "replace_artifact",
             "artifact": {"id": "s2", "kind": "git_repository"},
         },
     )
     updated = apply_state_update(state, proposal)
-    assert [artifact.id for artifact in updated.northstar.artifacts] == ["n1", "n2"]
     assert [artifact.id for artifact in updated.artifacts] == ["s1", "s2", "s3"]
-
-
-def test_apply_state_update_replacement_preserves_northstar_ordinary_separation() -> None:
-    state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
-        artifacts=(StateArtifact(id="s1", kind="git_repository"),),
-    )
-    proposal = StateUpdateProposal(
-        id="proposal-1",
-        target=StateUpdateTarget(artifact_id="n1"),
-        summary="Replace northstar artifact only.",
-        payload={
-            "operation": "replace_artifact",
-            "artifact": {"id": "n1", "kind": "document"},
-        },
-    )
-    updated = apply_state_update(state, proposal)
-    assert [artifact.id for artifact in updated.northstar.artifacts] == ["n1"]
-    assert [artifact.id for artifact in updated.artifacts] == ["s1"]
 
 
 def test_apply_state_update_replacement_rejects_different_id() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+        artifacts=(StateArtifact(id="n1", kind="document"),),
     )
     proposal = StateUpdateProposal(
         id="proposal-1",
@@ -990,7 +861,7 @@ def test_apply_state_update_replacement_rejects_different_id() -> None:
 
 def test_apply_state_update_replacement_rejects_different_kind() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+        artifacts=(StateArtifact(id="n1", kind="document"),),
     )
     proposal = StateUpdateProposal(
         id="proposal-1",
@@ -1007,7 +878,6 @@ def test_apply_state_update_replacement_rejects_different_kind() -> None:
 
 def test_apply_state_update_replace_artifact_preserves_document_artifact_type() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
         artifacts=(
             DocumentArtifact(
                 id="doc-1",
@@ -1040,7 +910,6 @@ def test_apply_state_update_replace_artifact_preserves_document_artifact_type() 
 
 def test_apply_state_update_replace_artifact_preserves_coding_artifact_type() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
         artifacts=(
             CodingArtifact(
                 id="code-1",
@@ -1073,7 +942,7 @@ def test_apply_state_update_replace_artifact_preserves_coding_artifact_type() ->
 
 def test_apply_state_update_unsupported_operation_raises_not_implemented() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+        artifacts=(StateArtifact(id="n1", kind="document"),),
     )
     proposal = StateUpdateProposal(
         id="proposal-1",
@@ -1087,7 +956,7 @@ def test_apply_state_update_unsupported_operation_raises_not_implemented() -> No
 
 def test_apply_state_update_missing_operation_raises_clear_error() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+        artifacts=(StateArtifact(id="n1", kind="document"),),
     )
     proposal = StateUpdateProposal(
         id="proposal-1",
@@ -1101,7 +970,7 @@ def test_apply_state_update_missing_operation_raises_clear_error() -> None:
 
 def test_apply_state_update_missing_artifact_raises_value_error() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+        artifacts=(StateArtifact(id="n1", kind="document"),),
     )
     proposal = StateUpdateProposal(
         id="proposal-1",
@@ -1115,7 +984,6 @@ def test_apply_state_update_missing_artifact_raises_value_error() -> None:
 
 def test_apply_state_update_does_not_mutate_input_state() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="northstar-1", kind="document"),)),
         artifacts=(StateArtifact(id="state-1", kind="git_repository"),),
     )
     before = state.model_dump(mode="json")
@@ -1195,7 +1063,7 @@ def test_modifying_one_default_registry_does_not_affect_another() -> None:
         second.resolve("custom")
 
 
-def test_validate_state_artifacts_validates_all_northstar_artifacts() -> None:
+def test_validate_state_artifacts_validates_all_state_artifacts() -> None:
     calls: list[str] = []
 
     class DocumentTrackingAdapter:
@@ -1219,11 +1087,9 @@ def test_validate_state_artifacts_validates_all_northstar_artifacts() -> None:
             return f"git:{artifact.id}"
 
     state = State(
-        northstar=NorthStar(
-            artifacts=(
-                StateArtifact(id="n-doc", kind="document"),
-                StateArtifact(id="n-git", kind="git_repository"),
-            )
+        artifacts=(
+            StateArtifact(id="n-doc", kind="document"),
+            StateArtifact(id="n-git", kind="git_repository"),
         ),
     )
     registry = StateArtifactRegistry()
@@ -1258,7 +1124,6 @@ def test_validate_state_artifacts_validates_all_ordinary_artifacts() -> None:
             return f"git:{artifact.id}"
 
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="northstar", kind="document"),)),
         artifacts=(
             StateArtifact(id="s-doc", kind="document"),
             StateArtifact(id="s-git", kind="git_repository"),
@@ -1269,17 +1134,11 @@ def test_validate_state_artifacts_validates_all_ordinary_artifacts() -> None:
     registry.register(GitTrackingAdapter())
 
     _ = validate_state_artifacts(state, registry)
-    assert calls == ["northstar", "s-doc", "s-git"]
+    assert calls == ["s-doc", "s-git"]
 
 
 def test_validate_state_artifacts_preserves_ordering() -> None:
     state = State(
-        northstar=NorthStar(
-            artifacts=(
-                StateArtifact(id="n1", kind="document"),
-                StateArtifact(id="n2", kind="git_repository"),
-            )
-        ),
         artifacts=(
             StateArtifact(id="s1", kind="document"),
             StateArtifact(id="s2", kind="git_repository"),
@@ -1290,27 +1149,12 @@ def test_validate_state_artifacts_preserves_ordering() -> None:
     registry.register(GitRepositoryArtifactAdapter())
 
     validated = validate_state_artifacts(state, registry)
-    assert [artifact.id for artifact in validated.northstar.artifacts] == ["n1", "n2"]
     assert [artifact.id for artifact in validated.artifacts] == ["s1", "s2"]
 
 
-def test_validate_state_artifacts_preserves_northstar_ordinary_separation() -> None:
+def test_validate_state_artifacts_raises_for_unknown_artifact_kind() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
-        artifacts=(StateArtifact(id="s1", kind="git_repository"),),
-    )
-    registry = StateArtifactRegistry()
-    registry.register(DocumentArtifactAdapter())
-    registry.register(GitRepositoryArtifactAdapter())
-
-    validated = validate_state_artifacts(state, registry)
-    assert [artifact.id for artifact in validated.northstar.artifacts] == ["n1"]
-    assert [artifact.id for artifact in validated.artifacts] == ["s1"]
-
-
-def test_validate_state_artifacts_raises_for_unknown_northstar_artifact_kind() -> None:
-    state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="unknown"),)),
+        artifacts=(StateArtifact(id="s1", kind="unknown"),),
     )
     registry = StateArtifactRegistry()
     registry.register(DocumentArtifactAdapter())
@@ -1321,7 +1165,6 @@ def test_validate_state_artifacts_raises_for_unknown_northstar_artifact_kind() -
 
 def test_validate_state_artifacts_raises_for_unknown_ordinary_artifact_kind() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
         artifacts=(StateArtifact(id="s1", kind="unknown"),),
     )
     registry = StateArtifactRegistry()
@@ -1342,7 +1185,7 @@ def test_validate_state_artifacts_raises_if_adapter_changes_id() -> None:
             return f"doc:{artifact.id}"
 
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+        artifacts=(StateArtifact(id="n1", kind="document"),),
     )
     registry = StateArtifactRegistry()
     registry.register(ChangingIdAdapter())
@@ -1362,7 +1205,7 @@ def test_validate_state_artifacts_raises_if_adapter_changes_kind() -> None:
             return f"doc:{artifact.id}"
 
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+        artifacts=(StateArtifact(id="n1", kind="document"),),
     )
     registry = StateArtifactRegistry()
     registry.register(ChangingKindAdapter())
@@ -1373,7 +1216,6 @@ def test_validate_state_artifacts_raises_if_adapter_changes_kind() -> None:
 
 def test_validate_state_artifacts_does_not_mutate_input_state() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
         artifacts=(StateArtifact(id="s1", kind="git_repository"),),
     )
     before = state.model_dump(mode="json")
@@ -1389,17 +1231,14 @@ def test_validate_state_artifacts_does_not_mutate_input_state() -> None:
 
 def test_state_projection_defaults_to_empty_tuples() -> None:
     projection = StateProjection()
-    assert projection.northstar == ()
     assert projection.artifacts == ()
 
 
-def test_project_state_projects_northstar_artifacts_through_adapters() -> None:
+def test_project_state_projects_artifacts_through_adapters() -> None:
     state = State(
-        northstar=NorthStar(
-            artifacts=(
-                StateArtifact(id="n1", kind="document"),
-                StateArtifact(id="n2", kind="git_repository"),
-            )
+        artifacts=(
+            StateArtifact(id="n1", kind="document"),
+            StateArtifact(id="n2", kind="git_repository"),
         ),
     )
     registry = StateArtifactRegistry()
@@ -1407,7 +1246,7 @@ def test_project_state_projects_northstar_artifacts_through_adapters() -> None:
     registry.register(GitRepositoryArtifactAdapter())
 
     projection = project_state(state, registry)
-    assert projection.northstar == (
+    assert projection.artifacts == (
         "document artifact: n1",
         "git repository artifact: n2",
     )
@@ -1415,7 +1254,6 @@ def test_project_state_projects_northstar_artifacts_through_adapters() -> None:
 
 def test_project_state_projects_ordinary_artifacts_through_adapters() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
         artifacts=(
             StateArtifact(id="s1", kind="document"),
             StateArtifact(id="s2", kind="git_repository"),
@@ -1434,12 +1272,6 @@ def test_project_state_projects_ordinary_artifacts_through_adapters() -> None:
 
 def test_project_state_preserves_ordering() -> None:
     state = State(
-        northstar=NorthStar(
-            artifacts=(
-                StateArtifact(id="n1", kind="document"),
-                StateArtifact(id="n2", kind="git_repository"),
-            )
-        ),
         artifacts=(
             StateArtifact(id="s1", kind="git_repository"),
             StateArtifact(id="s2", kind="document"),
@@ -1450,44 +1282,14 @@ def test_project_state_preserves_ordering() -> None:
     registry.register(GitRepositoryArtifactAdapter())
 
     projection = project_state(state, registry)
-    assert projection.northstar == (
-        "document artifact: n1",
-        "git repository artifact: n2",
-    )
     assert projection.artifacts == (
         "git repository artifact: s1",
         "document artifact: s2",
     )
 
 
-def test_project_state_preserves_northstar_ordinary_separation() -> None:
+def test_project_state_raises_for_unknown_artifact_kind() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
-        artifacts=(StateArtifact(id="s1", kind="git_repository"),),
-    )
-    registry = StateArtifactRegistry()
-    registry.register(DocumentArtifactAdapter())
-    registry.register(GitRepositoryArtifactAdapter())
-
-    projection = project_state(state, registry)
-    assert projection.northstar == ("document artifact: n1",)
-    assert projection.artifacts == ("git repository artifact: s1",)
-
-
-def test_project_state_raises_for_unknown_northstar_artifact_kind() -> None:
-    state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="unknown"),)),
-    )
-    registry = StateArtifactRegistry()
-    registry.register(DocumentArtifactAdapter())
-
-    with pytest.raises(ValueError, match="unknown artifact kind"):
-        project_state(state, registry)
-
-
-def test_project_state_raises_for_unknown_ordinary_artifact_kind() -> None:
-    state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
         artifacts=(StateArtifact(id="s1", kind="unknown"),),
     )
     registry = StateArtifactRegistry()
@@ -1508,7 +1310,7 @@ def test_project_state_raises_if_adapter_projection_is_empty_or_whitespace() -> 
             return "   "
 
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
+        artifacts=(StateArtifact(id="n1", kind="document"),),
     )
     registry = StateArtifactRegistry()
     registry.register(EmptyProjectionAdapter())
@@ -1519,7 +1321,6 @@ def test_project_state_raises_if_adapter_projection_is_empty_or_whitespace() -> 
 
 def test_project_state_does_not_mutate_input_state() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
         artifacts=(StateArtifact(id="s1", kind="git_repository"),),
     )
     before = state.model_dump(mode="json")
@@ -1563,7 +1364,6 @@ def test_delta_coding_batch_state_validates() -> None:
 
 def test_apply_state_update_write_files_adds_new_files() -> None:
     state = State(
-        northstar=NorthStar(artifacts=()),
         artifacts=(CodingArtifact(id="code", files=(CodeFile(path="existing.py", content="old"),)),),
     )
     proposal = StateUpdateProposal(
@@ -1587,7 +1387,6 @@ def test_apply_state_update_write_files_adds_new_files() -> None:
 
 def test_apply_state_update_write_files_overwrites_existing_file() -> None:
     state = State(
-        northstar=NorthStar(artifacts=()),
         artifacts=(CodingArtifact(id="code", files=(CodeFile(path="a.py", content="old"),)),),
     )
     proposal = StateUpdateProposal(
@@ -1608,7 +1407,6 @@ def test_apply_state_update_write_files_overwrites_existing_file() -> None:
 
 def test_apply_state_update_write_files_requires_coding_artifact() -> None:
     state = State(
-        northstar=NorthStar(artifacts=()),
         artifacts=(DocumentArtifact(id="doc", sections=()),),
     )
     proposal = StateUpdateProposal(
@@ -1646,7 +1444,6 @@ def test_delta_modify_document_state_validates() -> None:
 
 def test_apply_state_update_modify_section_replaces_body() -> None:
     state = State(
-        northstar=NorthStar(artifacts=()),
         artifacts=(DocumentArtifact(
             id="doc",
             sections=(
@@ -1674,7 +1471,6 @@ def test_apply_state_update_modify_section_replaces_body() -> None:
 
 def test_apply_state_update_modify_section_raises_if_title_not_found() -> None:
     state = State(
-        northstar=NorthStar(artifacts=()),
         artifacts=(DocumentArtifact(
             id="doc",
             sections=(Section(title="Intro", body="body"),),
@@ -1696,7 +1492,6 @@ def test_apply_state_update_modify_section_raises_if_title_not_found() -> None:
 
 def test_apply_state_update_modify_section_requires_document_artifact() -> None:
     state = State(
-        northstar=NorthStar(artifacts=()),
         artifacts=(CodingArtifact(id="code", files=()),),
     )
     proposal = StateUpdateProposal(
@@ -1717,7 +1512,6 @@ def test_apply_state_update_modify_section_requires_document_artifact() -> None:
 
 def test_apply_state_update_delete_section_removes_matching_section() -> None:
     state = State(
-        northstar=NorthStar(artifacts=()),
         artifacts=(DocumentArtifact(
             id="doc",
             sections=(
@@ -1742,7 +1536,6 @@ def test_apply_state_update_delete_section_removes_matching_section() -> None:
 
 def test_apply_state_update_delete_section_raises_if_title_not_found() -> None:
     state = State(
-        northstar=NorthStar(artifacts=()),
         artifacts=(DocumentArtifact(
             id="doc",
             sections=(Section(title="Intro", body="body"),),
@@ -1760,7 +1553,6 @@ def test_apply_state_update_delete_section_raises_if_title_not_found() -> None:
 
 def test_apply_state_update_delete_section_requires_document_artifact() -> None:
     state = State(
-        northstar=NorthStar(artifacts=()),
         artifacts=(CodingArtifact(id="code", files=()),),
     )
     proposal = StateUpdateProposal(
@@ -1777,7 +1569,6 @@ def test_apply_state_update_delete_section_requires_document_artifact() -> None:
 
 def test_apply_state_update_delete_file_removes_matching_file() -> None:
     state = State(
-        northstar=NorthStar(artifacts=()),
         artifacts=(CodingArtifact(
             id="code",
             files=(
@@ -1802,7 +1593,6 @@ def test_apply_state_update_delete_file_removes_matching_file() -> None:
 
 def test_apply_state_update_delete_file_raises_if_path_not_found() -> None:
     state = State(
-        northstar=NorthStar(artifacts=()),
         artifacts=(CodingArtifact(
             id="code",
             files=(CodeFile(path="a.py", content="a"),),
@@ -1820,7 +1610,6 @@ def test_apply_state_update_delete_file_raises_if_path_not_found() -> None:
 
 def test_apply_state_update_delete_file_requires_coding_artifact() -> None:
     state = State(
-        northstar=NorthStar(artifacts=()),
         artifacts=(DocumentArtifact(id="doc", sections=()),),
     )
     proposal = StateUpdateProposal(

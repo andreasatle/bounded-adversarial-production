@@ -299,7 +299,6 @@ class NorthStar(BaseModel):
 
 
 class State(BaseModel):
-    northstar: NorthStar
     artifacts: tuple[SerializeAsAny[StateArtifact], ...] = ()
 
     @field_validator("artifacts", mode="before")
@@ -320,18 +319,6 @@ class State(BaseModel):
         if len(ids) != len(set(ids)):
             raise ValueError("state artifact ids must be unique")
         return artifacts
-
-    @model_validator(mode="after")
-    def _validate_northstar_and_state_artifact_disjointness(self) -> "State":
-        northstar_ids = {artifact.id for artifact in self.northstar.artifacts}
-        state_ids = {artifact.id for artifact in self.artifacts}
-        overlap = northstar_ids.intersection(state_ids)
-        if overlap:
-            raise ValueError(
-                "northstar and state artifacts must not share ids; "
-                f"overlap: {sorted(overlap)}"
-            )
-        return self
 
 
 class StateUpdateTarget(BaseModel):
@@ -367,7 +354,6 @@ class StateUpdateProposal(BaseModel):
 
 
 class StateProjection(BaseModel):
-    northstar: tuple[str, ...] = ()
     artifacts: tuple[str, ...] = ()
 
 
@@ -388,9 +374,6 @@ def validate_update_base_state(state: State, proposal: StateUpdateProposal) -> b
 
 def find_state_artifact(state: State, artifact_id: str) -> StateArtifact:
     resolved_artifact_id = _require_non_empty(artifact_id)
-    for artifact in state.northstar.artifacts:
-        if artifact.id == resolved_artifact_id:
-            return artifact
     for artifact in state.artifacts:
         if artifact.id == resolved_artifact_id:
             return artifact
@@ -400,17 +383,11 @@ def find_state_artifact(state: State, artifact_id: str) -> StateArtifact:
 def _replace_artifact_in_state(
     state: State, artifact_id: str, replacement: StateArtifact
 ) -> State:
-    new_northstar = tuple(
-        replacement if a.id == artifact_id else a
-        for a in state.northstar.artifacts
-    )
-    if any(a is replacement for a in new_northstar):
-        return State(northstar=NorthStar(artifacts=new_northstar), artifacts=state.artifacts)
     new_artifacts = tuple(
         replacement if a.id == artifact_id else a
         for a in state.artifacts
     )
-    return State(northstar=state.northstar, artifacts=new_artifacts)
+    return State(artifacts=new_artifacts)
 
 
 def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
@@ -540,7 +517,6 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
         else:
             added_artifact = StateArtifact.model_validate(artifact_payload)
         return State(
-            northstar=state.northstar,
             artifacts=(*state.artifacts, added_artifact),
         )
 
@@ -574,11 +550,7 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
 
 
 def apply_state_delta(state: State, delta: DeltaState) -> State:
-    """Apply a typed DeltaState directly to State via the artifact's own apply_delta method.
-
-    Searches only mutable (non-NorthStar) artifacts. NorthStar protection is enforced
-    at the StateService level before this function is called.
-    """
+    """Apply a typed DeltaState directly to State via the artifact's own apply_delta method."""
     artifact_id = delta.artifact_id
     artifact = next((a for a in state.artifacts if a.id == artifact_id), None)
     if artifact is None:
@@ -589,7 +561,6 @@ def apply_state_delta(state: State, delta: DeltaState) -> State:
         )
     updated = artifact.apply_delta(delta)
     return State(
-        northstar=state.northstar,
         artifacts=tuple(updated if a.id == artifact_id else a for a in state.artifacts),
     )
 
@@ -613,13 +584,9 @@ def validate_state_artifacts(state: State, registry: StateArtifactRegistry) -> S
             )
         return validated
 
-    validated_northstar_artifacts = tuple(
-        _validate_one(artifact) for artifact in state.northstar.artifacts
-    )
     validated_state_artifacts = tuple(_validate_one(artifact) for artifact in state.artifacts)
 
     return State(
-        northstar=NorthStar(artifacts=validated_northstar_artifacts),
         artifacts=validated_state_artifacts,
     )
 
@@ -650,9 +617,8 @@ def project_state(state: State, registry: StateArtifactRegistry) -> StateProject
             )
         return projection
 
-    projected_northstar = tuple(_project_one(artifact) for artifact in state.northstar.artifacts)
     projected_artifacts = tuple(_project_one(artifact) for artifact in state.artifacts)
-    return StateProjection(northstar=projected_northstar, artifacts=projected_artifacts)
+    return StateProjection(artifacts=projected_artifacts)
 
 
 class StateArtifactAdapter(Protocol):

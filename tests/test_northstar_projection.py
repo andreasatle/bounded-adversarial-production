@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from baps.state import NorthStar, State, StateArtifact
+from baps.state import State, StateArtifact
 from baps.northstar_projection import (
     NorthStarView,
     NorthStarProjectionRenderer,
@@ -252,7 +252,6 @@ def test_changed_northstar_inputs_produce_different_fingerprints() -> None:
 
 def test_projection_artifact_is_distinct_from_state_and_does_not_mutate_state() -> None:
     state = State(
-        northstar=NorthStar(artifacts=(StateArtifact(id="n1", kind="document"),)),
         artifacts=(StateArtifact(id="a1", kind="git_repository"),),
     )
     before = state.model_dump(mode="json")

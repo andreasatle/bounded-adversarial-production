@@ -26,14 +26,12 @@ from baps.state import (
     DeltaDeleteCodingState,
     DeltaState,
     GameSpec,
-    NorthStar,
     State,
     StateUpdateProposal,
     StateUpdateTarget,
     WriteFileDelta,
     WriteFilesDelta,
 )
-from baps.document_adapter import build_northstar_artifact_from_markdown
 
 
 _BLUE_CONTENT_FORBIDDEN_MARKERS: tuple[str, ...] = (
@@ -76,7 +74,7 @@ def coding_artifact_from_state(state: State, artifact_id: str) -> CodingArtifact
 def build_coding_create_game_state_view(state: State, config: dict[str, Any]) -> StateView:
     artifact_id = _config_artifact_id(config)
     target_artifact = coding_artifact_from_state(state, artifact_id)
-    northstar_content = state.northstar.render_content()
+    northstar_content = _config_northstar_markdown(config)
 
     _MAX_LINES_PER_FILE = 30  # lines shown in CreateGame view per file
 
@@ -567,10 +565,7 @@ class CodingProjectAdapter:
     supported_delta_type = "DeltaCodingState"
 
     def create_initial_state(self, config: dict[str, object]) -> State:
-        northstar_markdown = _config_northstar_markdown(config)
-        northstar_artifact = build_northstar_artifact_from_markdown(northstar_markdown)
         return State(
-            northstar=NorthStar(artifacts=(northstar_artifact,)),
             artifacts=(CodingArtifact(id=_config_artifact_id(config), files=()),),
         )
 

@@ -6,7 +6,6 @@ import pytest
 
 from baps.state import (
     fingerprint_state,
-    NorthStar,
     State,
     StateArtifact,
     StateArtifactRegistry,
@@ -37,12 +36,6 @@ class InMemoryStateStore:
 
 def _state() -> State:
     return State(
-        northstar=NorthStar(
-            artifacts=(
-                StateArtifact(id="northstar-1", kind="document"),
-                StateArtifact(id="northstar-2", kind="git_repository"),
-            )
-        ),
         artifacts=(
             StateArtifact(id="artifact-1", kind="document"),
             StateArtifact(id="artifact-2", kind="git_repository"),
@@ -97,7 +90,7 @@ def test_validate_state_loads_and_validates_artifacts_through_registry() -> None
     validated = service.validate_state()
 
     assert store.load_calls == 1
-    assert len(calls) == 4
+    assert len(calls) == 2
     assert validated == store.state
 
 
@@ -119,7 +112,7 @@ def test_apply_update_loads_validates_applies_validates_saves_and_returns_state(
     updated = service.apply_update(proposal)
 
     assert store.load_calls == 1
-    assert len(calls) == 7
+    assert len(calls) == 3
     assert store.save_calls == 1
     assert store.last_saved == updated
     assert updated == store.state
@@ -141,26 +134,6 @@ def test_apply_update_does_not_save_when_update_fails() -> None:
         service.apply_update(proposal)
 
     assert store.load_calls == 1
-    assert store.save_calls == 0
-
-
-def test_apply_update_rejects_northstar_artifact_target() -> None:
-    store = InMemoryStateStore(state=_state())
-    registry = _registry_with_counting_adapters([])
-    service = StateService(store=store, registry=registry)
-    proposal = StateUpdateProposal(
-        id="proposal-1",
-        target=StateUpdateTarget(artifact_id="northstar-1"),
-        summary="Replace northstar artifact",
-        payload={
-            "operation": "replace_artifact",
-            "artifact": {"id": "northstar-1", "kind": "document"},
-        },
-    )
-
-    with pytest.raises(ValueError, match="human approval"):
-        service.apply_update(proposal)
-
     assert store.save_calls == 0
 
 

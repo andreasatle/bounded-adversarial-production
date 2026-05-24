@@ -29,12 +29,6 @@ class StateService:
         """Apply a typed DeltaState directly, bypassing the dict-based proposal path."""
         current = self.store.load()
         validated_current = validate_state_artifacts(current, self.registry)
-        northstar_ids = {a.id for a in validated_current.northstar.artifacts}
-        if delta.artifact_id in northstar_ids:
-            raise ValueError(
-                "NorthStar artifacts cannot be modified through automated state updates; "
-                "human approval is required to update NorthStar"
-            )
         updated = apply_state_delta(validated_current, delta)
         validated_updated = validate_state_artifacts(updated, self.registry)
         self.store.save(validated_updated)
@@ -43,12 +37,6 @@ class StateService:
     def apply_update(self, proposal: StateUpdateProposal) -> State:
         current = self.store.load()
         validated_current = validate_state_artifacts(current, self.registry)
-        northstar_ids = {a.id for a in validated_current.northstar.artifacts}
-        if proposal.target.artifact_id in northstar_ids:
-            raise ValueError(
-                "NorthStar artifacts cannot be modified through automated state updates; "
-                "human approval is required to update NorthStar"
-            )
         if not validate_update_base_state(validated_current, proposal):
             raise ValueError("base_state_fingerprint does not match current state")
         updated = apply_state_update(validated_current, proposal)

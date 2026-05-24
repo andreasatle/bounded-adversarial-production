@@ -23,7 +23,6 @@ from baps.state import (
     DocumentArtifact,
     GameSpec,
     ModifySectionDelta,
-    NorthStar,
     Section,
     State,
     StateUpdateProposal,
@@ -52,7 +51,7 @@ def document_artifact_from_state(state: State, artifact_id: str) -> DocumentArti
 
 def build_document_create_game_state_view(state: State, config: dict[str, Any]) -> StateView:
     target_artifact = document_artifact_from_state(state, _config_artifact_id(config))
-    northstar_content = state.northstar.render_content()
+    northstar_content = _config_northstar_markdown(config)
     section_summaries = [
         {"title": section.title, "body": section.body}
         for section in target_artifact.sections
@@ -65,7 +64,6 @@ def build_document_create_game_state_view(state: State, config: dict[str, Any]) 
             "sections": section_summaries,
         },
         "state_summary": {
-            "northstar_artifact_ids": [artifact.id for artifact in state.northstar.artifacts],
             "artifact_ids": [artifact.id for artifact in state.artifacts],
         },
     }
@@ -309,10 +307,7 @@ class DocumentProjectAdapter:
     supported_delta_type = "DeltaDocumentState"
 
     def create_initial_state(self, config: dict[str, object]) -> State:
-        northstar_markdown = _config_northstar_markdown(config)
-        northstar_artifact = build_northstar_artifact_from_markdown(northstar_markdown)
         return State(
-            northstar=NorthStar(artifacts=(northstar_artifact,)),
             artifacts=(DocumentArtifact(id=_config_artifact_id(config), sections=()),),
         )
 

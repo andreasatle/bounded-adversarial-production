@@ -17,12 +17,11 @@ from baps.state import (
     DeltaState,
     DocumentArtifact,
     GameSpec,
-    NorthStar,
+    Section,
     State,
     StateUpdateProposal,
 )
 from baps.document_adapter import (
-    build_northstar_artifact_from_markdown,
     document_artifact_from_state,
     parse_document_delta_json,
     derive_document_state_update_from_delta,
@@ -31,6 +30,7 @@ from baps.document_adapter import (
 
 
 _SOURCE_PATH_MARKER = "<!-- audit:source_path="
+_AUDIT_META_ARTIFACT_ID_PREFIX = "audit:meta:"
 _DEFAULT_SOURCE_PATTERNS = (
     "*.py", "*.go", "*.rs", "*.js", "*.ts", "*.java", "*.c", "*.cpp", "*.h",
     "*.yaml", "*.yml", "*.json", "*.toml", "*.tf", "*.sh", "*.md", "*.txt",
@@ -54,8 +54,18 @@ def _embed_source_path(northstar_markdown: str, source_path: str) -> str:
     return f"{_SOURCE_PATH_MARKER}{source_path} -->\n\n{northstar_markdown}"
 
 
-def _extract_source_path(state: State) -> Path | None:
-    content = state.northstar.render_content()
+def _get_northstar_from_state(state: State) -> str:
+    """Extract the northstar markdown content stored in the audit meta artifact."""
+    for artifact in state.artifacts:
+        if isinstance(artifact, DocumentArtifact) and artifact.id.startswith(_AUDIT_META_ARTIFACT_ID_PREFIX):
+            for section in artifact.sections:
+                if section.title == "northstar":
+                    return section.body
+    return ""
+
+
+def _extract_source_path(northstar_markdown: str) -> Path | None:
+    content = northstar_markdown
     if _SOURCE_PATH_MARKER not in content:
         return None
     start = content.index(_SOURCE_PATH_MARKER) + len(_SOURCE_PATH_MARKER)
@@ -128,9 +138,11 @@ def _render_source_content(
 def build_audit_create_game_state_view(state: State, config: dict[str, Any]) -> StateView:
     artifact_id = _config_artifact_id(config)
     artifact = document_artifact_from_state(state, artifact_id)
-    northstar_content = state.northstar.render_content()
+    northstar_markdown = _config_northstar_markdown(config)
+    northstar_content = northstar_markdown
 
-    source_path = _extract_source_path(state)
+    source_path_str = str(config.get("source_path", "")).strip()
+    source_path = Path(source_path_str) if source_path_str else None
     if source_path is not None and source_path.exists():
         patterns = tuple(config.get("source_include", _DEFAULT_SOURCE_PATTERNS))
         files = _collect_source_files(source_path, patterns)
@@ -186,7 +198,8 @@ def build_audit_create_game_state_view(state: State, config: dict[str, Any]) -> 
 def build_audit_play_game_state_view(state: State, game_spec: GameSpec) -> StateView:
     artifact = document_artifact_from_state(state, game_spec.target_artifact_id)
 
-    source_path = _extract_source_path(state)
+    northstar_markdown = _get_northstar_from_state(state)
+    source_path = _extract_source_path(northstar_markdown)
     if source_path is not None and source_path.exists():
         files = _collect_source_files(source_path, _DEFAULT_SOURCE_PATTERNS)
         source_content = _render_source_content(
@@ -312,10 +325,16 @@ class AuditProjectAdapter:
         if not source_path.strip():
             raise ValueError("source_path must be non-empty for audit project type")
         northstar_with_meta = _embed_source_path(northstar_markdown, source_path)
-        northstar_artifact = build_northstar_artifact_from_markdown(northstar_with_meta)
+        fingerprint = hashlib.sha256(northstar_with_meta.encode("utf-8")).hexdigest()[:12]
+        meta_artifact = DocumentArtifact(
+            id=f"{_AUDIT_META_ARTIFACT_ID_PREFIX}{fingerprint}",
+            sections=(Section(title="northstar", body=northstar_with_meta),),
+        )
         return State(
-            northstar=NorthStar(artifacts=(northstar_artifact,)),
-            artifacts=(DocumentArtifact(id=_config_artifact_id(config), sections=()),),
+            artifacts=(
+                DocumentArtifact(id=_config_artifact_id(config), sections=()),
+                meta_artifact,
+            ),
         )
 
     def build_create_game_state_view(self, state: State, config: dict[str, object]) -> StateView:

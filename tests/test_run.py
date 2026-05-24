@@ -327,7 +327,6 @@ def test_project_type_document_creates_state_and_logs_when_debug_enabled(
     assert "[DEBUG] create_game.input:" in out
     assert "[DEBUG] create_game.output:" in out
     assert "  state:" in out
-    assert "    northstar:" in out
     assert "    artifacts:" in out
     assert "      - id: main-document" in out
     assert "        kind: document" in out
@@ -387,17 +386,6 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
     forwarded_state = captured.get("state")
     assert forwarded_state is not None
     assert forwarded_state.model_dump(mode="json") == {
-        "northstar": {
-            "artifacts": [
-                {
-                    "id": forwarded_state.northstar.artifacts[0].id,
-                    "kind": "document",
-                    "sections": [
-                        {"title": "NorthStar", "body": "Write a report."}
-                    ],
-                }
-            ]
-        },
         "artifacts": [{"id": "main-document", "kind": "document", "sections": []}],
     }
 
@@ -3154,24 +3142,15 @@ def test_create_game_state_view_content_is_markdown_for_empty_document() -> None
     import baps.run as run_module
 
     state = run_module.State(
-        northstar=state_module.NorthStar(
-            artifacts=(
-                state_module.DocumentArtifact(
-                    id="northstar:abc",
-                    sections=(
-                        state_module.Section(
-                            title="NorthStar",
-                            body="# Goal\n\nWrite a short report about bounded adversarial evaluation.",
-                        ),
-                    ),
-                ),
-            )
-        ),
         artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
     )
 
     state_view = run_module.DocumentProjectAdapter().build_create_game_state_view(
-        state, {"artifact_id": "main-document"}
+        state,
+        {
+            "artifact_id": "main-document",
+            "northstar_markdown": "# Goal\n\nWrite a short report about bounded adversarial evaluation.",
+        },
     )
     content = state_view.content
     assert content.startswith("=== StateView Start ===")
@@ -3196,19 +3175,6 @@ def test_create_game_state_view_content_includes_sections_as_markdown() -> None:
     import baps.run as run_module
 
     state = run_module.State(
-        northstar=state_module.NorthStar(
-            artifacts=(
-                state_module.DocumentArtifact(
-                    id="northstar:def",
-                    sections=(
-                        state_module.Section(
-                            title="NorthStar",
-                            body="# Goal\n\nWrite a short report about bounded adversarial evaluation.",
-                        ),
-                    ),
-                ),
-            )
-        ),
         artifacts=(
             state_module.DocumentArtifact(
                 id="main-document",
@@ -3218,7 +3184,11 @@ def test_create_game_state_view_content_includes_sections_as_markdown() -> None:
     )
 
     state_view = run_module.DocumentProjectAdapter().build_create_game_state_view(
-        state, {"artifact_id": "main-document"}
+        state,
+        {
+            "artifact_id": "main-document",
+            "northstar_markdown": "# Goal\n\nWrite a short report about bounded adversarial evaluation.",
+        },
     )
     content = state_view.content
     assert "### Current Sections" in content
@@ -4650,9 +4620,21 @@ def test_debug_enabled_prints_read_config_input_output(monkeypatch, capsys, tmp_
     assert "{'cli_args':" not in out
 
 
-def test_examples_document_project_yaml_still_passes(monkeypatch, capsys) -> None:
-    monkeypatch.setattr("sys.argv", ["baps-run", "run", "--spec", "examples/document-project.yaml"])
-    main()
+def test_examples_document_project_yaml_still_passes(monkeypatch, capsys, tmp_path: Path) -> None:
+    import baps.run as run_module
+    workspace = tmp_path / "example-doc-ws"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "init_and_run",
+            "--spec",
+            "examples/document-project.yaml",
+            "--workspace",
+            str(workspace),
+        ],
+    )
+    run_module.main()
     out = capsys.readouterr().out
     assert "project_type=document" in out
     assert "stop_reason=" in out
@@ -4739,7 +4721,7 @@ def test_run_cli_args_override_workspace_config(
     assert "goal=Overridden goal." in out
 
 
-def test_init_from_spec_persists_northstar_artifact(monkeypatch, tmp_path: Path) -> None:
+def test_init_from_spec_persists_northstar_in_workspace_config(monkeypatch, tmp_path: Path) -> None:
     import baps.run as run_module
 
     workspace = tmp_path / "ws-init-northstar"
@@ -4764,16 +4746,15 @@ def test_init_from_spec_persists_northstar_artifact(monkeypatch, tmp_path: Path)
     monkeypatch.setattr("sys.argv", ["baps-run", "init", "--spec", str(spec)])
     run_module.main()
 
+    import json as _json
+    workspace_config = _json.loads((workspace / "baps-config.json").read_text())
+    assert "northstar_markdown" in workspace_config
+    assert "# Goal" in workspace_config["northstar_markdown"]
+    assert "Write a short report grounded in NorthStar intent." in workspace_config["northstar_markdown"]
+
     persisted = run_module.JsonStateStore(workspace / "state" / "state.json").load()
-    assert len(persisted.northstar.artifacts) == 1
-    northstar_artifact = persisted.northstar.artifacts[0]
-    assert northstar_artifact.kind == "document"
-    assert northstar_artifact.id.startswith("northstar:")
-    assert isinstance(northstar_artifact, state_module.DocumentArtifact)
-    assert len(northstar_artifact.sections) == 1
-    assert northstar_artifact.sections[0].body == (
-        "# Goal\n\nWrite a short report grounded in NorthStar intent."
-    )
+    assert len(persisted.artifacts) == 1
+    assert persisted.artifacts[0].id == "main-document"
 
 
 def test_debug_formatter_renders_nested_list_of_dicts_without_python_repr(
@@ -4825,7 +4806,7 @@ def test_debug_formatter_renders_tuple_as_yaml_list_and_empty_as_brackets(
 
     main()
     out = capsys.readouterr().out
-    assert "northstar:\n      artifacts:\n        - id: northstar:" in out
+    assert "artifacts:\n      - id: main-document" in out
     assert "sections: []" in out
 
 
@@ -5155,7 +5136,6 @@ def test_coding_create_game_accepts_test_file_task_second_iteration() -> None:
         "spec_path": None,
     }
     state = run_module.State(
-        northstar=run_module.create_state(config).northstar,
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",
@@ -8107,285 +8087,3 @@ def test_coding_blue_prompt_includes_candidate_verification_failures() -> None:
     assert "tests/test_calc.py::test_add" in prompt
     assert "Candidate verification failed" in prompt
     assert "Repair these test failures" in prompt
-
-
-# ---------------------------------------------------------------------------
-# Research phase / tool session injection in play_game
-# ---------------------------------------------------------------------------
-
-def _make_executor_with_tracking():
-    """Returns (executor, calls_log)."""
-    from baps.tools import ToolExecutor, FETCH_URL_DEFINITION
-    calls: list[tuple[str, dict]] = []
-
-    def _fetch(url: str) -> str:
-        calls.append(("fetch_url", {"url": url}))
-        return f"content of {url}"
-
-    executor = ToolExecutor()
-    executor.register(FETCH_URL_DEFINITION, _fetch)
-    return executor, calls
-
-
-def _make_audit_adapter_with_research_tools():
-    """Document adapter stub that returns fetch_url for all roles."""
-    from baps.tools import FETCH_URL_DEFINITION
-    import baps.state as state_module
-    from baps.northstar_projection import StateView, ProjectionType
-    import hashlib
-
-    class _AuditStubAdapter:
-        project_type = "document"
-        supported_delta_type = "DeltaDocumentState"
-
-        def build_state_view(self, state, game_spec):
-            content = "stub state view"
-            fp = hashlib.sha256(content.encode()).hexdigest()
-            return StateView(id="sv", projection_type=ProjectionType.NORTH_STAR,
-                             content=content, input_fingerprint=fp, metadata={})
-
-        def render_blue_prompt(self, state_view, game_spec, attempt, feedback):
-            return "write a section"
-
-        def build_blue_output_format(self):
-            return None
-
-        def build_blue_tools(self):
-            return []
-
-        def build_research_tools(self, role: str):
-            return [FETCH_URL_DEFINITION]
-
-        def parse_blue_delta(self, text):
-            return state_module.DeltaDocumentState(
-                artifact_id="doc",
-                operation="append_section",
-                payload=state_module.AppendSectionDelta(
-                    section=state_module.Section(title="T", body="B")
-                ),
-            )
-
-        def tool_call_to_delta(self, tool_call):
-            raise ValueError("no tool delta")
-
-        def delta_to_state_update(self, delta):
-            from baps.document_adapter import derive_document_state_update_from_delta
-            return derive_document_state_update_from_delta(delta)
-
-        def render_red_prompt_supplement(self, *a, **kw):
-            return ""
-
-        def render_referee_prompt_supplement(self, *a, **kw):
-            return ""
-
-    return _AuditStubAdapter()
-
-
-def test_play_game_with_executor_calls_research_tools_for_blue() -> None:
-    from baps.models import FakeModelClient, ToolCall, ToolCallRecord
-    from baps.tools import ToolExecutor, FETCH_URL_DEFINITION
-    import baps.state as state_module
-    import baps.run as run_module
-
-    executor, calls = _make_executor_with_tracking()
-    adapter = _make_audit_adapter_with_research_tools()
-
-    fetch_tc = ToolCall(name="fetch_url", arguments={"url": "https://nvd.nist.gov/CVE-1234"})
-    blue_client = FakeModelClient(
-        agentic_sequences=[[fetch_tc, "found buffer overflow"]],
-        responses=['{"artifact_id":"doc","operation":"append_section","payload":{"section":{"title":"T","body":"B"}}}'],
-    )
-    red_client = FakeModelClient(
-        agentic_sequences=[[]],  # no research
-        responses=['{"disposition":"accept","rationale":"ok","success_condition_met":true,"findings":[]}'],
-    )
-    referee_client = FakeModelClient(
-        agentic_sequences=[[]],
-        responses=['{"disposition":"accept","rationale":"good","red_override":false,"improvement_hints":[]}'],
-    )
-
-    config = {
-        "workspace": state_module.Path(".baps-workspace") if hasattr(state_module, "Path") else None,
-        "project_type": "document",
-        "artifact_id": "doc",
-        "goal": "audit",
-        "northstar_markdown": "# Audit",
-        "output_path": None,
-        "max_iterations": 1,
-        "spec_path": None,
-    }
-    from pathlib import Path
-    state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
-        artifacts=(state_module.DocumentArtifact(id="doc", sections=()),),
-    )
-    game_spec = state_module.GameSpec(
-        objective="find vulnerabilities",
-        target_artifact_id="doc",
-        allowed_delta_type="DeltaDocumentState",
-        success_condition="finding present",
-    )
-
-    delta = run_module.play_game(
-        state=state,
-        game_spec=game_spec,
-        adapter=adapter,
-        model_client=blue_client,
-        red_model_client=red_client,
-        referee_model_client=referee_client,
-        executor=executor,
-    )
-    assert delta is not None
-    # Blue's research tool was called
-    assert ("fetch_url", {"url": "https://nvd.nist.gov/CVE-1234"}) in calls
-
-
-def test_play_game_tool_session_injected_into_blue_prompt() -> None:
-    """Blue's research summary should appear in its output prompt."""
-    from baps.models import FakeModelClient, ToolCall
-    import baps.state as state_module
-    import baps.run as run_module
-
-    executor, _ = _make_executor_with_tracking()
-    adapter = _make_audit_adapter_with_research_tools()
-
-    fetch_tc = ToolCall(name="fetch_url", arguments={"url": "https://example.com"})
-    blue_client = FakeModelClient(
-        agentic_sequences=[[fetch_tc, "research summary text"]],
-        responses=['{"artifact_id":"doc","operation":"append_section","payload":{"section":{"title":"T","body":"B"}}}'],
-    )
-    red_client = FakeModelClient(
-        agentic_sequences=[[]],
-        responses=['{"disposition":"accept","rationale":"ok","success_condition_met":true,"findings":[]}'],
-    )
-    referee_client = FakeModelClient(
-        agentic_sequences=[[]],
-        responses=['{"disposition":"accept","rationale":"ok","red_override":false,"improvement_hints":[]}'],
-    )
-
-    state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
-        artifacts=(state_module.DocumentArtifact(id="doc", sections=()),),
-    )
-    game_spec = state_module.GameSpec(
-        objective="audit run.py",
-        target_artifact_id="doc",
-        allowed_delta_type="DeltaDocumentState",
-        success_condition="finding present",
-    )
-
-    run_module.play_game(
-        state=state,
-        game_spec=game_spec,
-        adapter=adapter,
-        model_client=blue_client,
-        red_model_client=red_client,
-        referee_model_client=referee_client,
-        executor=executor,
-    )
-    # Blue's delta-generation prompt should include the research session block
-    assert any("research summary text" in p for p in blue_client.prompts)
-
-
-def test_play_game_no_executor_skips_research() -> None:
-    """When executor=None, research phases are skipped entirely."""
-    from baps.models import FakeModelClient
-    import baps.state as state_module
-    import baps.run as run_module
-
-    adapter = _make_audit_adapter_with_research_tools()
-    blue_client = FakeModelClient(
-        responses=['{"artifact_id":"doc","operation":"append_section","payload":{"section":{"title":"T","body":"B"}}}'],
-    )
-    red_client = FakeModelClient(
-        responses=['{"disposition":"accept","rationale":"ok","success_condition_met":true,"findings":[]}'],
-    )
-    referee_client = FakeModelClient(
-        responses=['{"disposition":"accept","rationale":"ok","red_override":false,"improvement_hints":[]}'],
-    )
-    state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
-        artifacts=(state_module.DocumentArtifact(id="doc", sections=()),),
-    )
-    game_spec = state_module.GameSpec(
-        objective="audit",
-        target_artifact_id="doc",
-        allowed_delta_type="DeltaDocumentState",
-        success_condition="finding present",
-    )
-    delta = run_module.play_game(
-        state=state,
-        game_spec=game_spec,
-        adapter=adapter,
-        model_client=blue_client,
-        red_model_client=red_client,
-        referee_model_client=referee_client,
-        executor=None,
-    )
-    assert delta is not None
-    # No agentic prompts recorded (research skipped)
-    assert blue_client.agentic_prompts == []
-
-
-def test_play_game_tool_session_in_red_prompt_includes_blue_session() -> None:
-    """Red's evaluation prompt should contain Blue's tool call records."""
-    from baps.models import FakeModelClient, ToolCall
-    import baps.state as state_module
-    import baps.run as run_module
-
-    executor, _ = _make_executor_with_tracking()
-    adapter = _make_audit_adapter_with_research_tools()
-
-    fetch_tc = ToolCall(name="fetch_url", arguments={"url": "https://cve.example.com"})
-    blue_client = FakeModelClient(
-        agentic_sequences=[[fetch_tc, "blue found this"]],
-        responses=['{"artifact_id":"doc","operation":"append_section","payload":{"section":{"title":"T","body":"B"}}}'],
-    )
-    red_client = FakeModelClient(
-        agentic_sequences=[["red researched independently"]],
-        responses=['{"disposition":"accept","rationale":"ok","success_condition_met":true,"findings":[]}'],
-    )
-    referee_client = FakeModelClient(
-        agentic_sequences=[[]],
-        responses=['{"disposition":"accept","rationale":"ok","red_override":false,"improvement_hints":[]}'],
-    )
-    state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
-        artifacts=(state_module.DocumentArtifact(id="doc", sections=()),),
-    )
-    game_spec = state_module.GameSpec(
-        objective="audit",
-        target_artifact_id="doc",
-        allowed_delta_type="DeltaDocumentState",
-        success_condition="finding present",
-    )
-    run_module.play_game(
-        state=state, game_spec=game_spec, adapter=adapter,
-        model_client=blue_client, red_model_client=red_client,
-        referee_model_client=referee_client, executor=executor,
-    )
-    # Red's evaluation prompt should contain Blue's tool call
-    assert any("cve.example.com" in p for p in red_client.prompts)
-
-
-def test_render_tool_session_block_empty_returns_empty() -> None:
-    from baps.run import _render_tool_session_block
-    assert _render_tool_session_block([]) == ""
-
-
-def test_render_tool_session_block_formats_records() -> None:
-    from baps.run import _render_tool_session_block
-    from baps.models import ToolCallRecord
-    record = ToolCallRecord(
-        role="blue", tool_name="web_search",
-        arguments={"query": "CVE-2024"}, result="found it",
-        created_at="2024-01-01T00:00:00+00:00",
-    )
-    block = _render_tool_session_block([("blue", [record], "summary text")])
-    assert "BLUE" in block
-    assert "web_search" in block
-    assert "CVE-2024" in block
-    assert "UNTRUSTED EXTERNAL CONTENT" in block
-    assert "found it" in block
-    assert "END UNTRUSTED EXTERNAL CONTENT" in block
-    assert "summary text" in block

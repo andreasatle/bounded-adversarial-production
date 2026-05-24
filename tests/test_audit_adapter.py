@@ -26,14 +26,12 @@ from baps.models import ToolCall
 
 def test_embed_and_extract_source_path_round_trips() -> None:
     embedded = _embed_source_path("# Audit Goal\n\nFind bugs.", "/some/path")
-    state = _make_state_with_northstar(embedded)
-    result = _extract_source_path(state)
+    result = _extract_source_path(embedded)
     assert result == Path("/some/path")
 
 
 def test_extract_source_path_returns_none_when_marker_absent() -> None:
-    state = _make_state_with_northstar("# No marker here")
-    assert _extract_source_path(state) is None
+    assert _extract_source_path("# No marker here") is None
 
 
 def test_embed_source_path_preserves_northstar_content() -> None:
@@ -137,13 +135,15 @@ def test_audit_adapter_create_initial_state_requires_source_path() -> None:
 
 
 def test_audit_adapter_create_initial_state_embeds_source_path() -> None:
+    from baps.audit_adapter import _get_northstar_from_state
     adapter = AuditProjectAdapter()
     state = adapter.create_initial_state({
         "artifact_id": "report",
         "northstar_markdown": "# Goal\n\nFind bugs.",
         "source_path": "/tmp/src",
     })
-    recovered = _extract_source_path(state)
+    northstar_markdown = _get_northstar_from_state(state)
+    recovered = _extract_source_path(northstar_markdown)
     assert recovered == Path("/tmp/src")
 
 
@@ -170,7 +170,7 @@ def test_audit_create_game_state_view_includes_northstar(tmp_path: Path) -> None
         "northstar_markdown": "# Security Audit Goal\n\nFind vulnerabilities.",
         "source_path": str(tmp_path),
     })
-    config = {"artifact_id": "report", "source_path": str(tmp_path)}
+    config = {"artifact_id": "report", "northstar_markdown": "# Security Audit Goal\n\nFind vulnerabilities.", "source_path": str(tmp_path)}
     view = adapter.build_create_game_state_view(state, config)
     assert "Security Audit Goal" in view.content
 
@@ -183,7 +183,7 @@ def test_audit_create_game_state_view_includes_source_listing(tmp_path: Path) ->
         "northstar_markdown": "# Goal",
         "source_path": str(tmp_path),
     })
-    config = {"artifact_id": "report", "source_path": str(tmp_path)}
+    config = {"artifact_id": "report", "northstar_markdown": "# Goal", "source_path": str(tmp_path)}
     view = adapter.build_create_game_state_view(state, config)
     assert "models.py" in view.content
 
@@ -196,7 +196,7 @@ def test_audit_create_game_state_view_shows_existing_findings(tmp_path: Path) ->
         "source_path": str(tmp_path),
     })
     state = _append_finding(state, "report", "SQL Injection", "Found in db.py line 42.")
-    config = {"artifact_id": "report", "source_path": str(tmp_path)}
+    config = {"artifact_id": "report", "northstar_markdown": "# Goal", "source_path": str(tmp_path)}
     view = adapter.build_create_game_state_view(state, config)
     assert "SQL Injection" in view.content
 
@@ -517,15 +517,6 @@ def test_audit_adapter_registered_in_default_adapters() -> None:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-def _make_state_with_northstar(northstar_markdown: str) -> state_module.State:
-    from baps.document_adapter import build_northstar_artifact_from_markdown
-    northstar_artifact = build_northstar_artifact_from_markdown(northstar_markdown)
-    return state_module.State(
-        northstar=state_module.NorthStar(artifacts=(northstar_artifact,)),
-        artifacts=(state_module.DocumentArtifact(id="report", sections=()),),
-    )
-
 
 def _append_finding(
     state: state_module.State, artifact_id: str, title: str, body: str
