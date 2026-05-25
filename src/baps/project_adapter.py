@@ -16,7 +16,9 @@ from baps.state import DeltaState, GameSpec, State, StateUpdateProposal
 _MODEL_INJECTION_RE = re.compile(
     r"(ignore|disregard|forget|override)\s+(all\s+)?(previous|prior|above|earlier)\s+"
     r"(instructions?|prompts?|context|rules?)"
-    r"|^[\t ]*system\s*:",
+    r"|^[\t ]*system\s*:"
+    r"|^[\t ]*assistant\s*:"
+    r"|^[\t ]*user\s*:",
     re.IGNORECASE | re.MULTILINE,
 )
 

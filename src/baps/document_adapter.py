@@ -55,7 +55,7 @@ def build_document_create_game_state_view(state: State, config: dict[str, Any]) 
     target_artifact = document_artifact_from_state(state, _config_artifact_id(config))
     northstar_content = _config_northstar_markdown(config)
     section_summaries = [
-        {"title": section.title, "body": section.body}
+        {"title": sanitize_model_title(section.title), "body": sanitize_model_string(section.body)}
         for section in target_artifact.sections
     ]
     metadata = {
@@ -120,7 +120,7 @@ def build_document_state_view(state: State, game_spec: GameSpec) -> StateView:
             f"got: {target_artifact.kind}"
         )
     sections = [
-        {"title": section.title, "body": section.body}
+        {"title": sanitize_model_title(section.title), "body": sanitize_model_string(section.body)}
         for section in target_artifact.sections
     ]
     metadata = {

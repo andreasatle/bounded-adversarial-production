@@ -128,6 +128,59 @@ def test_delta_document_state_rejects_empty_section_body(bad_body: str) -> None:
         )
 
 
+def test_section_rejects_unicode_whitespace_only_body() -> None:
+    with pytest.raises(ValidationError):
+        Section(title="Intro", body=" ")  # EM SPACE passes ASCII strip but not NFKC
+
+
+def test_section_rejects_unicode_whitespace_only_title() -> None:
+    with pytest.raises(ValidationError):
+        Section(title=" ", body="Body text")
+
+
+def test_section_rejects_non_string_body() -> None:
+    with pytest.raises(ValidationError):
+        Section.model_validate({"title": "Intro", "body": 42})
+
+
+def test_section_rejects_non_string_title() -> None:
+    with pytest.raises(ValidationError):
+        Section.model_validate({"title": 42, "body": "Body text"})
+
+
+def test_section_rejects_extra_fields() -> None:
+    with pytest.raises(ValidationError):
+        Section.model_validate({"title": "Intro", "body": "Body", "injected": "x"})
+
+
+def test_section_rejects_oversized_body() -> None:
+    from baps.state import _MAX_SECTION_BODY_BYTES
+    with pytest.raises(ValidationError):
+        Section(title="Intro", body="x" * (_MAX_SECTION_BODY_BYTES + 1))
+
+
+def test_code_file_rejects_non_string_path() -> None:
+    with pytest.raises(ValidationError):
+        CodeFile.model_validate({"path": 123, "content": ""})
+
+
+def test_code_file_rejects_non_string_content() -> None:
+    with pytest.raises(ValidationError):
+        CodeFile.model_validate({"path": "src/main.py", "content": ["lines"]})
+
+
+def test_code_file_rejects_oversized_path() -> None:
+    from baps.state import _MAX_CODEFILE_PATH_BYTES
+    with pytest.raises(ValidationError):
+        CodeFile(path="a" * (_MAX_CODEFILE_PATH_BYTES + 1), content="")
+
+
+def test_code_file_rejects_oversized_content() -> None:
+    from baps.state import _MAX_CODEFILE_CONTENT_BYTES
+    with pytest.raises(ValidationError):
+        CodeFile(path="src/main.py", content="x" * (_MAX_CODEFILE_CONTENT_BYTES + 1))
+
+
 def test_delta_document_state_serialization_is_deterministic() -> None:
     delta = DeltaDocumentState(
         artifact_id="main-document",

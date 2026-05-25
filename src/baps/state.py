@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import unicodedata
 from enum import Enum
-from typing import Literal, Protocol
+from typing import Annotated, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, model_validator, field_validator
 
@@ -14,8 +15,13 @@ class Disposition(str, Enum):
     reject = "reject"
 
 
+_MAX_SECTION_BODY_BYTES = 65536
+_MAX_CODEFILE_PATH_BYTES = 4096
+_MAX_CODEFILE_CONTENT_BYTES = 65536
+
+
 def _require_non_empty(value: str) -> str:
-    if not value.strip():
+    if not unicodedata.normalize("NFKC", value).strip():
         raise ValueError("must be a non-empty string")
     return value
 
@@ -45,12 +51,20 @@ class StateArtifact(BaseModel):
 
 
 class Section(BaseModel):
-    title: str
-    body: str
+    model_config = ConfigDict(extra="forbid")
+    title: Annotated[str, Field(strict=True)]
+    body: Annotated[str, Field(strict=True)]
     source_hash: str | None = None
 
     _validate_title = field_validator("title")(_require_non_empty)
-    _validate_body = field_validator("body")(_require_non_empty)
+
+    @field_validator("body")
+    @classmethod
+    def _validate_body(cls, value: str) -> str:
+        _require_non_empty(value)
+        if len(value.encode("utf-8")) > _MAX_SECTION_BODY_BYTES:
+            raise ValueError(f"section body must not exceed {_MAX_SECTION_BODY_BYTES} bytes")
+        return value
 
 
 class DocumentArtifact(StateArtifact):
@@ -97,10 +111,23 @@ class DocumentArtifact(StateArtifact):
 
 
 class CodeFile(BaseModel):
-    path: str
-    content: str
+    path: Annotated[str, Field(strict=True)]
+    content: Annotated[str, Field(strict=True)]
 
-    _validate_path = field_validator("path")(_require_non_empty)
+    @field_validator("path")
+    @classmethod
+    def _validate_path(cls, value: str) -> str:
+        _require_non_empty(value)
+        if len(value.encode("utf-8")) > _MAX_CODEFILE_PATH_BYTES:
+            raise ValueError(f"file path must not exceed {_MAX_CODEFILE_PATH_BYTES} bytes")
+        return value
+
+    @field_validator("content")
+    @classmethod
+    def _validate_content_length(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > _MAX_CODEFILE_CONTENT_BYTES:
+            raise ValueError(f"file content must not exceed {_MAX_CODEFILE_CONTENT_BYTES} bytes")
+        return value
 
 
 class CodingArtifact(StateArtifact):
@@ -143,7 +170,14 @@ class ModifySectionDelta(BaseModel):
     new_body: str
 
     _validate_section_title = field_validator("section_title")(_require_non_empty)
-    _validate_new_body = field_validator("new_body")(_require_non_empty)
+
+    @field_validator("new_body")
+    @classmethod
+    def _validate_new_body(cls, value: str) -> str:
+        _require_non_empty(value)
+        if len(value.encode("utf-8")) > _MAX_SECTION_BODY_BYTES:
+            raise ValueError(f"section body must not exceed {_MAX_SECTION_BODY_BYTES} bytes")
+        return value
 
 
 class DeleteSectionDelta(BaseModel):
