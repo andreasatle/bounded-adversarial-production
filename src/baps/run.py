@@ -664,6 +664,7 @@ _KNOWN_SPEC_KEYS = frozenset({
     "goal",
     "output",
     "max_iterations",
+    "max_sub_gaps",
     "source_path",
     "source_include",
     "sandbox",
@@ -786,6 +787,14 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
     if sandbox not in ("docker", "none"):
         raise ValueError(f"sandbox must be 'docker' or 'none', got: {sandbox!r}")
 
+    max_sub_gaps_raw = _resolve(None, "max_sub_gaps", 5)
+    try:
+        max_sub_gaps = int(max_sub_gaps_raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("max_sub_gaps must be an integer >= 1") from exc
+    if max_sub_gaps < 1:
+        raise ValueError("max_sub_gaps must be >= 1")
+
     config = {
         "workspace": workspace,
         "project_type": project_type,
@@ -794,6 +803,7 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
         "goal": goal,
         "output_path": output_path,
         "max_iterations": max_iterations,
+        "max_sub_gaps": max_sub_gaps,
         "spec_path": spec_path,
         "source_path": source_path,
         "source_include": source_include,
@@ -1022,7 +1032,7 @@ def _parse_game_spec_json(text: str) -> GameSpec:
         raise ValueError("create_game model output failed GameSpec validation") from exc
 
 
-def _parse_create_game_output(text: str) -> GameSpec | DecomposeSpec:
+def _parse_create_game_output(text: str, max_sub_gaps: int = 5) -> GameSpec | DecomposeSpec:
     normalized = normalize_json_candidate(text)
     try:
         parsed = json.loads(normalized)
@@ -1077,6 +1087,13 @@ def _parse_create_game_output(text: str) -> GameSpec | DecomposeSpec:
         )
         if not sub_gaps:
             raise ValueError("create_game decompose response sub_gaps contained no valid entries")
+        if len(sub_gaps) > max_sub_gaps:
+            print(
+                f"[create_game] DecomposeSpec contained {len(sub_gaps)} sub-gaps; "
+                f"truncating to max_sub_gaps={max_sub_gaps}",
+                flush=True,
+            )
+            sub_gaps = sub_gaps[:max_sub_gaps]
         return DecomposeSpec(rationale=rationale, sub_gaps=sub_gaps)
 
     return _parse_game_spec_json(normalized)
@@ -1230,6 +1247,7 @@ def create_game(
 
     red_feedback: dict[str, Any] | None = None
     last_valid_game_spec: GameSpec | None = None
+    max_sub_gaps = int(config.get("max_sub_gaps", 5))
 
     for attempt in range(1, max_create_game_attempts + 1):
         prompt = _render_create_game_prompt(
@@ -1245,7 +1263,7 @@ def create_game(
         generated = role.generate(prompt)
         _debug_print_create_game_raw_model_output(generated)
         try:
-            result = _parse_create_game_output(generated)
+            result = _parse_create_game_output(generated, max_sub_gaps=max_sub_gaps)
         except ValueError as exc:
             if "valid JSON" not in str(exc) or not use_planner:
                 raise
@@ -1256,7 +1274,7 @@ def create_game(
                 fallback_role = Role(role_name, _build_role_client("create_game"), _CREATE_GAME_SCHEMA, constrained=False)
                 generated = fallback_role.generate(prompt)
                 _debug_print_create_game_raw_model_output(generated)
-                result = _parse_create_game_output(generated)
+                result = _parse_create_game_output(generated, max_sub_gaps=max_sub_gaps)
             else:
                 raise
         except NoNewGameError:

@@ -45,7 +45,8 @@ CreateGame is a **gap-analysis operation**, not a step-forward operation. It com
 16. Model-generated content is sanitized (NFKC-normalized, injection patterns removed) before embedding in any subsequent prompt.
 17. Delta payload models reject extra fields (`extra="forbid"`); unexpected model output fields cause validation failure rather than silent discard.
 18. Model response size is bounded before JSON deserialization (64 KB cap in `normalize_json_candidate`).
-19. Model-generated code executes inside an isolated Docker container during verification; `sandbox=none` is an explicit opt-in that emits a runtime warning and must not be used in production.
+19. Decomposition branching is bounded by `max_sub_gaps` (config key, default 5); a `DecomposeSpec` with more sub-gaps is truncated to the first `max_sub_gaps` entries before execution.
+20. Model-generated code executes inside an isolated Docker container during verification; `sandbox=none` is an explicit opt-in that emits a runtime warning and must not be used in production.
 
 ## 3. Adapter Contract
 
@@ -140,9 +141,10 @@ Blackboard is append-only and non-authoritative. It never feeds back into `State
 8. Framing CreateGame as "what should I do next?" rather than "what gap to NorthStar must I close?".
 9. Mutating NorthStar through the automated pipeline without human approval.
 10. Allowing decomposition to continue past `max_depth`.
-11. Embedding model-generated content in prompts without sanitization.
+11. Allowing a single `DecomposeSpec` to contain more than `max_sub_gaps` sub-gaps (default 5); excess entries are silently truncated before execution.
+12. Embedding model-generated content in prompts without sanitization.
 12. Treating a completed decomposition pass as project completion without re-running CreateGame.
-13. Running model-generated code unsandboxed without explicit `sandbox=none` opt-in and warning.
+14. Running model-generated code unsandboxed without explicit `sandbox=none` opt-in and warning.
 
 ## 10. Authority and Boundaries
 

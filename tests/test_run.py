@@ -7455,6 +7455,164 @@ def test_parse_create_game_output_decompose_requires_rationale() -> None:
         run_module._parse_create_game_output(text)
 
 
+def test_parse_create_game_output_truncates_sub_gaps_when_over_max() -> None:
+    import baps.run as run_module
+
+    sub_gaps = [{"description": f"Gap {i}"} for i in range(7)]
+    text = json.dumps({"decompose": True, "rationale": "Too large", "sub_gaps": sub_gaps})
+    result = run_module._parse_create_game_output(text, max_sub_gaps=5)
+    assert isinstance(result, run_module.DecomposeSpec)
+    assert len(result.sub_gaps) == 5
+    assert result.sub_gaps[0].description == "Gap 0"
+    assert result.sub_gaps[4].description == "Gap 4"
+
+
+def test_parse_create_game_output_does_not_truncate_at_exactly_max() -> None:
+    import baps.run as run_module
+
+    sub_gaps = [{"description": f"Gap {i}"} for i in range(5)]
+    text = json.dumps({"decompose": True, "rationale": "Decomposing", "sub_gaps": sub_gaps})
+    result = run_module._parse_create_game_output(text, max_sub_gaps=5)
+    assert isinstance(result, run_module.DecomposeSpec)
+    assert len(result.sub_gaps) == 5
+
+
+def test_parse_create_game_output_max_sub_gaps_1_allows_only_one() -> None:
+    import baps.run as run_module
+
+    sub_gaps = [{"description": "First"}, {"description": "Second"}]
+    text = json.dumps({"decompose": True, "rationale": "Big gap", "sub_gaps": sub_gaps})
+    result = run_module._parse_create_game_output(text, max_sub_gaps=1)
+    assert isinstance(result, run_module.DecomposeSpec)
+    assert len(result.sub_gaps) == 1
+    assert result.sub_gaps[0].description == "First"
+
+
+def test_resolve_run_config_max_sub_gaps_defaults_to_5(tmp_path: Path) -> None:
+    import argparse
+    import baps.run as run_module
+
+    (tmp_path / "ns.md").write_text("NorthStar")
+    spec = {
+        "project_type": "document",
+        "artifact_id": "doc",
+        "northstar_path": str(tmp_path / "ns.md"),
+        "goal": "write a doc",
+        "output": "out/doc.md",
+    }
+    import yaml
+    spec_path = tmp_path / "spec.yaml"
+    spec_path.write_text(yaml.dump(spec))
+    args = argparse.Namespace(
+        spec=str(spec_path),
+        workspace=str(tmp_path / "ws"),
+        artifact_id=None,
+        goal=None,
+        output=None,
+        max_iterations=None,
+        project_type=None,
+        sandbox=None,
+        command=None,
+    )
+    config = run_module.resolve_run_config(args)
+    assert config["max_sub_gaps"] == 5
+
+
+def test_resolve_run_config_max_sub_gaps_from_spec(tmp_path: Path) -> None:
+    import argparse
+    import baps.run as run_module
+
+    (tmp_path / "ns.md").write_text("NorthStar")
+    spec = {
+        "project_type": "document",
+        "artifact_id": "doc",
+        "northstar_path": str(tmp_path / "ns.md"),
+        "goal": "write a doc",
+        "output": "out/doc.md",
+        "max_sub_gaps": 3,
+    }
+    import yaml
+    spec_path = tmp_path / "spec.yaml"
+    spec_path.write_text(yaml.dump(spec))
+    args = argparse.Namespace(
+        spec=str(spec_path),
+        workspace=str(tmp_path / "ws"),
+        artifact_id=None,
+        goal=None,
+        output=None,
+        max_iterations=None,
+        project_type=None,
+        sandbox=None,
+        command=None,
+    )
+    config = run_module.resolve_run_config(args)
+    assert config["max_sub_gaps"] == 3
+
+
+def test_resolve_run_config_max_sub_gaps_zero_raises(tmp_path: Path) -> None:
+    import argparse
+    import pytest
+    import baps.run as run_module
+
+    (tmp_path / "ns.md").write_text("NorthStar")
+    spec = {
+        "project_type": "document",
+        "artifact_id": "doc",
+        "northstar_path": str(tmp_path / "ns.md"),
+        "goal": "write a doc",
+        "output": "out/doc.md",
+        "max_sub_gaps": 0,
+    }
+    import yaml
+    spec_path = tmp_path / "spec.yaml"
+    spec_path.write_text(yaml.dump(spec))
+    args = argparse.Namespace(
+        spec=str(spec_path),
+        workspace=str(tmp_path / "ws"),
+        artifact_id=None,
+        goal=None,
+        output=None,
+        max_iterations=None,
+        project_type=None,
+        sandbox=None,
+        command=None,
+    )
+    with pytest.raises(ValueError, match="max_sub_gaps must be >= 1"):
+        run_module.resolve_run_config(args)
+
+
+def test_resolve_run_config_max_sub_gaps_non_integer_raises(tmp_path: Path) -> None:
+    import argparse
+    import pytest
+    import baps.run as run_module
+
+    (tmp_path / "ns.md").write_text("NorthStar")
+    spec = {
+        "project_type": "document",
+        "artifact_id": "doc",
+        "northstar_path": str(tmp_path / "ns.md"),
+        "goal": "write a doc",
+        "output": "out/doc.md",
+        "max_sub_gaps": "lots",
+    }
+    import yaml
+    spec_path = tmp_path / "spec.yaml"
+    spec_path.write_text(yaml.dump(spec))
+    args = argparse.Namespace(
+        spec=str(spec_path),
+        workspace=str(tmp_path / "ws"),
+        artifact_id=None,
+        goal=None,
+        output=None,
+        max_iterations=None,
+        project_type=None,
+        sandbox=None,
+        command=None,
+    )
+    with pytest.raises(ValueError, match="max_sub_gaps must be an integer"):
+        run_module.resolve_run_config(args)
+
+
 def test_create_game_prompt_includes_context_chain_when_provided() -> None:
     import baps.run as run_module
 

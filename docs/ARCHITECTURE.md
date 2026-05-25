@@ -103,6 +103,8 @@ Current implementation philosophy:
 
 **`_RunContext`:** Mutable dataclass threaded through recursion tracking current state, remaining iterations, verification result, and stop reason.
 
+**`max_sub_gaps`:** Config key (default 5, spec-overridable) bounding decomposition branching factor. `_parse_create_game_output` truncates any `DecomposeSpec` whose `sub_gaps` length exceeds the limit and prints a notice. Validated >= 1 in `resolve_run_config`.
+
 **Per-role model selection:**
 
 Each role can use a different model backend/model:
@@ -258,6 +260,7 @@ tests/
   test_scheduler.py
   test_northstar_apply.py
   test_tools.py
+  test_sandbox.py
 
 docs/
   SYSTEM.md               # Normative system contract
@@ -444,6 +447,7 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 - State persistence and service mutation
 - Export and verification paths
 - Security boundary tests: path anchoring, symlink escape rejection, policy path validation
+- Sandbox boundary tests: Docker command construction, bind-mount scope, symlink resolution, flag invariants, warning emission, unknown-mode rejection
 - Scheduler policy tests: EMA scoring, softmax selection, underperformer dropping
 
 ---
@@ -467,6 +471,7 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 13. Delta payload models reject unexpected fields.
 14. Model response size is bounded before deserialization.
 15. Model-generated code executes inside a Docker container during verification; unsandboxed execution requires explicit opt-in.
+16. Decomposition branching factor is bounded by `max_sub_gaps`; excess sub-gaps are truncated before recursion begins.
 
 ---
 
@@ -481,7 +486,7 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 
 ## 10. Suggested Next Milestones
 
-1. **`max_sub_gaps` enforcement** — cap branching factor per decomposition to bound worst-case game count
+1. ~~**`max_sub_gaps` enforcement**~~ — done: `max_sub_gaps` config key (default 5) truncates oversized `DecomposeSpec` before execution
 2. **Per-file staleness** — track source hash per file within audit sections for finer-grained invalidation
 3. **Adapter expansion** — new project types register adapters without touching core orchestration
 4. **Stronger contract tests** — verify decomposition invariants and context chain integrity end-to-end
