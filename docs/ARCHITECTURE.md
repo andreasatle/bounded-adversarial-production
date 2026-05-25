@@ -96,7 +96,7 @@ Current implementation philosophy:
 
 ### Runtime (`src/baps/run.py`)
 
-**Lifecycle commands:** `init`, `run`, `init_and_run`
+**Lifecycle commands:** `start`, `reset`
 
 **Key functions:**
 
@@ -129,10 +129,12 @@ Roles: `BLUE`, `RED`, `REFEREE`, `CREATE_GAME`, `DECOMPOSE`. Falls back to globa
 |---|---|
 | `iteration_limit_reached` | `max_iterations` leaf games consumed |
 | `create_game_no_new_game` | No gap at depth 0 |
-| `play_game_no_delta` | PlayGame returned no accepted delta (clears between siblings) |
-| `no_state_change` | Delta produced no state change |
-| `northstar_update_proposed` | CreateGame signalled trajectory drift |
+| `play_game_no_delta` | PlayGame returned no accepted delta; at depth 0, escalates to `northstar_update_proposed` |
+| `no_state_change` | Delta produced no state change; at depth 0, escalates to `northstar_update_proposed` |
+| `northstar_update_proposed` | CreateGame signalled trajectory drift, or gap identified but not closable |
 | `max_depth_reached` | Decomposition exceeded `max_depth` |
+
+`_run_project_iterations` converts `play_game_no_delta` and `no_state_change` to `northstar_update_proposed` at the outer loop, appending a blackboard proposal so the human is alerted through the NorthStar approval channel.
 
 ---
 

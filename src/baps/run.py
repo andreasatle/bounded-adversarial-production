@@ -2122,6 +2122,32 @@ def _run_project_iterations(
             max_depth=max_depth,
             depth=0,
         )
+        # A gap was identified but the system could not close it.  Escalate to
+        # a NorthStar proposal so the human is alerted through the normal
+        # approval channel rather than receiving a silent stop.
+        if ctx.stop_reason in ("play_game_no_delta", "no_state_change"):
+            if ctx.stop_reason == "play_game_no_delta":
+                rationale = (
+                    "Gap was identified but play_game produced no accepted delta — "
+                    "Blue was unable to close the gap. "
+                    "NorthStar may need clarification or the gap may be unreachable "
+                    "with the current approach."
+                )
+            else:
+                rationale = (
+                    "Gap was identified and a delta was produced and accepted, but "
+                    "applying it produced no state change — the gap may already be "
+                    "satisfied or the delta was a no-op. "
+                    "NorthStar may need clarification or the success condition may "
+                    "need revision."
+                )
+            _append_northstar_proposal_to_blackboard(
+                workspace=config["workspace"],
+                rationale=rationale,
+                proposed_northstar=_config_northstar_markdown(config),
+            )
+            ctx.northstar_proposal_written = True
+            ctx.stop_reason = "northstar_update_proposed"
 
     if ctx.stop_reason is None:
         ctx.stop_reason = "iteration_limit_reached"

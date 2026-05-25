@@ -3871,7 +3871,8 @@ def test_main_exits_cleanly_if_play_game_returns_none(monkeypatch, capsys, tmp_p
     assert "error: play_game produced no DeltaState" not in captured.err
     assert "update_applied=False" in captured.out
     assert "state_changed=False" in captured.out
-    assert "stop_reason=play_game_no_delta" in captured.out
+    assert "stop_reason=northstar_update_proposed" in captured.out
+    assert "northstar_proposal_written=True" in captured.out
 
 
 def test_main_max_iterations_two_runs_two_iterations_with_state_carry_forward(
@@ -4061,7 +4062,8 @@ def test_main_stop_reason_no_state_change_when_applied_delta_has_no_effect(
     )
     run_module.main()
     out = capsys.readouterr().out
-    assert "stop_reason=no_state_change" in out
+    assert "stop_reason=northstar_update_proposed" in out
+    assert "northstar_proposal_written=True" in out
     assert "state_changed=False" in out
     assert "update_applied=True" in out
 
@@ -4099,7 +4101,7 @@ def test_main_no_state_change_stops_loop_before_max_iterations(
     )
     run_module.main()
     out = capsys.readouterr().out
-    assert "stop_reason=no_state_change" in out
+    assert "stop_reason=northstar_update_proposed" in out
     assert create_game_calls["n"] == 1
 
 
@@ -4133,8 +4135,70 @@ def test_main_no_state_change_after_prior_state_change_reports_state_changed_tru
     )
     run_module.main()
     out = capsys.readouterr().out
-    assert "stop_reason=no_state_change" in out
+    assert "stop_reason=northstar_update_proposed" in out
     assert "state_changed=True" in out
+
+
+def test_play_game_no_delta_escalates_to_northstar_proposal(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    import baps.run as run_module
+
+    workspace = tmp_path / "ws-no-delta-proposal"
+    monkeypatch.setattr(run_module, "play_game", lambda _s, _g, adapter=None, verification_result=None, **_kw: None)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run", "start",
+            "--workspace", str(workspace),
+            "--project-type", "document",
+            "--artifact-id", "main-document",
+            "--goal", "Write a report.", "--output", "output/report.md",
+        ],
+    )
+    run_module.main()
+    out = capsys.readouterr().out
+    assert "stop_reason=northstar_update_proposed" in out
+    assert "northstar_proposal_written=True" in out
+
+    proposals_path = workspace / "blackboard" / "northstar_proposals.jsonl"
+    assert proposals_path.exists()
+    entry = json.loads(proposals_path.read_text(encoding="utf-8").strip())
+    assert entry["event"] == "northstar_update_proposal"
+    assert "play_game produced no accepted delta" in entry["rationale"]
+    assert "created_at" in entry
+
+
+def test_no_state_change_escalates_to_northstar_proposal(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    import baps.run as run_module
+    import baps.state_service as ss_module
+
+    workspace = tmp_path / "ws-no-change-proposal"
+    monkeypatch.setattr(ss_module.StateService, "states_differ", lambda self, _b, _a: False)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run", "start",
+            "--workspace", str(workspace),
+            "--project-type", "document",
+            "--artifact-id", "main-document",
+            "--goal", "Write a report.", "--output", "output/report.md",
+            "--max-iterations", "3",
+        ],
+    )
+    run_module.main()
+    out = capsys.readouterr().out
+    assert "stop_reason=northstar_update_proposed" in out
+    assert "northstar_proposal_written=True" in out
+
+    proposals_path = workspace / "blackboard" / "northstar_proposals.jsonl"
+    assert proposals_path.exists()
+    entry = json.loads(proposals_path.read_text(encoding="utf-8").strip())
+    assert entry["event"] == "northstar_update_proposal"
+    assert "no state change" in entry["rationale"].lower()
+    assert "created_at" in entry
 
 
 def test_main_create_game_parse_error_is_not_swallowed_as_no_game(

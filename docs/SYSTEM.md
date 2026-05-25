@@ -89,7 +89,7 @@ When CreateGame returns a `DecomposeSpec`:
 - The current gap's description is prepended to `context_chain` before each recursive call
 - Recursion is bounded by `max_depth` (config key, default 3)
 - Sub-gaps are executed sequentially; each leaf applies its delta to state before the next sub-gap begins
-- A `play_game_no_delta` result at a leaf does not abort sibling sub-gaps; only real stop conditions propagate up
+- A `play_game_no_delta` result at a leaf clears between sibling sub-gaps and does not abort them; only real stop conditions propagate up
 - `NoNewGameError` at depth > 0 means the sub-gap is satisfied; only at depth 0 does it stop the run
 - Only leaf `PlayGame` executions count against `max_iterations`
 - `max_depth_reached` is a valid stop reason when decomposition exceeds the depth limit
@@ -126,10 +126,12 @@ Blackboard is append-only and non-authoritative. It never feeds back into `State
 |---|---|
 | `iteration_limit_reached` | `max_iterations` leaf games executed |
 | `create_game_no_new_game` | No gap remains at depth 0 |
-| `play_game_no_delta` | PlayGame produced no accepted delta (leaf only; siblings continue) |
-| `no_state_change` | Accepted delta produced no state change |
-| `northstar_update_proposed` | Trajectory drift detected; human approval needed |
+| `play_game_no_delta` | PlayGame produced no accepted delta; at depth 0, escalates to `northstar_update_proposed` |
+| `no_state_change` | Accepted delta produced no state change; at depth 0, escalates to `northstar_update_proposed` |
+| `northstar_update_proposed` | Trajectory drift, or gap was identified but could not be closed; human approval needed |
 | `max_depth_reached` | Decomposition exceeded `max_depth` |
+
+`play_game_no_delta` and `no_state_change` are internal conditions. At depth 0, `_run_project_iterations` converts them to `northstar_update_proposed` and appends a blackboard proposal explaining the stuck condition so the human is alerted through the standard NorthStar approval channel rather than receiving a silent stop.
 
 ## 9. Anti-Invariants (Forbidden Drift)
 
@@ -147,6 +149,7 @@ Blackboard is append-only and non-authoritative. It never feeds back into `State
 12. Embedding model-generated content in prompts without sanitization.
 12. Treating a completed decomposition pass as project completion without re-running CreateGame.
 14. Running model-generated code unsandboxed without explicit `sandbox=none` opt-in and warning.
+15. Silently halting when a gap was identified but could not be closed (`play_game_no_delta` or `no_state_change` at depth 0); the runtime must escalate to `northstar_update_proposed` and write a blackboard proposal.
 
 ## 10. Authority and Boundaries
 
