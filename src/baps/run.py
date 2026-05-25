@@ -783,8 +783,8 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
     source_include_raw = spec_data.get("source_include")
     source_include = list(source_include_raw) if isinstance(source_include_raw, list) else None
 
-    language_raw = _resolve(None, "language", "python")
-    language = str(language_raw)
+    language_raw = _resolve(getattr(args, "language", None), "language")
+    language = str(language_raw) if language_raw is not None else ""
 
     sandbox_raw = _resolve(getattr(args, "sandbox", None), "sandbox", "docker")
     sandbox = str(sandbox_raw)
@@ -2227,6 +2227,10 @@ def main() -> None:
         p.add_argument(
             "--sandbox", default=None, choices=("docker", "none"),
             help="Sandbox mode for code execution: 'docker' (default) or 'none' (unsafe, prints warning).",
+        )
+        p.add_argument(
+            "--language", default=None,
+            help="Language plugin for coding projects (e.g. python, zig). Required for coding project type.",
         )
 
     start_parser = subparsers.add_parser(

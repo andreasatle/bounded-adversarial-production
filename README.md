@@ -46,16 +46,16 @@ Reads an external source tree and produces a structured findings report. Each fi
 
 ## Language plugins (coding projects)
 
-The coding adapter is language-agnostic. The `language` key in your spec selects a plugin that owns the Docker image, the test command, and the project scaffolding.
+The coding adapter is language-agnostic. The `language` key in your spec is required and selects a plugin that owns the Docker image, the test command, and the project scaffolding.
 
 Built-in plugins:
 
 | Language | `language` key | Docker image | Test command |
 |---|---|---|---|
-| Python | `python` (default) | `python:3.12-slim` | `pip install pytest -q && python -m pytest` |
+| Python | `python` | `python:3.12-slim` | `pip install pytest -q && python -m pytest` |
 | Zig | `zig` | `baps-zig:latest` | `zig build test` |
 
-Set `language: zig` in your spec and the Zig plugin handles everything — the right image is used, the right test command runs, and `build.zig` is scaffolded if it does not exist.
+The plugin handles everything — the right image is used, the right test command runs, and project boilerplate is scaffolded if it does not exist.
 
 The Zig image is not pulled from a registry — build it locally before first use:
 
@@ -206,7 +206,7 @@ It scores models by EMA reward, selects via softmax with temperature decay, esca
 ```yaml
 project_type: coding          # coding | document | audit
 artifact_id: main-codebase    # identifier for the state artifact
-language: python              # coding only: python (default) | zig
+language: python              # coding only (required): python | zig
 goal: "..."                   # human-readable goal; also used as NorthStar fallback
 northstar_markdown: |         # target state; all gap analysis measures against this
   ...

@@ -157,7 +157,7 @@ Roles: `BLUE`, `RED`, `REFEREE`, `CREATE_GAME`, `DECOMPOSE`. Falls back to globa
 - Export: file tree + language-plugin boilerplate
 - Verification: delegates to `LanguagePlugin.run_tests`; result evidence feeds next CreateGame
 - Sandbox: `sandbox_mode` propagated from config/CLI through `run.py` → `play_game` → adapter → plugin → `sandbox.run_sandboxed`
-- Language resolved from `CodingArtifact.language` (set at `create_initial_state` from the spec's `language` key; default `"python"`); unknown names raise `ValueError` at creation time with the list of available languages
+- Language resolved from `CodingArtifact.language` (set at `create_initial_state` from the spec's `language` key; **required** — omitting it raises `ValueError` listing available languages); unknown names also raise `ValueError`
 
 #### Language Plugins (`src/baps/language_plugin.py`, `src/baps/language_python.py`, `src/baps/language_zig.py`)
 
@@ -378,7 +378,7 @@ Only leaf PlayGame executions count against `max_iterations`. Decomposition is f
 
 ### `CodingArtifact`
 
-- Fields: `id`, `kind` (`"coding"`), `language` (default `"python"`), `files`
+- Fields: `id`, `kind` (`"coding"`), `language` (required; set from spec at creation time), `files`
 - `language`: set at `create_initial_state` from the spec's `language` key; persists in authoritative state; read by all coding operations (export, verify_export, verify_candidate) to select the language plugin
 
 ### `Section`

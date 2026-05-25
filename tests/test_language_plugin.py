@@ -330,10 +330,29 @@ def test_has_tests_mixed_returns_true() -> None:
 # CodingProjectAdapter language selection
 # ---------------------------------------------------------------------------
 
-def test_coding_adapter_create_initial_state_defaults_to_python() -> None:
+def test_coding_adapter_create_initial_state_missing_language_raises() -> None:
     from baps.coding_adapter import CodingProjectAdapter
 
-    state = CodingProjectAdapter().create_initial_state({"artifact_id": "art", "northstar_markdown": "x"})
+    with pytest.raises(ValueError, match="requires a 'language' field"):
+        CodingProjectAdapter().create_initial_state({"artifact_id": "art", "northstar_markdown": "x"})
+
+
+def test_coding_adapter_create_initial_state_missing_language_error_lists_available() -> None:
+    from baps.coding_adapter import CodingProjectAdapter
+
+    with pytest.raises(ValueError, match="python"):
+        CodingProjectAdapter().create_initial_state({"artifact_id": "art", "northstar_markdown": "x"})
+
+    with pytest.raises(ValueError, match="zig"):
+        CodingProjectAdapter().create_initial_state({"artifact_id": "art", "northstar_markdown": "x"})
+
+
+def test_coding_adapter_create_initial_state_accepts_python() -> None:
+    from baps.coding_adapter import CodingProjectAdapter
+
+    state = CodingProjectAdapter().create_initial_state(
+        {"artifact_id": "art", "language": "python", "northstar_markdown": "x"}
+    )
     artifact = next(a for a in state.artifacts if a.id == "art")
     assert artifact.language == "python"  # type: ignore[union-attr]
 

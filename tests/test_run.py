@@ -5021,6 +5021,7 @@ def test_coding_create_state_creates_coding_artifact() -> None:
             "workspace": Path(".baps-workspace"),
             "project_type": "coding",
             "artifact_id": "main-codebase",
+            "language": "python",
             "goal": "Implement Fibonacci",
             "northstar_markdown": "# Goal\n\nImplement Fibonacci",
             "output_path": Path(".baps-workspace/output/project"),
@@ -5042,6 +5043,7 @@ def test_coding_create_game_state_view_is_textual_with_delimiters() -> None:
         "workspace": Path(".baps-workspace"),
         "project_type": "coding",
         "artifact_id": "main-codebase",
+        "language": "python",
         "goal": "Implement Fibonacci",
         "northstar_markdown": "# Goal\n\nImplement Fibonacci",
         "output_path": Path(".baps-workspace/output/project"),
@@ -5092,6 +5094,7 @@ def test_coding_create_game_prompt_includes_multi_file_guidance() -> None:
         "workspace": Path(".baps-workspace"),
         "project_type": "coding",
         "artifact_id": "main-codebase",
+        "language": "python",
         "goal": "Implement Fibonacci with tests",
         "northstar_markdown": "# Goal\n\nImplement Fibonacci with tests",
         "output_path": Path(".baps-workspace/output/project"),
@@ -5119,6 +5122,7 @@ def test_coding_create_game_prompt_includes_previous_verification_evidence() -> 
         "workspace": Path(".baps-workspace"),
         "project_type": "coding",
         "artifact_id": "main-codebase",
+        "language": "python",
         "goal": "Implement Fibonacci with tests",
         "northstar_markdown": "# Goal\n\nImplement Fibonacci with tests",
         "output_path": Path(".baps-workspace/output/project"),
@@ -5180,6 +5184,7 @@ def test_coding_create_game_accepts_src_file_task_first_iteration() -> None:
         "workspace": Path(".baps-workspace"),
         "project_type": "coding",
         "artifact_id": "main-codebase",
+        "language": "python",
         "goal": "Implement Fibonacci with tests",
         "northstar_markdown": (
             "# Goal\n\nImplement Fibonacci with tests.\n"
@@ -5260,6 +5265,7 @@ def test_coding_normalize_passes_through_model_objective_and_success_condition()
         "workspace": Path(".baps-workspace"),
         "project_type": "coding",
         "artifact_id": "main-codebase",
+        "language": "python",
         "goal": "Implement a text similarity utility",
         "northstar_markdown": (
             "# Goal\n\nImplement a text similarity utility.\n"
@@ -5295,6 +5301,7 @@ def test_coding_normalize_does_not_inject_hardcoded_file_paths() -> None:
         "workspace": Path(".baps-workspace"),
         "project_type": "coding",
         "artifact_id": "main-codebase",
+        "language": "python",
         "goal": "Implement a text similarity utility",
         "northstar_markdown": "# Goal\n\nImplement a text similarity utility.",
         "output_path": Path(".baps-workspace/output/project"),
@@ -5326,6 +5333,7 @@ def test_coding_normalization_overrides_file_path_target_artifact_id() -> None:
         "workspace": Path(".baps-workspace"),
         "project_type": "coding",
         "artifact_id": "main-codebase",
+        "language": "python",
         "goal": "Implement Fibonacci with tests",
         "northstar_markdown": "# Goal\n\nImplement Fibonacci with tests.",
         "output_path": Path(".baps-workspace/output/project"),
@@ -6192,6 +6200,8 @@ def test_coding_run_no_files_keeps_output_exported_false(monkeypatch, tmp_path: 
             "output/project",
             "--max-iterations",
             "1",
+            "--language",
+            "python",
         ],
     )
     run_module.main()
@@ -6252,6 +6262,8 @@ def test_coding_run_summary_includes_verification_status(
             "1",
             "--sandbox",
             "none",
+            "--language",
+            "python",
         ],
     )
     run_module.main()
@@ -6372,6 +6384,8 @@ def test_coding_init_and_run_exports_fibonacci_files(monkeypatch, tmp_path: Path
             "2",
             "--sandbox",
             "none",
+            "--language",
+            "python",
         ],
     )
 
@@ -6622,6 +6636,8 @@ def test_coding_iteration_two_does_not_receive_stale_verification_result(
             "2",
             "--sandbox",
             "none",
+            "--language",
+            "python",
         ],
     )
     run_module.main()
@@ -6724,6 +6740,8 @@ def test_coding_create_game_receives_previous_verification_result_second_iterati
             "output/project",
             "--max-iterations",
             "2",
+            "--language",
+            "python",
         ],
     )
     run_module.main()
@@ -7733,7 +7751,7 @@ def test_resolve_run_config_language_zig_propagates_to_config(tmp_path: Path) ->
     assert config["language"] == "zig"
 
 
-def test_resolve_run_config_language_defaults_to_python(tmp_path: Path) -> None:
+def test_resolve_run_config_language_absent_leaves_empty_string(tmp_path: Path) -> None:
     import argparse
     import yaml
     import baps.run as run_module
@@ -7759,7 +7777,7 @@ def test_resolve_run_config_language_defaults_to_python(tmp_path: Path) -> None:
         command=None,
     )
     config = run_module.resolve_run_config(args)
-    assert config["language"] == "python"
+    assert config["language"] == ""
 
 
 def test_create_game_prompt_includes_context_chain_when_provided() -> None:

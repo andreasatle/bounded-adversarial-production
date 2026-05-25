@@ -78,7 +78,7 @@ All three participate through the same adapter contract and orchestration path.
 
 ### Coding language plugins
 
-The coding adapter delegates language-specific behavior to a `LanguagePlugin`. The plugin is selected from the `language` key in the spec (default: `python`). Built-in plugins:
+The coding adapter delegates language-specific behavior to a `LanguagePlugin`. The `language` key is required in every coding spec; omitting it raises an error listing available languages. Built-in plugins:
 
 - `python` — `python:3.12-slim` image, `pip install pytest -q && python -m pytest`; scaffolds `conftest.py` + `.gitignore`
 - `zig` — `baps-zig:latest` image (build locally: `docker build -t baps-zig:latest docker/zig/`), `zig build test`; scaffolds `build.zig` + `src/main.zig` + `.gitignore`

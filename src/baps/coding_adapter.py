@@ -85,7 +85,14 @@ def _plugin_for(language: str) -> LanguagePlugin:
 
 
 def _config_language(config: dict[str, object]) -> str:
-    return str(config.get("language", "python"))
+    language = config.get("language")
+    if not language:
+        registry = _build_language_registry()
+        available = ", ".join(sorted(registry))
+        raise ValueError(
+            f"coding project spec requires a 'language' field. Available languages: {available}"
+        )
+    return str(language)
 
 
 def coding_artifact_from_state(state: State, artifact_id: str) -> CodingArtifact:
@@ -675,7 +682,7 @@ class CodingProjectAdapter:
         attempt_number: int,
         previous_feedback: dict[str, object] | None,
     ) -> str:
-        language = str(state_view.metadata.get("language", "python"))
+        language = str(state_view.metadata["language"])
         plugin = _plugin_for(language)
         return render_coding_blue_prompt(
             state_view=state_view,
