@@ -51,7 +51,7 @@ _GITIGNORE_CONTENT = (
 
 class ZigLanguagePlugin:
     name = "zig"
-    docker_image = "tangowithfoxtrot/zig:latest"
+    docker_image = "rawpair/zig:latest"
     test_command = "zig build test"
 
     def initialize(self, project_path: Path) -> bool:
