@@ -391,7 +391,7 @@ def test_zig_plugin_name() -> None:
 def test_zig_plugin_docker_image() -> None:
     from baps.language_zig import ZigLanguagePlugin
 
-    assert ZigLanguagePlugin.docker_image == "ziglang/zig:latest"
+    assert ZigLanguagePlugin.docker_image == "ziglings/ziglang:latest"
 
 
 def test_zig_plugin_test_command() -> None:
@@ -523,7 +523,7 @@ def test_coding_adapter_verify_export_zig_uses_zig_docker_image(tmp_path: Path) 
         CodingProjectAdapter().verify_export(output_path, state, "art", sandbox_mode="docker")
 
     docker_args = mock_run.call_args[0][0]
-    assert "ziglang/zig:latest" in docker_args
+    assert "ziglings/ziglang:latest" in docker_args
 
 
 def test_coding_adapter_verify_export_zig_uses_zig_test_command(tmp_path: Path) -> None:
@@ -587,7 +587,7 @@ def test_coding_adapter_verify_candidate_zig_uses_zig_docker_image(tmp_path: Pat
 
     assert result is not None
     docker_args = mock_run.call_args[0][0]
-    assert "ziglang/zig:latest" in docker_args
+    assert "ziglings/ziglang:latest" in docker_args
 
 
 def test_coding_adapter_verify_candidate_zig_uses_zig_test_command(tmp_path: Path) -> None:
