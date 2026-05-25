@@ -1,292 +1,218 @@
-# bounded-adversarial-production (BAPS)
+# baps — bounded adversarial production
 
-BAPS is a framework for **multiscale, bounded, model-driven project evolution**.
+`baps` is a CLI runtime for iterative, model-driven project evolution. You give it a spec with a NorthStar (the desired end state) and it runs a loop: identify the highest-priority gap, have a model propose a change, have two other model roles challenge it, apply what passes. Repeat until there are no gaps left.
 
-Projects evolve through:
-
-- authoritative state
-- NorthStar as the target
-- gap analysis at multiple scales
-- recursive decomposition into coherent sub-games
-- adversarial bounded execution
-- typed deltas with full context chain
-- controlled state mutation
-- exported outputs
+It is not an autonomous agent that does whatever it wants. Every iteration is bounded by the spec, every mutation goes through a typed state service, and every claim by the model that writes code gets challenged by a model that looks for problems.
 
 ---
 
-## Canonical Runtime
+## How it works
 
-```text
-config/NorthStar
-        ↓
-      State
-        ↓
-    StateView
-        ↓
-   CreateGame ──→ DecomposeSpec ──→ sub-gaps (recursive, up to max_depth)
-        ↓
-  GameSpec (with context_chain from all ancestor levels)
-        ↓
-     PlayGame (Blue → Red → Referee)
-        ↓
-    DeltaState
-        ↓
-StateUpdateProposal
-        ↓
-   StateService
-        ↓
-      export
+```
+NorthStar (your spec)
+    ↓
+CreateGame — identifies the highest-priority gap between current state and NorthStar
+    ↓ (gap too large? decompose into sub-gaps, solve recursively)
+GameSpec — a bounded task contract
+    ↓
+PlayGame — Blue proposes a change, Red challenges it, Referee accepts/rejects
+    ↓
+StateService — applies the accepted delta to authoritative state
+    ↓
+export — writes output files
+    ↓
+loop until no gaps remain
 ```
 
-CreateGame performs **gap analysis** — it compares current state against NorthStar, identifies the highest-priority gap, and either produces a `GameSpec` to close it directly or returns a `DecomposeSpec` to split it into coherent sub-gaps. Sub-gaps are solved recursively. Every leaf `GameSpec` carries the full `context_chain` from all ancestor levels, so Blue always has the complete planning hierarchy.
-
-Lifecycle commands:
-
-```bash
-baps-run init
-baps-run run
-baps-run init_and_run
-```
-
-Additional tools:
-
-```bash
-baps-scheduler       # adaptive multi-model scheduler with policy learning
-baps-apply-northstar # review and apply approved NorthStar proposals
-```
+CreateGame is gap analysis, not step planning. It does not decide what to do next — it compares the current state against your NorthStar and closes the most important thing that is missing.
 
 ---
 
-## Core Concepts
+## Project types
 
-### NorthStar
+### document
 
-NorthStar is the **target state** — what the completed project should look like. It is authoritative and immutable through the automated pipeline. Updates require human approval via `baps-apply-northstar`.
+Evolves a structured markdown document through section operations (`append_section`, `modify_section`, `delete_section`). Useful for specs, reports, or any document that should converge toward a defined structure.
 
-NorthStar is embedded inside `State` and visible to models only through `StateView`.
+### coding
 
----
+Evolves a codebase through file operations (`write_file`, `write_files`, `delete_file`). After each accepted change, the code is exported and run inside a Docker container to verify tests pass. The verification result feeds back into the next planning step.
 
-### State
+### audit
 
-`State` is the authoritative project condition.
-
-- persisted as JSON via `StateService`
-- contains `NorthStar`
-- contains project artifacts (document, coding)
-- never passed directly to model prompts
+Reads an external source tree and produces a structured findings report. Each finding records a hash of the source files it covers; on re-runs, findings whose source has changed are flagged as stale.
 
 ---
 
-### StateView
+## Language plugins (coding projects)
 
-`StateView` is the **model-facing textual projection**.
+The coding adapter is language-agnostic. The `language` key in your spec selects a plugin that owns the Docker image, the test command, and the project scaffolding.
 
-Models consume `StateView.content` — never raw `State` JSON.
+Built-in plugins:
 
-```text
-=== StateView Start ===
+| Language | `language` key | Docker image | Test command |
+|---|---|---|---|
+| Python | `python` (default) | `python:3.12-slim` | `pip install pytest -q && python -m pytest` |
+| Zig | `zig` | `rawpair/zig:latest` | `zig build test` |
 
---- NorthStar ---
+Set `language: zig` in your spec and the Zig plugin handles everything — the right image is used, the right test command runs, and `build.zig` is scaffolded if it does not exist.
 
-# Goal
-Implement a Fibonacci generator.
-
---- State Artifacts ---
-
-## Artifact: main-codebase
-kind: coding
-
-### src/fibonacci.py
-def fibonacci(n): ...
-... (12 more lines)
-
-=== StateView End ===
-```
+Adding a new language means writing one plugin file and registering it. Nothing else changes.
 
 ---
 
-### CreateGame
+## Docker sandbox
 
-CreateGame performs **gap analysis** against NorthStar:
+All code verification runs inside Docker by default. The model's output never executes on your host.
 
-1. **GAP ANALYSIS** — enumerate what NorthStar requires that is absent or incomplete
-2. **PRIORITIZE** — select the highest-impact gap
-3. **DECIDE** — can Blue close this gap in one turn? If yes → `GameSpec`. If not → `DecomposeSpec`
-4. **SELF-CONTAIN** — fold all NorthStar intent into the output
-
-Returns one of:
-- `GameSpec` — directly executable leaf game
-- `DecomposeSpec` — split into ordered sub-gaps, each solved recursively
-- `{"no_new_game": true}` — all gaps closed
-- `{"northstar_update_needed": true}` — trajectory requires NorthStar change (human approval)
-
----
-
-### Context Chain
-
-Each `GameSpec` carries a `context_chain` — the ordered list of gap descriptions from the coarsest decomposition down to the immediate task. Blue sees the full chain, giving every leaf game awareness of why it exists in the broader plan.
-
-```text
-[1] Authentication subsystem is entirely absent
-[2] JWT token generation has no implementation
-[current] Write jwt_utils.py with sign() and verify()
-```
-
----
-
-### PlayGame
-
-PlayGame executes bounded adversarial evaluation:
-
-```text
-Blue   → proposes candidate DeltaState
-Red    → critiques the proposal
-Referee → decides: accept / revise / reject
-```
-
-Bounded by `max_attempts` (default 3). Each role can use a different model via per-role model selection.
-
----
-
-### Delta Operations
-
-**Document adapter:**
-
-| Operation | Description |
-|---|---|
-| `append_section` | Add a new section |
-| `modify_section` | Rewrite an existing section |
-| `delete_section` | Remove a section |
-
-**Coding adapter:**
-
-| Operation | Description |
-|---|---|
-| `write_file` | Write a single file |
-| `write_files` | Write multiple files in one game (preferred) |
-| `delete_file` | Remove a file |
-
----
-
-### Integration
-
-Accepted deltas become:
-
-```text
-DeltaState → StateUpdateProposal → StateService
-```
-
-`StateService` is the only mutation boundary. NorthStar artifacts are protected — `StateService` rejects any proposal targeting them.
-
----
-
-### Export
-
-Export materializes state to output files. It is one-way and non-authoritative — exported files never define state.
-
----
-
-## Project Types
-
-### Document
-
-Evolves a structured markdown document via section operations.
-
-```bash
-uv run baps-run init_and_run \
-    --spec examples/document-project.yaml
-```
-
-### Coding
-
-Evolves a codebase via file operations with pytest verification.
-
-```bash
-uv run baps-run init_and_run \
-    --spec examples/coding-project.yaml
-```
-
----
-
-## Model Configuration
-
-Backend selection via environment variables:
-
-```bash
-BAPS_BACKEND=anthropic          # anthropic | openai | ollama
-BAPS_ANTHROPIC_MODEL=claude-sonnet-4-6
-BAPS_OPENAI_MODEL=gpt-4o
-BAPS_OLLAMA_MODEL=llama3.1:8b
-```
-
-Per-role model override (any role can use a different model):
-
-```bash
-BAPS_BLUE_BACKEND=anthropic
-BAPS_BLUE_MODEL=claude-sonnet-4-6
-BAPS_RED_BACKEND=anthropic
-BAPS_RED_MODEL=claude-haiku-4-5-20251001
-BAPS_REFEREE_BACKEND=anthropic
-BAPS_REFEREE_MODEL=claude-haiku-4-5-20251001
-BAPS_CREATE_GAME_BACKEND=anthropic
-BAPS_CREATE_GAME_MODEL=claude-opus-4-7
-BAPS_DECOMPOSE_BACKEND=ollama
-BAPS_DECOMPOSE_MODEL=llama3.2
-```
-
-The `DECOMPOSE` role handles CreateGame calls at decomposition nodes (depth > 0) — the structural planning tasks that split a large gap into sub-gaps. It requires less capability than leaf execution and can use a lighter/faster model. When `BAPS_DECOMPOSE_*` is unset, the decompose role falls back to the `CREATE_GAME` client transparently.
-
-Keys are loaded from `.env` at startup.
-
----
-
-## Adaptive Scheduler
-
-The scheduler runs specs repeatedly with policy-guided model selection:
-
-```bash
-uv run baps-scheduler \
-    examples/document-project.yaml \
-    examples/coding-project.yaml \
-    --concurrency 2 \
-    --rounds 5 \
-    --escalation-threshold 0.5
-```
-
-- Models are ranked by EMA reward score
-- Softmax selection with temperature decay over runs
-- Automatic escalation to stronger models on failure
-- Underperforming models dropped after enough runs
-- Model ladder configurable via `BAPS_MODEL_LADDER`
-
----
-
-## Spec Format
+To run without Docker (development only):
 
 ```yaml
-project_type: coding
-artifact_id: main-codebase
-goal: Build a Fibonacci generator with tests.
-northstar_markdown: |
-  # Goal
-  Implement a complete, tested Fibonacci generator.
-output_path: output/
-max_iterations: 10
-max_depth: 3        # maximum decomposition depth (default: 3)
-workspace: .baps-workspace/my-project
+sandbox: none
 ```
+
+This prints a warning and should not be used in production.
 
 ---
 
-## Installation
+## Getting started
+
+**Install:**
 
 ```bash
 uv sync
 ```
 
-Run tests:
+**Write a spec** (e.g. `my-project.yaml`):
+
+```yaml
+project_type: coding
+artifact_id: main-codebase
+language: python
+goal: "Implement a binary search tree with insert, search, and delete."
+northstar_markdown: |
+  # Goal
+  Implement a binary search tree in Python with:
+  - insert(value)
+  - search(value) -> bool
+  - delete(value)
+  - Tests for all three operations using pytest
+output: output/bst-project
+workspace: .baps-workspace/bst
+max_iterations: 10
+```
+
+**Run:**
+
+```bash
+uv run baps-run start --spec my-project.yaml
+```
+
+baps initializes state on the first run and resumes from where it left off on subsequent runs.
+
+**Wipe and start over:**
+
+```bash
+uv run baps-run reset --spec my-project.yaml
+uv run baps-run start --spec my-project.yaml
+```
+
+---
+
+## Commands
+
+### `start`
+
+Smart continue-or-begin. If the workspace has no state, initializes from scratch. If state exists, resumes the loop from the current state.
+
+```bash
+uv run baps-run start --spec examples/coding-project.yaml
+uv run baps-run start --spec examples/coding-project-zig.yaml
+uv run baps-run start --spec examples/document-project.yaml
+uv run baps-run start --spec examples/audit-baps.yaml
+```
+
+### `reset`
+
+Wipes workspace state and output, then exits. No model calls are made. Run this before `start` when you want a clean slate.
+
+```bash
+uv run baps-run reset --spec examples/coding-project.yaml
+```
+
+---
+
+## Model configuration
+
+```bash
+# Pick a backend
+BAPS_BACKEND=anthropic        # or: openai, ollama (default)
+
+# Anthropic
+ANTHROPIC_API_KEY=sk-...
+BAPS_ANTHROPIC_MODEL=claude-sonnet-4-6
+
+# OpenAI
+OPENAI_API_KEY=sk-...
+BAPS_OPENAI_MODEL=gpt-4o
+
+# Ollama (local)
+BAPS_OLLAMA_MODEL=llama3.2
+```
+
+Each role (Blue, Red, Referee, CreateGame, Decompose) can use a different model:
+
+```bash
+BAPS_BLUE_BACKEND=anthropic
+BAPS_BLUE_MODEL=claude-sonnet-4-6
+BAPS_RED_MODEL=claude-haiku-4-5-20251001
+BAPS_REFEREE_MODEL=claude-haiku-4-5-20251001
+BAPS_DECOMPOSE_BACKEND=ollama
+BAPS_DECOMPOSE_MODEL=llama3.2
+```
+
+The Decompose role handles structural gap-splitting at planning nodes and can use a lighter model than the roles that write code.
+
+Keys are loaded from `.env` at startup.
+
+---
+
+## Adaptive scheduler
+
+The scheduler runs specs repeatedly and learns which models perform best:
+
+```bash
+uv run baps-scheduler \
+    examples/coding-project.yaml \
+    examples/document-project.yaml \
+    --concurrency 2 \
+    --rounds 5
+```
+
+It scores models by EMA reward, selects via softmax with temperature decay, escalates to stronger models on repeated failures, and drops underperformers after enough runs. Configure the model ladder with `BAPS_MODEL_LADDER`.
+
+---
+
+## Spec reference
+
+```yaml
+project_type: coding          # coding | document | audit
+artifact_id: main-codebase    # identifier for the state artifact
+language: python              # coding only: python (default) | zig
+goal: "..."                   # human-readable goal; also used as NorthStar fallback
+northstar_markdown: |         # target state; all gap analysis measures against this
+  ...
+output: output/my-project     # where exported files go (relative to workspace)
+workspace: .baps-workspace/x  # where state and run metadata live
+max_iterations: 10            # max leaf games per run
+max_depth: 3                  # max decomposition depth (default: 3)
+max_sub_gaps: 5               # max sub-gaps per decomposition (default: 5)
+sandbox: docker               # docker (default) | none
+```
+
+---
+
+## Run tests
 
 ```bash
 uv run pytest
@@ -294,20 +220,7 @@ uv run pytest
 
 ---
 
-## Architecture Principles
-
-1. **State is authoritative.** Never bypassed or replaced.
-2. **StateView is model-facing.** Not authority — projection only.
-3. **NorthStar is the target.** CreateGame closes gaps toward it, not arbitrary steps.
-4. **Decomposition is multiscale.** Large gaps split recursively; context flows down.
-5. **Project mechanics belong to adapters.** Core orchestration stays generic.
-6. **StateService owns mutation.** The only path to durable state change.
-7. **Export is one-way.** Derived materialization; never feeds back as authority.
-
----
-
 ## Documentation
 
-System contract: `docs/SYSTEM.md`
-
-Implementation details: `docs/ARCHITECTURE.md`
+- `docs/SYSTEM.md` — normative contract: invariants, adapter contract, stop conditions, forbidden patterns
+- `docs/ARCHITECTURE.md` — implementation: components, schemas, runtime flow, repository structure

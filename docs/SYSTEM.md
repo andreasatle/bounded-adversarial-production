@@ -48,7 +48,7 @@ CreateGame is a **gap-analysis operation**, not a step-forward operation. It com
 17. Delta payload models reject extra fields (`extra="forbid"`); unexpected model output fields cause validation failure rather than silent discard.
 18. Model response size is bounded before JSON deserialization (64 KB cap in `normalize_json_candidate`).
 19. Decomposition branching is bounded by `max_sub_gaps` (config key, default 5); a `DecomposeSpec` with more sub-gaps is truncated to the first `max_sub_gaps` entries before execution.
-20. Model-generated code executes inside an isolated Docker container during verification; `sandbox=none` is an explicit opt-in that emits a runtime warning and must not be used in production.
+20. Model-generated code executes inside a Docker container during verification via `sandbox.run_sandboxed(cwd, mode, test_command, docker_image)`; the container image and test command are owned by the language plugin; `sandbox=none` is an explicit opt-in that emits a runtime warning and must not be used in production.
 
 ## 3. Adapter Contract
 
@@ -62,6 +62,7 @@ CreateGame is a **gap-analysis operation**, not a step-forward operation. It com
 6. Delta → `StateUpdateProposal` mapping
 7. Export
 8. Optional export verification
+9. Language plugin resolution (coding adapter only): the `language` spec key selects a `LanguagePlugin` at state-creation time; the plugin owns `docker_image`, `test_command`, `initialize`, `run_tests`, `has_tests`, and `parse_test_failures`; unknown language names raise immediately with the list of available languages; adding a new language requires implementing `LanguagePlugin` and registering it — `sandbox.py` requires no changes
 
 Core orchestration must call adapter interfaces and remain generic.
 
@@ -70,10 +71,19 @@ Core orchestration must call adapter interfaces and remain generic.
 Active registered project types in canonical runtime:
 
 - `document` — section-based document evolution (`append_section`, `modify_section`, `delete_section`)
-- `coding` — file-based codebase evolution (`write_file`, `write_files`, `delete_file`)
+- `coding` — file-based codebase evolution (`write_file`, `write_files`, `delete_file`); language-agnostic via plugin registry
 - `audit` — adversarial source code audit producing a structured findings report (`append_section`, `no_finding`)
 
 All three participate through the same adapter contract and orchestration path.
+
+### Coding language plugins
+
+The coding adapter delegates language-specific behavior to a `LanguagePlugin`. The plugin is selected from the `language` key in the spec (default: `python`). Built-in plugins:
+
+- `python` — `python:3.12-slim` image, `pip install pytest -q && python -m pytest`; scaffolds `conftest.py` + `.gitignore`
+- `zig` — `rawpair/zig:latest` image, `zig build test`; scaffolds `build.zig` + `src/main.zig` + `.gitignore`
+
+The language is stored on `CodingArtifact.language` at creation time and persists in authoritative state. All subsequent operations (verification, candidate testing) read language from the artifact, not from config.
 
 ### Audit-specific invariants
 
@@ -147,9 +157,10 @@ Blackboard is append-only and non-authoritative. It never feeds back into `State
 10. Allowing decomposition to continue past `max_depth`.
 11. Allowing a single `DecomposeSpec` to contain more than `max_sub_gaps` sub-gaps (default 5); excess entries are silently truncated before execution.
 12. Embedding model-generated content in prompts without sanitization.
-12. Treating a completed decomposition pass as project completion without re-running CreateGame.
+13. Treating a completed decomposition pass as project completion without re-running CreateGame.
 14. Running model-generated code unsandboxed without explicit `sandbox=none` opt-in and warning.
 15. Silently halting when a gap was identified but could not be closed (`play_game_no_delta` or `no_state_change` at depth 0); the runtime must escalate to `northstar_update_proposed` and write a blackboard proposal.
+16. Resolving the language plugin from config at verification time; the language is set once at `create_initial_state` and persists in `CodingArtifact.language` — all operations read it from the artifact.
 
 ## 10. Authority and Boundaries
 
@@ -170,3 +181,4 @@ Blackboard is append-only and non-authoritative. It never feeds back into `State
 6. `CreateGame == gap analysis toward NorthStar` (not step derivation)
 7. `context_chain == full ancestor scope chain flowing into every leaf game`
 8. `one decomposition pass != project complete` (outer loop re-assesses)
+9. `artifact.language == source of truth for plugin selection` (not runtime config)

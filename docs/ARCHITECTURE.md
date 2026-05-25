@@ -60,7 +60,7 @@ Current implementation philosophy:
 **Core state:**
 
 - `State`, `StateArtifact`
-- `DocumentArtifact` (sections), `CodingArtifact` (files)
+- `DocumentArtifact` (sections), `CodingArtifact` (files, language)
 - `Section` — `title`, `body`, `source_hash` (optional; set by audit adapter only)
 - `CodeFile`
 
@@ -150,26 +150,31 @@ Roles: `BLUE`, `RED`, `REFEREE`, `CREATE_GAME`, `DECOMPOSE`. Falls back to globa
 
 #### Coding (`src/baps/coding_adapter.py`)
 
-- File-based codebase state
+- File-based codebase state; language-agnostic via plugin registry
 - CreateGame StateView: renders NorthStar + existing file contents (first 30 lines, sanitized)
 - PlayGame StateView: renders NorthStar + full file contents (sanitized)
 - Delta operations: `write_file`, `write_files` (preferred), `delete_file`
-- Export: file tree + language-plugin boilerplate (conftest, .gitignore for Python)
+- Export: file tree + language-plugin boilerplate
 - Verification: delegates to `LanguagePlugin.run_tests`; result evidence feeds next CreateGame
 - Sandbox: `sandbox_mode` propagated from config/CLI through `run.py` → `play_game` → adapter → plugin → `sandbox.run_sandboxed`
-- Language plugin selected at adapter construction via `language` parameter (default: `"python"`); unknown names raise `ValueError`
+- Language resolved from `CodingArtifact.language` (set at `create_initial_state` from the spec's `language` key; default `"python"`); unknown names raise `ValueError` at creation time with the list of available languages
 
-#### Language Plugin (`src/baps/language_plugin.py`, `src/baps/language_python.py`, `src/baps/language_zig.py`)
+#### Language Plugins (`src/baps/language_plugin.py`, `src/baps/language_python.py`, `src/baps/language_zig.py`)
 
-- `LanguagePlugin` protocol: `name`, `test_command`, `docker_image`, `initialize`, `run_tests`, `build`, `parse_test_failures`, `has_tests`
-- `test_command` — shell command passed to `sandbox.run_sandboxed` for Docker execution
-- `docker_image` — Docker image for sandboxed execution
+`LanguagePlugin` protocol: `name`, `test_command`, `docker_image`, `initialize`, `run_tests`, `build`, `parse_test_failures`, `has_tests`
+
+- `test_command` — shell command passed as the `sh -c` argument inside the Docker container
+- `docker_image` — Docker image for sandboxed execution; passed directly to `sandbox.run_sandboxed`
 - `get_language_plugin(name)` resolves a name to a plugin or raises `ValueError("Language 'X' is not supported. Available languages: ...")`
-- Active implementations:
-  - `PythonLanguagePlugin` (`python`): `python:3.12-slim`, `pip install pytest -q && python -m pytest`; writes `conftest.py` + `.gitignore`; bare mode uses `uv run pytest` / `sys.executable -m pytest`; parses pytest `FAILED` lines; detects `tests/` and `test_` prefixes
-  - `ZigLanguagePlugin` (`zig`): `ziglang/zig:latest`, `zig build test`; scaffolds `build.zig` + `src/main.zig` if absent; bare mode uses `zig build test` directly; parses Zig `FAIL ` lines; detects `.zig` files
-- The coding adapter resolves the plugin from `CodingArtifact.language` (set at `create_initial_state` time from the spec's `language` key; default `"python"`); unknown languages raise immediately with the available list
-- Adding a new language requires implementing `LanguagePlugin`, adding it to the registry in `language_plugin.py` and `coding_adapter.py`, and adding a spec example — `sandbox.py` requires no changes
+
+Active implementations:
+
+| Plugin | Key | Docker image | Test command | Boilerplate |
+|---|---|---|---|---|
+| `PythonLanguagePlugin` | `python` | `python:3.12-slim` | `pip install pytest -q 2>/dev/null && python -m pytest` | `conftest.py`, `.gitignore`; bare mode: `uv run pytest` |
+| `ZigLanguagePlugin` | `zig` | `rawpair/zig:latest` | `zig build test` | `build.zig`, `src/main.zig`, `.gitignore`; bare mode: `zig build test` |
+
+The language is stored on `CodingArtifact.language` at creation time and persists in authoritative state. All subsequent operations (export, verify_export, verify_candidate) read it from the artifact — not from config. Adding a new language requires implementing `LanguagePlugin`, registering it in `language_plugin.py` and `coding_adapter.py`, and adding a spec example. `sandbox.py` requires no changes.
 
 #### Audit (`src/baps/audit_adapter.py`)
 
@@ -244,7 +249,7 @@ Reads `<workspace>/blackboard/northstar_proposals.jsonl`, lists proposals intera
 - GameSpec fields (`objective`, `success_condition`) are sanitized before embedding in Red and Referee prompts
 - Referee/Red rationale is sanitized before re-embedding in `previous_feedback` for subsequent Blue turns
 - NorthStar proposals are sanitized before writing to the blackboard
-- `sandbox.py`: generic `run_sandboxed(cwd, mode, test_command, docker_image)` — model-generated code runs inside the plugin-specified Docker image; `sandbox=none` opt-in emits `SANDBOX_NONE_WARNING` at run start; configurable via `--sandbox` CLI flag or `sandbox` spec key (default: `docker`)
+- `sandbox.py`: `run_sandboxed(cwd, mode, test_command, docker_image)` — runs `test_command` inside `docker_image` via `docker run --rm -v <cwd>:/work:rw`; the image and command are plugin-owned; `sandbox=none` opt-in emits `SANDBOX_NONE_WARNING` at run start; configurable via `--sandbox` CLI flag or `sandbox` spec key (default: `docker`)
 
 ---
 
@@ -259,6 +264,7 @@ src/baps/
   audit_adapter.py        # AuditProjectAdapter — all audit mechanics, source fingerprinting
   language_plugin.py      # LanguagePlugin protocol + get_language_plugin registry lookup
   language_python.py      # PythonLanguagePlugin — Python/pytest specifics
+  language_zig.py         # ZigLanguagePlugin — Zig/build.zig specifics
   state.py                # Authoritative schemas, mutation, delta application
   state_service.py        # StateService — the only mutation boundary
   state_store.py          # JsonStateStore — JSON persistence
@@ -293,6 +299,7 @@ docs/
 examples/
   document-project.yaml
   coding-project.yaml
+  coding-project-zig.yaml
   audit-baps.yaml         # Security audit spec (workspace: .baps-workspace-security)
   audit-coverage.yaml     # Test coverage audit spec (workspace: .baps-workspace-coverage)
 ```
@@ -303,9 +310,8 @@ examples/
 
 ### Lifecycle commands
 
-- `init` — resolve config, validate workspace, create initial State, persist
-- `run` — load persisted state, run bounded iterations
-- `init_and_run` — initialize then immediately run
+- `start` — initialize (if no state) or resume (if state exists), then run the game loop
+- `reset` — wipe workspace state and output file, then exit; no model calls
 
 ### Iteration flow (inside `_solve_gap`)
 
@@ -331,7 +337,7 @@ examples/
 
 4. **Export**
    - Adapter exports state-derived artifacts to output path
-   - Adapter verification may execute (coding: pytest; audit: structural check)
+   - Adapter verification may execute (coding: language plugin test suite; audit: structural check)
    - Verification result fed into next CreateGame call
 
 ### Multiscale decomposition
@@ -366,6 +372,11 @@ Only leaf PlayGame executions count against `max_iterations`. Decomposition is f
 
 ## 5. Schema Documentation
 
+### `CodingArtifact`
+
+- Fields: `id`, `kind` (`"coding"`), `language` (default `"python"`), `files`
+- `language`: set at `create_initial_state` from the spec's `language` key; persists in authoritative state; read by all coding operations (export, verify_export, verify_candidate) to select the language plugin
+
 ### `Section`
 
 - Fields: `title`, `body`, `source_hash` (optional, default `None`)
@@ -383,7 +394,7 @@ Only leaf PlayGame executions count against `max_iterations`. Decomposition is f
 
 - Fields: `rationale`, `sub_gaps`
 - `sub_gaps`: ordered tuple of `SubGapSpec` — each closes a coherent portion of the parent gap
-- Invariants: rationale non-empty, at least one sub-gap
+- Invariants: rationale non-empty, at least one sub-gap, length bounded by `max_sub_gaps`
 - Purpose: CreateGame response when the gap is too large for one game
 
 ### `SubGapSpec`
@@ -469,6 +480,7 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 - Schema validation and update semantics
 - State persistence and service mutation
 - Export and verification paths
+- Language plugin wiring: `resolve_run_config` propagation, `verify_export` and `verify_candidate` routing to correct plugin and Docker image
 - Security boundary tests: path anchoring, symlink escape rejection, policy path validation
 - Sandbox boundary tests: Docker command construction, bind-mount scope, symlink resolution, flag invariants, warning emission, unknown-mode rejection
 - Scheduler policy tests: EMA scoring, softmax selection, underperformer dropping
@@ -495,26 +507,27 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 14. Model response size is bounded before deserialization.
 15. Model-generated code executes inside a Docker container during verification; unsandboxed execution requires explicit opt-in.
 16. Decomposition branching factor is bounded by `max_sub_gaps`; excess sub-gaps are truncated before recursion begins.
+17. Language plugin is selected from `CodingArtifact.language` (persisted in state at creation time); all operations read from the artifact, not from runtime config.
 
 ---
 
 ## 9. Current Limitations
 
-1. Decomposition branching factor is unconstrained — the model decides how many sub-gaps to produce (`max_sub_gaps` not yet enforced).
-2. Sub-gap planning is fixed at decomposition time — individual leaf results cannot trigger re-planning of remaining siblings within the same iteration.
-3. Only `document`, `coding`, and `audit` project types are active.
-4. Audit source staleness detection uses a fixed hash of all source files; per-file granularity is not yet implemented.
+1. Sub-gap planning is fixed at decomposition time — individual leaf results cannot trigger re-planning of remaining siblings within the same iteration.
+2. Only `document`, `coding`, and `audit` project types are active.
+3. Audit source staleness detection uses a fixed hash of all source files; per-file granularity is not yet implemented.
 
 ---
 
 ## 10. Suggested Next Milestones
 
 1. ~~**`max_sub_gaps` enforcement**~~ — done: `max_sub_gaps` config key (default 5) truncates oversized `DecomposeSpec` before execution
-2. **Per-file staleness** — track source hash per file within audit sections for finer-grained invalidation
-3. **Adapter expansion** — new project types register adapters without touching core orchestration
-4. **Stronger contract tests** — verify decomposition invariants and context chain integrity end-to-end
+2. ~~**Language plugin system**~~ — done: `LanguagePlugin` protocol with Python and Zig implementations; language stored on `CodingArtifact`; `sandbox.run_sandboxed` is generic
+3. **Per-file staleness** — track source hash per file within audit sections for finer-grained invalidation
+4. **Docker network isolation** — add `--network=none` to the Docker sandbox for language plugins that do not need network access at test time (Zig is a candidate; Python with pip install is not)
 5. **Prompt-complexity routing** — extend DECOMPOSE role to select model based on StateView size or estimated task complexity
-6. **Docker network isolation** — add `--network=none` to the Docker sandbox once a pre-built image with pytest is established (avoids pip install at runtime)
+6. **Stronger contract tests** — verify decomposition invariants and context chain integrity end-to-end
+7. **Additional language plugins** — C, JavaScript/Node, or others; each adds only a plugin file and registry entry
 
 ---
 
@@ -530,10 +543,11 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 - **DeltaState**: Proposed project mutation from role execution.
 - **artifact**: Typed state unit (document/coding) within `State`.
 - **adapter**: `ProjectTypeAdapter` implementation owning all project-specific behavior.
+- **LanguagePlugin**: Protocol owning `docker_image`, `test_command`, and test lifecycle for a specific programming language within the coding adapter.
 - **RedFinding**: Adversarial reviewer decision output.
 - **RefereeDecision**: Game-local adjudication output.
 - **StateUpdateProposal**: Integration envelope for mutation through `StateService`.
-- **runtime**: Lifecycle orchestration path (`init`, `run`, `init_and_run`).
+- **runtime**: Lifecycle orchestration via `start` (initialize-or-resume + game loop) and `reset` (wipe only).
 - **ModelClient**: Generation interface for model backends and test doubles.
 - **Role**: A named model client with schema, constrained-decoding flag, and optional research phase.
 - **export**: One-way materialization of state to filesystem outputs.
@@ -542,4 +556,4 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 - **multiscale**: The property that decomposition can recurse to arbitrary depth, with each level informed by all levels above.
 - **source_hash**: SHA-256 fingerprint of source files stored per audit section; used to detect staleness on re-runs.
 - **research phase**: Optional agentic tool-use loop run by a role before producing its primary output.
-- **sandbox**: Execution isolation for model-generated code during verification; `docker` (default) runs pytest inside a Docker container; `none` runs bare with a warning.
+- **sandbox**: Execution isolation for model-generated code during verification; `docker` (default) runs the language plugin's `test_command` inside its `docker_image`; `none` runs bare with a warning.
