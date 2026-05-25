@@ -30,6 +30,18 @@ Evolutions are good if they:
 
 ---
 
+## Language Registry
+
+The coding adapter should support a pluggable language registry. Each language plugin defines the operations needed to work with that language: `initialize_project`, `run_tests`, `build_project`, and any other language-specific mechanics.
+
+The registry lives in a well-known location accessible to the coding adapter. When a coding project specifies a target language, the adapter looks it up in the registry. If found, it uses it. If not found, it triggers a NorthStar proposal explaining that the language is unsupported and human intervention is required to add it.
+
+New language plugins can be generated autonomously by running a dedicated language generator spec — baps generating baps language support. Once added to the registry, any future coding project can use the new language without further human involvement.
+
+Python is the default and always present. The registry should be extensible without touching core orchestration or the coding adapter internals.
+
+---
+
 ## Constraints
 
 These must not change through the automated pipeline:
