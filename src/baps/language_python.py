@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 from typing import Sequence
 
@@ -39,6 +41,8 @@ def _parse_pytest_failures(stdout: str) -> list[dict[str, str]]:
 
 class PythonLanguagePlugin:
     name = "python"
+    docker_image = "python:3.12-slim"
+    test_command = "pip install pytest -q 2>/dev/null && python -m pytest"
 
     def initialize(self, project_path: Path) -> bool:
         project_path.mkdir(parents=True, exist_ok=True)
@@ -63,9 +67,13 @@ class PythonLanguagePlugin:
         return changed
 
     def run_tests(self, project_path: Path, sandbox_mode: str) -> VerificationResult:
-        from baps.sandbox import run_pytest_sandboxed
-
-        command, completed = run_pytest_sandboxed(project_path, sandbox_mode)
+        if sandbox_mode == "none":
+            command, completed = self._run_bare(project_path)
+        else:
+            from baps.sandbox import run_sandboxed
+            command, completed = run_sandboxed(
+                project_path, sandbox_mode, self.test_command, self.docker_image
+            )
         return VerificationResult(
             command=command,
             cwd=str(project_path),
@@ -74,6 +82,23 @@ class PythonLanguagePlugin:
             stderr=completed.stderr,
             passed=completed.returncode == 0,
         )
+
+    def _run_bare(self, project_path: Path) -> tuple[str, subprocess.CompletedProcess]:
+        # Use uv when available; fall back to the current interpreter.
+        # test_command is for Docker (needs pip install); bare execution relies
+        # on the dev environment having pytest already installed.
+        try:
+            completed = subprocess.run(
+                ["uv", "run", "pytest"],
+                cwd=project_path, capture_output=True, text=True, check=False,
+            )
+            return "uv run pytest", completed
+        except FileNotFoundError:
+            completed = subprocess.run(
+                [sys.executable, "-m", "pytest"],
+                cwd=project_path, capture_output=True, text=True, check=False,
+            )
+            return f"{sys.executable} -m pytest", completed
 
     def build(self, project_path: Path) -> None:
         pass

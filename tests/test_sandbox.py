@@ -6,6 +6,10 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 
+_TEST_COMMAND = "my_test_runner --verbose"
+_DOCKER_IMAGE = "example:1.0"
+
+
 def _make_completed(returncode: int = 0, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess:
     result: subprocess.CompletedProcess = MagicMock(spec=subprocess.CompletedProcess)
     result.returncode = returncode
@@ -24,120 +28,114 @@ def test_sandbox_none_warning_contains_expected_text() -> None:
     assert "production" in SANDBOX_NONE_WARNING.lower()
 
 
-# --- sandbox=none path ---
+# --- _run_bare ---
 
-def test_run_pytest_bare_uses_uv_when_available(tmp_path: Path) -> None:
-    from baps.sandbox import _run_pytest_bare
+def test_run_bare_runs_test_command(tmp_path: Path) -> None:
+    from baps.sandbox import _run_bare
 
     completed = _make_completed(returncode=0, stdout="1 passed")
     with patch("baps.sandbox.subprocess.run", return_value=completed) as mock_run:
-        command, result = _run_pytest_bare(tmp_path)
+        command, result = _run_bare(tmp_path, _TEST_COMMAND)
 
-    assert command == "uv run pytest"
+    assert command == _TEST_COMMAND
     assert result.returncode == 0
-    called_args = mock_run.call_args[0][0]
-    assert called_args == ["uv", "run", "pytest"]
+    assert mock_run.call_args[0][0] == _TEST_COMMAND
+    assert mock_run.call_args.kwargs.get("shell") is True
     assert mock_run.call_args.kwargs.get("cwd") == tmp_path
 
 
-def test_run_pytest_bare_falls_back_to_python_when_uv_missing(tmp_path: Path) -> None:
-    from baps.sandbox import _run_pytest_bare
+def test_run_bare_returns_test_command_as_command_string(tmp_path: Path) -> None:
+    from baps.sandbox import _run_bare
 
-    completed = _make_completed(returncode=1, stdout="1 failed")
-
-    def _side_effect(args, **kwargs):
-        if args[0] == "uv":
-            raise FileNotFoundError("uv not found")
-        return completed
-
-    with patch("baps.sandbox.subprocess.run", side_effect=_side_effect):
-        command, result = _run_pytest_bare(tmp_path)
-
-    assert "pytest" in command
-    assert "uv" not in command
-    assert result.returncode == 1
-
-
-def test_run_pytest_sandboxed_none_mode_calls_bare(tmp_path: Path) -> None:
-    from baps.sandbox import run_pytest_sandboxed
-
-    completed = _make_completed(returncode=0)
+    completed = _make_completed(returncode=1)
     with patch("baps.sandbox.subprocess.run", return_value=completed):
-        command, result = run_pytest_sandboxed(tmp_path, "none")
+        command, _ = _run_bare(tmp_path, _TEST_COMMAND)
 
-    assert "pytest" in command
-    assert result.returncode == 0
+    assert command == _TEST_COMMAND
 
 
-# --- docker path ---
+# --- _run_docker ---
 
-def test_run_pytest_docker_constructs_correct_command(tmp_path: Path) -> None:
-    from baps.sandbox import _run_pytest_docker, _SANDBOX_DOCKER_IMAGE
+def test_run_docker_constructs_correct_command(tmp_path: Path) -> None:
+    from baps.sandbox import _run_docker
 
     completed = _make_completed(returncode=0, stdout="1 passed")
     with patch("baps.sandbox.subprocess.run", return_value=completed) as mock_run:
-        command, result = _run_pytest_docker(tmp_path)
+        command, result = _run_docker(tmp_path, _TEST_COMMAND, _DOCKER_IMAGE)
 
     docker_args = mock_run.call_args[0][0]
     assert docker_args[0] == "docker"
     assert docker_args[1] == "run"
     assert "--rm" in docker_args
-    assert _SANDBOX_DOCKER_IMAGE in docker_args
+    assert _DOCKER_IMAGE in docker_args
+    assert _TEST_COMMAND in docker_args
     assert result.returncode == 0
 
 
-def test_run_pytest_docker_returns_command_string(tmp_path: Path) -> None:
-    from baps.sandbox import _run_pytest_docker
-
-    completed = _make_completed(returncode=0)
-    with patch("baps.sandbox.subprocess.run", return_value=completed):
-        command, _ = _run_pytest_docker(tmp_path)
-
-    assert isinstance(command, str)
-    assert "docker" in command
-    assert "pytest" in command
-
-
-def test_run_pytest_docker_rm_flag_ensures_cleanup(tmp_path: Path) -> None:
-    """--rm prevents persistent containers accumulating on the host."""
-    from baps.sandbox import _run_pytest_docker
+def test_run_docker_passes_test_command_to_sh(tmp_path: Path) -> None:
+    from baps.sandbox import _run_docker
 
     completed = _make_completed(returncode=0)
     with patch("baps.sandbox.subprocess.run", return_value=completed) as mock_run:
-        _run_pytest_docker(tmp_path)
+        _run_docker(tmp_path, _TEST_COMMAND, _DOCKER_IMAGE)
+
+    docker_args = mock_run.call_args[0][0]
+    sh_index = docker_args.index("sh")
+    assert docker_args[sh_index + 1] == "-c"
+    assert docker_args[sh_index + 2] == _TEST_COMMAND
+
+
+def test_run_docker_returns_command_string(tmp_path: Path) -> None:
+    from baps.sandbox import _run_docker
+
+    completed = _make_completed(returncode=0)
+    with patch("baps.sandbox.subprocess.run", return_value=completed):
+        command, _ = _run_docker(tmp_path, _TEST_COMMAND, _DOCKER_IMAGE)
+
+    assert isinstance(command, str)
+    assert "docker" in command
+    assert _DOCKER_IMAGE in command
+    assert _TEST_COMMAND in command
+
+
+def test_run_docker_rm_flag_ensures_cleanup(tmp_path: Path) -> None:
+    """--rm prevents persistent containers accumulating on the host."""
+    from baps.sandbox import _run_docker
+
+    completed = _make_completed(returncode=0)
+    with patch("baps.sandbox.subprocess.run", return_value=completed) as mock_run:
+        _run_docker(tmp_path, _TEST_COMMAND, _DOCKER_IMAGE)
 
     docker_args = mock_run.call_args[0][0]
     assert "--rm" in docker_args
 
 
-def test_run_pytest_docker_bind_mount_scoped_to_cwd_only(tmp_path: Path) -> None:
+def test_run_docker_bind_mount_scoped_to_cwd_only(tmp_path: Path) -> None:
     """The bind mount must be exactly the target directory — not the root or parent."""
-    from baps.sandbox import _run_pytest_docker
+    from baps.sandbox import _run_docker
 
     completed = _make_completed(returncode=0)
     with patch("baps.sandbox.subprocess.run", return_value=completed) as mock_run:
-        _run_pytest_docker(tmp_path)
+        _run_docker(tmp_path, _TEST_COMMAND, _DOCKER_IMAGE)
 
     docker_args = mock_run.call_args[0][0]
     v_index = docker_args.index("-v")
     mount_spec = docker_args[v_index + 1]
     host_path, container_path_and_mode = mount_spec.split(":", 1)
 
-    # Host side is the resolved tmp_path only — not a parent, not "/"
     assert host_path == str(tmp_path.resolve())
     assert container_path_and_mode == "/work:rw"
-    # No second -v mount — only one bind mount
     remaining = docker_args[v_index + 2:]
     assert "-v" not in remaining
 
 
-def test_run_pytest_docker_does_not_mount_host_root(tmp_path: Path) -> None:
+def test_run_docker_does_not_mount_host_root(tmp_path: Path) -> None:
     """Docker args must not bind-mount the host root or sensitive system directories."""
-    from baps.sandbox import _run_pytest_docker
+    from baps.sandbox import _run_docker
 
     completed = _make_completed(returncode=0)
     with patch("baps.sandbox.subprocess.run", return_value=completed) as mock_run:
-        _run_pytest_docker(tmp_path)
+        _run_docker(tmp_path, _TEST_COMMAND, _DOCKER_IMAGE)
 
     docker_args = mock_run.call_args[0][0]
     for i, arg in enumerate(docker_args):
@@ -150,21 +148,21 @@ def test_run_pytest_docker_does_not_mount_host_root(tmp_path: Path) -> None:
             assert not host_part.startswith("/home")
 
 
-def test_run_pytest_docker_does_not_use_privileged_flag(tmp_path: Path) -> None:
+def test_run_docker_does_not_use_privileged_flag(tmp_path: Path) -> None:
     """Privileged mode grants full host access — must never be used."""
-    from baps.sandbox import _run_pytest_docker
+    from baps.sandbox import _run_docker
 
     completed = _make_completed(returncode=0)
     with patch("baps.sandbox.subprocess.run", return_value=completed) as mock_run:
-        _run_pytest_docker(tmp_path)
+        _run_docker(tmp_path, _TEST_COMMAND, _DOCKER_IMAGE)
 
     docker_args = mock_run.call_args[0][0]
     assert "--privileged" not in docker_args
 
 
-def test_run_pytest_docker_uses_resolved_path_not_symlink(tmp_path: Path) -> None:
+def test_run_docker_uses_resolved_path_not_symlink(tmp_path: Path) -> None:
     """Symlinks in cwd are resolved so the mount target is always the canonical path."""
-    from baps.sandbox import _run_pytest_docker
+    from baps.sandbox import _run_docker
 
     real_dir = tmp_path / "real"
     real_dir.mkdir()
@@ -173,7 +171,7 @@ def test_run_pytest_docker_uses_resolved_path_not_symlink(tmp_path: Path) -> Non
 
     completed = _make_completed(returncode=0)
     with patch("baps.sandbox.subprocess.run", return_value=completed) as mock_run:
-        _run_pytest_docker(link_dir)
+        _run_docker(link_dir, _TEST_COMMAND, _DOCKER_IMAGE)
 
     docker_args = mock_run.call_args[0][0]
     v_index = docker_args.index("-v")
@@ -184,24 +182,55 @@ def test_run_pytest_docker_uses_resolved_path_not_symlink(tmp_path: Path) -> Non
     assert "link" not in host_path
 
 
-def test_run_pytest_sandboxed_docker_mode_calls_docker(tmp_path: Path) -> None:
-    from baps.sandbox import run_pytest_sandboxed
+# --- run_sandboxed ---
+
+def test_run_sandboxed_none_mode_calls_bare(tmp_path: Path) -> None:
+    from baps.sandbox import run_sandboxed
 
     completed = _make_completed(returncode=0)
     with patch("baps.sandbox.subprocess.run", return_value=completed) as mock_run:
-        command, result = run_pytest_sandboxed(tmp_path, "docker")
+        command, result = run_sandboxed(tmp_path, "none", _TEST_COMMAND, _DOCKER_IMAGE)
+
+    assert command == _TEST_COMMAND
+    assert result.returncode == 0
+    assert mock_run.call_args.kwargs.get("shell") is True
+
+
+def test_run_sandboxed_docker_mode_calls_docker(tmp_path: Path) -> None:
+    from baps.sandbox import run_sandboxed
+
+    completed = _make_completed(returncode=0)
+    with patch("baps.sandbox.subprocess.run", return_value=completed) as mock_run:
+        command, result = run_sandboxed(tmp_path, "docker", _TEST_COMMAND, _DOCKER_IMAGE)
 
     docker_args = mock_run.call_args[0][0]
     assert docker_args[0] == "docker"
-    assert "pytest" in command
+    assert _DOCKER_IMAGE in docker_args
+    assert _TEST_COMMAND in docker_args
 
 
-def test_run_pytest_sandboxed_unknown_mode_raises(tmp_path: Path) -> None:
-    from baps.sandbox import run_pytest_sandboxed
+def test_run_sandboxed_unknown_mode_raises(tmp_path: Path) -> None:
+    from baps.sandbox import run_sandboxed
     import pytest
 
     with pytest.raises(ValueError, match="unknown sandbox_mode"):
-        run_pytest_sandboxed(tmp_path, "qemu")
+        run_sandboxed(tmp_path, "qemu", _TEST_COMMAND, _DOCKER_IMAGE)
+
+
+# --- Python plugin supplies correct values to sandbox ---
+
+def test_python_plugin_docker_image_is_passed_to_docker(tmp_path: Path) -> None:
+    from baps.sandbox import _run_docker
+    from baps.language_python import PythonLanguagePlugin
+
+    plugin = PythonLanguagePlugin()
+    completed = _make_completed(returncode=0)
+    with patch("baps.sandbox.subprocess.run", return_value=completed) as mock_run:
+        _run_docker(tmp_path, plugin.test_command, plugin.docker_image)
+
+    docker_args = mock_run.call_args[0][0]
+    assert plugin.docker_image in docker_args
+    assert plugin.test_command in docker_args
 
 
 # --- is_docker_available ---

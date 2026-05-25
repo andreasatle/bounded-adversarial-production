@@ -156,14 +156,17 @@ Roles: `BLUE`, `RED`, `REFEREE`, `CREATE_GAME`, `DECOMPOSE`. Falls back to globa
 - Delta operations: `write_file`, `write_files` (preferred), `delete_file`
 - Export: file tree + language-plugin boilerplate (conftest, .gitignore for Python)
 - Verification: delegates to `LanguagePlugin.run_tests`; result evidence feeds next CreateGame
-- Sandbox: `sandbox_mode` propagated from config/CLI through `run.py` → `play_game` → adapter → plugin → `sandbox.run_pytest_sandboxed`
+- Sandbox: `sandbox_mode` propagated from config/CLI through `run.py` → `play_game` → adapter → plugin → `sandbox.run_sandboxed`
 - Language plugin selected at adapter construction via `language` parameter (default: `"python"`); unknown names raise `ValueError`
 
 #### Language Plugin (`src/baps/language_plugin.py`, `src/baps/language_python.py`)
 
-- `LanguagePlugin` protocol: `initialize`, `run_tests`, `build`, `parse_test_failures`, `has_tests`
+- `LanguagePlugin` protocol: `name`, `test_command`, `docker_image`, `initialize`, `run_tests`, `build`, `parse_test_failures`, `has_tests`
+- `test_command` — shell command passed to `sandbox.run_sandboxed` for Docker execution (e.g. `pip install pytest -q 2>/dev/null && python -m pytest`)
+- `docker_image` — Docker image for sandboxed execution (e.g. `python:3.12-slim`)
 - `get_language_plugin(name)` resolves a name to a plugin or raises `ValueError`; currently only `"python"` is registered
-- `PythonLanguagePlugin` (Python/pytest): writes `conftest.py` + `.gitignore`, delegates test execution to `sandbox.run_pytest_sandboxed`, parses pytest `FAILED` lines, detects `tests/` and `test_` prefixes
+- `PythonLanguagePlugin`: writes `conftest.py` + `.gitignore` on `initialize`; Docker execution delegates to `sandbox.run_sandboxed` with its `test_command`/`docker_image`; bare execution uses `uv run pytest` (falls back to `sys.executable -m pytest`); parses pytest `FAILED` lines; detects `tests/` and `test_` prefixes
+- Adding a new language (e.g. Rust) means implementing `LanguagePlugin` with `docker_image="rust:latest"` and `test_command="cargo test"` — `sandbox.py` requires no changes
 - Groundwork for a future language registry — the registry and NorthStar proposal flow for unknown languages are not yet implemented
 
 #### Audit (`src/baps/audit_adapter.py`)
@@ -239,7 +242,7 @@ Reads `<workspace>/blackboard/northstar_proposals.jsonl`, lists proposals intera
 - GameSpec fields (`objective`, `success_condition`) are sanitized before embedding in Red and Referee prompts
 - Referee/Red rationale is sanitized before re-embedding in `previous_feedback` for subsequent Blue turns
 - NorthStar proposals are sanitized before writing to the blackboard
-- `sandbox.py`: model-generated code runs inside a Docker container during verification; `sandbox=none` opt-in emits `SANDBOX_NONE_WARNING` at run start; configurable via `--sandbox` CLI flag or `sandbox` spec key (default: `docker`)
+- `sandbox.py`: generic `run_sandboxed(cwd, mode, test_command, docker_image)` — model-generated code runs inside the plugin-specified Docker image; `sandbox=none` opt-in emits `SANDBOX_NONE_WARNING` at run start; configurable via `--sandbox` CLI flag or `sandbox` spec key (default: `docker`)
 
 ---
 
@@ -262,7 +265,7 @@ src/baps/
   scheduler.py            # Adaptive multi-model scheduler with policy learning
   scheduler_policy.py     # ModelPolicy, EMA scoring, softmax selection
   northstar_apply.py      # baps-apply-northstar CLI
-  sandbox.py              # run_pytest_sandboxed — Docker/bare pytest execution, SANDBOX_NONE_WARNING
+  sandbox.py              # run_sandboxed — generic Docker/bare execution, SANDBOX_NONE_WARNING
   tools.py                # fetch_url, web_search, ToolExecutor — research phase tools
 
 tests/

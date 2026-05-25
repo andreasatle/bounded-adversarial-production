@@ -11,6 +11,8 @@ class LanguagePlugin(Protocol):
     """Contract for language-specific project setup and test execution."""
 
     name: str
+    test_command: str
+    docker_image: str
 
     def initialize(self, project_path: Path) -> bool:
         """Set up project boilerplate (e.g. conftest, .gitignore). Returns True if any files changed."""

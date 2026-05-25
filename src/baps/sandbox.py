@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 import subprocess
-import sys
 from pathlib import Path
-
-_SANDBOX_DOCKER_IMAGE = "python:3.12-slim"
 
 SANDBOX_NONE_WARNING = (
     "\nWARNING: sandbox=none — generated code will execute unsandboxed.\n"
@@ -27,46 +24,46 @@ def is_docker_available() -> bool:
         return False
 
 
-def run_pytest_sandboxed(
+def run_sandboxed(
     cwd: Path,
     sandbox_mode: str,
+    test_command: str,
+    docker_image: str,
 ) -> tuple[str, subprocess.CompletedProcess]:
-    """Run pytest in cwd under the configured sandbox.
+    """Run *test_command* in *cwd* under the configured sandbox.
 
     Returns (command_string, completed_process).
     Raises ValueError for unknown sandbox_mode.
     """
     if sandbox_mode == "none":
-        return _run_pytest_bare(cwd)
+        return _run_bare(cwd, test_command)
     if sandbox_mode == "docker":
-        return _run_pytest_docker(cwd)
+        return _run_docker(cwd, test_command, docker_image)
     raise ValueError(f"unknown sandbox_mode: {sandbox_mode!r}; expected 'docker' or 'none'")
 
 
-def _run_pytest_bare(cwd: Path) -> tuple[str, subprocess.CompletedProcess]:
-    try:
-        args = ["uv", "run", "pytest"]
-        completed = subprocess.run(args, cwd=cwd, capture_output=True, text=True, check=False)
-        return "uv run pytest", completed
-    except FileNotFoundError:
-        args = [sys.executable, "-m", "pytest"]
-        completed = subprocess.run(args, cwd=cwd, capture_output=True, text=True, check=False)
-        return f"{sys.executable} -m pytest", completed
+def _run_bare(cwd: Path, test_command: str) -> tuple[str, subprocess.CompletedProcess]:
+    completed = subprocess.run(
+        test_command, cwd=cwd, capture_output=True, text=True, check=False, shell=True
+    )
+    return test_command, completed
 
 
-def _run_pytest_docker(cwd: Path) -> tuple[str, subprocess.CompletedProcess]:
+def _run_docker(
+    cwd: Path, test_command: str, docker_image: str
+) -> tuple[str, subprocess.CompletedProcess]:
     resolved = cwd.resolve()
     docker_args = [
         "docker", "run", "--rm",
         "-v", f"{resolved}:/work:rw",
         "--workdir", "/work",
-        _SANDBOX_DOCKER_IMAGE,
+        docker_image,
         "sh", "-c",
-        "pip install pytest -q 2>/dev/null && python -m pytest",
+        test_command,
     ]
     command = (
         f"docker run --rm -v {resolved}:/work:rw --workdir /work"
-        f" {_SANDBOX_DOCKER_IMAGE} sh -c 'pip install pytest -q && python -m pytest'"
+        f" {docker_image} sh -c '{test_command}'"
     )
     completed = subprocess.run(docker_args, capture_output=True, text=True, check=False)
     return command, completed

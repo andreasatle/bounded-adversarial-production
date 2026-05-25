@@ -48,6 +48,25 @@ def test_python_plugin_name() -> None:
     assert PythonLanguagePlugin.name == "python"
 
 
+def test_python_plugin_docker_image() -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    assert PythonLanguagePlugin.docker_image == "python:3.12-slim"
+
+
+def test_python_plugin_test_command_contains_pytest() -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    assert "pytest" in PythonLanguagePlugin.test_command
+
+
+def test_python_plugin_test_command_is_str() -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    assert isinstance(PythonLanguagePlugin.test_command, str)
+    assert PythonLanguagePlugin.test_command.strip() != ""
+
+
 # ---------------------------------------------------------------------------
 # PythonLanguagePlugin.initialize
 # ---------------------------------------------------------------------------
@@ -112,37 +131,82 @@ def _make_completed(returncode: int, stdout: str = "", stderr: str = "") -> subp
     return result
 
 
-def test_run_tests_delegates_to_sandbox(tmp_path: Path) -> None:
+def test_run_tests_bare_uses_uv(tmp_path: Path) -> None:
     from baps.language_python import PythonLanguagePlugin
 
     completed = _make_completed(returncode=0, stdout="1 passed")
-    with patch("baps.sandbox.subprocess.run", return_value=completed):
+    with patch("baps.language_python.subprocess.run", return_value=completed) as mock_run:
         result = PythonLanguagePlugin().run_tests(tmp_path, "none")
 
     assert result.passed is True
     assert result.exit_code == 0
-    assert "pytest" in result.command
+    assert result.command == "uv run pytest"
+    assert mock_run.call_args[0][0] == ["uv", "run", "pytest"]
 
 
-def test_run_tests_wraps_failure_result(tmp_path: Path) -> None:
+def test_run_tests_bare_falls_back_when_uv_missing(tmp_path: Path) -> None:
+    import sys as _sys
     from baps.language_python import PythonLanguagePlugin
 
-    completed = _make_completed(returncode=1, stdout="1 failed", stderr="error")
-    with patch("baps.sandbox.subprocess.run", return_value=completed):
+    completed = _make_completed(returncode=0, stdout="1 passed")
+
+    def _side_effect(args, **kwargs):
+        if args[0] == "uv":
+            raise FileNotFoundError
+        return completed
+
+    with patch("baps.language_python.subprocess.run", side_effect=_side_effect):
+        result = PythonLanguagePlugin().run_tests(tmp_path, "none")
+
+    assert result.passed is True
+    assert _sys.executable in result.command
+
+
+def test_run_tests_bare_sets_cwd(tmp_path: Path) -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    completed = _make_completed(returncode=0)
+    with patch("baps.language_python.subprocess.run", return_value=completed) as mock_run:
+        result = PythonLanguagePlugin().run_tests(tmp_path, "none")
+
+    assert result.cwd == str(tmp_path)
+    assert mock_run.call_args.kwargs.get("cwd") == tmp_path
+
+
+def test_run_tests_bare_wraps_failure(tmp_path: Path) -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    completed = _make_completed(returncode=1, stdout="1 failed", stderr="err")
+    with patch("baps.language_python.subprocess.run", return_value=completed):
         result = PythonLanguagePlugin().run_tests(tmp_path, "none")
 
     assert result.passed is False
     assert result.exit_code == 1
     assert result.stdout == "1 failed"
-    assert result.stderr == "error"
+    assert result.stderr == "err"
 
 
-def test_run_tests_sets_cwd_to_project_path(tmp_path: Path) -> None:
+def test_run_tests_docker_uses_plugin_image_and_command(tmp_path: Path) -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    plugin = PythonLanguagePlugin()
+    completed = _make_completed(returncode=0, stdout="1 passed")
+    with patch("baps.sandbox.subprocess.run", return_value=completed) as mock_run:
+        result = plugin.run_tests(tmp_path, "docker")
+
+    assert result.passed is True
+    docker_args = mock_run.call_args[0][0]
+    assert docker_args[0] == "docker"
+    assert plugin.docker_image in docker_args
+    assert plugin.test_command in docker_args
+
+
+def test_run_tests_docker_sets_cwd(tmp_path: Path) -> None:
     from baps.language_python import PythonLanguagePlugin
 
     completed = _make_completed(returncode=0)
     with patch("baps.sandbox.subprocess.run", return_value=completed):
-        result = PythonLanguagePlugin().run_tests(tmp_path, "none")
+        result = PythonLanguagePlugin().run_tests(tmp_path, "docker")
 
     assert result.cwd == str(tmp_path)
 
