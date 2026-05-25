@@ -783,6 +783,9 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
     source_include_raw = spec_data.get("source_include")
     source_include = list(source_include_raw) if isinstance(source_include_raw, list) else None
 
+    language_raw = _resolve(None, "language", "python")
+    language = str(language_raw)
+
     sandbox_raw = _resolve(getattr(args, "sandbox", None), "sandbox", "docker")
     sandbox = str(sandbox_raw)
     if sandbox not in ("docker", "none"):
@@ -800,6 +803,7 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
         "workspace": workspace,
         "project_type": project_type,
         "artifact_id": artifact_id,
+        "language": language,
         "northstar_markdown": northstar_markdown,
         "goal": goal,
         "output_path": output_path,

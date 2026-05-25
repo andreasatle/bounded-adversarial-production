@@ -500,3 +500,131 @@ def test_zig_plugin_run_tests_docker_uses_plugin_values(tmp_path: Path) -> None:
     docker_args = mock_run.call_args[0][0]
     assert plugin.docker_image in docker_args
     assert plugin.test_command in docker_args
+
+
+# ---------------------------------------------------------------------------
+# CodingProjectAdapter.verify_export Zig wiring
+# ---------------------------------------------------------------------------
+
+def test_coding_adapter_verify_export_zig_uses_zig_docker_image(tmp_path: Path) -> None:
+    from baps.coding_adapter import CodingProjectAdapter
+    from baps.state import CodingArtifact, CodeFile, State
+
+    artifact = CodingArtifact(id="art", language="zig", files=(
+        CodeFile(path="src/main.zig", content="// hello"),
+    ))
+    state = State(artifacts=(artifact,))
+    output_path = tmp_path / "output"
+    (output_path / "src").mkdir(parents=True)
+    (output_path / "src" / "main.zig").write_text("// hello", encoding="utf-8")
+
+    completed = _make_completed(returncode=0)
+    with patch("baps.sandbox.subprocess.run", return_value=completed) as mock_run:
+        CodingProjectAdapter().verify_export(output_path, state, "art", sandbox_mode="docker")
+
+    docker_args = mock_run.call_args[0][0]
+    assert "ziglang/zig:latest" in docker_args
+
+
+def test_coding_adapter_verify_export_zig_uses_zig_test_command(tmp_path: Path) -> None:
+    from baps.coding_adapter import CodingProjectAdapter
+    from baps.state import CodingArtifact, CodeFile, State
+
+    artifact = CodingArtifact(id="art", language="zig", files=(
+        CodeFile(path="src/main.zig", content="// hello"),
+    ))
+    state = State(artifacts=(artifact,))
+    output_path = tmp_path / "output"
+    (output_path / "src").mkdir(parents=True)
+    (output_path / "src" / "main.zig").write_text("// hello", encoding="utf-8")
+
+    completed = _make_completed(returncode=0)
+    with patch("baps.sandbox.subprocess.run", return_value=completed) as mock_run:
+        CodingProjectAdapter().verify_export(output_path, state, "art", sandbox_mode="docker")
+
+    docker_args = mock_run.call_args[0][0]
+    assert "zig build test" in docker_args
+
+
+def test_coding_adapter_verify_export_zig_does_not_use_python_image(tmp_path: Path) -> None:
+    from baps.coding_adapter import CodingProjectAdapter
+    from baps.state import CodingArtifact, CodeFile, State
+
+    artifact = CodingArtifact(id="art", language="zig", files=(
+        CodeFile(path="src/main.zig", content="// hello"),
+    ))
+    state = State(artifacts=(artifact,))
+    output_path = tmp_path / "output"
+    (output_path / "src").mkdir(parents=True)
+    (output_path / "src" / "main.zig").write_text("// hello", encoding="utf-8")
+
+    completed = _make_completed(returncode=0)
+    with patch("baps.sandbox.subprocess.run", return_value=completed) as mock_run:
+        CodingProjectAdapter().verify_export(output_path, state, "art", sandbox_mode="docker")
+
+    docker_args = mock_run.call_args[0][0]
+    assert "python:3.12-slim" not in docker_args
+
+
+# ---------------------------------------------------------------------------
+# CodingProjectAdapter.verify_candidate Zig wiring
+# ---------------------------------------------------------------------------
+
+def test_coding_adapter_verify_candidate_zig_uses_zig_docker_image(tmp_path: Path) -> None:
+    from baps.coding_adapter import CodingProjectAdapter
+    from baps.state import CodingArtifact, DeltaCodingState, State
+
+    state = State(artifacts=(CodingArtifact(id="art", language="zig", files=()),))
+    delta = DeltaCodingState.model_validate({
+        "artifact_id": "art",
+        "operation": "write_file",
+        "payload": {"file": {"path": "src/main.zig", "content": "// hello"}},
+    })
+
+    completed = _make_completed(returncode=0)
+    with patch("baps.sandbox.subprocess.run", return_value=completed) as mock_run:
+        result = CodingProjectAdapter().verify_candidate(delta, state, "art", sandbox_mode="docker")
+
+    assert result is not None
+    docker_args = mock_run.call_args[0][0]
+    assert "ziglang/zig:latest" in docker_args
+
+
+def test_coding_adapter_verify_candidate_zig_uses_zig_test_command(tmp_path: Path) -> None:
+    from baps.coding_adapter import CodingProjectAdapter
+    from baps.state import CodingArtifact, DeltaCodingState, State
+
+    state = State(artifacts=(CodingArtifact(id="art", language="zig", files=()),))
+    delta = DeltaCodingState.model_validate({
+        "artifact_id": "art",
+        "operation": "write_file",
+        "payload": {"file": {"path": "src/main.zig", "content": "// hello"}},
+    })
+
+    completed = _make_completed(returncode=0)
+    with patch("baps.sandbox.subprocess.run", return_value=completed) as mock_run:
+        result = CodingProjectAdapter().verify_candidate(delta, state, "art", sandbox_mode="docker")
+
+    assert result is not None
+    docker_args = mock_run.call_args[0][0]
+    assert "zig build test" in docker_args
+
+
+def test_coding_adapter_verify_candidate_zig_does_not_use_python_image(tmp_path: Path) -> None:
+    from baps.coding_adapter import CodingProjectAdapter
+    from baps.state import CodingArtifact, DeltaCodingState, State
+
+    state = State(artifacts=(CodingArtifact(id="art", language="zig", files=()),))
+    delta = DeltaCodingState.model_validate({
+        "artifact_id": "art",
+        "operation": "write_file",
+        "payload": {"file": {"path": "src/main.zig", "content": "// hello"}},
+    })
+
+    completed = _make_completed(returncode=0)
+    with patch("baps.sandbox.subprocess.run", return_value=completed) as mock_run:
+        result = CodingProjectAdapter().verify_candidate(delta, state, "art", sandbox_mode="docker")
+
+    assert result is not None
+    docker_args = mock_run.call_args[0][0]
+    assert "python:3.12-slim" not in docker_args

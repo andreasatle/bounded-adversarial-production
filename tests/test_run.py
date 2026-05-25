@@ -7703,6 +7703,65 @@ def test_resolve_run_config_max_sub_gaps_non_integer_raises(tmp_path: Path) -> N
         run_module.resolve_run_config(args)
 
 
+def test_resolve_run_config_language_zig_propagates_to_config(tmp_path: Path) -> None:
+    import argparse
+    import yaml
+    import baps.run as run_module
+
+    spec = {
+        "project_type": "coding",
+        "artifact_id": "mycode",
+        "northstar_markdown": "Build a stack",
+        "language": "zig",
+        "goal": "implement a stack",
+        "output": "output/zig-proj",
+    }
+    spec_path = tmp_path / "spec.yaml"
+    spec_path.write_text(yaml.dump(spec))
+    args = argparse.Namespace(
+        spec=str(spec_path),
+        workspace=str(tmp_path / "ws"),
+        artifact_id=None,
+        goal=None,
+        output=None,
+        max_iterations=None,
+        project_type=None,
+        sandbox=None,
+        command=None,
+    )
+    config = run_module.resolve_run_config(args)
+    assert config["language"] == "zig"
+
+
+def test_resolve_run_config_language_defaults_to_python(tmp_path: Path) -> None:
+    import argparse
+    import yaml
+    import baps.run as run_module
+
+    spec = {
+        "project_type": "coding",
+        "artifact_id": "mycode",
+        "northstar_markdown": "Build a thing",
+        "goal": "implement something",
+        "output": "output/proj",
+    }
+    spec_path = tmp_path / "spec.yaml"
+    spec_path.write_text(yaml.dump(spec))
+    args = argparse.Namespace(
+        spec=str(spec_path),
+        workspace=str(tmp_path / "ws"),
+        artifact_id=None,
+        goal=None,
+        output=None,
+        max_iterations=None,
+        project_type=None,
+        sandbox=None,
+        command=None,
+    )
+    config = run_module.resolve_run_config(args)
+    assert config["language"] == "python"
+
+
 def test_create_game_prompt_includes_context_chain_when_provided() -> None:
     import baps.run as run_module
 
