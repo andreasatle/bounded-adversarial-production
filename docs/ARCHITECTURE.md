@@ -12,6 +12,7 @@ config/NorthStar → State → StateView → CreateGame
                                    GameSpec (context_chain)
                                            ↓
                                        PlayGame
+                                     [research phase]
                                            ↓
                                DeltaState → StateUpdateProposal → StateService → export
 ```
@@ -30,10 +31,12 @@ Current execution behavior:
    a. Call `_solve_gap(context_chain=(), depth=0)` which:
       - Builds adapter-owned `StateView`
       - Calls `CreateGame` (gap analysis against NorthStar)
-      - If `DecomposeSpec`: recurse into each sub-gap with extended `context_chain`
+      - If `DecomposeSpec`: recurse into each sub-gap with extended `context_chain`; each leaf applies its delta before the next sub-gap begins
       - If `GameSpec`: inject `context_chain`, run `PlayGame`, integrate delta, export
    b. Stop when `iterations_remaining == 0` or a stop condition is raised
 4. Write run result JSON to workspace.
+
+A completed decomposition pass is not assumed to complete the project. The outer loop re-invokes CreateGame at depth 0 after all sub-gaps complete, allowing gap re-assessment against the updated state.
 
 Current implementation philosophy:
 
@@ -51,9 +54,10 @@ Current implementation philosophy:
 
 **Core state:**
 
-- `State`, `NorthStar`, `StateArtifact`
+- `State`, `StateArtifact`
 - `DocumentArtifact` (sections), `CodingArtifact` (files)
-- `Section`, `CodeFile`
+- `Section` — `title`, `body`, `source_hash` (optional; set by audit adapter only)
+- `CodeFile`
 
 **Game contracts:**
 
@@ -61,22 +65,22 @@ Current implementation philosophy:
 - `SubGapSpec` — `description` (a gap to be recursively planned)
 - `DecomposeSpec` — `rationale`, `sub_gaps` (CreateGame decomposition response)
 
-**Document deltas:**
+**Document deltas** (payload models use `extra="forbid"`):
 
-- `DeltaDocumentState` (`append_section`) — add a new section
-- `DeltaModifyDocumentState` (`modify_section`) — rewrite an existing section
-- `DeltaDeleteDocumentState` (`delete_section`) — remove a section
+- `DeltaDocumentState` (`append_section`) / `AppendSectionDelta`
+- `DeltaModifyDocumentState` (`modify_section`) / `ModifySectionDelta`
+- `DeltaDeleteDocumentState` (`delete_section`) / `DeleteSectionDelta`
 
-**Coding deltas:**
+**Coding deltas** (payload models use `extra="forbid"`):
 
-- `DeltaCodingState` (`write_file`) — write a single file
-- `DeltaCodingBatchState` (`write_files`) — write multiple files in one game
-- `DeltaDeleteCodingState` (`delete_file`) — remove a file
+- `DeltaCodingState` (`write_file`) / `WriteFileDelta`
+- `DeltaCodingBatchState` (`write_files`) / `WriteFilesDelta`
+- `DeltaDeleteCodingState` (`delete_file`) / `DeleteFileDelta`
 
 **Adversarial evaluation:**
 
-- `RedFinding` — adversarial reviewer output
-- `RefereeDecision` — adjudication output
+- `RedFinding` — adversarial reviewer output (`disposition`, `rationale`, `findings`)
+- `RefereeDecision` — adjudication output (`disposition`, `rationale`, `improvement_hints`)
 - `PlayGameRuntime` — attempt tracking
 
 **Integration:**
@@ -92,9 +96,10 @@ Current implementation philosophy:
 **Key functions:**
 
 - `create_game(...)` — gap-analysis prompt, parsing (`GameSpec | DecomposeSpec`), validation, adapter normalization
-- `play_game(...)` — Blue/Red/Referee orchestration with bounded retries
-- `_solve_gap(context_chain, ctx, ..., depth)` — recursive gap solver; accumulates context chain; counts only leaf executions against `max_iterations`
+- `play_game(...)` — Blue/Red/Referee orchestration with optional research phases and bounded retries
+- `_solve_gap(context_chain, ctx, ..., depth)` — recursive gap solver; accumulates context chain; counts only leaf executions against `max_iterations`; clears `play_game_no_delta` between sibling sub-gaps
 - `_run_project_iterations(...)` — outer loop calling `_solve_gap` at depth 0 until stop
+- `_sanitize_feedback_dict(...)` — sanitizes model-generated strings in feedback dicts before re-embedding in subsequent prompts
 
 **`_RunContext`:** Mutable dataclass threaded through recursion tracking current state, remaining iterations, verification result, and stop reason.
 
@@ -109,7 +114,7 @@ BAPS_{ROLE}_MODEL=<model-id>
 
 Roles: `BLUE`, `RED`, `REFEREE`, `CREATE_GAME`, `DECOMPOSE`. Falls back to global `BAPS_BACKEND` / `BAPS_*_MODEL`.
 
-**`DECOMPOSE` role** — used for CreateGame calls at decomposition nodes (`depth > 0`). These are structural planning tasks (splitting large gaps into sub-gaps) that require less raw capability than leaf execution. When `BAPS_DECOMPOSE_*` is unset, falls back to the `CREATE_GAME` client. A typical local-first setup might assign a small fast model to `DECOMPOSE` and a stronger model to `BLUE`.
+**`DECOMPOSE` role** — used for CreateGame calls at decomposition nodes (`depth > 0`). These are structural planning tasks that require less raw capability than leaf execution. A typical setup assigns a lighter model to `DECOMPOSE` and a stronger model to `BLUE`.
 
 **Stop conditions:**
 
@@ -117,7 +122,7 @@ Roles: `BLUE`, `RED`, `REFEREE`, `CREATE_GAME`, `DECOMPOSE`. Falls back to globa
 |---|---|
 | `iteration_limit_reached` | `max_iterations` leaf games consumed |
 | `create_game_no_new_game` | No gap at depth 0 |
-| `play_game_no_delta` | PlayGame returned no accepted delta |
+| `play_game_no_delta` | PlayGame returned no accepted delta (clears between siblings) |
 | `no_state_change` | Delta produced no state change |
 | `northstar_update_proposed` | CreateGame signalled trajectory drift |
 | `max_depth_reached` | Decomposition exceeded `max_depth` |
@@ -129,20 +134,31 @@ Roles: `BLUE`, `RED`, `REFEREE`, `CREATE_GAME`, `DECOMPOSE`. Falls back to globa
 #### Document (`src/baps/document_adapter.py`)
 
 - Section-based document state
-- CreateGame StateView: renders NorthStar + current sections
+- CreateGame StateView: renders NorthStar + current sections (sanitized)
+- PlayGame StateView: renders NorthStar + full section bodies (sanitized)
 - Delta operations: `append_section`, `modify_section`, `delete_section`
 - Export: markdown file
-- Verification: structural consistency check
 
 #### Coding (`src/baps/coding_adapter.py`)
 
 - File-based codebase state
-- CreateGame StateView: renders NorthStar + existing file contents (first 30 lines, truncated with count)
+- CreateGame StateView: renders NorthStar + existing file contents (first 30 lines, sanitized)
+- PlayGame StateView: renders NorthStar + full file contents (sanitized)
 - Delta operations: `write_file`, `write_files` (preferred), `delete_file`
 - Export: file tree + root `conftest.py`
 - Verification: `pytest` execution; result evidence feeds next CreateGame
 
-Both adapters expose tools for Blue's tool-call interface in addition to JSON output.
+#### Audit (`src/baps/audit_adapter.py`)
+
+- Document-based findings report over an external source tree
+- CreateGame StateView: renders NorthStar + source file listing + current findings; stale findings marked `[STALE — source changed]`
+- PlayGame StateView: renders NorthStar + full source file contents
+- Delta operations: `append_section` (finding), `modify_section` (revise finding), `no_finding` (confirmed clean)
+- Each accepted section stores `source_hash` (SHA-256 of source files at write time) for staleness detection
+- Export: markdown findings report
+- Separate workspace per spec required (each spec has its own `artifact_id`)
+
+All adapters expose tools for Blue's tool-call interface in addition to JSON output.
 
 ---
 
@@ -152,6 +168,7 @@ Both adapters expose tools for Blue's tool-call interface in addition to JSON ou
 - Content uses explicit delimiters (`=== StateView Start/End ===`)
 - Built by adapters for CreateGame and PlayGame contexts
 - Never passed as raw JSON to prompts
+- All model-generated content embedded in `StateView.content` is NFKC-normalized and injection-pattern-sanitized before inclusion
 
 ---
 
@@ -164,7 +181,7 @@ Active backends:
 - `OllamaClient` — local Ollama server
 - `FakeModelClient` — deterministic test double with queued responses and prompt capture
 
-`Role` wraps a client with name, output schema, and constrained-decoding flag.
+`Role` wraps a client with name, output schema, and constrained-decoding flag. Roles supporting research phases use `generate_agentic(...)` for tool-use loops before producing their primary output.
 
 ---
 
@@ -173,11 +190,12 @@ Active backends:
 Runs specs repeatedly across a model ladder with policy-guided selection:
 
 - EMA reward scoring: `score = 0.7 * score + 0.3 * reward`
-- Softmax model selection with temperature decay
+- Softmax model selection with decaying temperature
 - Automatic escalation to stronger model on low reward
 - Underperformer dropping: models below score floor after min runs are removed
 - Multi-round support with ladder reload between rounds
 - Configurable via `BAPS_MODEL_LADDER` (comma-separated model names)
+- Policy path validated to be within current working directory
 
 ---
 
@@ -189,7 +207,20 @@ Reviews and applies approved NorthStar proposals from the blackboard:
 baps-apply-northstar <workspace> [--index N] [--dry-run]
 ```
 
-Reads `<workspace>/blackboard/northstar_proposals.jsonl`, lists proposals interactively, writes accepted `proposed_northstar` to `baps-config.json`.
+Reads `<workspace>/blackboard/northstar_proposals.jsonl`, lists proposals interactively, writes accepted `proposed_northstar` to `baps-config.json`. Config path is validated to remain within the workspace (symlink escape rejection).
+
+---
+
+### Security Boundaries (`src/baps/project_adapter.py`, `src/baps/tools.py`)
+
+- `sanitize_model_string`: NFKC-normalizes and applies injection-pattern regex before embedding model-generated strings in prompts
+- `sanitize_model_title`: additionally collapses to a single line and strips leading `#` characters
+- `normalize_json_candidate`: enforces 64 KB byte-length cap before `json.loads` to bound memory allocation
+- `_sanitize_external_content` (tools.py): same NFKC normalization applied to external web content
+- All delta payload models use `extra="forbid"` — unexpected fields are rejected rather than silently dropped
+- GameSpec fields (`objective`, `success_condition`) are sanitized before embedding in Red and Referee prompts
+- Referee/Red rationale is sanitized before re-embedding in `previous_feedback` for subsequent Blue turns
+- NorthStar proposals are sanitized before writing to the blackboard
 
 ---
 
@@ -198,9 +229,10 @@ Reads `<workspace>/blackboard/northstar_proposals.jsonl`, lists proposals intera
 ```
 src/baps/
   run.py                  # Generic lifecycle orchestration, recursive gap solver
-  project_adapter.py      # ProjectTypeAdapter protocol, registry, Blue prompt core
+  project_adapter.py      # ProjectTypeAdapter protocol, registry, sanitizers, Blue prompt core
   document_adapter.py     # DocumentProjectAdapter — all document mechanics
   coding_adapter.py       # CodingProjectAdapter — all coding mechanics
+  audit_adapter.py        # AuditProjectAdapter — all audit mechanics, source fingerprinting
   state.py                # Authoritative schemas, mutation, delta application
   state_service.py        # StateService — the only mutation boundary
   state_store.py          # JsonStateStore — JSON persistence
@@ -209,6 +241,7 @@ src/baps/
   scheduler.py            # Adaptive multi-model scheduler with policy learning
   scheduler_policy.py     # ModelPolicy, EMA scoring, softmax selection
   northstar_apply.py      # baps-apply-northstar CLI
+  tools.py                # fetch_url, web_search, ToolExecutor — research phase tools
 
 tests/
   test_state.py
@@ -217,10 +250,22 @@ tests/
   test_northstar_projection.py
   test_models.py
   test_run.py
+  test_audit_adapter.py
+  test_scheduler_policy.py
+  test_scheduler.py
+  test_northstar_apply.py
+  test_tools.py
 
 docs/
   SYSTEM.md               # Normative system contract
   ARCHITECTURE.md         # Implementation description (this file)
+  NORTH-STAR.md           # Long-term intent and philosophy
+
+examples/
+  document-project.yaml
+  coding-project.yaml
+  audit-baps.yaml         # Security audit spec (workspace: .baps-workspace-security)
+  audit-coverage.yaml     # Test coverage audit spec (workspace: .baps-workspace-coverage)
 ```
 
 ---
@@ -236,50 +281,50 @@ docs/
 ### Iteration flow (inside `_solve_gap`)
 
 1. **CreateGame** — gap analysis
-   - Adapter builds CreateGame `StateView` (includes file contents for coding)
+   - Adapter builds CreateGame `StateView` (NorthStar + current artifact state)
    - Core renders gap-analysis prompt with optional `context_chain` from parent levels
    - Model returns `GameSpec`, `DecomposeSpec`, `no_new_game`, or `northstar_update_needed`
-   - If `DecomposeSpec`: recurse for each sub-gap with extended context chain
+   - If `DecomposeSpec`: recurse for each sub-gap with extended context chain; `play_game_no_delta` clears between siblings
 
 2. **PlayGame** — adversarial execution (leaf games only)
+   - Optional research phase: each role may run agentic tool loops before producing output
    - Adapter builds PlayGame `StateView`
    - Blue prompt includes full `context_chain` from all ancestor levels
    - Blue produces candidate `DeltaState` (JSON or tool call)
-   - Red evaluates against `GameSpec`
+   - Red evaluates against `GameSpec`; its rationale is sanitized before feeding back to Blue
    - Referee decides accept/revise/reject
-   - Bounded retries with feedback on rejected attempts
+   - Bounded retries with sanitized feedback on rejected attempts
 
 3. **Integration**
    - Accepted delta mapped to `StateUpdateProposal` by adapter
-   - `StateService.apply_update` applies as durable mutation
+   - `StateService.apply_delta` applies as durable mutation
    - NorthStar artifact IDs are protected — proposals targeting them are rejected
 
 4. **Export**
    - Adapter exports state-derived artifacts to output path
-   - Adapter verification may execute (coding: pytest; document: consistency check)
+   - Adapter verification may execute (coding: pytest; audit: structural check)
    - Verification result fed into next CreateGame call
 
 ### Multiscale decomposition
 
 ```
-_solve_gap((), ctx, depth=0)
+_solve_gap((), ctx, depth=0)           ← outer loop re-invokes this after all sub-gaps complete
   → CreateGame returns DecomposeSpec(sub_gaps=[A, B, C])
   → _solve_gap(("A",), ctx, depth=1)
       → CreateGame returns GameSpec for A
-      → PlayGame → integrate → export
+      → PlayGame → integrate → export   ← state updated; B and C will see result
   → _solve_gap(("B",), ctx, depth=1)
       → CreateGame returns DecomposeSpec(sub_gaps=[B1, B2])
       → _solve_gap(("B", "B1"), ctx, depth=2)
-          → CreateGame returns GameSpec for B1
           → PlayGame → integrate → export
       → _solve_gap(("B", "B2"), ctx, depth=2)
           → ...
   → _solve_gap(("C",), ctx, depth=1)
       → ...
-→ _solve_gap((), ctx, depth=0)  [outer loop re-assesses from NorthStar]
+→ outer loop: CreateGame re-assesses at depth=0 against updated state
 ```
 
-Only leaf PlayGame executions count against `max_iterations`. Decomposition is free.
+Only leaf PlayGame executions count against `max_iterations`. Decomposition is free. The project is not considered complete until CreateGame returns `no_new_game` at depth 0.
 
 ### Persistence
 
@@ -291,6 +336,12 @@ Only leaf PlayGame executions count against `max_iterations`. Decomposition is f
 ---
 
 ## 5. Schema Documentation
+
+### `Section`
+
+- Fields: `title`, `body`, `source_hash` (optional, default `None`)
+- `source_hash`: set by audit adapter only; SHA-256 of source files at write time; used for staleness detection on subsequent runs
+- Document and coding adapters never set `source_hash`
 
 ### `GameSpec`
 
@@ -311,25 +362,26 @@ Only leaf PlayGame executions count against `max_iterations`. Decomposition is f
 - Fields: `description`
 - Purpose: a gap description passed as context to the next decomposition level
 
-### `DeltaDocumentState` / `DeltaModifyDocumentState` / `DeltaDeleteDocumentState`
+### Delta payload models
 
-- Operations: `append_section`, `modify_section`, `delete_section`
-- Payloads: `AppendSectionDelta`, `ModifySectionDelta`, `DeleteSectionDelta`
+All payload models use `model_config = ConfigDict(extra="forbid")`:
 
-### `DeltaCodingState` / `DeltaCodingBatchState` / `DeltaDeleteCodingState`
-
-- Operations: `write_file`, `write_files`, `delete_file`
-- Payloads: `WriteFileDelta`, `WriteFilesDelta`, `DeleteFileDelta`
+- `AppendSectionDelta` — `section: Section`
+- `ModifySectionDelta` — `section_title`, `new_body`
+- `DeleteSectionDelta` — `section_title`
+- `WriteFileDelta` — `file: CodeFile`
+- `WriteFilesDelta` — `files: tuple[CodeFile, ...]`
+- `DeleteFileDelta` — `path`
 
 ### `RedFinding`
 
 - Fields: `disposition` (accept|revise|reject), `rationale`, `success_condition_met`, `findings`
-- Purpose: adversarial review output
+- Purpose: adversarial review output; rationale is sanitized before re-embedding in feedback
 
 ### `RefereeDecision`
 
 - Fields: `disposition` (accept|revise|reject), `rationale`, `red_override`, `improvement_hints`
-- Purpose: game-local adjudication output
+- Purpose: game-local adjudication output; rationale is sanitized before re-embedding in feedback
 
 ### `StateUpdateProposal`
 
@@ -357,17 +409,22 @@ If a `context_chain` is present, it is rendered before the steps as "Parent plan
 
 - Full `context_chain` (if non-empty): "Planning context (coarsest → finest scope)"
 - Current `StateView`
-- `GameSpec` fields: objective, target, delta type, success condition
+- `GameSpec` fields: objective (sanitized), target, delta type, success condition (sanitized)
 - Execution rules including feedback repair on retry
 
 Adapter supplements inject delta-shape instructions and project-specific constraints.
 
 ### Red and Referee prompts
 
-- Core Red evaluates candidate against `GameSpec.success_condition`
+- Core Red evaluates candidate against `GameSpec.success_condition` (sanitized)
 - Core Referee adjudicates Red finding + candidate + GameSpec
 - Adapter supplements inject type-specific guidance
 - Verification result (if available) is passed as evidence to both
+- Red/Referee rationale and findings are sanitized before flowing into `previous_feedback`
+
+### Research phases
+
+Before producing their primary output, Blue, Red, and Referee roles may optionally run agentic tool-use loops (`generate_agentic`). Tool call logs are passed between roles for transparency. Adapters control which tools each role receives.
 
 ---
 
@@ -378,11 +435,13 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 - `FakeModelClient` provides queued responses and prompt capture
 - Autouse fixture patches `_build_model_client` and `_build_role_client` to inject fakes
 - Prompt content and parser validation tests
-- Recursive solve behavior: decompose, context chain injection, max_depth enforcement
+- Recursive solve behavior: decompose, context chain injection, max_depth enforcement, sibling continuation after `play_game_no_delta`
 - Adapter boundary regression tests
 - Schema validation and update semantics
 - State persistence and service mutation
 - Export and verification paths
+- Security boundary tests: path anchoring, symlink escape rejection, policy path validation
+- Scheduler policy tests: EMA scoring, softmax selection, underperformer dropping
 
 ---
 
@@ -401,25 +460,28 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 9. Export is one-way from `State`.
 10. Schema validation enforced via typed models and runtime checks.
 11. Deterministic tests enforce boundary contracts.
+12. Model-generated content is sanitized before embedding in any prompt.
+13. Delta payload models reject unexpected fields.
+14. Model response size is bounded before deserialization.
 
 ---
 
 ## 9. Current Limitations
 
 1. Decomposition branching factor is unconstrained — the model decides how many sub-gaps to produce (`max_sub_gaps` not yet enforced).
-2. Sub-gap verification feedback does not propagate upward to re-trigger parent-level decomposition.
-3. Role execution is prompt-only (no tool-execution subsystem in canonical runtime).
-4. Only `document` and `coding` project types are active.
+2. Sub-gap planning is fixed at decomposition time — individual leaf results cannot trigger re-planning of remaining siblings within the same iteration.
+3. Only `document`, `coding`, and `audit` project types are active.
+4. Audit source staleness detection uses a fixed hash of all source files; per-file granularity is not yet implemented.
 
 ---
 
 ## 10. Suggested Next Milestones
 
 1. **`max_sub_gaps` enforcement** — cap branching factor per decomposition to bound worst-case game count
-2. **Residual feedback propagation** — failed leaf verifications signal back to parent level to trigger re-decomposition
+2. **Per-file staleness** — track source hash per file within audit sections for finer-grained invalidation
 3. **Adapter expansion** — new project types register adapters without touching core orchestration
 4. **Stronger contract tests** — verify decomposition invariants and context chain integrity end-to-end
-5. **Prompt-complexity routing** — extend DECOMPOSE role to select model based on StateView size or estimated task complexity within a role
+5. **Prompt-complexity routing** — extend DECOMPOSE role to select model based on StateView size or estimated task complexity
 
 ---
 
@@ -427,7 +489,7 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 
 - **State**: Authoritative project condition persisted as JSON.
 - **NorthStar**: Intent artifact(s) embedded inside authoritative state; the target all gap analysis measures against.
-- **StateView**: Bounded text projection for model-facing prompts.
+- **StateView**: Bounded, sanitized text projection for model-facing prompts.
 - **GameSpec**: Bounded task contract for one PlayGame cycle; carries `context_chain`.
 - **DecomposeSpec**: CreateGame response signalling the gap is too large; carries ordered sub-gaps.
 - **SubGapSpec**: A gap description passed down to the next decomposition level.
@@ -440,8 +502,10 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 - **StateUpdateProposal**: Integration envelope for mutation through `StateService`.
 - **runtime**: Lifecycle orchestration path (`init`, `run`, `init_and_run`).
 - **ModelClient**: Generation interface for model backends and test doubles.
-- **Role**: A named model client with schema and constrained-decoding flag.
+- **Role**: A named model client with schema, constrained-decoding flag, and optional research phase.
 - **export**: One-way materialization of state to filesystem outputs.
 - **canonical spine**: The active execution path from NorthStar through recursive gap solving to export.
 - **gap analysis**: CreateGame's process of comparing current state against NorthStar to identify what is missing.
 - **multiscale**: The property that decomposition can recurse to arbitrary depth, with each level informed by all levels above.
+- **source_hash**: SHA-256 fingerprint of source files stored per audit section; used to detect staleness on re-runs.
+- **research phase**: Optional agentic tool-use loop run by a role before producing its primary output.

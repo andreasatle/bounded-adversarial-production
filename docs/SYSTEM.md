@@ -8,8 +8,6 @@ This document is prescriptive about what must remain true.
 
 ## 1. Canonical Spine
 
-Canonical runtime:
-
 ```
 config/NorthStar → State → StateView → CreateGame
                                            ↓
@@ -18,6 +16,7 @@ config/NorthStar → State → StateView → CreateGame
                                    GameSpec (context_chain)
                                            ↓
                                        PlayGame
+                                     [research phase]
                                            ↓
                                DeltaState → StateUpdateProposal → StateService → export
 ```
@@ -36,26 +35,29 @@ CreateGame is a **gap-analysis operation**, not a step-forward operation. It com
 6. `NorthStar` is immutable through the automated pipeline; updates require human approval.
 7. Project behavior is adapter-owned behind `ProjectTypeAdapter`.
 8. Core orchestration remains project-type generic.
-9. `CreateGame` is `State`/`NorthStar`-aware through `StateView`. It performs gap analysis, not step derivation.
-10. `PlayGame` is `GameSpec`-bound. It has no access to `NorthStar` directly.
+9. CreateGame is `State`/`NorthStar`-aware through `StateView`. It performs gap analysis, not step derivation.
+10. PlayGame is `GameSpec`-bound. It has no access to `NorthStar` directly.
 11. `GameSpec.context_chain` carries all ancestor gap descriptions from the coarsest decomposition to the immediate task. Blue sees the full chain.
 12. `StateService` is the mutation boundary for durable state changes.
 13. `StateService` rejects proposals targeting NorthStar artifacts.
 14. Export is one-way materialization from `State` to output files.
 15. Prompts consume `StateView` context, not raw authoritative `State` internals.
+16. Model-generated content is sanitized (NFKC-normalized, injection patterns removed) before embedding in any subsequent prompt.
+17. Delta payload models reject extra fields (`extra="forbid"`); unexpected model output fields cause validation failure rather than silent discard.
+18. Model response size is bounded before JSON deserialization (64 KB cap in `normalize_json_candidate`).
 
 ## 3. Adapter Contract
 
 `ProjectTypeAdapter` owns project-specific mechanics:
 
-1. initial state creation
+1. Initial state creation
 2. CreateGame `StateView` rendering
 3. PlayGame `StateView` rendering
-4. project prompt supplements (CreateGame, Blue, Red, Referee)
+4. Project prompt supplements (CreateGame, Blue, Red, Referee)
 5. Blue delta parsing
-6. delta → `StateUpdateProposal` mapping
-7. export
-8. optional export verification
+6. Delta → `StateUpdateProposal` mapping
+7. Export
+8. Optional export verification
 
 Core orchestration must call adapter interfaces and remain generic.
 
@@ -65,8 +67,15 @@ Active registered project types in canonical runtime:
 
 - `document` — section-based document evolution (`append_section`, `modify_section`, `delete_section`)
 - `coding` — file-based codebase evolution (`write_file`, `write_files`, `delete_file`)
+- `audit` — adversarial source code audit producing a structured findings report (`append_section`, `no_finding`)
 
-Both participate through the same adapter contract and orchestration path.
+All three participate through the same adapter contract and orchestration path.
+
+### Audit-specific invariants
+
+- Each audit section stores a `source_hash` (SHA-256 of source files at write time).
+- On subsequent runs, sections whose `source_hash` differs from the current source are marked `[STALE — source changed]` in the CreateGame `StateView`.
+- `source_hash` is audit-only; document and coding adapters never set it.
 
 ## 5. Multiscale Decomposition Contract
 
@@ -75,16 +84,31 @@ When CreateGame returns a `DecomposeSpec`:
 - `_solve_gap` recursively solves each `SubGapSpec` at `depth + 1`
 - The current gap's description is prepended to `context_chain` before each recursive call
 - Recursion is bounded by `max_depth` (config key, default 3)
+- Sub-gaps are executed sequentially; each leaf applies its delta to state before the next sub-gap begins
+- A `play_game_no_delta` result at a leaf does not abort sibling sub-gaps; only real stop conditions propagate up
 - `NoNewGameError` at depth > 0 means the sub-gap is satisfied; only at depth 0 does it stop the run
 - Only leaf `PlayGame` executions count against `max_iterations`
 - `max_depth_reached` is a valid stop reason when decomposition exceeds the depth limit
+- The outer iteration loop re-invokes CreateGame at depth 0 after all sub-gaps complete; the project is not assumed complete after one decomposition pass
 
-## 6. NorthStar Proposal Flow
+## 6. Role Model
+
+PlayGame involves three roles, each optionally preceded by a research phase:
+
+- **Blue** — proposes a candidate `DeltaState`
+- **Red** — adversarially reviews the candidate against `GameSpec`
+- **Referee** — adjudicates and decides accept/revise/reject
+
+Each role may use a different model backend/model via environment variables (`BAPS_{ROLE}_BACKEND`, `BAPS_{ROLE}_MODEL`). The **DECOMPOSE** role handles CreateGame calls at decomposition nodes (`depth > 0`) and may be assigned a lighter model than the leaf-execution roles.
+
+Research phases (agentic tool use before role output) are optional and adapter-controlled. Tool call logs are passed between roles for transparency.
+
+## 7. NorthStar Proposal Flow
 
 When CreateGame signals trajectory drift:
 
 - Returns `{"northstar_update_needed": true, "rationale": "...", "proposed_northstar": "..."}`
-- Runtime appends a JSONL event to `<workspace>/blackboard/northstar_proposals.jsonl`
+- Runtime sanitizes and appends a JSONL event to `<workspace>/blackboard/northstar_proposals.jsonl`
 - Stop reason is set to `northstar_update_proposed`
 - No state is mutated
 - Human reviews proposals and manually updates the NorthStar source
@@ -92,35 +116,33 @@ When CreateGame signals trajectory drift:
 
 Blackboard is append-only and non-authoritative. It never feeds back into `State`.
 
-## 7. Stop Conditions
+## 8. Stop Conditions
 
 | Stop reason | Meaning |
 |---|---|
 | `iteration_limit_reached` | `max_iterations` leaf games executed |
 | `create_game_no_new_game` | No gap remains at depth 0 |
-| `play_game_no_delta` | PlayGame produced no accepted delta |
+| `play_game_no_delta` | PlayGame produced no accepted delta (leaf only; siblings continue) |
 | `no_state_change` | Accepted delta produced no state change |
 | `northstar_update_proposed` | Trajectory drift detected; human approval needed |
 | `max_depth_reached` | Decomposition exceeded `max_depth` |
 
-## 8. Anti-Invariants (Forbidden Drift)
-
-The following are forbidden:
+## 9. Anti-Invariants (Forbidden Drift)
 
 1. Passing raw `State` JSON as `StateView` prompt context.
-2. Embedding project-specific document/coding logic in core orchestration.
+2. Embedding project-specific document/coding/audit logic in core orchestration.
 3. Bypassing `ProjectTypeAdapter` for project-type behavior.
 4. Treating English narrative semantics as validator authority.
 5. Treating exported files as canonical state.
 6. Introducing competing runtime spines.
 7. Exposing authoritative state internals directly to prompts outside `StateView` contract.
-8. Framing CreateGame as "what should I do next?" rather than "what gap to NorthStar must I close?"
+8. Framing CreateGame as "what should I do next?" rather than "what gap to NorthStar must I close?".
 9. Mutating NorthStar through the automated pipeline without human approval.
 10. Allowing decomposition to continue past `max_depth`.
+11. Embedding model-generated content in prompts without sanitization.
+12. Treating a completed decomposition pass as project completion without re-running CreateGame.
 
-## 9. Authority and Boundaries
-
-Authority hierarchy:
+## 10. Authority and Boundaries
 
 1. Model outputs are proposals, not authoritative state.
 2. Accepted integration is required before durable mutation.
@@ -129,14 +151,13 @@ Authority hierarchy:
 5. Export never defines authoritative state.
 6. NorthStar proposals on the blackboard are not authority — they are proposals awaiting human review.
 
-## 10. System Alignment Rules
-
-Required alignment:
+## 11. System Alignment Rules
 
 1. `State != StateView`
 2. `core orchestration != adapter mechanics`
 3. `export != authoritative state`
-4. `prompt context == StateView` (bounded model-facing view)
+4. `prompt context == StateView` (bounded, sanitized, model-facing view)
 5. `blackboard != authority`
 6. `CreateGame == gap analysis toward NorthStar` (not step derivation)
 7. `context_chain == full ancestor scope chain flowing into every leaf game`
+8. `one decomposition pass != project complete` (outer loop re-assesses)
