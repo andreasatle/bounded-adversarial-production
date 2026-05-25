@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from baps.language_plugin import LanguagePlugin, get_language_plugin
 from baps.models import ToolCall, ToolDefinition
 from baps.northstar_projection import ProjectionType, StateView
 from baps.project_adapter import (
@@ -60,23 +61,6 @@ _BLUE_CONTENT_FORBIDDEN_MARKERS: tuple[str, ...] = (
     "Rewriting",
     "self-contained issue",
     "Re-reading context",
-)
-
-_CONFTEST_CONTENT = (
-    "import sys, os\n"
-    'sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))\n'
-)
-
-_GITIGNORE_CONTENT = (
-    "__pycache__/\n"
-    "*.pyc\n"
-    "*.pyo\n"
-    ".pytest_cache/\n"
-    "*.egg-info/\n"
-    "dist/\n"
-    "build/\n"
-    ".venv/\n"
-    "uv.lock\n"
 )
 
 
@@ -191,7 +175,10 @@ def build_coding_state_view(state: State, game_spec: GameSpec) -> StateView:
     )
 
 
-def _render_verification_feedback_section(previous_feedback: dict[str, object] | None) -> str:
+def _render_verification_feedback_section(
+    previous_feedback: dict[str, object] | None,
+    plugin: LanguagePlugin,
+) -> str:
     if previous_feedback is None:
         return ""
     section = ""
@@ -199,7 +186,7 @@ def _render_verification_feedback_section(previous_feedback: dict[str, object] |
         pv = previous_feedback["prior_export_verification"]
         exit_code = pv.get("exit_code", "?")
         stdout = str(pv.get("stdout", ""))
-        failures = _parse_pytest_failures(stdout)
+        failures = plugin.parse_test_failures(stdout)
         if failures:
             lines = "\n".join(f"  - {f['test_id']}: {f['reason']}" for f in failures)
             section += (
@@ -216,7 +203,7 @@ def _render_verification_feedback_section(previous_feedback: dict[str, object] |
         cv = previous_feedback["candidate_verification"]
         exit_code = cv.get("exit_code", "?")
         stdout = str(cv.get("stdout", ""))
-        failures = _parse_pytest_failures(stdout)
+        failures = plugin.parse_test_failures(stdout)
         if failures:
             lines = "\n".join(f"  - {f['test_id']}: {f['reason']}" for f in failures)
             section += (
@@ -237,8 +224,9 @@ def render_coding_blue_prompt(
     game_spec: GameSpec,
     attempt_number: int,
     previous_feedback: dict[str, object] | None,
+    plugin: LanguagePlugin,
 ) -> str:
-    verification_section = _render_verification_feedback_section(previous_feedback)
+    verification_section = _render_verification_feedback_section(previous_feedback, plugin)
     coding_delta_instructions = (
         "Coding delta rules:\n"
         "- Use write_files (plural) to write one or more files in a single delta — preferred.\n"
@@ -492,19 +480,6 @@ def _recover_malformed_coding_delta_json(text: str) -> dict[str, object] | None:
     return parsed
 
 
-def _parse_pytest_failures(stdout: str) -> list[dict[str, str]]:
-    failures = []
-    for line in stdout.splitlines():
-        if line.startswith("FAILED "):
-            rest = line[len("FAILED "):]
-            if " - " in rest:
-                test_id, reason = rest.split(" - ", 1)
-            else:
-                test_id, reason = rest, ""
-            failures.append({"test_id": test_id.strip(), "reason": reason.strip()})
-    return failures
-
-
 def _truncate_lines(text: str, max_lines: int) -> str:
     lines = text.splitlines()
     if len(lines) <= max_lines:
@@ -590,6 +565,9 @@ def _apply_delta_to_files(
 class CodingProjectAdapter:
     project_type = "coding"
     supported_delta_type = "DeltaCodingState"
+
+    def __init__(self, language: str = "python") -> None:
+        self._plugin: LanguagePlugin = get_language_plugin(language)
 
     def create_initial_state(self, config: dict[str, object]) -> State:
         return State(
@@ -677,6 +655,7 @@ class CodingProjectAdapter:
             game_spec=game_spec,
             attempt_number=attempt_number,
             previous_feedback=previous_feedback,
+            plugin=self._plugin,
         )
 
     def render_red_prompt_supplement(
@@ -851,24 +830,7 @@ class CodingProjectAdapter:
 
     def export_state(self, state: State, output_path: Path, artifact_id: str) -> bool:
         artifact = coding_artifact_from_state(state, artifact_id)
-        output_path.mkdir(parents=True, exist_ok=True)
-        changed = False
-
-        conftest_path = output_path / "conftest.py"
-        conftest_before = (
-            conftest_path.read_text(encoding="utf-8") if conftest_path.exists() else None
-        )
-        if conftest_before != _CONFTEST_CONTENT:
-            conftest_path.write_text(_CONFTEST_CONTENT, encoding="utf-8")
-            changed = True
-
-        gitignore_path = output_path / ".gitignore"
-        gitignore_before = (
-            gitignore_path.read_text(encoding="utf-8") if gitignore_path.exists() else None
-        )
-        if gitignore_before != _GITIGNORE_CONTENT:
-            gitignore_path.write_text(_GITIGNORE_CONTENT, encoding="utf-8")
-            changed = True
+        changed = self._plugin.initialize(output_path)
 
         resolved_root = output_path.resolve()
         for code_file in artifact.files:
@@ -914,8 +876,6 @@ class CodingProjectAdapter:
     def verify_export(
         self, output_path: Path, state: State, artifact_id: str, sandbox_mode: str = "docker"
     ) -> VerificationResult | None:
-        from baps.sandbox import run_pytest_sandboxed
-
         output_path.mkdir(parents=True, exist_ok=True)
         artifact = coding_artifact_from_state(state, artifact_id)
         missing_files = [
@@ -932,15 +892,7 @@ class CodingProjectAdapter:
                 stderr=f"exported files missing from output: {', '.join(missing_files)}",
                 passed=False,
             )
-        command, completed = run_pytest_sandboxed(output_path, sandbox_mode)
-        return VerificationResult(
-            command=command,
-            cwd=str(output_path),
-            exit_code=completed.returncode,
-            stdout=completed.stdout,
-            stderr=completed.stderr,
-            passed=completed.returncode == 0,
-        )
+        return self._plugin.run_tests(output_path, sandbox_mode)
 
     def verify_candidate(
         self,
@@ -951,19 +903,13 @@ class CodingProjectAdapter:
     ) -> VerificationResult | None:
         import tempfile
 
-        from baps.sandbox import run_pytest_sandboxed
-
         artifact = coding_artifact_from_state(state, artifact_id)
         candidate_files = _apply_delta_to_files(artifact.files, delta_state)
-        has_tests = any(
-            f.path.startswith("tests/") or f.path.startswith("test_")
-            for f in candidate_files
-        )
-        if not has_tests:
+        if not self._plugin.has_tests([f.path for f in candidate_files]):
             return None
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
-            (tmp_path / "conftest.py").write_text(_CONFTEST_CONTENT, encoding="utf-8")
+            self._plugin.initialize(tmp_path)
             resolved_tmp = tmp_path.resolve()
             for code_file in candidate_files:
                 dest = (tmp_path / code_file.path).resolve()
@@ -975,12 +921,4 @@ class CodingProjectAdapter:
                 dest.write_text(
                     _normalize_coding_export_content(code_file.content), encoding="utf-8"
                 )
-            command, completed = run_pytest_sandboxed(tmp_path, sandbox_mode)
-            return VerificationResult(
-                command=command,
-                cwd=str(tmp_path),
-                exit_code=completed.returncode,
-                stdout=completed.stdout,
-                stderr=completed.stderr,
-                passed=completed.returncode == 0,
-            )
+            return self._plugin.run_tests(tmp_path, sandbox_mode)

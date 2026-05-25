@@ -154,9 +154,17 @@ Roles: `BLUE`, `RED`, `REFEREE`, `CREATE_GAME`, `DECOMPOSE`. Falls back to globa
 - CreateGame StateView: renders NorthStar + existing file contents (first 30 lines, sanitized)
 - PlayGame StateView: renders NorthStar + full file contents (sanitized)
 - Delta operations: `write_file`, `write_files` (preferred), `delete_file`
-- Export: file tree + root `conftest.py`
-- Verification: `pytest` execution inside Docker container (default) or bare process (`sandbox=none`); result evidence feeds next CreateGame
-- Sandbox: `sandbox_mode` propagated from config/CLI through `run.py` → `play_game` → adapter → `sandbox.run_pytest_sandboxed`
+- Export: file tree + language-plugin boilerplate (conftest, .gitignore for Python)
+- Verification: delegates to `LanguagePlugin.run_tests`; result evidence feeds next CreateGame
+- Sandbox: `sandbox_mode` propagated from config/CLI through `run.py` → `play_game` → adapter → plugin → `sandbox.run_pytest_sandboxed`
+- Language plugin selected at adapter construction via `language` parameter (default: `"python"`); unknown names raise `ValueError`
+
+#### Language Plugin (`src/baps/language_plugin.py`, `src/baps/language_python.py`)
+
+- `LanguagePlugin` protocol: `initialize`, `run_tests`, `build`, `parse_test_failures`, `has_tests`
+- `get_language_plugin(name)` resolves a name to a plugin or raises `ValueError`; currently only `"python"` is registered
+- `PythonLanguagePlugin` (Python/pytest): writes `conftest.py` + `.gitignore`, delegates test execution to `sandbox.run_pytest_sandboxed`, parses pytest `FAILED` lines, detects `tests/` and `test_` prefixes
+- Groundwork for a future language registry — the registry and NorthStar proposal flow for unknown languages are not yet implemented
 
 #### Audit (`src/baps/audit_adapter.py`)
 
@@ -242,8 +250,10 @@ src/baps/
   run.py                  # Generic lifecycle orchestration, recursive gap solver
   project_adapter.py      # ProjectTypeAdapter protocol, registry, sanitizers, Blue prompt core
   document_adapter.py     # DocumentProjectAdapter — all document mechanics
-  coding_adapter.py       # CodingProjectAdapter — all coding mechanics
+  coding_adapter.py       # CodingProjectAdapter — all coding mechanics (language-agnostic)
   audit_adapter.py        # AuditProjectAdapter — all audit mechanics, source fingerprinting
+  language_plugin.py      # LanguagePlugin protocol + get_language_plugin registry lookup
+  language_python.py      # PythonLanguagePlugin — Python/pytest specifics
   state.py                # Authoritative schemas, mutation, delta application
   state_service.py        # StateService — the only mutation boundary
   state_store.py          # JsonStateStore — JSON persistence
@@ -263,6 +273,7 @@ tests/
   test_models.py
   test_run.py
   test_audit_adapter.py
+  test_language_plugin.py
   test_scheduler_policy.py
   test_scheduler.py
   test_northstar_apply.py

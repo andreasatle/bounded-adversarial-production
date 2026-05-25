@@ -1,0 +1,266 @@
+"""Tests for language_plugin.py and language_python.py."""
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+
+# ---------------------------------------------------------------------------
+# LanguagePlugin protocol and registry
+# ---------------------------------------------------------------------------
+
+def test_get_language_plugin_python_returns_python_plugin() -> None:
+    from baps.language_plugin import get_language_plugin
+    from baps.language_python import PythonLanguagePlugin
+
+    plugin = get_language_plugin("python")
+    assert isinstance(plugin, PythonLanguagePlugin)
+
+
+def test_get_language_plugin_unknown_raises_value_error() -> None:
+    from baps.language_plugin import get_language_plugin
+
+    with pytest.raises(ValueError, match="unknown language plugin"):
+        get_language_plugin("fortran")
+
+
+def test_get_language_plugin_error_message_lists_supported() -> None:
+    from baps.language_plugin import get_language_plugin
+
+    with pytest.raises(ValueError, match="python"):
+        get_language_plugin("cobol")
+
+
+def test_python_plugin_satisfies_language_plugin_protocol() -> None:
+    from baps.language_plugin import LanguagePlugin
+    from baps.language_python import PythonLanguagePlugin
+
+    plugin = PythonLanguagePlugin()
+    assert isinstance(plugin, LanguagePlugin)
+
+
+def test_python_plugin_name() -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    assert PythonLanguagePlugin.name == "python"
+
+
+# ---------------------------------------------------------------------------
+# PythonLanguagePlugin.initialize
+# ---------------------------------------------------------------------------
+
+def test_initialize_creates_conftest(tmp_path: Path) -> None:
+    from baps.language_python import PythonLanguagePlugin, _CONFTEST_CONTENT
+
+    PythonLanguagePlugin().initialize(tmp_path)
+    assert (tmp_path / "conftest.py").read_text(encoding="utf-8") == _CONFTEST_CONTENT
+
+
+def test_initialize_creates_gitignore(tmp_path: Path) -> None:
+    from baps.language_python import PythonLanguagePlugin, _GITIGNORE_CONTENT
+
+    PythonLanguagePlugin().initialize(tmp_path)
+    assert (tmp_path / ".gitignore").read_text(encoding="utf-8") == _GITIGNORE_CONTENT
+
+
+def test_initialize_returns_true_on_first_call(tmp_path: Path) -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    changed = PythonLanguagePlugin().initialize(tmp_path)
+    assert changed is True
+
+
+def test_initialize_returns_false_when_files_already_correct(tmp_path: Path) -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    plugin = PythonLanguagePlugin()
+    plugin.initialize(tmp_path)
+    changed = plugin.initialize(tmp_path)
+    assert changed is False
+
+
+def test_initialize_creates_project_path_if_missing(tmp_path: Path) -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    new_dir = tmp_path / "subdir" / "project"
+    assert not new_dir.exists()
+    PythonLanguagePlugin().initialize(new_dir)
+    assert new_dir.is_dir()
+    assert (new_dir / "conftest.py").exists()
+
+
+def test_initialize_returns_true_when_conftest_differs(tmp_path: Path) -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    (tmp_path / "conftest.py").write_text("# old content\n", encoding="utf-8")
+    changed = PythonLanguagePlugin().initialize(tmp_path)
+    assert changed is True
+
+
+# ---------------------------------------------------------------------------
+# PythonLanguagePlugin.run_tests
+# ---------------------------------------------------------------------------
+
+def _make_completed(returncode: int, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess:
+    result: subprocess.CompletedProcess = MagicMock(spec=subprocess.CompletedProcess)
+    result.returncode = returncode
+    result.stdout = stdout
+    result.stderr = stderr
+    return result
+
+
+def test_run_tests_delegates_to_sandbox(tmp_path: Path) -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    completed = _make_completed(returncode=0, stdout="1 passed")
+    with patch("baps.sandbox.subprocess.run", return_value=completed):
+        result = PythonLanguagePlugin().run_tests(tmp_path, "none")
+
+    assert result.passed is True
+    assert result.exit_code == 0
+    assert "pytest" in result.command
+
+
+def test_run_tests_wraps_failure_result(tmp_path: Path) -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    completed = _make_completed(returncode=1, stdout="1 failed", stderr="error")
+    with patch("baps.sandbox.subprocess.run", return_value=completed):
+        result = PythonLanguagePlugin().run_tests(tmp_path, "none")
+
+    assert result.passed is False
+    assert result.exit_code == 1
+    assert result.stdout == "1 failed"
+    assert result.stderr == "error"
+
+
+def test_run_tests_sets_cwd_to_project_path(tmp_path: Path) -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    completed = _make_completed(returncode=0)
+    with patch("baps.sandbox.subprocess.run", return_value=completed):
+        result = PythonLanguagePlugin().run_tests(tmp_path, "none")
+
+    assert result.cwd == str(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# PythonLanguagePlugin.build
+# ---------------------------------------------------------------------------
+
+def test_build_is_noop(tmp_path: Path) -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    before = list(tmp_path.iterdir())
+    PythonLanguagePlugin().build(tmp_path)
+    after = list(tmp_path.iterdir())
+    assert before == after
+
+
+def test_build_returns_none(tmp_path: Path) -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    result = PythonLanguagePlugin().build(tmp_path)
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# PythonLanguagePlugin.parse_test_failures
+# ---------------------------------------------------------------------------
+
+def test_parse_test_failures_empty_stdout() -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    assert PythonLanguagePlugin().parse_test_failures("") == []
+
+
+def test_parse_test_failures_no_failures() -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    stdout = "collected 3 items\n\n3 passed in 0.1s\n"
+    assert PythonLanguagePlugin().parse_test_failures(stdout) == []
+
+
+def test_parse_test_failures_single_failure_with_reason() -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    stdout = "FAILED tests/test_foo.py::test_bar - AssertionError: expected 1 got 2\n"
+    result = PythonLanguagePlugin().parse_test_failures(stdout)
+    assert result == [{"test_id": "tests/test_foo.py::test_bar", "reason": "AssertionError: expected 1 got 2"}]
+
+
+def test_parse_test_failures_multiple_failures() -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    stdout = (
+        "FAILED tests/test_a.py::test_one - AssertionError: wrong\n"
+        "FAILED tests/test_b.py::test_two - TypeError: bad type\n"
+    )
+    result = PythonLanguagePlugin().parse_test_failures(stdout)
+    assert len(result) == 2
+    assert result[0]["test_id"] == "tests/test_a.py::test_one"
+    assert result[1]["test_id"] == "tests/test_b.py::test_two"
+
+
+def test_parse_test_failures_no_reason_separator() -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    stdout = "FAILED tests/test_foo.py::test_bar\n"
+    result = PythonLanguagePlugin().parse_test_failures(stdout)
+    assert result == [{"test_id": "tests/test_foo.py::test_bar", "reason": ""}]
+
+
+# ---------------------------------------------------------------------------
+# PythonLanguagePlugin.has_tests
+# ---------------------------------------------------------------------------
+
+def test_has_tests_detects_tests_prefix() -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    assert PythonLanguagePlugin().has_tests(["tests/test_foo.py"]) is True
+
+
+def test_has_tests_detects_test_underscore_prefix() -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    assert PythonLanguagePlugin().has_tests(["test_utils.py"]) is True
+
+
+def test_has_tests_returns_false_for_src_only() -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    assert PythonLanguagePlugin().has_tests(["src/foo.py", "src/bar.py"]) is False
+
+
+def test_has_tests_returns_false_for_empty_list() -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    assert PythonLanguagePlugin().has_tests([]) is False
+
+
+def test_has_tests_mixed_returns_true() -> None:
+    from baps.language_python import PythonLanguagePlugin
+
+    assert PythonLanguagePlugin().has_tests(["src/foo.py", "tests/test_foo.py"]) is True
+
+
+# ---------------------------------------------------------------------------
+# CodingProjectAdapter uses plugin
+# ---------------------------------------------------------------------------
+
+def test_coding_adapter_default_language_is_python() -> None:
+    from baps.coding_adapter import CodingProjectAdapter
+    from baps.language_python import PythonLanguagePlugin
+
+    adapter = CodingProjectAdapter()
+    assert isinstance(adapter._plugin, PythonLanguagePlugin)
+
+
+def test_coding_adapter_unknown_language_raises() -> None:
+    from baps.coding_adapter import CodingProjectAdapter
+
+    with pytest.raises(ValueError, match="unknown language plugin"):
+        CodingProjectAdapter(language="brainfuck")

@@ -7952,25 +7952,25 @@ def test_solve_gap_max_depth_stops_recursion(monkeypatch, tmp_path: Path) -> Non
 # ---------------------------------------------------------------------------
 
 def test_parse_pytest_failures_empty_stdout() -> None:
-    from baps.coding_adapter import _parse_pytest_failures
+    from baps.language_python import _parse_pytest_failures
     assert _parse_pytest_failures("") == []
 
 
 def test_parse_pytest_failures_no_failures() -> None:
-    from baps.coding_adapter import _parse_pytest_failures
+    from baps.language_python import _parse_pytest_failures
     stdout = "collected 3 items\n\n3 passed in 0.1s\n"
     assert _parse_pytest_failures(stdout) == []
 
 
 def test_parse_pytest_failures_single_failure_with_reason() -> None:
-    from baps.coding_adapter import _parse_pytest_failures
+    from baps.language_python import _parse_pytest_failures
     stdout = "FAILED tests/test_foo.py::test_bar - AssertionError: expected 1 got 2\n"
     result = _parse_pytest_failures(stdout)
     assert result == [{"test_id": "tests/test_foo.py::test_bar", "reason": "AssertionError: expected 1 got 2"}]
 
 
 def test_parse_pytest_failures_multiple_failures() -> None:
-    from baps.coding_adapter import _parse_pytest_failures
+    from baps.language_python import _parse_pytest_failures
     stdout = (
         "FAILED tests/test_a.py::test_one - AssertionError: wrong\n"
         "FAILED tests/test_b.py::test_two - TypeError: bad type\n"
@@ -7982,7 +7982,7 @@ def test_parse_pytest_failures_multiple_failures() -> None:
 
 
 def test_parse_pytest_failures_no_reason_separator() -> None:
-    from baps.coding_adapter import _parse_pytest_failures
+    from baps.language_python import _parse_pytest_failures
     stdout = "FAILED tests/test_foo.py::test_bar\n"
     result = _parse_pytest_failures(stdout)
     assert result == [{"test_id": "tests/test_foo.py::test_bar", "reason": ""}]
@@ -8008,6 +8008,7 @@ def test_truncate_lines_truncates_at_limit() -> None:
 
 def test_coding_blue_prompt_includes_prior_export_failures() -> None:
     from baps.coding_adapter import render_coding_blue_prompt
+    from baps.language_python import PythonLanguagePlugin
     from baps.northstar_projection import ProjectionType, StateView
     import baps.run as run_module
     import hashlib
@@ -8038,6 +8039,7 @@ def test_coding_blue_prompt_includes_prior_export_failures() -> None:
         game_spec=game_spec,
         attempt_number=1,
         previous_feedback=previous_feedback,
+        plugin=PythonLanguagePlugin(),
     )
     assert "tests/test_foo.py::test_bar" in prompt
     assert "AssertionError: wrong" in prompt
@@ -8046,6 +8048,7 @@ def test_coding_blue_prompt_includes_prior_export_failures() -> None:
 
 def test_coding_blue_prompt_no_verification_section_when_feedback_is_none() -> None:
     from baps.coding_adapter import render_coding_blue_prompt
+    from baps.language_python import PythonLanguagePlugin
     from baps.northstar_projection import ProjectionType, StateView
     import baps.run as run_module
 
@@ -8067,6 +8070,7 @@ def test_coding_blue_prompt_no_verification_section_when_feedback_is_none() -> N
         game_spec=game_spec,
         attempt_number=1,
         previous_feedback=None,
+        plugin=PythonLanguagePlugin(),
     )
     assert "Prior export verification" not in prompt
     assert "Fix these specific test failures" not in prompt
@@ -8294,6 +8298,7 @@ def test_verify_candidate_fails_when_tests_fail() -> None:
 
 def test_coding_blue_prompt_includes_candidate_verification_failures() -> None:
     from baps.coding_adapter import render_coding_blue_prompt
+    from baps.language_python import PythonLanguagePlugin
     from baps.northstar_projection import ProjectionType, StateView
     import baps.run as run_module
 
@@ -8323,6 +8328,7 @@ def test_coding_blue_prompt_includes_candidate_verification_failures() -> None:
         game_spec=game_spec,
         attempt_number=2,
         previous_feedback=previous_feedback,
+        plugin=PythonLanguagePlugin(),
     )
     assert "tests/test_calc.py::test_add" in prompt
     assert "Candidate verification failed" in prompt
