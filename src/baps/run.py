@@ -705,7 +705,7 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
     )
 
     workspace_config: dict[str, Any] = {}
-    if getattr(args, "command", None) == "run":
+    if getattr(args, "command", None) in ("start", "reset"):
         workspace_config = _load_workspace_config(Path(str(workspace_raw)))
 
     def _resolve(cli_val: object, spec_key: str, default: object = None) -> object:
@@ -1895,21 +1895,20 @@ def _load_workspace_config(workspace: Path) -> dict[str, Any]:
     return {k: v for k, v in loaded.items() if k in _WORKSPACE_CONFIG_FIELDS}
 
 
-def _ensure_not_initialized(workspace: Path) -> None:
-    if _state_path_for_workspace(workspace).exists():
-        raise ValueError("project already initialized")
-
-
-def _ensure_initialized(workspace: Path) -> None:
-    if not _state_path_for_workspace(workspace).exists():
-        raise ValueError("project state not initialized")
+def _wipe_state(workspace: Path) -> None:
+    """Delete persisted state and workspace config to allow a clean reset."""
+    state_path = _state_path_for_workspace(workspace)
+    if state_path.exists():
+        state_path.unlink()
+    config_path = _workspace_config_path(workspace)
+    if config_path.exists():
+        config_path.unlink()
 
 
 def _initialize_project(
     config: dict[str, Any],
 ) -> tuple[StateService, State]:
     workspace = config["workspace"]
-    _ensure_not_initialized(workspace)
     initial_state = create_state(config)
     state_store = JsonStateStore(_state_path_for_workspace(workspace))
     state_store.save(initial_state)
@@ -1922,7 +1921,6 @@ def _initialize_project(
 
 
 def _load_project_service(workspace: Path) -> StateService:
-    _ensure_initialized(workspace)
     return StateService(
         store=JsonStateStore(_state_path_for_workspace(workspace)),
         registry=build_default_state_artifact_registry(),
@@ -2124,52 +2122,67 @@ def _active_model_info() -> dict[str, str]:
 def main() -> None:
     from dotenv import load_dotenv
     load_dotenv()
-    parser = argparse.ArgumentParser(description="Run one hardened deterministic baps loop.")
-    parser.add_argument(
-        "command",
-        nargs="?",
-        choices=("init", "run", "init_and_run"),
-        default="init_and_run",
-        help="Lifecycle command.",
+    parser = argparse.ArgumentParser(
+        description="baps — bounded adversarial production system.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  uv run baps-run start --spec examples/coding-project.yaml\n"
+            "  uv run baps-run reset --spec examples/coding-project.yaml\n"
+        ),
     )
-    parser.add_argument("--spec", default=None, help="YAML spec path.")
-    parser.add_argument(
-        "--workspace",
-        default=None,
-        help="Workspace directory for runtime outputs.",
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    def _add_common_args(p: argparse.ArgumentParser) -> None:
+        p.add_argument("--spec", default=None, help="YAML spec path.")
+        p.add_argument(
+            "--workspace", default=None,
+            help="Workspace directory for runtime outputs.",
+        )
+        p.add_argument(
+            "--project-type", default=None,
+            help="Project type (currently supported: document, coding, audit).",
+        )
+        p.add_argument(
+            "--artifact-id", default=None,
+            help="Artifact id for project state.",
+        )
+        p.add_argument(
+            "--goal", default=None,
+            help="Runtime goal text. Required if not set in spec or workspace config.",
+        )
+        p.add_argument(
+            "--output", default=None,
+            help="Output path (relative paths are resolved under workspace).",
+        )
+        p.add_argument(
+            "--max-iterations", type=int, default=None,
+            help="Maximum loop iterations (must be >= 1).",
+        )
+        p.add_argument(
+            "--sandbox", default=None, choices=("docker", "none"),
+            help="Sandbox mode for code execution: 'docker' (default) or 'none' (unsafe, prints warning).",
+        )
+
+    start_parser = subparsers.add_parser(
+        "start",
+        help=(
+            "Initialize if needed, then run. "
+            "Continues from existing state when present; "
+            "initializes from scratch when the workspace is empty."
+        ),
     )
-    parser.add_argument(
-        "--project-type",
-        default=None,
-        help="Project type (currently supported: document, coding, audit).",
+    _add_common_args(start_parser)
+
+    reset_parser = subparsers.add_parser(
+        "reset",
+        help=(
+            "Wipe existing state, reinitialize, then run. "
+            "Destructive — discards all prior accumulated state."
+        ),
     )
-    parser.add_argument(
-        "--artifact-id",
-        default=None,
-        help="Artifact id for project state.",
-    )
-    parser.add_argument(
-        "--goal",
-        default=None,
-        help="Runtime goal text. Required if not set in spec or workspace config.",
-    )
-    parser.add_argument(
-        "--output",
-        default=None,
-        help="Output markdown path (relative paths are resolved under workspace).",
-    )
-    parser.add_argument(
-        "--max-iterations",
-        type=int,
-        default=None,
-        help="Maximum loop iterations (must be >= 1).",
-    )
-    parser.add_argument(
-        "--sandbox",
-        default=None,
-        choices=("docker", "none"),
-        help="Sandbox mode for code execution: 'docker' (default) or 'none' (unsafe, prints warning).",
-    )
+    _add_common_args(reset_parser)
+
     args = parser.parse_args()
 
     try:
@@ -2203,54 +2216,37 @@ def main() -> None:
     stop_reason = "not_run"
 
     try:
-        if command == "init":
-            _initialize_project(config)
-            stop_reason = "initialized_only"
-        elif command == "run":
-            state_service = _load_project_service(workspace)
-            current_state = state_service.load_state()
-            results = _run_project_iterations(
-                config=config,
-                adapter=adapter,
-                state_service=state_service,
-                initial_state=current_state,
-            )
-            update_applied = bool(results["update_applied"])
-            state_changed = bool(results["state_changed"])
-            output_exported = bool(results["output_exported"])
-            output_changed = bool(results["output_changed"])
-            northstar_proposal_written = bool(results["northstar_proposal_written"])
-            verification_result = results["verification_result"]
-            verification_run = verification_result is not None
-            if verification_result is not None:
-                verification_passed = verification_result.passed
-                verification_exit_code = verification_result.exit_code
-                verification_command = verification_result.command
-                verification_cwd = verification_result.cwd
-            iterations_completed = int(results["iterations_completed"])
-            stop_reason = str(results["stop_reason"])
-        else:  # init_and_run
+        if command == "reset":
+            _wipe_state(workspace)
             state_service, current_state = _initialize_project(config)
-            results = _run_project_iterations(
-                config=config,
-                adapter=adapter,
-                state_service=state_service,
-                initial_state=current_state,
-            )
-            update_applied = bool(results["update_applied"])
-            state_changed = bool(results["state_changed"])
-            output_exported = bool(results["output_exported"])
-            output_changed = bool(results["output_changed"])
-            northstar_proposal_written = bool(results["northstar_proposal_written"])
-            verification_result = results["verification_result"]
-            verification_run = verification_result is not None
-            if verification_result is not None:
-                verification_passed = verification_result.passed
-                verification_exit_code = verification_result.exit_code
-                verification_command = verification_result.command
-                verification_cwd = verification_result.cwd
-            iterations_completed = int(results["iterations_completed"])
-            stop_reason = str(results["stop_reason"])
+        else:  # start
+            state_path = _state_path_for_workspace(workspace)
+            if state_path.exists():
+                state_service = _load_project_service(workspace)
+                current_state = state_service.load_state()
+            else:
+                state_service, current_state = _initialize_project(config)
+
+        results = _run_project_iterations(
+            config=config,
+            adapter=adapter,
+            state_service=state_service,
+            initial_state=current_state,
+        )
+        update_applied = bool(results["update_applied"])
+        state_changed = bool(results["state_changed"])
+        output_exported = bool(results["output_exported"])
+        output_changed = bool(results["output_changed"])
+        northstar_proposal_written = bool(results["northstar_proposal_written"])
+        verification_result = results["verification_result"]
+        verification_run = verification_result is not None
+        if verification_result is not None:
+            verification_passed = verification_result.passed
+            verification_exit_code = verification_result.exit_code
+            verification_command = verification_result.command
+            verification_cwd = verification_result.cwd
+        iterations_completed = int(results["iterations_completed"])
+        stop_reason = str(results["stop_reason"])
     except (ValueError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         stop_reason = "error"
