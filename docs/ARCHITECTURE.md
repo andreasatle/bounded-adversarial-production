@@ -146,7 +146,8 @@ Roles: `BLUE`, `RED`, `REFEREE`, `CREATE_GAME`, `DECOMPOSE`. Falls back to globa
 - PlayGame StateView: renders NorthStar + full file contents (sanitized)
 - Delta operations: `write_file`, `write_files` (preferred), `delete_file`
 - Export: file tree + root `conftest.py`
-- Verification: `pytest` execution; result evidence feeds next CreateGame
+- Verification: `pytest` execution inside Docker container (default) or bare process (`sandbox=none`); result evidence feeds next CreateGame
+- Sandbox: `sandbox_mode` propagated from config/CLI through `run.py` → `play_game` → adapter → `sandbox.run_pytest_sandboxed`
 
 #### Audit (`src/baps/audit_adapter.py`)
 
@@ -221,6 +222,7 @@ Reads `<workspace>/blackboard/northstar_proposals.jsonl`, lists proposals intera
 - GameSpec fields (`objective`, `success_condition`) are sanitized before embedding in Red and Referee prompts
 - Referee/Red rationale is sanitized before re-embedding in `previous_feedback` for subsequent Blue turns
 - NorthStar proposals are sanitized before writing to the blackboard
+- `sandbox.py`: model-generated code runs inside a Docker container during verification; `sandbox=none` opt-in emits `SANDBOX_NONE_WARNING` at run start; configurable via `--sandbox` CLI flag or `sandbox` spec key (default: `docker`)
 
 ---
 
@@ -241,6 +243,7 @@ src/baps/
   scheduler.py            # Adaptive multi-model scheduler with policy learning
   scheduler_policy.py     # ModelPolicy, EMA scoring, softmax selection
   northstar_apply.py      # baps-apply-northstar CLI
+  sandbox.py              # run_pytest_sandboxed — Docker/bare pytest execution, SANDBOX_NONE_WARNING
   tools.py                # fetch_url, web_search, ToolExecutor — research phase tools
 
 tests/
@@ -463,6 +466,7 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 12. Model-generated content is sanitized before embedding in any prompt.
 13. Delta payload models reject unexpected fields.
 14. Model response size is bounded before deserialization.
+15. Model-generated code executes inside a Docker container during verification; unsandboxed execution requires explicit opt-in.
 
 ---
 
@@ -482,6 +486,7 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 3. **Adapter expansion** — new project types register adapters without touching core orchestration
 4. **Stronger contract tests** — verify decomposition invariants and context chain integrity end-to-end
 5. **Prompt-complexity routing** — extend DECOMPOSE role to select model based on StateView size or estimated task complexity
+6. **Docker network isolation** — add `--network=none` to the Docker sandbox once a pre-built image with pytest is established (avoids pip install at runtime)
 
 ---
 
@@ -509,3 +514,4 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 - **multiscale**: The property that decomposition can recurse to arbitrary depth, with each level informed by all levels above.
 - **source_hash**: SHA-256 fingerprint of source files stored per audit section; used to detect staleness on re-runs.
 - **research phase**: Optional agentic tool-use loop run by a role before producing its primary output.
+- **sandbox**: Execution isolation for model-generated code during verification; `docker` (default) runs pytest inside a Docker container; `none` runs bare with a warning.
