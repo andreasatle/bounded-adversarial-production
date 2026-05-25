@@ -1904,7 +1904,11 @@ def _wipe_state(workspace: Path, output_path: Path | None = None) -> None:
     if config_path.exists():
         config_path.unlink()
     if output_path is not None and output_path.exists():
-        output_path.unlink()
+        if output_path.is_dir():
+            import shutil
+            shutil.rmtree(output_path)
+        else:
+            output_path.unlink()
 
 
 def _resolve_reset_config(args: argparse.Namespace) -> tuple[Path, Path | None]:
