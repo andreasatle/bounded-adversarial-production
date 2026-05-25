@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from baps.language_plugin import LanguagePlugin, get_language_plugin
+from baps.language_plugin import LanguagePlugin
 from baps.models import ToolCall, ToolDefinition
 from baps.northstar_projection import ProjectionType, StateView
 from baps.project_adapter import (
@@ -62,6 +62,30 @@ _BLUE_CONTENT_FORBIDDEN_MARKERS: tuple[str, ...] = (
     "self-contained issue",
     "Re-reading context",
 )
+
+
+def _build_language_registry() -> dict[str, LanguagePlugin]:
+    from baps.language_python import PythonLanguagePlugin
+    from baps.language_zig import ZigLanguagePlugin
+
+    return {
+        "python": PythonLanguagePlugin(),
+        "zig": ZigLanguagePlugin(),
+    }
+
+
+def _plugin_for(language: str) -> LanguagePlugin:
+    registry = _build_language_registry()
+    if language not in registry:
+        available = ", ".join(sorted(registry))
+        raise ValueError(
+            f"Language {language!r} is not supported. Available languages: {available}"
+        )
+    return registry[language]
+
+
+def _config_language(config: dict[str, object]) -> str:
+    return str(config.get("language", "python"))
 
 
 def coding_artifact_from_state(state: State, artifact_id: str) -> CodingArtifact:
@@ -126,6 +150,7 @@ def build_coding_create_game_state_view(state: State, config: dict[str, Any]) ->
         input_fingerprint=input_fingerprint,
         metadata={
             "target_artifact_id": target_artifact.id,
+            "language": target_artifact.language,
             "files": [file.model_dump(mode="json") for file in target_artifact.files],
         },
     )
@@ -170,6 +195,7 @@ def build_coding_state_view(state: State, game_spec: GameSpec) -> StateView:
         input_fingerprint=input_fingerprint,
         metadata={
             "target_artifact_id": artifact.id,
+            "language": artifact.language,
             "files": [file.model_dump(mode="json") for file in artifact.files],
         },
     )
@@ -566,12 +592,11 @@ class CodingProjectAdapter:
     project_type = "coding"
     supported_delta_type = "DeltaCodingState"
 
-    def __init__(self, language: str = "python") -> None:
-        self._plugin: LanguagePlugin = get_language_plugin(language)
-
     def create_initial_state(self, config: dict[str, object]) -> State:
+        language = _config_language(config)
+        _plugin_for(language)  # validate early — raises ValueError on unknown language
         return State(
-            artifacts=(CodingArtifact(id=_config_artifact_id(config), files=()),),
+            artifacts=(CodingArtifact(id=_config_artifact_id(config), language=language, files=()),),
         )
 
     def build_create_game_state_view(self, state: State, config: dict[str, object]) -> StateView:
@@ -650,12 +675,14 @@ class CodingProjectAdapter:
         attempt_number: int,
         previous_feedback: dict[str, object] | None,
     ) -> str:
+        language = str(state_view.metadata.get("language", "python"))
+        plugin = _plugin_for(language)
         return render_coding_blue_prompt(
             state_view=state_view,
             game_spec=game_spec,
             attempt_number=attempt_number,
             previous_feedback=previous_feedback,
-            plugin=self._plugin,
+            plugin=plugin,
         )
 
     def render_red_prompt_supplement(
@@ -830,7 +857,8 @@ class CodingProjectAdapter:
 
     def export_state(self, state: State, output_path: Path, artifact_id: str) -> bool:
         artifact = coding_artifact_from_state(state, artifact_id)
-        changed = self._plugin.initialize(output_path)
+        plugin = _plugin_for(artifact.language)
+        changed = plugin.initialize(output_path)
 
         resolved_root = output_path.resolve()
         for code_file in artifact.files:
@@ -892,7 +920,7 @@ class CodingProjectAdapter:
                 stderr=f"exported files missing from output: {', '.join(missing_files)}",
                 passed=False,
             )
-        return self._plugin.run_tests(output_path, sandbox_mode)
+        return _plugin_for(artifact.language).run_tests(output_path, sandbox_mode)
 
     def verify_candidate(
         self,
@@ -904,12 +932,13 @@ class CodingProjectAdapter:
         import tempfile
 
         artifact = coding_artifact_from_state(state, artifact_id)
+        plugin = _plugin_for(artifact.language)
         candidate_files = _apply_delta_to_files(artifact.files, delta_state)
-        if not self._plugin.has_tests([f.path for f in candidate_files]):
+        if not plugin.has_tests([f.path for f in candidate_files]):
             return None
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
-            self._plugin.initialize(tmp_path)
+            plugin.initialize(tmp_path)
             resolved_tmp = tmp_path.resolve()
             for code_file in candidate_files:
                 dest = (tmp_path / code_file.path).resolve()
@@ -921,4 +950,4 @@ class CodingProjectAdapter:
                 dest.write_text(
                     _normalize_coding_export_content(code_file.content), encoding="utf-8"
                 )
-            return self._plugin.run_tests(tmp_path, sandbox_mode)
+            return plugin.run_tests(tmp_path, sandbox_mode)

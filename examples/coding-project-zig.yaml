@@ -1,0 +1,32 @@
+project_type: coding
+artifact_id: main-codebase
+language: zig
+workspace: .baps-workspace/coding-project-zig
+goal: "Implement a simple stack data structure in Zig with push, pop, and peek operations, plus tests."
+output: output/project-zig
+max_iterations: 5
+northstar_markdown: |
+  # Goal
+
+  Implement a generic stack data structure in Zig with inline tests.
+
+  # Expected output layout
+
+  - `src/main.zig` — must contain:
+    - `Stack(comptime T: type)` — a generic stack type backed by `std.ArrayList`
+    - `push(self: *Stack(T), item: T) !void` — append an item, returning error on allocation failure
+    - `pop(self: *Stack(T)) ?T` — remove and return the top item, or null if empty
+    - `peek(self: *Stack(T)) ?T` — return the top item without removing it, or null if empty
+    - `len(self: Stack(T)) usize` — return the current number of items
+  - Tests must be inline in `src/main.zig` using Zig's built-in `test` blocks:
+    - push/pop round-trip: push three integers, pop all three in LIFO order
+    - peek does not remove: peek returns the same value on repeated calls
+    - empty stack: pop and peek both return null on an empty stack
+    - len tracking: len increases on push, decreases on pop
+
+  # Constraints
+
+  - Use `std.testing.allocator` in all tests for memory safety.
+  - Stack must be properly de-initialized in each test (call `deinit` or use defer).
+  - Do not use any external dependencies — stdlib only.
+  - All public functions must have doc comments.

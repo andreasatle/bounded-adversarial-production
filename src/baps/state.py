@@ -132,18 +132,19 @@ class CodeFile(BaseModel):
 
 class CodingArtifact(StateArtifact):
     kind: Literal["coding"] = "coding"
+    language: str = "python"
     files: tuple[CodeFile, ...] = ()
 
     def apply_delta(self, delta: DeltaState) -> CodingArtifact:
         if isinstance(delta, DeltaCodingState):
             files_by_path = {f.path: f for f in self.files}
             files_by_path[delta.payload.file.path] = delta.payload.file
-            return CodingArtifact(id=self.id, files=tuple(files_by_path.values()))
+            return CodingArtifact(id=self.id, language=self.language, files=tuple(files_by_path.values()))
         if isinstance(delta, DeltaCodingBatchState):
             files_by_path = {f.path: f for f in self.files}
             for incoming in delta.payload.files:
                 files_by_path[incoming.path] = incoming
-            return CodingArtifact(id=self.id, files=tuple(files_by_path.values()))
+            return CodingArtifact(id=self.id, language=self.language, files=tuple(files_by_path.values()))
         if isinstance(delta, DeltaDeleteCodingState):
             path = delta.payload.path
             if not any(f.path == path for f in self.files):
@@ -152,6 +153,7 @@ class CodingArtifact(StateArtifact):
                 )
             return CodingArtifact(
                 id=self.id,
+                language=self.language,
                 files=tuple(f for f in self.files if f.path != path),
             )
         raise ValueError(
@@ -456,6 +458,7 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
 
         replacement = CodingArtifact(
             id=existing.id,
+            language=existing.language,
             files=tuple(updated_files),
         )
         return _replace_artifact_in_state(state, target_artifact_id, replacement)
@@ -471,7 +474,7 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
         files_by_path = {f.path: f for f in existing.files}
         for incoming_file in incoming_files:
             files_by_path[incoming_file.path] = incoming_file
-        replacement = CodingArtifact(id=existing.id, files=tuple(files_by_path.values()))
+        replacement = CodingArtifact(id=existing.id, language=existing.language, files=tuple(files_by_path.values()))
         return _replace_artifact_in_state(state, target_artifact_id, replacement)
 
     if operation == "append_section":
@@ -544,6 +547,7 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
             )
         replacement = CodingArtifact(
             id=existing.id,
+            language=existing.language,
             files=tuple(f for f in existing.files if f.path != path),
         )
         return _replace_artifact_in_state(state, target_artifact_id, replacement)

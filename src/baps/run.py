@@ -659,6 +659,7 @@ _KNOWN_SPEC_KEYS = frozenset({
     "workspace",
     "project_type",
     "artifact_id",
+    "language",
     "northstar_markdown",
     "northstar_path",
     "goal",

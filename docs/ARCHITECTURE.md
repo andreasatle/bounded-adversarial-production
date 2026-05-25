@@ -159,15 +159,17 @@ Roles: `BLUE`, `RED`, `REFEREE`, `CREATE_GAME`, `DECOMPOSE`. Falls back to globa
 - Sandbox: `sandbox_mode` propagated from config/CLI through `run.py` → `play_game` → adapter → plugin → `sandbox.run_sandboxed`
 - Language plugin selected at adapter construction via `language` parameter (default: `"python"`); unknown names raise `ValueError`
 
-#### Language Plugin (`src/baps/language_plugin.py`, `src/baps/language_python.py`)
+#### Language Plugin (`src/baps/language_plugin.py`, `src/baps/language_python.py`, `src/baps/language_zig.py`)
 
 - `LanguagePlugin` protocol: `name`, `test_command`, `docker_image`, `initialize`, `run_tests`, `build`, `parse_test_failures`, `has_tests`
-- `test_command` — shell command passed to `sandbox.run_sandboxed` for Docker execution (e.g. `pip install pytest -q 2>/dev/null && python -m pytest`)
-- `docker_image` — Docker image for sandboxed execution (e.g. `python:3.12-slim`)
-- `get_language_plugin(name)` resolves a name to a plugin or raises `ValueError`; currently only `"python"` is registered
-- `PythonLanguagePlugin`: writes `conftest.py` + `.gitignore` on `initialize`; Docker execution delegates to `sandbox.run_sandboxed` with its `test_command`/`docker_image`; bare execution uses `uv run pytest` (falls back to `sys.executable -m pytest`); parses pytest `FAILED` lines; detects `tests/` and `test_` prefixes
-- Adding a new language (e.g. Rust) means implementing `LanguagePlugin` with `docker_image="rust:latest"` and `test_command="cargo test"` — `sandbox.py` requires no changes
-- Groundwork for a future language registry — the registry and NorthStar proposal flow for unknown languages are not yet implemented
+- `test_command` — shell command passed to `sandbox.run_sandboxed` for Docker execution
+- `docker_image` — Docker image for sandboxed execution
+- `get_language_plugin(name)` resolves a name to a plugin or raises `ValueError("Language 'X' is not supported. Available languages: ...")`
+- Active implementations:
+  - `PythonLanguagePlugin` (`python`): `python:3.12-slim`, `pip install pytest -q && python -m pytest`; writes `conftest.py` + `.gitignore`; bare mode uses `uv run pytest` / `sys.executable -m pytest`; parses pytest `FAILED` lines; detects `tests/` and `test_` prefixes
+  - `ZigLanguagePlugin` (`zig`): `ziglang/zig:latest`, `zig build test`; scaffolds `build.zig` + `src/main.zig` if absent; bare mode uses `zig build test` directly; parses Zig `FAIL ` lines; detects `.zig` files
+- The coding adapter resolves the plugin from `CodingArtifact.language` (set at `create_initial_state` time from the spec's `language` key; default `"python"`); unknown languages raise immediately with the available list
+- Adding a new language requires implementing `LanguagePlugin`, adding it to the registry in `language_plugin.py` and `coding_adapter.py`, and adding a spec example — `sandbox.py` requires no changes
 
 #### Audit (`src/baps/audit_adapter.py`)
 

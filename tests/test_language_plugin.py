@@ -20,10 +20,18 @@ def test_get_language_plugin_python_returns_python_plugin() -> None:
     assert isinstance(plugin, PythonLanguagePlugin)
 
 
+def test_get_language_plugin_zig_returns_zig_plugin() -> None:
+    from baps.language_plugin import get_language_plugin
+    from baps.language_zig import ZigLanguagePlugin
+
+    plugin = get_language_plugin("zig")
+    assert isinstance(plugin, ZigLanguagePlugin)
+
+
 def test_get_language_plugin_unknown_raises_value_error() -> None:
     from baps.language_plugin import get_language_plugin
 
-    with pytest.raises(ValueError, match="unknown language plugin"):
+    with pytest.raises(ValueError, match="is not supported"):
         get_language_plugin("fortran")
 
 
@@ -31,6 +39,13 @@ def test_get_language_plugin_error_message_lists_supported() -> None:
     from baps.language_plugin import get_language_plugin
 
     with pytest.raises(ValueError, match="python"):
+        get_language_plugin("cobol")
+
+
+def test_get_language_plugin_error_message_lists_zig() -> None:
+    from baps.language_plugin import get_language_plugin
+
+    with pytest.raises(ValueError, match="zig"):
         get_language_plugin("cobol")
 
 
@@ -312,19 +327,176 @@ def test_has_tests_mixed_returns_true() -> None:
 
 
 # ---------------------------------------------------------------------------
-# CodingProjectAdapter uses plugin
+# CodingProjectAdapter language selection
 # ---------------------------------------------------------------------------
 
-def test_coding_adapter_default_language_is_python() -> None:
-    from baps.coding_adapter import CodingProjectAdapter
-    from baps.language_python import PythonLanguagePlugin
-
-    adapter = CodingProjectAdapter()
-    assert isinstance(adapter._plugin, PythonLanguagePlugin)
-
-
-def test_coding_adapter_unknown_language_raises() -> None:
+def test_coding_adapter_create_initial_state_defaults_to_python() -> None:
     from baps.coding_adapter import CodingProjectAdapter
 
-    with pytest.raises(ValueError, match="unknown language plugin"):
-        CodingProjectAdapter(language="brainfuck")
+    state = CodingProjectAdapter().create_initial_state({"artifact_id": "art", "northstar_markdown": "x"})
+    artifact = next(a for a in state.artifacts if a.id == "art")
+    assert artifact.language == "python"  # type: ignore[union-attr]
+
+
+def test_coding_adapter_create_initial_state_accepts_zig() -> None:
+    from baps.coding_adapter import CodingProjectAdapter
+
+    state = CodingProjectAdapter().create_initial_state(
+        {"artifact_id": "art", "language": "zig", "northstar_markdown": "x"}
+    )
+    artifact = next(a for a in state.artifacts if a.id == "art")
+    assert artifact.language == "zig"  # type: ignore[union-attr]
+
+
+def test_coding_adapter_unknown_language_raises_on_create_initial_state() -> None:
+    from baps.coding_adapter import CodingProjectAdapter
+
+    with pytest.raises(ValueError, match="is not supported"):
+        CodingProjectAdapter().create_initial_state(
+            {"artifact_id": "art", "language": "brainfuck", "northstar_markdown": "x"}
+        )
+
+
+def test_coding_adapter_unknown_language_error_lists_available() -> None:
+    from baps.coding_adapter import CodingProjectAdapter
+
+    with pytest.raises(ValueError, match="python"):
+        CodingProjectAdapter().create_initial_state(
+            {"artifact_id": "art", "language": "cobol", "northstar_markdown": "x"}
+        )
+
+    with pytest.raises(ValueError, match="zig"):
+        CodingProjectAdapter().create_initial_state(
+            {"artifact_id": "art", "language": "cobol", "northstar_markdown": "x"}
+        )
+
+
+# ---------------------------------------------------------------------------
+# ZigLanguagePlugin
+# ---------------------------------------------------------------------------
+
+def test_zig_plugin_satisfies_language_plugin_protocol() -> None:
+    from baps.language_plugin import LanguagePlugin
+    from baps.language_zig import ZigLanguagePlugin
+
+    assert isinstance(ZigLanguagePlugin(), LanguagePlugin)
+
+
+def test_zig_plugin_name() -> None:
+    from baps.language_zig import ZigLanguagePlugin
+
+    assert ZigLanguagePlugin.name == "zig"
+
+
+def test_zig_plugin_docker_image() -> None:
+    from baps.language_zig import ZigLanguagePlugin
+
+    assert ZigLanguagePlugin.docker_image == "ziglang/zig:latest"
+
+
+def test_zig_plugin_test_command() -> None:
+    from baps.language_zig import ZigLanguagePlugin
+
+    assert ZigLanguagePlugin.test_command == "zig build test"
+
+
+def test_zig_plugin_initialize_creates_build_zig(tmp_path: Path) -> None:
+    from baps.language_zig import ZigLanguagePlugin
+
+    ZigLanguagePlugin().initialize(tmp_path)
+    assert (tmp_path / "build.zig").exists()
+
+
+def test_zig_plugin_initialize_creates_src_main_zig(tmp_path: Path) -> None:
+    from baps.language_zig import ZigLanguagePlugin
+
+    ZigLanguagePlugin().initialize(tmp_path)
+    assert (tmp_path / "src" / "main.zig").exists()
+
+
+def test_zig_plugin_initialize_creates_gitignore(tmp_path: Path) -> None:
+    from baps.language_zig import ZigLanguagePlugin, _GITIGNORE_CONTENT
+
+    ZigLanguagePlugin().initialize(tmp_path)
+    assert (tmp_path / ".gitignore").read_text(encoding="utf-8") == _GITIGNORE_CONTENT
+
+
+def test_zig_plugin_initialize_returns_true_first_call(tmp_path: Path) -> None:
+    from baps.language_zig import ZigLanguagePlugin
+
+    assert ZigLanguagePlugin().initialize(tmp_path) is True
+
+
+def test_zig_plugin_initialize_returns_false_when_unchanged(tmp_path: Path) -> None:
+    from baps.language_zig import ZigLanguagePlugin
+
+    plugin = ZigLanguagePlugin()
+    plugin.initialize(tmp_path)
+    assert plugin.initialize(tmp_path) is False
+
+
+def test_zig_plugin_initialize_skips_existing_files(tmp_path: Path) -> None:
+    from baps.language_zig import ZigLanguagePlugin
+
+    build_zig = tmp_path / "build.zig"
+    build_zig.write_text("// custom build\n", encoding="utf-8")
+    ZigLanguagePlugin().initialize(tmp_path)
+    assert build_zig.read_text(encoding="utf-8") == "// custom build\n"
+
+
+def test_zig_plugin_has_tests_detects_zig_files() -> None:
+    from baps.language_zig import ZigLanguagePlugin
+
+    assert ZigLanguagePlugin().has_tests(["src/main.zig"]) is True
+
+
+def test_zig_plugin_has_tests_returns_false_for_non_zig() -> None:
+    from baps.language_zig import ZigLanguagePlugin
+
+    assert ZigLanguagePlugin().has_tests(["README.md", "src/foo.c"]) is False
+
+
+def test_zig_plugin_has_tests_returns_false_for_empty() -> None:
+    from baps.language_zig import ZigLanguagePlugin
+
+    assert ZigLanguagePlugin().has_tests([]) is False
+
+
+def test_zig_plugin_parse_test_failures_empty() -> None:
+    from baps.language_zig import ZigLanguagePlugin
+
+    assert ZigLanguagePlugin().parse_test_failures("") == []
+
+
+def test_zig_plugin_parse_test_failures_detects_fail_lines() -> None:
+    from baps.language_zig import ZigLanguagePlugin
+
+    stdout = "FAIL test.my_test\nAll 1 tests ran.\n"
+    result = ZigLanguagePlugin().parse_test_failures(stdout)
+    assert len(result) == 1
+    assert "my_test" in result[0]["test_id"]
+
+
+def test_zig_plugin_run_tests_bare_uses_zig_build_test(tmp_path: Path) -> None:
+    from baps.language_zig import ZigLanguagePlugin
+
+    completed = _make_completed(returncode=0, stdout="All tests passed")
+    with patch("baps.language_zig.subprocess.run", return_value=completed) as mock_run:
+        result = ZigLanguagePlugin().run_tests(tmp_path, "none")
+
+    assert result.passed is True
+    assert mock_run.call_args[0][0] == ["zig", "build", "test"]
+    assert result.command == "zig build test"
+
+
+def test_zig_plugin_run_tests_docker_uses_plugin_values(tmp_path: Path) -> None:
+    from baps.language_zig import ZigLanguagePlugin
+
+    plugin = ZigLanguagePlugin()
+    completed = _make_completed(returncode=0)
+    with patch("baps.sandbox.subprocess.run", return_value=completed) as mock_run:
+        result = plugin.run_tests(tmp_path, "docker")
+
+    docker_args = mock_run.call_args[0][0]
+    assert plugin.docker_image in docker_args
+    assert plugin.test_command in docker_args

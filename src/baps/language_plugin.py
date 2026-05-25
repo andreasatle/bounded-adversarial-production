@@ -38,12 +38,15 @@ class LanguagePlugin(Protocol):
 def get_language_plugin(name: str) -> LanguagePlugin:
     """Return the plugin for *name*, raising ValueError if not registered."""
     from baps.language_python import PythonLanguagePlugin
+    from baps.language_zig import ZigLanguagePlugin
 
     _registry: dict[str, LanguagePlugin] = {
         "python": PythonLanguagePlugin(),
+        "zig": ZigLanguagePlugin(),
     }
     if name not in _registry:
+        available = ", ".join(sorted(_registry))
         raise ValueError(
-            f"unknown language plugin {name!r}; supported: {sorted(_registry)}"
+            f"Language {name!r} is not supported. Available languages: {available}"
         )
     return _registry[name]
