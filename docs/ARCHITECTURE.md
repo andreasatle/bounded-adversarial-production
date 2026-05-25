@@ -23,7 +23,12 @@ config/NorthStar → State → StateView → CreateGame
 
 `baps` is an adapter-driven, multiscale runtime for bounded, iterative project evolution over authoritative `State`. NorthStar defines the target; CreateGame identifies gaps; recursive decomposition breaks large gaps into coherent sub-games; PlayGame closes leaf gaps through adversarial evaluation.
 
-Current execution behavior:
+CLI commands:
+
+- **`reset`** — wipe workspace state and output file, then exit. No model calls, no game loop. Run before `start` when a clean slate is needed.
+- **`start`** — initialize (if workspace has no state) or resume (if state exists), then run the game loop.
+
+`start` execution behavior:
 
 1. Read config (NorthStar content, runtime controls, model config).
 2. Create or load authoritative `State`.

@@ -21,7 +21,9 @@ config/NorthStar → State → StateView → CreateGame
                                DeltaState → StateUpdateProposal → StateService → export
 ```
 
-This is the only active lifecycle execution path for `init`, `run`, and `init_and_run`. No other lifecycle is canonical.
+This is the only active lifecycle execution path for `start`. No other lifecycle is canonical.
+
+`reset` is not a lifecycle path — it wipes workspace state and output then exits immediately. No model calls, no game loop.
 
 CreateGame is a **gap-analysis operation**, not a step-forward operation. It compares current state against NorthStar intent and either produces a `GameSpec` to close the highest-priority gap directly, or a `DecomposeSpec` to split the gap into coherent sub-gaps solved recursively.
 

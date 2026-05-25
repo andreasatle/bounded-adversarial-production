@@ -4441,43 +4441,69 @@ def test_baps_start_works(monkeypatch, tmp_path: Path) -> None:
     assert (workspace / "output" / "report.md").exists()
 
 
-def test_baps_reset_wipes_and_reinitializes(monkeypatch, tmp_path: Path) -> None:
-    import baps.run as run_module
-    import json as _json
-
+def test_baps_reset_wipes_state_and_output_then_exits(monkeypatch, tmp_path: Path, capsys) -> None:
     workspace = tmp_path / "ws-reset"
-    start_argv = [
+
+    # Create state and output via start
+    monkeypatch.setattr("sys.argv", [
         "baps-run", "start",
         "--workspace", str(workspace),
         "--project-type", "document",
         "--artifact-id", "main-document",
         "--goal", "Write a report.", "--output", "output/report.md",
         "--max-iterations", "1",
-    ]
-    monkeypatch.setattr("sys.argv", start_argv)
+    ])
     main()
 
-    # Inject a section so we can verify state is wiped on reset
     state_path = workspace / "state" / "state.json"
-    state_data = _json.loads(state_path.read_text())
-    state_data["artifacts"][0]["sections"] = [{"title": "Old Section", "body": "Old body"}]
-    state_path.write_text(_json.dumps(state_data))
+    output_path = workspace / "output" / "report.md"
+    assert state_path.exists()
+    assert output_path.exists()
 
-    reset_argv = [
+    # Reset: wipe state and output, no game loop
+    monkeypatch.setattr("sys.argv", [
         "baps-run", "reset",
         "--workspace", str(workspace),
-        "--project-type", "document",
-        "--artifact-id", "main-document",
-        "--goal", "Write a report.", "--output", "output/report.md",
-        "--max-iterations", "1",
-    ]
-    monkeypatch.setattr("sys.argv", reset_argv)
+        "--output", "output/report.md",
+    ])
     main()
 
-    # State is fresh — the injected section is gone
-    fresh_state_data = _json.loads(state_path.read_text())
-    sections = fresh_state_data["artifacts"][0].get("sections", [])
-    assert not any(s.get("title") == "Old Section" for s in sections)
+    assert not state_path.exists(), "reset must wipe state.json"
+    assert not output_path.exists(), "reset must wipe output file"
+    out = capsys.readouterr().out
+    assert f"workspace={workspace}" in out
+    assert "command=reset" in out
+    assert "wiped=True" in out
+
+
+def test_baps_reset_makes_no_model_calls(monkeypatch, tmp_path: Path) -> None:
+    import baps.run as run_module
+
+    workspace = tmp_path / "ws-reset-no-model"
+
+    def _fail(*_a, **_kw):
+        raise AssertionError("model client must not be built during reset")
+
+    monkeypatch.setattr(run_module, "_build_model_client", _fail)
+    monkeypatch.setattr(run_module, "_build_planner_model_client", _fail)
+    monkeypatch.setattr(run_module, "_build_role_client", _fail)
+
+    monkeypatch.setattr("sys.argv", [
+        "baps-run", "reset",
+        "--workspace", str(workspace),
+    ])
+    main()  # must not raise
+
+
+def test_baps_reset_without_existing_state_exits_cleanly(monkeypatch, tmp_path: Path, capsys) -> None:
+    workspace = tmp_path / "ws-reset-empty"
+    monkeypatch.setattr("sys.argv", [
+        "baps-run", "reset",
+        "--workspace", str(workspace),
+    ])
+    main()
+    out = capsys.readouterr().out
+    assert "wiped=True" in out
 
 
 def test_second_run_sees_previous_state(monkeypatch, tmp_path: Path) -> None:

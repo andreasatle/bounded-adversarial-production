@@ -705,7 +705,7 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
     )
 
     workspace_config: dict[str, Any] = {}
-    if getattr(args, "command", None) in ("start", "reset"):
+    if getattr(args, "command", None) == "start":
         workspace_config = _load_workspace_config(Path(str(workspace_raw)))
 
     def _resolve(cli_val: object, spec_key: str, default: object = None) -> object:
@@ -1895,14 +1895,44 @@ def _load_workspace_config(workspace: Path) -> dict[str, Any]:
     return {k: v for k, v in loaded.items() if k in _WORKSPACE_CONFIG_FIELDS}
 
 
-def _wipe_state(workspace: Path) -> None:
-    """Delete persisted state and workspace config to allow a clean reset."""
+def _wipe_state(workspace: Path, output_path: Path | None = None) -> None:
+    """Delete persisted state, workspace config, and optionally the output file."""
     state_path = _state_path_for_workspace(workspace)
     if state_path.exists():
         state_path.unlink()
     config_path = _workspace_config_path(workspace)
     if config_path.exists():
         config_path.unlink()
+    if output_path is not None and output_path.exists():
+        output_path.unlink()
+
+
+def _resolve_reset_config(args: argparse.Namespace) -> tuple[Path, Path | None]:
+    """Resolve workspace and optional output path for the reset command.
+
+    reset only needs to know where state lives and what output file to wipe.
+    All other fields (goal, project_type, etc.) are irrelevant.
+    """
+    spec_data: dict[str, Any] = {}
+    if args.spec:
+        spec_data = _load_spec(Path(args.spec))
+
+    workspace_raw = (
+        args.workspace
+        if args.workspace is not None
+        else spec_data.get("workspace", _DEFAULT_WORKSPACE)
+    )
+    workspace = Path(str(workspace_raw))
+    workspace_config = _load_workspace_config(workspace)
+
+    output_raw = (
+        args.output
+        if args.output is not None
+        else spec_data.get("output") or workspace_config.get("output")
+    )
+    if not output_raw or not str(output_raw).strip():
+        return workspace, None
+    return workspace, _resolve_output_path(workspace, str(output_raw))
 
 
 def _initialize_project(
@@ -2127,8 +2157,8 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  uv run baps-run start --spec examples/coding-project.yaml\n"
             "  uv run baps-run reset --spec examples/coding-project.yaml\n"
+            "  uv run baps-run start --spec examples/coding-project.yaml\n"
         ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -2167,7 +2197,7 @@ def main() -> None:
     start_parser = subparsers.add_parser(
         "start",
         help=(
-            "Initialize if needed, then run. "
+            "Initialize if needed, then run the game loop. "
             "Continues from existing state when present; "
             "initializes from scratch when the workspace is empty."
         ),
@@ -2177,13 +2207,31 @@ def main() -> None:
     reset_parser = subparsers.add_parser(
         "reset",
         help=(
-            "Wipe existing state, reinitialize, then run. "
-            "Destructive — discards all prior accumulated state."
+            "Wipe workspace state and output file, then exit. "
+            "No model calls are made. "
+            "Run 'start' afterwards to begin from a clean slate."
         ),
     )
-    _add_common_args(reset_parser)
+    reset_parser.add_argument("--spec", default=None, help="YAML spec path.")
+    reset_parser.add_argument("--workspace", default=None, help="Workspace directory.")
+    reset_parser.add_argument(
+        "--output", default=None,
+        help="Output file to wipe (relative paths resolved under workspace).",
+    )
 
     args = parser.parse_args()
+
+    if args.command == "reset":
+        try:
+            workspace, output_path = _resolve_reset_config(args)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            raise SystemExit(2) from exc
+        _wipe_state(workspace, output_path)
+        print(f"workspace={workspace}")
+        print(f"command=reset")
+        print(f"wiped=True")
+        return
 
     try:
         config = resolve_run_config(args)
@@ -2216,16 +2264,12 @@ def main() -> None:
     stop_reason = "not_run"
 
     try:
-        if command == "reset":
-            _wipe_state(workspace)
+        state_path = _state_path_for_workspace(workspace)
+        if state_path.exists():
+            state_service = _load_project_service(workspace)
+            current_state = state_service.load_state()
+        else:
             state_service, current_state = _initialize_project(config)
-        else:  # start
-            state_path = _state_path_for_workspace(workspace)
-            if state_path.exists():
-                state_service = _load_project_service(workspace)
-                current_state = state_service.load_state()
-            else:
-                state_service, current_state = _initialize_project(config)
 
         results = _run_project_iterations(
             config=config,
