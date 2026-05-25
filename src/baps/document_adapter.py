@@ -527,7 +527,7 @@ class DocumentProjectAdapter:
         return changed
 
     def verify_export(
-        self, output_path: Path, state: State, artifact_id: str
+        self, output_path: Path, state: State, artifact_id: str, sandbox_mode: str = "docker"
     ) -> VerificationResult | None:
         command = "document_export_consistency_check"
         cwd = str(output_path.parent)

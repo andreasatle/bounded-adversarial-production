@@ -666,6 +666,7 @@ _KNOWN_SPEC_KEYS = frozenset({
     "max_iterations",
     "source_path",
     "source_include",
+    "sandbox",
 })
 
 
@@ -780,6 +781,11 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
     source_include_raw = spec_data.get("source_include")
     source_include = list(source_include_raw) if isinstance(source_include_raw, list) else None
 
+    sandbox_raw = _resolve(getattr(args, "sandbox", None), "sandbox", "docker")
+    sandbox = str(sandbox_raw)
+    if sandbox not in ("docker", "none"):
+        raise ValueError(f"sandbox must be 'docker' or 'none', got: {sandbox!r}")
+
     config = {
         "workspace": workspace,
         "project_type": project_type,
@@ -791,6 +797,7 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
         "spec_path": spec_path,
         "source_path": source_path,
         "source_include": source_include,
+        "sandbox": sandbox,
     }
     _debug_print_read_config(args=args, spec_data=spec_data, config=config)
     return config
@@ -1516,6 +1523,7 @@ def play_game(
     verification_result: VerificationResult | None = None,
     max_attempts: int = _DEFAULT_MAX_PLAY_GAME_ATTEMPTS,
     executor: ToolExecutor | None = None,
+    sandbox_mode: str = "docker",
 ) -> DeltaState | None:
     if max_attempts < 1:
         raise ValueError("max_attempts must be >= 1")
@@ -1722,7 +1730,8 @@ def play_game(
         )
         if referee_decision.disposition == "accept":
             candidate_result = _verify_candidate_with_adapter(
-                resolved_adapter, candidate_delta, state, game_spec.target_artifact_id
+                resolved_adapter, candidate_delta, state, game_spec.target_artifact_id,
+                sandbox_mode=sandbox_mode,
             )
             if (
                 candidate_result is not None
@@ -1772,12 +1781,16 @@ def _derive_state_update_from_delta(
 
 
 def _verify_export_with_adapter(
-    adapter: ProjectTypeAdapter, output_path: Path, state: State, artifact_id: str
+    adapter: ProjectTypeAdapter,
+    output_path: Path,
+    state: State,
+    artifact_id: str,
+    sandbox_mode: str = "docker",
 ) -> VerificationResult | None:
     verifier = getattr(adapter, "verify_export", None)
     if verifier is None:
         return None
-    return verifier(output_path, state, artifact_id)
+    return verifier(output_path, state, artifact_id, sandbox_mode=sandbox_mode)
 
 
 def _verify_candidate_with_adapter(
@@ -1785,11 +1798,12 @@ def _verify_candidate_with_adapter(
     delta_state: DeltaState,
     state: State,
     artifact_id: str,
+    sandbox_mode: str = "docker",
 ) -> VerificationResult | None:
     verifier = getattr(adapter, "verify_candidate", None)
     if verifier is None:
         return None
-    return verifier(delta_state, state, artifact_id)
+    return verifier(delta_state, state, artifact_id, sandbox_mode=sandbox_mode)
 
 
 def _commit_export_with_adapter(
@@ -1992,12 +2006,14 @@ def _solve_gap(
             flush=True,
         )
 
+    sandbox_mode = config.get("sandbox", "docker")
     delta_state = play_game(
         ctx.current_state,
         game_spec,
         adapter=adapter,
         verification_result=ctx.verification_result,
         executor=build_default_tool_executor(),
+        sandbox_mode=sandbox_mode,
     )
     if delta_state is None:
         ctx.stop_reason = "play_game_no_delta"
@@ -2010,7 +2026,7 @@ def _solve_gap(
     ctx.output_changed = adapter.export_state(updated_state, output_path, artifact_id)
     ctx.output_exported = ctx.output_exported or ctx.output_changed
     ctx.verification_result = _verify_export_with_adapter(
-        adapter, output_path, updated_state, artifact_id
+        adapter, output_path, updated_state, artifact_id, sandbox_mode=sandbox_mode
     )
     _debug_print_verification_result(ctx.verification_result)
     if ctx.output_changed:
@@ -2037,6 +2053,10 @@ def _run_project_iterations(
     max_iterations = config["max_iterations"]
     artifact_id = _config_artifact_id(config)
     max_depth = int(config.get("max_depth", _DEFAULT_MAX_DEPTH))
+
+    if config.get("project_type") == "coding" and config.get("sandbox") == "none":
+        from baps.sandbox import SANDBOX_NONE_WARNING
+        print(SANDBOX_NONE_WARNING, file=sys.stderr, flush=True)
 
     ctx = _RunContext(initial_state=initial_state, max_iterations=max_iterations)
 
@@ -2125,6 +2145,12 @@ def main() -> None:
         type=int,
         default=None,
         help="Maximum loop iterations (must be >= 1).",
+    )
+    parser.add_argument(
+        "--sandbox",
+        default=None,
+        choices=("docker", "none"),
+        help="Sandbox mode for code execution: 'docker' (default) or 'none' (unsafe, prints warning).",
     )
     args = parser.parse_args()
 

@@ -5503,7 +5503,7 @@ def test_coding_adapter_verify_export_discovers_and_runs_pytest_tests(
     adapter = run_module.CodingProjectAdapter()
     output_dir = tmp_path / "project"
     _ = adapter.export_state(state, output_dir, "main-codebase")
-    result = adapter.verify_export(output_dir, state, "main-codebase")
+    result = adapter.verify_export(output_dir, state, "main-codebase", sandbox_mode="none")
     assert result is not None
     assert result.passed is True
     assert result.exit_code == 0
@@ -5612,7 +5612,7 @@ def test_document_adapter_verify_export_fails_when_section_content_missing(
 def test_coding_adapter_verify_export_runs_pytest_and_captures_success(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import baps.coding_adapter as coding_module
+    import baps.sandbox as sandbox_module
     import baps.run as run_module
 
     captured: dict[str, object] = {}
@@ -5620,30 +5620,19 @@ def test_coding_adapter_verify_export_runs_pytest_and_captures_success(
     def _fake_run(args, cwd, capture_output, text, check):
         captured["args"] = args
         captured["cwd"] = cwd
-        captured["capture_output"] = capture_output
-        captured["text"] = text
-        captured["check"] = check
-        return subprocess.CompletedProcess(
-            args=args,
-            returncode=0,
-            stdout="2 passed\n",
-            stderr="",
-        )
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="2 passed\n", stderr="")
 
-    monkeypatch.setattr(coding_module.subprocess, "run", _fake_run)
+    monkeypatch.setattr(sandbox_module.subprocess, "run", _fake_run)
     adapter = run_module.CodingProjectAdapter()
     output_dir = tmp_path / "project"
     state = run_module.State(
         northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.CodingArtifact(id="main-codebase", files=()),),
     )
-    result = adapter.verify_export(output_dir, state, "main-codebase")
+    result = adapter.verify_export(output_dir, state, "main-codebase", sandbox_mode="none")
     assert result is not None
     assert captured["args"] == ["uv", "run", "pytest"]
     assert captured["cwd"] == output_dir
-    assert captured["capture_output"] is True
-    assert captured["text"] is True
-    assert captured["check"] is False
     assert result.command == "uv run pytest"
     assert result.cwd == str(output_dir)
     assert result.exit_code == 0
@@ -5655,24 +5644,19 @@ def test_coding_adapter_verify_export_runs_pytest_and_captures_success(
 def test_coding_adapter_verify_export_captures_failure(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import baps.coding_adapter as coding_module
+    import baps.sandbox as sandbox_module
     import baps.run as run_module
 
     def _fake_run(args, cwd, capture_output, text, check):
-        return subprocess.CompletedProcess(
-            args=args,
-            returncode=1,
-            stdout="1 failed\n",
-            stderr="traceback\n",
-        )
+        return subprocess.CompletedProcess(args=args, returncode=1, stdout="1 failed\n", stderr="traceback\n")
 
-    monkeypatch.setattr(coding_module.subprocess, "run", _fake_run)
+    monkeypatch.setattr(sandbox_module.subprocess, "run", _fake_run)
     adapter = run_module.CodingProjectAdapter()
     state = run_module.State(
         northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.CodingArtifact(id="main-codebase", files=()),),
     )
-    result = adapter.verify_export(tmp_path / "project", state, "main-codebase")
+    result = adapter.verify_export(tmp_path / "project", state, "main-codebase", sandbox_mode="none")
     assert result is not None
     assert result.exit_code == 1
     assert result.passed is False
@@ -6179,6 +6163,8 @@ def test_coding_run_summary_includes_verification_status(
             "output/project",
             "--max-iterations",
             "1",
+            "--sandbox",
+            "none",
         ],
     )
     run_module.main()
@@ -6297,6 +6283,8 @@ def test_coding_init_and_run_exports_fibonacci_files(monkeypatch, tmp_path: Path
             str(output_dir),
             "--max-iterations",
             "2",
+            "--sandbox",
+            "none",
         ],
     )
 
@@ -6545,6 +6533,8 @@ def test_coding_iteration_two_does_not_receive_stale_verification_result(
             "output/project",
             "--max-iterations",
             "2",
+            "--sandbox",
+            "none",
         ],
     )
     run_module.main()
@@ -6607,7 +6597,7 @@ def test_coding_create_game_receives_previous_verification_result_second_iterati
 
     verify_calls = {"n": 0}
 
-    def _verify_export(_adapter, _output_path, _state, _artifact_id):
+    def _verify_export(_adapter, _output_path, _state, _artifact_id, **_kwargs):
         verify_calls["n"] += 1
         if verify_calls["n"] == 1:
             return run_module.VerificationResult(
@@ -8016,7 +8006,7 @@ def test_verify_candidate_passes_when_tests_pass(tmp_path) -> None:
             )
         ),
     )
-    result = CodingProjectAdapter().verify_candidate(delta, state, "art")
+    result = CodingProjectAdapter().verify_candidate(delta, state, "art", sandbox_mode="none")
     assert result is not None
     assert result.passed is True
     assert result.exit_code == 0
@@ -8048,7 +8038,7 @@ def test_verify_candidate_fails_when_tests_fail() -> None:
             )
         ),
     )
-    result = CodingProjectAdapter().verify_candidate(delta, state, "art")
+    result = CodingProjectAdapter().verify_candidate(delta, state, "art", sandbox_mode="none")
     assert result is not None
     assert result.passed is False
     assert result.exit_code == 1

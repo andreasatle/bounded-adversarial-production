@@ -912,8 +912,10 @@ class CodingProjectAdapter:
             return False
 
     def verify_export(
-        self, output_path: Path, state: State, artifact_id: str
+        self, output_path: Path, state: State, artifact_id: str, sandbox_mode: str = "docker"
     ) -> VerificationResult | None:
+        from baps.sandbox import run_pytest_sandboxed
+
         output_path.mkdir(parents=True, exist_ok=True)
         artifact = coding_artifact_from_state(state, artifact_id)
         missing_files = [
@@ -930,28 +932,7 @@ class CodingProjectAdapter:
                 stderr=f"exported files missing from output: {', '.join(missing_files)}",
                 passed=False,
             )
-        command_args: list[str]
-        command: str
-        try:
-            command_args = ["uv", "run", "pytest"]
-            command = "uv run pytest"
-            completed = subprocess.run(
-                command_args,
-                cwd=output_path,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-        except FileNotFoundError:
-            command_args = [sys.executable, "-m", "pytest"]
-            command = f"{sys.executable} -m pytest"
-            completed = subprocess.run(
-                command_args,
-                cwd=output_path,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
+        command, completed = run_pytest_sandboxed(output_path, sandbox_mode)
         return VerificationResult(
             command=command,
             cwd=str(output_path),
@@ -966,8 +947,11 @@ class CodingProjectAdapter:
         delta_state: DeltaState,
         state: State,
         artifact_id: str,
+        sandbox_mode: str = "docker",
     ) -> VerificationResult | None:
         import tempfile
+
+        from baps.sandbox import run_pytest_sandboxed
 
         artifact = coding_artifact_from_state(state, artifact_id)
         candidate_files = _apply_delta_to_files(artifact.files, delta_state)
@@ -991,28 +975,7 @@ class CodingProjectAdapter:
                 dest.write_text(
                     _normalize_coding_export_content(code_file.content), encoding="utf-8"
                 )
-            command_args: list[str]
-            command: str
-            try:
-                command_args = ["uv", "run", "pytest"]
-                command = "uv run pytest"
-                completed = subprocess.run(
-                    command_args,
-                    cwd=tmp_path,
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-            except FileNotFoundError:
-                command_args = [sys.executable, "-m", "pytest"]
-                command = f"{sys.executable} -m pytest"
-                completed = subprocess.run(
-                    command_args,
-                    cwd=tmp_path,
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
+            command, completed = run_pytest_sandboxed(tmp_path, sandbox_mode)
             return VerificationResult(
                 command=command,
                 cwd=str(tmp_path),
