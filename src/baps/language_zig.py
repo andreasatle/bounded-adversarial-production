@@ -51,7 +51,7 @@ _GITIGNORE_CONTENT = (
 
 class ZigLanguagePlugin:
     name = "zig"
-    docker_image = "rawpair/zig:latest"
+    docker_image = "baps-zig:latest"
     test_command = "zig build test"
 
     def initialize(self, project_path: Path) -> bool:

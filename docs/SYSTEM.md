@@ -81,7 +81,7 @@ All three participate through the same adapter contract and orchestration path.
 The coding adapter delegates language-specific behavior to a `LanguagePlugin`. The plugin is selected from the `language` key in the spec (default: `python`). Built-in plugins:
 
 - `python` — `python:3.12-slim` image, `pip install pytest -q && python -m pytest`; scaffolds `conftest.py` + `.gitignore`
-- `zig` — `rawpair/zig:latest` image, `zig build test`; scaffolds `build.zig` + `src/main.zig` + `.gitignore`
+- `zig` — `baps-zig:latest` image (build locally: `docker build -t baps-zig:latest docker/zig/`), `zig build test`; scaffolds `build.zig` + `src/main.zig` + `.gitignore`
 
 The language is stored on `CodingArtifact.language` at creation time and persists in authoritative state. All subsequent operations (verification, candidate testing) read language from the artifact, not from config.
 

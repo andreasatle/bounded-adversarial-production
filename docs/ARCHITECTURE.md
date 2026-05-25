@@ -172,7 +172,7 @@ Active implementations:
 | Plugin | Key | Docker image | Test command | Boilerplate |
 |---|---|---|---|---|
 | `PythonLanguagePlugin` | `python` | `python:3.12-slim` | `pip install pytest -q 2>/dev/null && python -m pytest` | `conftest.py`, `.gitignore`; bare mode: `uv run pytest` |
-| `ZigLanguagePlugin` | `zig` | `rawpair/zig:latest` | `zig build test` | `build.zig`, `src/main.zig`, `.gitignore`; bare mode: `zig build test` |
+| `ZigLanguagePlugin` | `zig` | `baps-zig:latest` | `zig build test` | `build.zig`, `src/main.zig`, `.gitignore`; bare mode: `zig build test` |
 
 The language is stored on `CodingArtifact.language` at creation time and persists in authoritative state. All subsequent operations (export, verify_export, verify_candidate) read it from the artifact — not from config. Adding a new language requires implementing `LanguagePlugin`, registering it in `language_plugin.py` and `coding_adapter.py`, and adding a spec example. `sandbox.py` requires no changes.
 
@@ -302,6 +302,10 @@ examples/
   coding-project-zig.yaml
   audit-baps.yaml         # Security audit spec (workspace: .baps-workspace-security)
   audit-coverage.yaml     # Test coverage audit spec (workspace: .baps-workspace-coverage)
+
+docker/
+  zig/
+    Dockerfile            # Debian Bookworm + Zig toolchain; build: docker build -t baps-zig:latest docker/zig/
 ```
 
 ---

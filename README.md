@@ -53,9 +53,17 @@ Built-in plugins:
 | Language | `language` key | Docker image | Test command |
 |---|---|---|---|
 | Python | `python` (default) | `python:3.12-slim` | `pip install pytest -q && python -m pytest` |
-| Zig | `zig` | `rawpair/zig:latest` | `zig build test` |
+| Zig | `zig` | `baps-zig:latest` | `zig build test` |
 
 Set `language: zig` in your spec and the Zig plugin handles everything — the right image is used, the right test command runs, and `build.zig` is scaffolded if it does not exist.
+
+The Zig image is not pulled from a registry — build it locally before first use:
+
+```bash
+docker build -t baps-zig:latest docker/zig/
+```
+
+This produces a Debian Bookworm image with the Zig toolchain for your host architecture (amd64 or arm64).
 
 Adding a new language means writing one plugin file and registering it. Nothing else changes.
 
