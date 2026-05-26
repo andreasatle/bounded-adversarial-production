@@ -32,12 +32,10 @@ def _patch_create_game_model_client(monkeypatch):
         arguments={"artifact_id": "main-document", "title": "Introduction", "body": "Advance goal"},
     )
     red_response = '{"disposition":"accept","rationale":"deterministic test path"}'
-    referee_response = '{"disposition":"accept","rationale":"deterministic test path"}'
 
     def _fake_create_game_builder():
         return FakeModelClient([create_game_response])
 
-    # play_game() calls _build_model_client() once each for blue, red, and referee.
     # Each factory call returns a fresh client that works for any role:
     # generate_with_tools → blue_tool_response; generate → accept_response (red/referee share the same text).
     def _fake_model_client_builder():
@@ -46,6 +44,16 @@ def _patch_create_game_model_client(monkeypatch):
             tool_responses=[blue_tool_response],
         )
 
+    # Primary patch: _build_client_for_role is the new call site used by create_game, play_game,
+    # and _solve_gap.  Route create_game/decompose/create_game_red to the planner fake and all
+    # other roles (blue/red/referee) to the play-game fake.
+    def _fake_build_client_for_role(role, config):
+        if role in ("create_game", "decompose", "create_game_red"):
+            return _fake_create_game_builder()
+        return _fake_model_client_builder()
+
+    monkeypatch.setattr("baps.run._build_client_for_role", _fake_build_client_for_role)
+    # Keep legacy patches so tests that call the old builders directly still work.
     monkeypatch.setattr("baps.run._build_planner_model_client", _fake_create_game_builder)
     monkeypatch.setattr("baps.run._build_model_client", _fake_model_client_builder)
     # _build_role_client must delegate to the live _build_model_client so per-test
@@ -661,9 +669,15 @@ def test_create_game_fallback_to_executor_when_planner_returns_invalid_json(
     }
     state = create_state(config)
 
-    # Planner (auto-built) returns invalid JSON; executor fallback returns valid JSON.
-    monkeypatch.setattr("baps.run._build_planner_model_client", lambda: FakeModelClient(["not-json"]))
-    monkeypatch.setattr("baps.run._build_model_client", lambda: FakeModelClient([valid_response]))
+    # First call (planner attempt) returns invalid JSON; second call (fallback) returns valid JSON.
+    call_count = {"n": 0}
+    def _staged_client(role, cfg):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return FakeModelClient(["not-json"])
+        return FakeModelClient([valid_response])
+
+    monkeypatch.setattr("baps.run._build_client_for_role", _staged_client)
 
     game_spec = run_module.create_game(config, state)
 
@@ -4551,6 +4565,7 @@ def test_baps_reset_makes_no_model_calls(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(run_module, "_build_model_client", _fail)
     monkeypatch.setattr(run_module, "_build_planner_model_client", _fail)
     monkeypatch.setattr(run_module, "_build_role_client", _fail)
+    monkeypatch.setattr(run_module, "_build_client_for_role", _fail)
 
     monkeypatch.setattr("sys.argv", [
         "baps-run", "reset",
@@ -7171,6 +7186,227 @@ def test_build_role_client_uses_global_anthropic_model_when_only_backend_set(mon
     client = _real_build_role_client("blue")
     assert isinstance(client, AnthropicClient)
     assert client.model == "claude-sonnet-4-6"
+
+
+# --- _resolve_backend_model / _build_client_for_role tests ---
+
+
+def test_resolve_backend_model_spec_global_overrides_env(monkeypatch) -> None:
+    import baps.run as run_module
+
+    monkeypatch.setenv("BAPS_BACKEND", "ollama")
+    monkeypatch.setenv("BAPS_OLLAMA_MODEL", "env-model")
+    config = {"spec_backend": "ollama", "spec_model": "spec-model", "spec_roles": {}}
+    backend, model = run_module._resolve_backend_model("blue", config)
+    assert backend == "ollama"
+    assert model == "spec-model"
+
+
+def test_resolve_backend_model_role_spec_overrides_global_spec(monkeypatch) -> None:
+    import baps.run as run_module
+
+    monkeypatch.delenv("BAPS_BACKEND", raising=False)
+    config = {
+        "spec_backend": "ollama",
+        "spec_model": "global-model",
+        "spec_roles": {"blue": {"backend": "ollama", "model": "role-model"}},
+    }
+    backend, model = run_module._resolve_backend_model("blue", config)
+    assert model == "role-model"
+
+
+def test_resolve_backend_model_env_fallback_when_no_spec(monkeypatch) -> None:
+    import baps.run as run_module
+
+    monkeypatch.setenv("BAPS_BACKEND", "ollama")
+    monkeypatch.setenv("BAPS_OLLAMA_MODEL", "env-model")
+    config: dict = {"spec_backend": None, "spec_model": None, "spec_roles": {}}
+    backend, model = run_module._resolve_backend_model("blue", config)
+    assert backend == "ollama"
+    assert model == "env-model"
+
+
+def test_resolve_backend_model_role_env_overrides_global_env(monkeypatch) -> None:
+    import baps.run as run_module
+
+    monkeypatch.setenv("BAPS_BACKEND", "ollama")
+    monkeypatch.setenv("BAPS_OLLAMA_MODEL", "global-env")
+    monkeypatch.setenv("BAPS_BLUE_BACKEND", "ollama")
+    monkeypatch.setenv("BAPS_BLUE_MODEL", "role-env")
+    config: dict = {"spec_backend": None, "spec_model": None, "spec_roles": {}}
+    backend, model = run_module._resolve_backend_model("blue", config)
+    assert model == "role-env"
+
+
+def test_resolve_backend_model_raises_when_nothing_configured(monkeypatch) -> None:
+    import baps.run as run_module
+
+    for var in ("BAPS_BACKEND", "BAPS_OLLAMA_MODEL", "BAPS_ANTHROPIC_MODEL",
+                "BAPS_OPENAI_MODEL", "BAPS_BLUE_BACKEND", "BAPS_BLUE_MODEL"):
+        monkeypatch.delenv(var, raising=False)
+    config: dict = {"spec_backend": None, "spec_model": None, "spec_roles": {}}
+    with pytest.raises(ValueError, match="No model configured"):
+        run_module._resolve_backend_model("blue", config)
+
+
+def test_resolve_backend_model_raises_on_unknown_backend(monkeypatch) -> None:
+    import baps.run as run_module
+
+    config: dict = {"spec_backend": "bogus", "spec_model": "some-model", "spec_roles": {}}
+    with pytest.raises(ValueError, match="Unknown backend"):
+        run_module._resolve_backend_model("blue", config)
+
+
+def test_resolve_backend_model_role_spec_backend_only_falls_back_to_spec_model(monkeypatch) -> None:
+    import baps.run as run_module
+
+    monkeypatch.delenv("BAPS_RED_MODEL", raising=False)
+    config = {
+        "spec_backend": "ollama",
+        "spec_model": "global-model",
+        "spec_roles": {"red": {"backend": "ollama"}},
+    }
+    backend, model = run_module._resolve_backend_model("red", config)
+    assert backend == "ollama"
+    assert model == "global-model"
+
+
+def test_build_client_for_role_constructs_ollama_client(monkeypatch) -> None:
+    import baps.run as run_module
+
+    config = {"spec_backend": "ollama", "spec_model": "gemma4:e4b", "spec_roles": {}}
+    client = run_module._build_client(  # bypass env
+        *run_module._resolve_backend_model("blue", config)
+    )
+    assert isinstance(client, OllamaClient)
+    assert client.model == "gemma4:e4b"
+
+
+def test_build_client_constructs_anthropic_client(monkeypatch) -> None:
+    # Test _build_client directly (not patched by autouse fixture).
+    import baps.run as run_module
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    client = run_module._build_client("anthropic", "claude-haiku-4-5-20251001")
+    assert isinstance(client, AnthropicClient)
+    assert client.model == "claude-haiku-4-5-20251001"
+
+
+def test_build_client_anthropic_raises_without_api_key(monkeypatch) -> None:
+    import baps.run as run_module
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    with pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
+        run_module._build_client("anthropic", "claude-sonnet-4-6")
+
+
+def test_spec_backend_and_model_parsed_into_config(tmp_path: Path) -> None:
+    import argparse
+    import yaml
+    import baps.run as run_module
+
+    spec = {
+        "project_type": "document",
+        "artifact_id": "doc",
+        "northstar_markdown": "# Goal",
+        "goal": "write",
+        "output": "output/doc.md",
+        "backend": "ollama",
+        "model": "gemma4:e4b",
+    }
+    spec_path = tmp_path / "spec.yaml"
+    spec_path.write_text(yaml.dump(spec))
+    args = argparse.Namespace(
+        spec=str(spec_path), workspace=None, artifact_id=None, goal=None,
+        output=None, max_iterations=None, project_type=None, sandbox=None,
+        command="start", language=None,
+    )
+    config = run_module.resolve_run_config(args)
+    assert config["spec_backend"] == "ollama"
+    assert config["spec_model"] == "gemma4:e4b"
+    assert config["spec_roles"] == {}
+
+
+def test_spec_roles_parsed_into_config(tmp_path: Path) -> None:
+    import argparse
+    import yaml
+    import baps.run as run_module
+
+    spec = {
+        "project_type": "document",
+        "artifact_id": "doc",
+        "northstar_markdown": "# Goal",
+        "goal": "write",
+        "output": "output/doc.md",
+        "backend": "ollama",
+        "model": "gemma4:e4b",
+        "roles": {
+            "blue": {"backend": "anthropic", "model": "claude-sonnet-4-6"},
+            "decompose": {"backend": "ollama", "model": "gemma4:e4b"},
+        },
+    }
+    spec_path = tmp_path / "spec.yaml"
+    spec_path.write_text(yaml.dump(spec))
+    args = argparse.Namespace(
+        spec=str(spec_path), workspace=None, artifact_id=None, goal=None,
+        output=None, max_iterations=None, project_type=None, sandbox=None,
+        command="start", language=None,
+    )
+    config = run_module.resolve_run_config(args)
+    assert config["spec_roles"]["blue"]["backend"] == "anthropic"
+    assert config["spec_roles"]["blue"]["model"] == "claude-sonnet-4-6"
+    assert config["spec_roles"]["decompose"]["model"] == "gemma4:e4b"
+
+
+def test_spec_backend_invalid_raises(tmp_path: Path) -> None:
+    import argparse
+    import yaml
+    import baps.run as run_module
+
+    spec = {
+        "project_type": "document",
+        "artifact_id": "doc",
+        "northstar_markdown": "# Goal",
+        "goal": "write",
+        "output": "output/doc.md",
+        "backend": "bogus",
+        "model": "whatever",
+    }
+    spec_path = tmp_path / "spec.yaml"
+    spec_path.write_text(yaml.dump(spec))
+    args = argparse.Namespace(
+        spec=str(spec_path), workspace=None, artifact_id=None, goal=None,
+        output=None, max_iterations=None, project_type=None, sandbox=None,
+        command="start", language=None,
+    )
+    with pytest.raises(ValueError, match="spec 'backend' must be one of"):
+        run_module.resolve_run_config(args)
+
+
+def test_spec_role_override_is_used_in_resolve(monkeypatch) -> None:
+    import baps.run as run_module
+
+    monkeypatch.setenv("BAPS_BACKEND", "ollama")
+    monkeypatch.setenv("BAPS_OLLAMA_MODEL", "global-env")
+    config = {
+        "spec_backend": "ollama",
+        "spec_model": "global-spec",
+        "spec_roles": {"referee": {"backend": "ollama", "model": "referee-override"}},
+    }
+    backend, model = run_module._resolve_backend_model("referee", config)
+    assert model == "referee-override"
+
+
+def test_role_spec_backend_only_uses_spec_model_for_model(monkeypatch) -> None:
+    import baps.run as run_module
+
+    config = {
+        "spec_backend": "ollama",
+        "spec_model": "fallback-model",
+        "spec_roles": {"red": {"backend": "ollama"}},
+    }
+    _, model = run_module._resolve_backend_model("red", config)
+    assert model == "fallback-model"
 
 
 # --- write_files adapter tests ---

@@ -1,6 +1,8 @@
 project_type: coding
 artifact_id: main-codebase
 language: zig
+backend: ollama
+model: gemma4:e4b
 workspace: .baps-workspace/coding-project-zig
 goal: "Implement a simple stack data structure in Zig with push, pop, and peek operations, plus tests."
 output: output/project-zig

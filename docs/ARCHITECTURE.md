@@ -110,16 +110,26 @@ Current implementation philosophy:
 
 **`max_sub_gaps`:** Config key (default 5, spec-overridable) bounding decomposition branching factor. `_parse_create_game_output` truncates any `DecomposeSpec` whose `sub_gaps` length exceeds the limit and prints a notice. Validated >= 1 in `resolve_run_config`.
 
-**Per-role model selection:**
+**Model configuration — spec-first, env fallback:**
 
-Each role can use a different model backend/model:
+Backend and model are configured in the spec file. No hardcoded defaults — the run fails with a clear error if nothing is configured:
 
-```bash
-BAPS_{ROLE}_BACKEND=anthropic|openai|ollama
-BAPS_{ROLE}_MODEL=<model-id>
+```yaml
+backend: ollama          # anthropic | openai | ollama
+model: gemma4:e4b
+
+roles:                   # optional per-role overrides
+  blue:
+    backend: anthropic
+    model: claude-sonnet-4-6
+  decompose:
+    backend: ollama
+    model: gemma4:e4b
 ```
 
-Roles: `BLUE`, `RED`, `REFEREE`, `CREATE_GAME`, `DECOMPOSE`. Falls back to global `BAPS_BACKEND` / `BAPS_*_MODEL`.
+Precedence: role-spec > global-spec > role-env (`BAPS_{ROLE}_BACKEND` / `BAPS_{ROLE}_MODEL`) > global-env (`BAPS_BACKEND` / `BAPS_*_MODEL`). Environment variables remain as a fallback for CI or spec-free usage.
+
+Client construction is handled by `_resolve_backend_model(role, config)` → `_build_client_for_role(role, config)`. Both functions are config-dict-driven and raise `ValueError("No model configured...")` if no backend/model can be resolved.
 
 **`DECOMPOSE` role** — used for CreateGame calls at decomposition nodes (`depth > 0`). These are structural planning tasks that require less raw capability than leaf execution. A typical setup assigns a lighter model to `DECOMPOSE` and a stronger model to `BLUE`.
 

@@ -1,6 +1,8 @@
 project_type: coding
 artifact_id: main-codebase
 language: python
+backend: ollama
+model: gemma4:e4b
 workspace: .baps-workspace/coding-project
 goal: "Implement a text similarity utility with normalize, token overlap, and compare functions, plus comprehensive pytest tests."
 output: output/project

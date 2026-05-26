@@ -152,34 +152,53 @@ uv run baps-run reset --spec examples/coding-project.yaml
 
 ## Model configuration
 
-```bash
-# Default: Ollama with gemma4:e4b (no API key required)
-BAPS_BACKEND=ollama            # default; or: anthropic, openai
-BAPS_OLLAMA_MODEL=gemma4:e4b   # default
+The preferred way to configure models is in the spec file itself:
 
-# Anthropic (requires API key)
-BAPS_BACKEND=anthropic
-ANTHROPIC_API_KEY=sk-...
-BAPS_ANTHROPIC_MODEL=claude-sonnet-4-6
-
-# OpenAI (requires API key)
-BAPS_BACKEND=openai
-OPENAI_API_KEY=sk-...
-BAPS_OPENAI_MODEL=gpt-4o
+```yaml
+backend: ollama          # anthropic | openai | ollama
+model: gemma4:e4b        # model id for the selected backend
 ```
 
-Each role (Blue, Red, Referee, CreateGame, Decompose) can use a different model:
+Per-role overrides let each role use a different model:
+
+```yaml
+roles:
+  blue:
+    backend: anthropic
+    model: claude-sonnet-4-6
+  red:
+    backend: ollama
+    model: qwen2.5-coder:7b
+  referee:
+    backend: ollama
+    model: qwen2.5-coder:7b
+  create_game:
+    backend: ollama
+    model: gemma4:e4b
+  decompose:
+    backend: ollama
+    model: gemma4:e4b
+```
+
+**Precedence (highest to lowest):** role-level spec → global spec → role env var → global env var → error.
+
+If nothing is configured anywhere, the run fails with a clear error.
+
+### Environment variables (fallback)
+
+Environment variables are still supported as a fallback when spec-level config is absent. Useful for CI or when running without a spec file:
 
 ```bash
+# Backend and global model
+BAPS_BACKEND=ollama
+BAPS_OLLAMA_MODEL=gemma4:e4b
+
+# Per-role overrides
 BAPS_BLUE_BACKEND=anthropic
 BAPS_BLUE_MODEL=claude-sonnet-4-6
-BAPS_RED_MODEL=claude-haiku-4-5-20251001
-BAPS_REFEREE_MODEL=claude-haiku-4-5-20251001
-BAPS_DECOMPOSE_BACKEND=ollama
-BAPS_DECOMPOSE_MODEL=gemma4:e4b
+BAPS_ANTHROPIC_MODEL=claude-sonnet-4-6   # used when backend=anthropic
+ANTHROPIC_API_KEY=sk-...
 ```
-
-The Decompose role handles structural gap-splitting at planning nodes and can use a lighter model than the roles that write code.
 
 Keys are loaded from `.env` at startup.
 
@@ -207,6 +226,8 @@ It scores models by EMA reward, selects via softmax with temperature decay, esca
 project_type: coding          # coding | document | audit
 artifact_id: main-codebase    # identifier for the state artifact
 language: python              # coding only (required): python | zig
+backend: ollama               # anthropic | openai | ollama (required)
+model: gemma4:e4b             # model id for the selected backend (required)
 goal: "..."                   # human-readable goal; also used as NorthStar fallback
 northstar_markdown: |         # target state; all gap analysis measures against this
   ...
@@ -216,6 +237,22 @@ max_iterations: 10            # max leaf games per run
 max_depth: 3                  # max decomposition depth (default: 3)
 max_sub_gaps: 5               # max sub-gaps per decomposition (default: 5)
 sandbox: docker               # docker (default) | none
+roles:                        # optional per-role model overrides
+  blue:
+    backend: anthropic
+    model: claude-sonnet-4-6
+  red:
+    backend: ollama
+    model: qwen2.5-coder:7b
+  referee:
+    backend: ollama
+    model: qwen2.5-coder:7b
+  create_game:
+    backend: ollama
+    model: gemma4:e4b
+  decompose:
+    backend: ollama
+    model: gemma4:e4b
 ```
 
 ---

@@ -599,6 +599,114 @@ def _build_role_client(role: str) -> ModelClient:
     )
 
 
+_VALID_BACKENDS = frozenset({"anthropic", "openai", "ollama"})
+_VALID_SPEC_ROLES = frozenset({"blue", "red", "referee", "create_game", "decompose", "create_game_red"})
+
+
+def _parse_spec_roles(roles_raw: object) -> dict[str, dict[str, str]]:
+    if not isinstance(roles_raw, dict):
+        raise ValueError("spec 'roles' must be a mapping")
+    result: dict[str, dict[str, str]] = {}
+    for role, role_cfg in roles_raw.items():
+        if role not in _VALID_SPEC_ROLES:
+            raise ValueError(
+                f"Unknown role {role!r} in spec 'roles'. Valid roles: {sorted(_VALID_SPEC_ROLES)}"
+            )
+        if not isinstance(role_cfg, dict):
+            raise ValueError(f"spec 'roles.{role}' must be a mapping")
+        parsed: dict[str, str] = {}
+        for field in ("backend", "model"):
+            if field in role_cfg:
+                val = str(role_cfg[field]).strip()
+                if field == "backend":
+                    val = val.lower()
+                    if val not in _VALID_BACKENDS:
+                        raise ValueError(
+                            f"spec 'roles.{role}.backend' must be one of "
+                            f"{sorted(_VALID_BACKENDS)}, got {val!r}"
+                        )
+                parsed[field] = val
+        result[role] = parsed
+    return result
+
+
+def _resolve_backend_model(role: str, config: dict[str, Any]) -> tuple[str, str]:
+    """Resolve backend and model for a role.
+
+    Precedence: role-spec > global-spec > role-env > global-env > error.
+    Raises ValueError if nothing is configured.
+    """
+    spec_roles: dict = config.get("spec_roles") or {}
+    role_cfg: dict = spec_roles.get(role) or {}
+    role_upper = role.upper()
+
+    backend = (
+        (role_cfg.get("backend") or "").strip().lower()
+        or (config.get("spec_backend") or "").strip().lower()
+        or os.getenv(f"BAPS_{role_upper}_BACKEND", "").strip().lower()
+        or os.getenv("BAPS_BACKEND", "").strip().lower()
+    )
+
+    env_model: str = ""
+    if backend == "anthropic":
+        env_model = os.getenv("BAPS_ANTHROPIC_MODEL", "").strip()
+    elif backend == "openai":
+        env_model = os.getenv("BAPS_OPENAI_MODEL", "").strip()
+    elif backend:
+        env_model = os.getenv("BAPS_OLLAMA_MODEL", "").strip()
+
+    model = (
+        (role_cfg.get("model") or "").strip()
+        or (config.get("spec_model") or "").strip()
+        or os.getenv(f"BAPS_{role_upper}_MODEL", "").strip()
+        or env_model
+    )
+
+    if not backend or not model:
+        raise ValueError(
+            "No model configured. Set backend and model in your spec file or via environment variables."
+        )
+
+    if backend not in _VALID_BACKENDS:
+        raise ValueError(
+            f"Unknown backend {backend!r}. Valid options: {sorted(_VALID_BACKENDS)}"
+        )
+
+    return backend, model
+
+
+def _build_client(backend: str, model: str) -> ModelClient:
+    """Construct a model client for the given backend and model id."""
+    if backend == "anthropic":
+        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        if not api_key.strip():
+            raise ValueError("ANTHROPIC_API_KEY must be set when using anthropic backend")
+        return AnthropicClient(
+            model=model,
+            api_key=api_key,
+            base_url=os.getenv("BAPS_ANTHROPIC_BASE_URL", _DEFAULT_ANTHROPIC_BASE_URL),
+        )
+    if backend == "openai":
+        api_key = os.getenv("OPENAI_API_KEY", "")
+        if not api_key.strip():
+            raise ValueError("OPENAI_API_KEY must be set when using openai backend")
+        return OpenAIClient(
+            model=model,
+            api_key=api_key,
+            base_url=os.getenv("BAPS_OPENAI_BASE_URL", _DEFAULT_OPENAI_BASE_URL),
+        )
+    return OllamaClient(
+        model=model,
+        base_url=os.getenv("BAPS_OLLAMA_BASE_URL", _DEFAULT_OLLAMA_BASE_URL),
+    )
+
+
+def _build_client_for_role(role: str, config: dict[str, Any]) -> ModelClient:
+    """Build a model client for a role, applying spec > env precedence."""
+    backend, model = _resolve_backend_model(role, config)
+    return _build_client(backend, model)
+
+
 # Role schemas.
 # constrained=True: Ollama constrained decoding enforces the schema at inference time.
 # Safe only when all string fields are enums or carry maxLength.
@@ -669,6 +777,9 @@ _KNOWN_SPEC_KEYS = frozenset({
     "source_path",
     "source_include",
     "sandbox",
+    "backend",
+    "model",
+    "roles",
 })
 
 
@@ -791,6 +902,23 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
     if sandbox not in ("docker", "none"):
         raise ValueError(f"sandbox must be 'docker' or 'none', got: {sandbox!r}")
 
+    spec_backend_raw = spec_data.get("backend")
+    spec_backend: str | None = None
+    if spec_backend_raw is not None:
+        spec_backend = str(spec_backend_raw).strip().lower()
+        if spec_backend not in _VALID_BACKENDS:
+            raise ValueError(
+                f"spec 'backend' must be one of {sorted(_VALID_BACKENDS)}, got {spec_backend!r}"
+            )
+
+    spec_model_raw = spec_data.get("model")
+    spec_model: str | None = str(spec_model_raw).strip() if spec_model_raw is not None else None
+
+    roles_raw = spec_data.get("roles")
+    spec_roles: dict[str, dict[str, str]] = (
+        _parse_spec_roles(roles_raw) if roles_raw is not None else {}
+    )
+
     max_sub_gaps_raw = _resolve(None, "max_sub_gaps", 5)
     try:
         max_sub_gaps = int(max_sub_gaps_raw)
@@ -813,6 +941,9 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
         "source_path": source_path,
         "source_include": source_include,
         "sandbox": sandbox,
+        "spec_backend": spec_backend,
+        "spec_model": spec_model,
+        "spec_roles": spec_roles,
     }
     _debug_print_read_config(args=args, spec_data=spec_data, config=config)
     return config
@@ -1239,7 +1370,8 @@ def create_game(
     state_view = resolved_adapter.build_create_game_state_view(state, config)
     use_planner = model_client is None
     if use_planner:
-        client = _build_decompose_client() if depth > 0 else _build_planner_model_client()
+        role_name_for_client = "decompose" if depth > 0 else "create_game"
+        client = _build_client_for_role(role_name_for_client, config)
     else:
         client = model_client
     role_name = "decompose" if depth > 0 else "create_game"
@@ -1276,7 +1408,7 @@ def create_game(
             if red_feedback is None:
                 if _debug_enabled():
                     print(f"[DEBUG] {role_name}.fallback: planner invalid JSON, retrying with executor model")
-                fallback_role = Role(role_name, _build_role_client("create_game"), _CREATE_GAME_SCHEMA, constrained=False)
+                fallback_role = Role(role_name, _build_client_for_role("create_game", config), _CREATE_GAME_SCHEMA, constrained=False)
                 generated = fallback_role.generate(prompt)
                 _debug_print_create_game_raw_model_output(generated)
                 result = _parse_create_game_output(generated, max_sub_gaps=max_sub_gaps)
@@ -1547,6 +1679,7 @@ def play_game(
     max_attempts: int = _DEFAULT_MAX_PLAY_GAME_ATTEMPTS,
     executor: ToolExecutor | None = None,
     sandbox_mode: str = "docker",
+    config: dict[str, Any] | None = None,
 ) -> DeltaState | None:
     if max_attempts < 1:
         raise ValueError("max_attempts must be >= 1")
@@ -1568,21 +1701,28 @@ def play_game(
                 "stderr": verification_result.stderr,
             }
         }
+    def _get_client(explicit: ModelClient | None, role: str) -> ModelClient:
+        if explicit is not None:
+            return explicit
+        if config is not None:
+            return _build_client_for_role(role, config)
+        return _build_role_client(role)
+
     blue_role = Role(
         "blue",
-        model_client if model_client is not None else _build_role_client("blue"),
+        _get_client(model_client, "blue"),
         resolved_adapter.build_blue_output_format(),
         constrained=False,
     )
     red_role = Role(
         "red",
-        red_model_client if red_model_client is not None else _build_role_client("red"),
+        _get_client(red_model_client, "red"),
         _RED_FINDING_SCHEMA,
         constrained=True,
     )
     referee_role = Role(
         "referee",
-        referee_model_client if referee_model_client is not None else _build_role_client("referee"),
+        _get_client(referee_model_client, "referee"),
         _REFEREE_DECISION_SCHEMA,
         constrained=True,
     )
@@ -2005,7 +2145,7 @@ def _solve_gap(
             verification_result=ctx.verification_result,
             context_chain=context_chain,
             depth=depth,
-            create_game_red_client=_build_role_client("create_game_red"),
+            create_game_red_client=_build_client_for_role("create_game_red", config),
         )
     except NoNewGameError:
         if depth == 0:
@@ -2069,6 +2209,7 @@ def _solve_gap(
         verification_result=ctx.verification_result,
         executor=build_default_tool_executor(),
         sandbox_mode=sandbox_mode,
+        config=config,
     )
     if delta_state is None:
         ctx.stop_reason = "play_game_no_delta"
@@ -2169,19 +2310,13 @@ def _run_project_iterations(
     }
 
 
-def _active_model_info() -> dict[str, str]:
-    backends_raw = os.getenv("BAPS_BACKENDS", "").strip()
-    if backends_raw:
-        backends = [b.strip().lower() for b in backends_raw.split(",") if b.strip()]
-        return {"backend": ",".join(backends), "model": "fallback-chain"}
-    backend = os.getenv("BAPS_BACKEND", "ollama").lower()
-    if backend == "anthropic":
-        model_id = os.getenv("BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL)
-    elif backend == "openai":
-        model_id = os.getenv("BAPS_OPENAI_MODEL", _DEFAULT_OPENAI_MODEL)
-    else:
-        model_id = os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL)
-    return {"backend": backend, "model": model_id}
+def _active_model_info(config: dict[str, Any] | None = None) -> dict[str, str]:
+    try:
+        cfg = config or {}
+        backend, model = _resolve_backend_model("blue", cfg)
+        return {"backend": backend, "model": model}
+    except ValueError:
+        return {"backend": "unknown", "model": "unknown"}
 
 
 def main() -> None:
@@ -2333,7 +2468,7 @@ def main() -> None:
     except (ValueError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         stop_reason = "error"
-        model_info = _active_model_info()
+        model_info = _active_model_info(config)
         workspace.mkdir(parents=True, exist_ok=True)
         (workspace / "run-result.json").write_text(
             json.dumps({
@@ -2368,7 +2503,7 @@ def main() -> None:
     print(f"verification_cwd={verification_cwd}")
     print(f"stop_reason={stop_reason}")
 
-    model_info = _active_model_info()
+    model_info = _active_model_info(config)
     result_data: dict[str, object] = {
         "stop_reason": stop_reason,
         "verification_passed": verification_passed if verification_run else None,

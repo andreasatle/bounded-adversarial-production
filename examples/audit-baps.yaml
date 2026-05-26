@@ -1,6 +1,8 @@
 # audit-baps.yaml
 project_type: audit
 artifact_id: baps-security-report
+backend: ollama
+model: gemma4:e4b
 workspace: .baps-workspace-security
 source_path: /Users/andreasatle/Projects/bounded-adversarial-production/src/baps
 northstar_markdown: |

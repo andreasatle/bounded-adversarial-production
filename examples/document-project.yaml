@@ -1,5 +1,7 @@
 project_type: document
 artifact_id: main-document
+backend: ollama
+model: gemma4:e4b
 workspace: .baps-workspace/document-project
 goal: "Write a technical report on using multiple AI vision models to improve OCR accuracy for historical legal documents, including verification strategies and human review."
 output: output/report.md
