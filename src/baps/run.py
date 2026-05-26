@@ -55,6 +55,7 @@ _DEFAULT_MAX_PLAY_GAME_ATTEMPTS = 3
 _DEFAULT_MAX_DEPTH = 3
 _BLACKBOARD_DIR = "blackboard"
 _NORTHSTAR_PROPOSALS_FILE = "northstar_proposals.jsonl"
+_STRIPPED_KEYS_FILE = "stripped_keys.jsonl"
 _WORKSPACE_CONFIG_FILE = "baps-config.json"
 
 
@@ -1136,7 +1137,7 @@ def _ensure_target_artifact_exists(state: State, artifact_id: str) -> None:
         raise ValueError(f"create_game target artifact not found in state: {artifact_id}")
 
 
-def _parse_game_spec_json(text: str) -> GameSpec:
+def _parse_game_spec_json(text: str, workspace: Path | None = None) -> GameSpec:
     normalized = normalize_json_candidate(text)
     try:
         parsed = json.loads(normalized)
@@ -1154,13 +1155,17 @@ def _parse_game_spec_json(text: str) -> GameSpec:
     }
     optional_keys = {"max_words", "context_chain"}
     present_keys = set(parsed.keys())
-    unknown_keys = present_keys - required_keys - optional_keys
-    if not required_keys.issubset(present_keys) or unknown_keys:
+    if not required_keys.issubset(present_keys):
         raise ValueError(
             "create_game model output must contain exactly keys: "
             "objective, target_artifact_id, allowed_delta_type, success_condition"
-            + (f" (unexpected keys: {sorted(unknown_keys)})" if unknown_keys else "")
         )
+    unknown_keys = present_keys - required_keys - optional_keys
+    if unknown_keys:
+        for key in unknown_keys:
+            del parsed[key]
+        if workspace is not None:
+            _append_stripped_keys_to_blackboard(workspace, list(unknown_keys), "create_game")
 
     try:
         return GameSpec.model_validate(parsed)
@@ -1168,7 +1173,7 @@ def _parse_game_spec_json(text: str) -> GameSpec:
         raise ValueError("create_game model output failed GameSpec validation") from exc
 
 
-def _parse_create_game_output(text: str, max_sub_gaps: int = 5) -> GameSpec | DecomposeSpec:
+def _parse_create_game_output(text: str, max_sub_gaps: int = 5, workspace: Path | None = None) -> GameSpec | DecomposeSpec:
     normalized = normalize_json_candidate(text)
     try:
         parsed = json.loads(normalized)
@@ -1232,7 +1237,7 @@ def _parse_create_game_output(text: str, max_sub_gaps: int = 5) -> GameSpec | De
             sub_gaps = sub_gaps[:max_sub_gaps]
         return DecomposeSpec(rationale=rationale, sub_gaps=sub_gaps)
 
-    return _parse_game_spec_json(normalized)
+    return _parse_game_spec_json(normalized, workspace=workspace)
 
 
 def _validate_game_spec(game_spec: GameSpec) -> None:
@@ -1400,7 +1405,7 @@ def create_game(
         generated = role.generate(prompt)
         _debug_print_create_game_raw_model_output(generated)
         try:
-            result = _parse_create_game_output(generated, max_sub_gaps=max_sub_gaps)
+            result = _parse_create_game_output(generated, max_sub_gaps=max_sub_gaps, workspace=config["workspace"])
         except ValueError as exc:
             if "valid JSON" not in str(exc) or not use_planner:
                 raise
@@ -1411,7 +1416,7 @@ def create_game(
                 fallback_role = Role(role_name, _build_client_for_role("create_game", config), _CREATE_GAME_SCHEMA, constrained=False)
                 generated = fallback_role.generate(prompt)
                 _debug_print_create_game_raw_model_output(generated)
-                result = _parse_create_game_output(generated, max_sub_gaps=max_sub_gaps)
+                result = _parse_create_game_output(generated, max_sub_gaps=max_sub_gaps, workspace=config["workspace"])
             else:
                 raise
         except NoNewGameError:
@@ -1994,6 +1999,22 @@ def _append_northstar_proposal_to_blackboard(
     }
     proposals_path = blackboard_dir / _NORTHSTAR_PROPOSALS_FILE
     with proposals_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def _append_stripped_keys_to_blackboard(
+    workspace: Path, stripped_keys: list[str], context: str
+) -> None:
+    blackboard_dir = workspace / _BLACKBOARD_DIR
+    blackboard_dir.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "event": "unexpected_keys_stripped",
+        "context": context,
+        "stripped_keys": sorted(stripped_keys),
+        "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
+    }
+    stripped_path = blackboard_dir / _STRIPPED_KEYS_FILE
+    with stripped_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
 
 
