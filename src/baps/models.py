@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any
 from urllib import error, request
+
+logger = logging.getLogger(__name__)
 
 _RETRY_DELAYS = (5.0, 15.0, 30.0)  # seconds to wait on 429, per attempt
 
@@ -158,7 +161,7 @@ class AnthropicClient(ModelClient):
                     return json.loads(resp.read().decode("utf-8"))
             except error.HTTPError as exc:
                 if exc.code == 429 and delay is not None:
-                    print(f"[anthropic] rate limited, retrying in {delay}s (attempt {attempt + 1})")
+                    logger.warning("[anthropic] rate limited, retrying in %ss (attempt %d)", delay, attempt + 1)
                     time.sleep(delay)
                     continue
                 body_text = exc.read().decode("utf-8", errors="replace")
@@ -301,7 +304,7 @@ class OpenAIClient(ModelClient):
                     return json.loads(resp.read().decode("utf-8"))
             except error.HTTPError as exc:
                 if exc.code == 429 and delay is not None:
-                    print(f"[openai] rate limited, retrying in {delay}s (attempt {attempt + 1})")
+                    logger.warning("[openai] rate limited, retrying in %ss (attempt %d)", delay, attempt + 1)
                     time.sleep(delay)
                     continue
                 body_text = exc.read().decode("utf-8", errors="replace")
@@ -566,10 +569,7 @@ class FallbackClient(ModelClient):
             try:
                 return client.generate(prompt, format=format)
             except RuntimeError as exc:
-                print(
-                    f"[fallback] client {i} ({type(client).__name__}) failed: {exc}; trying next",
-                    flush=True,
-                )
+                logger.warning("[fallback] client %d (%s) failed: %s; trying next", i, type(client).__name__, exc)
                 last_exc = exc
         raise RuntimeError(
             f"all {len(self._clients)} fallback clients failed; last: {last_exc}"
@@ -581,10 +581,7 @@ class FallbackClient(ModelClient):
             try:
                 return client.generate_with_tools(prompt, tools)
             except RuntimeError as exc:
-                print(
-                    f"[fallback] client {i} ({type(client).__name__}) failed: {exc}; trying next",
-                    flush=True,
-                )
+                logger.warning("[fallback] client %d (%s) failed: %s; trying next", i, type(client).__name__, exc)
                 last_exc = exc
         raise RuntimeError(
             f"all {len(self._clients)} fallback clients failed; last: {last_exc}"
@@ -603,10 +600,7 @@ class FallbackClient(ModelClient):
             try:
                 return client.generate_agentic(prompt, tools, executor, role_name=role_name, max_tool_calls=max_tool_calls)
             except RuntimeError as exc:
-                print(
-                    f"[fallback] client {i} ({type(client).__name__}) failed: {exc}; trying next",
-                    flush=True,
-                )
+                logger.warning("[fallback] client %d (%s) failed: %s; trying next", i, type(client).__name__, exc)
                 last_exc = exc
         raise RuntimeError(
             f"all {len(self._clients)} fallback clients failed; last: {last_exc}"

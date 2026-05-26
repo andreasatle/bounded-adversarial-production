@@ -3,11 +3,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import os
 import shutil
 from pathlib import Path
 
 from baps.scheduler_policy import ModelConfig, ModelPolicy, compute_reward
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_POLICY_PATH = Path(".baps-workspace/scheduler-policy.json")
 _DEFAULT_CONCURRENCY = 1
@@ -178,16 +181,19 @@ def _drop_underperformers(policy: ModelPolicy) -> list[str]:
 
 
 def _print_summary(policy: ModelPolicy) -> None:
-    print("\n[scheduler] policy state:")
+    lines = ["[scheduler] policy state:"]
     for m in policy.models:
         s = policy._stats[m.name]
-        print(f"  {m.name:16s}  score={s.score:.3f}  runs={s.runs}")
-    print(f"  temperature={policy.temperature:.3f}  total_runs={policy.total_runs}")
+        lines.append(f"  {m.name:16s}  score={s.score:.3f}  runs={s.runs}")
+    lines.append(f"  temperature={policy.temperature:.3f}  total_runs={policy.total_runs}")
+    logger.info("\n".join(lines))
 
 
 def main() -> None:
     from dotenv import load_dotenv
     load_dotenv()
+    _log_level = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
+    logging.basicConfig(level=_log_level, format="%(levelname)s %(name)s %(message)s")
 
     parser = argparse.ArgumentParser(description="Adaptive baps scheduler.")
     parser.add_argument("specs", nargs="*", help="YAML spec paths (default: examples/*.yaml).")
@@ -213,7 +219,7 @@ def main() -> None:
     policy_path = Path(args.policy).resolve()
     if not policy_path.is_relative_to(Path.cwd().resolve()):
         import sys as _sys
-        print(f"[scheduler] error: --policy path must be within the current directory: {policy_path}", file=_sys.stderr)
+        logger.error("[scheduler] --policy path must be within the current directory: %s", policy_path)
         _sys.exit(1)
     policy_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -221,11 +227,11 @@ def main() -> None:
     policy = ModelPolicy(models)
     policy.load_stats(policy_path)
 
-    print(f"[scheduler] backend={os.getenv('BAPS_BACKEND', 'ollama')}")
-    print(f"[scheduler] ladder={[m.name for m in models]}")
-    print(f"[scheduler] concurrency={args.concurrency}  threshold={args.escalation_threshold}  rounds={args.rounds}")
-    print(f"[scheduler] specs={specs}")
-    print(f"[scheduler] temperature={policy.temperature:.3f}  total_runs={policy.total_runs}")
+    logger.info("[scheduler] backend=%s", os.getenv('BAPS_BACKEND', 'ollama'))
+    logger.info("[scheduler] ladder=%s", [m.name for m in models])
+    logger.info("[scheduler] concurrency=%d  threshold=%s  rounds=%d", args.concurrency, args.escalation_threshold, args.rounds)
+    logger.info("[scheduler] specs=%s", specs)
+    logger.info("[scheduler] temperature=%.3f  total_runs=%d", policy.temperature, policy.total_runs)
 
     semaphore = asyncio.Semaphore(args.concurrency)
 

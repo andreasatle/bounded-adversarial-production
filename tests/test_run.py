@@ -2,6 +2,7 @@ import argparse
 import ast
 import inspect
 import json
+import logging
 from pathlib import Path
 import subprocess
 
@@ -156,7 +157,7 @@ def test_main_yaml_spec_resolves_and_prints(monkeypatch, capsys, tmp_path: Path)
 
 
 def test_main_document_spec_without_artifact_id_fails_cleanly(
-    monkeypatch, capsys, tmp_path: Path
+    monkeypatch, caplog, tmp_path: Path
 ) -> None:
     spec = tmp_path / "config-missing-artifact.yaml"
     spec.write_text(
@@ -172,11 +173,10 @@ def test_main_document_spec_without_artifact_id_fails_cleanly(
     )
 
     monkeypatch.setattr("sys.argv", ["baps-run", "start", "--spec", str(spec)])
-    with pytest.raises(SystemExit) as exc:
+    with caplog.at_level(logging.ERROR), pytest.raises(SystemExit) as exc:
         main()
     assert exc.value.code == 2
-    err = capsys.readouterr().err
-    assert "artifact_id must be non-empty" in err
+    assert "artifact_id must be non-empty" in caplog.text
 
 
 def test_main_cli_overrides_yaml(monkeypatch, capsys, tmp_path: Path) -> None:
@@ -284,17 +284,16 @@ def test_output_path_absolute_remains_absolute(monkeypatch, capsys, tmp_path: Pa
         ),
     ],
 )
-def test_invalid_config_fails_cleanly(monkeypatch, capsys, tmp_path, argv: list[str], error_substring: str) -> None:
+def test_invalid_config_fails_cleanly(monkeypatch, caplog, tmp_path, argv: list[str], error_substring: str) -> None:
     # Inject a fresh --workspace so the test doesn't pick up real workspace config
     # when no workspace or spec is specified.
     if "--workspace" not in argv and "--spec" not in argv:
         argv = argv + ["--workspace", str(tmp_path / "clean-ws")]
     monkeypatch.setattr("sys.argv", argv)
-    with pytest.raises(SystemExit) as exc:
+    with caplog.at_level(logging.ERROR), pytest.raises(SystemExit) as exc:
         main()
     assert exc.value.code == 2
-    err = capsys.readouterr().err
-    assert error_substring in err
+    assert error_substring in caplog.text
 
 
 @pytest.mark.parametrize(
@@ -311,21 +310,20 @@ def test_invalid_config_fails_cleanly(monkeypatch, capsys, tmp_path, argv: list[
     ],
 )
 def test_invalid_project_type_fails_cleanly(
-    monkeypatch, capsys, argv: list[str], error_substring: str
+    monkeypatch, caplog, argv: list[str], error_substring: str
 ) -> None:
     monkeypatch.setattr("sys.argv", argv)
-    with pytest.raises(SystemExit) as exc:
+    with caplog.at_level(logging.ERROR), pytest.raises(SystemExit) as exc:
         main()
     assert exc.value.code == 2
-    err = capsys.readouterr().err
-    assert error_substring in err
+    assert error_substring in caplog.text
 
 
 def test_project_type_document_creates_state_and_logs_when_debug_enabled(
-    monkeypatch, capsys, tmp_path: Path
+    monkeypatch, caplog, tmp_path: Path
 ) -> None:
     workspace = tmp_path / "debug-doc-ws"
-    monkeypatch.setenv("BAPS_DEBUG", "1")
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -338,23 +336,23 @@ def test_project_type_document_creates_state_and_logs_when_debug_enabled(
         "--artifact-id", "main-document", "--goal", "Write a report.", "--output", "output/report.md", ],
     )
 
-    main()
-    out = capsys.readouterr().out
-    assert "[DEBUG] create_state.input:" in out
-    assert "  project_type: document" in out
-    assert "[DEBUG] create_state.output:" in out
-    assert "[DEBUG] create_game.input:" in out
-    assert "[DEBUG] create_game.output:" in out
-    assert "  state:" in out
-    assert "    artifacts:" in out
-    assert "      - id: main-document" in out
-    assert "        kind: document" in out
-    assert "        sections: []" in out
+    with caplog.at_level(logging.DEBUG):
+        main()
+    assert "create_state.input:" in caplog.text
+    assert "project_type: document" in caplog.text
+    assert "create_state.output:" in caplog.text
+    assert "create_game.input:" in caplog.text
+    assert "create_game.output:" in caplog.text
+    assert "state:" in caplog.text
+    assert "artifacts:" in caplog.text
+    assert "id: main-document" in caplog.text
+    assert "kind: document" in caplog.text
+    assert "sections: []" in caplog.text
 
 
-def test_document_type_is_not_stored_in_state_output(monkeypatch, capsys, tmp_path: Path) -> None:
+def test_document_type_is_not_stored_in_state_output(monkeypatch, caplog, tmp_path: Path) -> None:
     workspace = tmp_path / "doc-ws"
-    monkeypatch.setenv("BAPS_DEBUG", "1")
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -367,10 +365,12 @@ def test_document_type_is_not_stored_in_state_output(monkeypatch, capsys, tmp_pa
         "--artifact-id", "main-document", "--goal", "Write a report.", "--output", "output/report.md", ],
     )
 
-    main()
-    out = capsys.readouterr().out
-    create_state_block = out.split("[DEBUG] create_state.output:")[1].split("\n\n", 1)[0]
-    assert "project_type" not in create_state_block
+    with caplog.at_level(logging.DEBUG):
+        main()
+    create_state_output_msg = next(
+        r.getMessage() for r in caplog.records if "create_state.output:" in r.getMessage()
+    )
+    assert "project_type" not in create_state_output_msg
 
 
 def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path) -> None:
@@ -484,7 +484,7 @@ def test_main_persists_updated_state_with_appended_section(monkeypatch, tmp_path
     assert doc.sections[0].body == "Advance goal"
 
 
-def test_main_unsupported_delta_operation_fails_explicitly(monkeypatch, capsys, tmp_path: Path) -> None:
+def test_main_unsupported_delta_operation_fails_explicitly(monkeypatch, capsys, caplog, tmp_path: Path) -> None:
     import baps.run as run_module
 
     monkeypatch.setattr(
@@ -509,11 +509,10 @@ def test_main_unsupported_delta_operation_fails_explicitly(monkeypatch, capsys, 
             "document",
         "--artifact-id", "main-document", "--goal", "Write a report.", "--output", "output/report.md", ],
     )
-    with pytest.raises(SystemExit) as exc:
+    with caplog.at_level(logging.ERROR), pytest.raises(SystemExit) as exc:
         run_module.main()
     assert exc.value.code == 2
-    err = capsys.readouterr().err
-    assert "DocumentArtifact does not support delta type" in err
+    assert "DocumentArtifact does not support delta type" in caplog.text
 
 
 def _make_doc_config(
@@ -605,7 +604,7 @@ def test_create_game_invalid_json_fails_cleanly() -> None:
 
 
 def test_create_game_invalid_json_with_debug_prints_raw_model_output(
-    monkeypatch, capsys
+    monkeypatch, caplog
 ) -> None:
     config = {
         "workspace": Path(".baps-workspace"),
@@ -618,18 +617,16 @@ def test_create_game_invalid_json_with_debug_prints_raw_model_output(
         "spec_path": None,
     }
     state = create_state(config)
-    monkeypatch.setenv("BAPS_DEBUG", "1")
 
-    with pytest.raises(ValueError, match="must be valid JSON"):
+    with caplog.at_level(logging.DEBUG), pytest.raises(ValueError, match="must be valid JSON"):
         create_game(config, state, model_client=FakeModelClient(["not-json-output", "not-json-output", "not-json-output"]))
-    out = capsys.readouterr().out
-    assert "[DEBUG] create_game.prompt:" in out
-    assert "[DEBUG] create_game.raw_model_output:" in out
-    assert "  not-json-output" in out
-    assert "[DEBUG] create_game.json_retry" in out
+    assert "create_game.prompt:" in caplog.text
+    assert "create_game.raw_model_output:" in caplog.text
+    assert "not-json-output" in caplog.text
+    assert "create_game.json_retry" in caplog.text
 
 
-def test_create_game_invalid_json_without_debug_does_not_print_raw_model_output(capsys) -> None:
+def test_create_game_invalid_json_without_debug_does_not_print_raw_model_output(caplog) -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
@@ -642,11 +639,10 @@ def test_create_game_invalid_json_without_debug_does_not_print_raw_model_output(
     }
     state = create_state(config)
 
-    with pytest.raises(ValueError, match="must be valid JSON"):
+    with caplog.at_level(logging.INFO), pytest.raises(ValueError, match="must be valid JSON"):
         create_game(config, state, model_client=FakeModelClient(["not-json-output", "not-json-output", "not-json-output"]))
-    out = capsys.readouterr().out
-    assert "[DEBUG] create_game.prompt:" not in out
-    assert "[DEBUG] create_game.raw_model_output:" not in out
+    assert "create_game.prompt:" not in caplog.text
+    assert "create_game.raw_model_output:" not in caplog.text
 
 
 def test_create_game_json_retry_with_correction_prompt_succeeds() -> None:
@@ -692,7 +688,7 @@ def test_create_game_explicit_model_client_retries_on_invalid_json() -> None:
 
 
 def test_create_game_structural_validation_failure_debug_prints_raw_output(
-    monkeypatch, capsys
+    monkeypatch, caplog
 ) -> None:
     config = {
         "workspace": Path(".baps-workspace"),
@@ -705,23 +701,21 @@ def test_create_game_structural_validation_failure_debug_prints_raw_output(
         "spec_path": None,
     }
     state = create_state(config)
-    monkeypatch.setenv("BAPS_DEBUG", "1")
     payload = (
         '{"objective":" ","target_artifact_id":"main-document",'
         '"allowed_delta_type":"DeltaDocumentState",'
         '"success_condition":"Add introduction and conclusion"}'
     )
-    with pytest.raises(ValueError, match="create_game model output failed GameSpec validation"):
+    with caplog.at_level(logging.DEBUG), pytest.raises(ValueError, match="create_game model output failed GameSpec validation"):
         create_game(config, state, model_client=FakeModelClient([payload]))
-    out = capsys.readouterr().out
-    assert "[DEBUG] create_game.prompt:" in out
-    assert "[DEBUG] create_game.raw_model_output:" in out
-    assert "[DEBUG] create_game.validation_input:" not in out
-    assert "[DEBUG] create_game.validation_failure:" not in out
-    assert payload in out
+    assert "create_game.prompt:" in caplog.text
+    assert "create_game.raw_model_output:" in caplog.text
+    assert "create_game.validation_input:" not in caplog.text
+    assert "create_game.validation_failure:" not in caplog.text
+    assert payload in caplog.text
 
 
-def test_create_game_validation_input_debug_enabled(monkeypatch, capsys) -> None:
+def test_create_game_validation_input_debug_enabled(caplog) -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
@@ -733,28 +727,27 @@ def test_create_game_validation_input_debug_enabled(monkeypatch, capsys) -> None
         "spec_path": None,
     }
     state = create_state(config)
-    monkeypatch.setenv("BAPS_DEBUG", "1")
 
-    create_game(
-        config,
-        state,
-        model_client=FakeModelClient(
-            [
-                '{"objective":"Advance report objective","target_artifact_id":"main-document",'
-                '"allowed_delta_type":"DeltaDocumentState",'
-                '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}'
-            ]
-        ),
-    )
-    out = capsys.readouterr().out
-    assert "[DEBUG] create_game.validation_input:" in out
-    assert "objective=Advance report objective" in out
-    assert "success_condition=PlayGame must return a valid DeltaDocumentState targeting main-document." in out
-    assert "target_artifact_id=main-document" in out
-    assert "allowed_delta_type=DeltaDocumentState" in out
+    with caplog.at_level(logging.DEBUG):
+        create_game(
+            config,
+            state,
+            model_client=FakeModelClient(
+                [
+                    '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+                    '"allowed_delta_type":"DeltaDocumentState",'
+                    '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}'
+                ]
+            ),
+        )
+    assert "create_game.validation_input:" in caplog.text
+    assert "objective=Advance report objective" in caplog.text
+    assert "success_condition=PlayGame must return a valid DeltaDocumentState targeting main-document." in caplog.text
+    assert "target_artifact_id=main-document" in caplog.text
+    assert "allowed_delta_type=DeltaDocumentState" in caplog.text
 
 
-def test_create_game_semantic_refinement_objective_is_accepted(monkeypatch, capsys) -> None:
+def test_create_game_semantic_refinement_objective_is_accepted(caplog) -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
@@ -766,23 +759,22 @@ def test_create_game_semantic_refinement_objective_is_accepted(monkeypatch, caps
         "spec_path": None,
     }
     state = create_state(config)
-    monkeypatch.setenv("BAPS_DEBUG", "1")
 
-    game_spec = create_game(
-        config,
-        state,
-        model_client=FakeModelClient(
-            [
-                '{"objective":"Add a Conclusion section to artifact main-document, summarizing bounded adversarial evaluation outcomes and reiterating relevance to software project improvement.",'
-                '"target_artifact_id":"main-document",'
-                '"allowed_delta_type":"DeltaDocumentState",'
-                '"success_condition":"Artifact contains a Conclusion section summarizing bounded adversarial evaluation outcomes and reiterating relevance to software project improvement."}'
-            ]
-        ),
-    )
+    with caplog.at_level(logging.DEBUG):
+        game_spec = create_game(
+            config,
+            state,
+            model_client=FakeModelClient(
+                [
+                    '{"objective":"Add a Conclusion section to artifact main-document, summarizing bounded adversarial evaluation outcomes and reiterating relevance to software project improvement.",'
+                    '"target_artifact_id":"main-document",'
+                    '"allowed_delta_type":"DeltaDocumentState",'
+                    '"success_condition":"Artifact contains a Conclusion section summarizing bounded adversarial evaluation outcomes and reiterating relevance to software project improvement."}'
+                ]
+            ),
+        )
     assert game_spec.target_artifact_id == "main-document"
-    out = capsys.readouterr().out
-    assert "[DEBUG] create_game.validation_input:" in out
+    assert "create_game.validation_input:" in caplog.text
 
 
 def test_create_game_objective_with_multiple_tasks_is_accepted_by_structural_validation() -> None:
@@ -812,7 +804,7 @@ def test_create_game_objective_with_multiple_tasks_is_accepted_by_structural_val
     assert game_spec.objective == "Update report and create appendix"
 
 
-def test_create_game_validation_debug_disabled_prints_nothing(capsys) -> None:
+def test_create_game_validation_debug_disabled_prints_nothing(caplog) -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
@@ -825,20 +817,20 @@ def test_create_game_validation_debug_disabled_prints_nothing(capsys) -> None:
     }
     state = create_state(config)
 
-    create_game(
-        config,
-        state,
-        model_client=FakeModelClient(
-            [
-                '{"objective":"Advance report objective","target_artifact_id":"main-document",'
-                '"allowed_delta_type":"DeltaDocumentState",'
-                '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}'
-            ]
-        ),
-    )
-    out = capsys.readouterr().out
-    assert "[DEBUG] create_game.validation_input:" not in out
-    assert "[DEBUG] create_game.validation_failure:" not in out
+    with caplog.at_level(logging.INFO):
+        create_game(
+            config,
+            state,
+            model_client=FakeModelClient(
+                [
+                    '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+                    '"allowed_delta_type":"DeltaDocumentState",'
+                    '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}'
+                ]
+            ),
+        )
+    assert "create_game.validation_input:" not in caplog.text
+    assert "create_game.validation_failure:" not in caplog.text
 
 
 def test_create_game_raw_json_still_accepted() -> None:
@@ -2639,7 +2631,7 @@ def test_create_game_engine_does_not_parse_must_include_policy_literals() -> Non
     assert "must include" not in active_prefix
 
 
-def test_required_sections_top_level_is_rejected_in_config(monkeypatch, capsys, tmp_path: Path) -> None:
+def test_required_sections_top_level_is_rejected_in_config(monkeypatch, caplog, tmp_path: Path) -> None:
     spec = tmp_path / "bad-required-sections.yaml"
     spec.write_text(
         "\n".join(
@@ -2654,40 +2646,38 @@ def test_required_sections_top_level_is_rejected_in_config(monkeypatch, capsys, 
         encoding="utf-8",
     )
     monkeypatch.setattr("sys.argv", ["baps-run", "start", "--spec", str(spec)])
-    with pytest.raises(SystemExit) as exc:
+    with caplog.at_level(logging.ERROR), pytest.raises(SystemExit) as exc:
         main()
     assert exc.value.code == 2
-    assert "required_sections is no longer supported" in capsys.readouterr().err
+    assert "required_sections is no longer supported" in caplog.text
 
 
-def test_spec_file_unknown_key_raises(monkeypatch, capsys, tmp_path: Path) -> None:
+def test_spec_file_unknown_key_raises(monkeypatch, caplog, tmp_path: Path) -> None:
     spec = tmp_path / "bad-key.yaml"
     spec.write_text(
         "project_type: document\nartifact_id: main-document\nmax_iteration: 2\n",
         encoding="utf-8",
     )
     monkeypatch.setattr("sys.argv", ["baps-run", "start", "--spec", str(spec)])
-    with pytest.raises(SystemExit) as exc:
+    with caplog.at_level(logging.ERROR), pytest.raises(SystemExit) as exc:
         main()
     assert exc.value.code == 2
-    err = capsys.readouterr().err
-    assert "unknown keys" in err
-    assert "max_iteration" in err
+    assert "unknown keys" in caplog.text
+    assert "max_iteration" in caplog.text
 
 
-def test_spec_file_multiple_unknown_keys_all_reported(monkeypatch, capsys, tmp_path: Path) -> None:
+def test_spec_file_multiple_unknown_keys_all_reported(monkeypatch, caplog, tmp_path: Path) -> None:
     spec = tmp_path / "multi-bad-keys.yaml"
     spec.write_text(
         "project_type: document\nartifact_id: main-document\ntypo_a: x\ntypo_b: y\n",
         encoding="utf-8",
     )
     monkeypatch.setattr("sys.argv", ["baps-run", "start", "--spec", str(spec)])
-    with pytest.raises(SystemExit) as exc:
+    with caplog.at_level(logging.ERROR), pytest.raises(SystemExit) as exc:
         main()
     assert exc.value.code == 2
-    err = capsys.readouterr().err
-    assert "typo_a" in err
-    assert "typo_b" in err
+    assert "typo_a" in caplog.text
+    assert "typo_b" in caplog.text
 
 
 def test_spec_file_all_known_keys_accepted(monkeypatch, capsys, tmp_path: Path) -> None:
@@ -2711,7 +2701,7 @@ def test_spec_file_all_known_keys_accepted(monkeypatch, capsys, tmp_path: Path) 
 
 
 def test_spec_file_required_sections_still_gets_specific_error(
-    monkeypatch, capsys, tmp_path: Path
+    monkeypatch, caplog, tmp_path: Path
 ) -> None:
     spec = tmp_path / "required-sections.yaml"
     spec.write_text(
@@ -2719,10 +2709,10 @@ def test_spec_file_required_sections_still_gets_specific_error(
         encoding="utf-8",
     )
     monkeypatch.setattr("sys.argv", ["baps-run", "start", "--spec", str(spec)])
-    with pytest.raises(SystemExit) as exc:
+    with caplog.at_level(logging.ERROR), pytest.raises(SystemExit) as exc:
         main()
     assert exc.value.code == 2
-    assert "required_sections is no longer supported" in capsys.readouterr().err
+    assert "required_sections is no longer supported" in caplog.text
 
 
 def test_blue_prompt_and_source_do_not_hardcode_project_policy_literals() -> None:
@@ -3748,7 +3738,7 @@ def test_play_game_invalid_blue_all_attempts_returns_none() -> None:
     assert delta is None
 
 
-def test_play_game_invalid_blue_debug_and_non_debug_output(monkeypatch, capsys) -> None:
+def test_play_game_invalid_blue_debug_and_non_debug_output(caplog) -> None:
     import baps.run as run_module
 
     spec = run_module.GameSpec(
@@ -3770,32 +3760,32 @@ def test_play_game_invalid_blue_debug_and_non_debug_output(monkeypatch, capsys) 
         }
     )
 
-    _ = play_game(
-        state,
-        spec,
-        model_client=FakeModelClient(
-            tool_responses=[ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": ""})]
-        ),
-        max_attempts=1,
-    )
-    non_debug_out = capsys.readouterr().out
-    assert "[DEBUG] blue.failed_tool_call:" not in non_debug_out
+    with caplog.at_level(logging.INFO):
+        _ = play_game(
+            state,
+            spec,
+            model_client=FakeModelClient(
+                tool_responses=[ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": ""})]
+            ),
+            max_attempts=1,
+        )
+    assert "blue.failed_tool_call:" not in caplog.text
+    caplog.clear()
 
-    monkeypatch.setenv("BAPS_DEBUG", "1")
-    _ = play_game(
-        state,
-        spec,
-        model_client=FakeModelClient(
-            tool_responses=[ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": ""})]
-        ),
-        max_attempts=1,
-    )
-    debug_out = capsys.readouterr().out
-    assert "[DEBUG] blue.failed_tool_call:" in debug_out
-    assert "[DEBUG] play_game.attempt_rejected:" in debug_out
-    assert "reason: blue output failed DeltaState validation:" in debug_out
-    assert "payload.section.body" in debug_out
-    assert "must be a non-empty string" in debug_out
+    with caplog.at_level(logging.DEBUG):
+        _ = play_game(
+            state,
+            spec,
+            model_client=FakeModelClient(
+                tool_responses=[ToolCall("append_section", {"artifact_id": "main-document", "title": "Introduction", "body": ""})]
+            ),
+            max_attempts=1,
+        )
+    assert "blue.failed_tool_call:" in caplog.text
+    assert "play_game.attempt_rejected:" in caplog.text
+    assert "reason: blue output failed DeltaState validation:" in caplog.text
+    assert "payload.section.body" in caplog.text
+    assert "must be a non-empty string" in caplog.text
 
 
 def test_runtime_preserves_accepted_delta_after_later_reject_in_helper_flow() -> None:
@@ -3830,10 +3820,9 @@ def test_runtime_preserves_accepted_delta_after_later_reject_in_helper_flow() ->
     assert runtime.current_best_delta.payload.section.body == "first"
 
 
-def test_play_game_debug_logs_appear(monkeypatch, capsys) -> None:
+def test_play_game_debug_logs_appear(caplog) -> None:
     import baps.run as run_module
 
-    monkeypatch.setenv("BAPS_DEBUG", "1")
     spec = run_module.GameSpec(
         objective="Write an introduction section",
         target_artifact_id="main-document",
@@ -3852,43 +3841,43 @@ def test_play_game_debug_logs_appear(monkeypatch, capsys) -> None:
             "spec_path": None,
         }
     )
-    _ = play_game(state, spec)
-    out = capsys.readouterr().out
-    assert "[DEBUG] blue.input:" in out
-    assert "[DEBUG] blue.output:" in out
-    assert "[DEBUG] red.input:" in out
-    assert "[DEBUG] red.output:" in out
-    assert "[DEBUG] referee.input:" in out
-    assert "[DEBUG] referee.output:" in out
-    assert "[DEBUG] play_game.input:" in out
-    assert "[DEBUG] play_game.attempt:" in out
-    assert "[DEBUG] play_game.output:" in out
-    assert "  attempt: 1" in out
-    blue_input_block = out.split("[DEBUG] blue.input:")[1].split("[DEBUG] blue.output:")[0]
-    assert "state_view:" in blue_input_block
-    assert "content: === StateView Start ===" in blue_input_block
-    assert "--- State Artifacts ---" in blue_input_block
-    assert "## Artifact: main-document" in blue_input_block
-    assert "kind: document" in blue_input_block
-    assert "No sections." in blue_input_block
-    assert '"target_artifact_id"' not in blue_input_block
-    assert "state:" not in blue_input_block
-    assert "game_spec:" in blue_input_block
-    assert "attempt_number: 1" in blue_input_block
-    assert "previous_feedback: None" in blue_input_block
-    red_input_block = out.split("[DEBUG] red.input:")[1].split("[DEBUG] red.output:")[0]
-    assert "game_spec:" in red_input_block
-    assert "state_view:" in red_input_block
-    assert "delta_state:" in red_input_block
-    assert "artifact_id: main-document" in red_input_block
-    assert "red_finding:" in out
-    referee_input_block = out.split("[DEBUG] referee.input:")[1].split("[DEBUG] referee.output:")[0]
-    assert "game_spec:" in referee_input_block
-    assert "state_view:" in referee_input_block
-    assert "delta_state:" in referee_input_block
-    assert "red_finding:" in referee_input_block
-    assert "referee_decision:" in out
-    assert "current_best_delta:" in out
+    with caplog.at_level(logging.DEBUG):
+        _ = play_game(state, spec)
+    assert "blue.input:" in caplog.text
+    assert "blue.output:" in caplog.text
+    assert "red.input:" in caplog.text
+    assert "red.output:" in caplog.text
+    assert "referee.input:" in caplog.text
+    assert "referee.output:" in caplog.text
+    assert "play_game.input:" in caplog.text
+    assert "play_game.attempt:" in caplog.text
+    assert "play_game.output:" in caplog.text
+    assert "attempt: 1" in caplog.text
+    blue_input_msg = next(r.getMessage() for r in caplog.records if "blue.input:" in r.getMessage())
+    assert "state_view:" in blue_input_msg
+    assert "content: === StateView Start ===" in blue_input_msg
+    assert "--- State Artifacts ---" in blue_input_msg
+    assert "## Artifact: main-document" in blue_input_msg
+    assert "kind: document" in blue_input_msg
+    assert "No sections." in blue_input_msg
+    assert '"target_artifact_id"' not in blue_input_msg
+    assert "state:" not in blue_input_msg
+    assert "game_spec:" in blue_input_msg
+    assert "attempt_number: 1" in blue_input_msg
+    assert "previous_feedback: None" in blue_input_msg
+    red_input_msg = next(r.getMessage() for r in caplog.records if "red.input:" in r.getMessage())
+    assert "game_spec:" in red_input_msg
+    assert "state_view:" in red_input_msg
+    assert "delta_state:" in red_input_msg
+    assert "artifact_id: main-document" in red_input_msg
+    assert "red_finding:" in caplog.text
+    referee_input_msg = next(r.getMessage() for r in caplog.records if "referee.input:" in r.getMessage())
+    assert "game_spec:" in referee_input_msg
+    assert "state_view:" in referee_input_msg
+    assert "delta_state:" in referee_input_msg
+    assert "red_finding:" in referee_input_msg
+    assert "referee_decision:" in caplog.text
+    assert "current_best_delta:" in caplog.text
 
 
 def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_path: Path) -> None:
@@ -4289,7 +4278,7 @@ def test_no_state_change_escalates_to_northstar_proposal(
 
 
 def test_main_create_game_parse_error_is_not_swallowed_as_no_game(
-    monkeypatch, capsys, tmp_path: Path
+    monkeypatch, capsys, caplog, tmp_path: Path
 ) -> None:
     import baps.run as run_module
 
@@ -4314,11 +4303,10 @@ def test_main_create_game_parse_error_is_not_swallowed_as_no_game(
             "2",
         ],
     )
-    with pytest.raises(SystemExit) as exc:
+    with caplog.at_level(logging.ERROR), pytest.raises(SystemExit) as exc:
         run_module.main()
     assert exc.value.code == 2
-    err = capsys.readouterr().err
-    assert "create_game model output must be valid JSON" in err
+    assert "create_game model output must be valid JSON" in caplog.text
 
 
 def test_start_clean_workspace_creates_report_from_spec(
@@ -4754,7 +4742,7 @@ def test_spec_relative_path_resolves_from_cwd(monkeypatch, capsys, tmp_path: Pat
     assert f"workspace={workspace}" in out
 
 
-def test_debug_enabled_prints_read_config_input_output(monkeypatch, capsys, tmp_path: Path) -> None:
+def test_debug_enabled_prints_read_config_input_output(monkeypatch, caplog, tmp_path: Path) -> None:
     workspace = tmp_path / "debug-ws"
     spec = tmp_path / "debug-config.yaml"
     spec.write_text(
@@ -4771,26 +4759,23 @@ def test_debug_enabled_prints_read_config_input_output(monkeypatch, capsys, tmp_
         encoding="utf-8",
     )
 
-    monkeypatch.setenv("BAPS_DEBUG", "1")
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
     monkeypatch.setattr("sys.argv", ["baps-run", "start", "--spec", str(spec)])
 
-    main()
-    out = capsys.readouterr().out
+    with caplog.at_level(logging.DEBUG):
+        main()
 
-    assert "[DEBUG] read_config.input:" in out
-    assert "  cli_args:" in out
-    assert "  yaml_values:" in out
-    assert f"    workspace: {workspace}" in out
-    assert "    goal: Debug spec goal" in out
-    assert "    output: out/debug.md" in out
-    assert "    max_iterations: 2" in out
-    assert "[DEBUG] read_config.output:" in out
-    assert f"  workspace: {workspace}" in out
-    assert "  artifact_id: main-document" in out
-    assert "  goal: Debug spec goal" in out
-    assert f"  output_path: {workspace / 'out/debug.md'}" in out
-    assert "  max_iterations: 2" in out
-    assert "{'cli_args':" not in out
+    assert "read_config.input:" in caplog.text
+    assert "cli_args:" in caplog.text
+    assert "yaml_values:" in caplog.text
+    assert f"workspace: {workspace}" in caplog.text
+    assert "goal: Debug spec goal" in caplog.text
+    assert "output: out/debug.md" in caplog.text
+    assert "max_iterations: 2" in caplog.text
+    assert "read_config.output:" in caplog.text
+    assert "artifact_id: main-document" in caplog.text
+    assert f"output_path: {workspace / 'out/debug.md'}" in caplog.text
+    assert "{'cli_args':" not in caplog.text
 
 
 def test_examples_document_project_yaml_still_passes(monkeypatch, capsys, tmp_path: Path) -> None:
@@ -4932,10 +4917,10 @@ def test_init_from_spec_persists_northstar_in_workspace_config(monkeypatch, tmp_
 
 
 def test_debug_formatter_renders_nested_list_of_dicts_without_python_repr(
-    monkeypatch, capsys, tmp_path: Path
+    monkeypatch, caplog, tmp_path: Path
 ) -> None:
     workspace = tmp_path / "debug-structure-ws"
-    monkeypatch.setenv("BAPS_DEBUG", "1")
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -4952,18 +4937,18 @@ def test_debug_formatter_renders_nested_list_of_dicts_without_python_repr(
         ],
     )
 
-    main()
-    out = capsys.readouterr().out
-    assert "artifacts: [{'id':" not in out
-    assert "artifacts:\n      - id: main-document" in out
-    assert "sections: []" in out
+    with caplog.at_level(logging.DEBUG):
+        main()
+    assert "artifacts: [{'id':" not in caplog.text
+    assert "id: main-document" in caplog.text
+    assert "sections: []" in caplog.text
 
 
 def test_debug_formatter_renders_tuple_as_yaml_list_and_empty_as_brackets(
-    monkeypatch, capsys, tmp_path: Path
+    monkeypatch, caplog, tmp_path: Path
 ) -> None:
     workspace = tmp_path / "debug-tuple-ws"
-    monkeypatch.setenv("BAPS_DEBUG", "1")
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -4980,10 +4965,10 @@ def test_debug_formatter_renders_tuple_as_yaml_list_and_empty_as_brackets(
         ],
     )
 
-    main()
-    out = capsys.readouterr().out
-    assert "artifacts:\n      - id: main-document" in out
-    assert "sections: []" in out
+    with caplog.at_level(logging.DEBUG):
+        main()
+    assert "id: main-document" in caplog.text
+    assert "sections: []" in caplog.text
 
 
 def test_main_uses_project_type_adapter_dispatch_for_document(

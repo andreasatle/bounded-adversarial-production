@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
+import os
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 _BLACKBOARD_DIR = "blackboard"
 _NORTHSTAR_PROPOSALS_FILE = "northstar_proposals.jsonl"
@@ -43,23 +47,26 @@ def _save_workspace_config(workspace: Path, config: dict) -> None:
 def _apply_proposal(workspace: Path, proposal: dict, dry_run: bool) -> None:
     config = _load_workspace_config(workspace)
     if not config:
-        print(f"[apply-northstar] no workspace config found at {workspace / _WORKSPACE_CONFIG_FILE}", file=sys.stderr)
+        logger.error("[apply-northstar] no workspace config found at %s", workspace / _WORKSPACE_CONFIG_FILE)
         sys.exit(1)
 
-    print(f"\n[apply-northstar] current NorthStar:\n{config.get('northstar_markdown', '(empty)')}\n")
-    print(f"[apply-northstar] proposed NorthStar:\n{proposal['proposed_northstar']}\n")
+    logger.info("[apply-northstar] current NorthStar:\n%s", config.get('northstar_markdown', '(empty)'))
+    logger.info("[apply-northstar] proposed NorthStar:\n%s", proposal['proposed_northstar'])
 
     if dry_run:
-        print("[apply-northstar] dry-run: no changes written.")
+        logger.info("[apply-northstar] dry-run: no changes written.")
         return
 
     config["northstar_markdown"] = proposal["proposed_northstar"]
     _save_workspace_config(workspace, config)
-    print(f"[apply-northstar] workspace config updated: {workspace / _WORKSPACE_CONFIG_FILE}")
-    print("[apply-northstar] NOTE: re-run 'baps-run init' or manually update the spec YAML to persist this NorthStar change across fresh workspaces.")
+    logger.info("[apply-northstar] workspace config updated: %s", workspace / _WORKSPACE_CONFIG_FILE)
+    logger.info("[apply-northstar] NOTE: re-run 'baps-run init' or manually update the spec YAML to persist this NorthStar change across fresh workspaces.")
 
 
 def main() -> None:
+    _log_level = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
+    logging.basicConfig(level=_log_level, format="%(levelname)s %(name)s %(message)s")
+
     parser = argparse.ArgumentParser(
         description="Review and apply a NorthStar update proposal from a workspace blackboard."
     )
@@ -82,48 +89,48 @@ def main() -> None:
 
     workspace = Path(args.workspace).resolve()
     if not workspace.exists():
-        print(f"[apply-northstar] workspace not found: {workspace}", file=sys.stderr)
+        logger.error("[apply-northstar] workspace not found: %s", workspace)
         sys.exit(1)
 
     proposals = _load_proposals(workspace)
     if not proposals:
-        print("[apply-northstar] no NorthStar proposals found in blackboard.")
+        logger.info("[apply-northstar] no NorthStar proposals found in blackboard.")
         sys.exit(0)
 
-    print(f"[apply-northstar] found {len(proposals)} proposal(s):\n")
+    logger.info("[apply-northstar] found %d proposal(s):", len(proposals))
     for i, p in enumerate(proposals):
         created_at = p.get("created_at", "unknown")
         rationale = p.get("rationale", "")[:120].replace("\n", " ")
-        print(f"  [{i}] {created_at}  —  {rationale}")
+        logger.info("  [%d] %s  —  %s", i, created_at, rationale)
 
     if args.index is not None:
         idx = args.index
         if idx < 0 or idx >= len(proposals):
-            print(f"[apply-northstar] index {idx} out of range (0–{len(proposals) - 1})", file=sys.stderr)
+            logger.error("[apply-northstar] index %d out of range (0–%d)", idx, len(proposals) - 1)
             sys.exit(1)
         chosen = proposals[idx]
     else:
         print()
         raw = input(f"Enter proposal index to apply [0–{len(proposals) - 1}], or 'q' to quit: ").strip()
         if raw.lower() in ("q", "quit", ""):
-            print("[apply-northstar] aborted.")
+            logger.info("[apply-northstar] aborted.")
             sys.exit(0)
         try:
             idx = int(raw)
         except ValueError:
-            print(f"[apply-northstar] invalid input: {raw!r}", file=sys.stderr)
+            logger.error("[apply-northstar] invalid input: %r", raw)
             sys.exit(1)
         if idx < 0 or idx >= len(proposals):
-            print(f"[apply-northstar] index {idx} out of range", file=sys.stderr)
+            logger.error("[apply-northstar] index %d out of range", idx)
             sys.exit(1)
         chosen = proposals[idx]
 
-    print(f"\n[apply-northstar] rationale: {chosen.get('rationale', '')}")
+    logger.info("[apply-northstar] rationale: %s", chosen.get('rationale', ''))
 
     if not args.dry_run and args.index is None:
         confirm = input("\nApply this proposal? [y/N] ").strip().lower()
         if confirm not in ("y", "yes"):
-            print("[apply-northstar] aborted.")
+            logger.info("[apply-northstar] aborted.")
             sys.exit(0)
 
     _apply_proposal(workspace, chosen, dry_run=args.dry_run)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -106,13 +107,14 @@ def test_save_workspace_config_rejects_traversal_via_workspace_symlink(tmp_path:
 # _apply_proposal
 # ---------------------------------------------------------------------------
 
-def test_apply_proposal_dry_run_does_not_write(tmp_path: Path, capsys) -> None:
+def test_apply_proposal_dry_run_does_not_write(tmp_path: Path, caplog) -> None:
     config = {"northstar_markdown": "old northstar", "goal": "test"}
     (tmp_path / "baps-config.json").write_text(json.dumps(config), encoding="utf-8")
-    _apply_proposal(tmp_path, {"proposed_northstar": "new northstar", "rationale": "better"}, dry_run=True)
+    with caplog.at_level(logging.INFO):
+        _apply_proposal(tmp_path, {"proposed_northstar": "new northstar", "rationale": "better"}, dry_run=True)
     written = json.loads((tmp_path / "baps-config.json").read_text(encoding="utf-8"))
     assert written["northstar_markdown"] == "old northstar"
-    assert "dry-run" in capsys.readouterr().out
+    assert "dry-run" in caplog.text
 
 
 def test_apply_proposal_writes_northstar_to_config(tmp_path: Path) -> None:

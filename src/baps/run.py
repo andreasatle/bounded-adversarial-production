@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -44,6 +45,8 @@ from baps.state import (
 from baps.state_service import StateService
 from baps.state_store import JsonStateStore
 
+logger = logging.getLogger(__name__)
+
 _DEFAULT_OLLAMA_MODEL = "gemma4:e4b"
 _DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
 _DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
@@ -70,10 +73,6 @@ class NorthStarUpdateNeededError(ValueError):
         super().__init__(rationale)
         self.rationale = rationale
         self.proposed_northstar = proposed_northstar
-
-
-def _debug_enabled() -> bool:
-    return os.getenv("BAPS_DEBUG") == "1"
 
 
 def _format_debug_yaml_like(value: Any, indent: int = 0) -> list[str]:
@@ -141,9 +140,8 @@ def _format_debug_yaml_like(value: Any, indent: int = 0) -> list[str]:
 
 
 def _debug_print_read_config(args: argparse.Namespace, spec_data: dict[str, Any], config: dict[str, Any]) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] read_config.input:")
     input_payload = {
         "cli_args": {
             "workspace": args.workspace,
@@ -155,10 +153,7 @@ def _debug_print_read_config(args: argparse.Namespace, spec_data: dict[str, Any]
         },
         "yaml_values": spec_data,
     }
-    for line in _format_debug_yaml_like(input_payload, indent=2):
-        print(line)
-    print()
-    print("[DEBUG] read_config.output:")
+    logger.debug("read_config.input:\n%s", "\n".join(_format_debug_yaml_like(input_payload, indent=2)))
     output_payload = {
         "workspace": str(config["workspace"]),
         "artifact_id": config["artifact_id"],
@@ -167,15 +162,12 @@ def _debug_print_read_config(args: argparse.Namespace, spec_data: dict[str, Any]
         "output_path": str(config["output_path"]),
         "max_iterations": config["max_iterations"],
     }
-    for line in _format_debug_yaml_like(output_payload, indent=2):
-        print(line)
-    print()
+    logger.debug("read_config.output:\n%s", "\n".join(_format_debug_yaml_like(output_payload, indent=2)))
 
 
 def _debug_print_create_state(config: dict[str, Any], state: State) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] create_state.input:")
     input_payload = {
         "project_type": config["project_type"],
         "artifact_id": _config_artifact_id(config),
@@ -185,106 +177,62 @@ def _debug_print_create_state(config: dict[str, Any], state: State) -> None:
         "output_path": str(config["output_path"]),
         "max_iterations": config["max_iterations"],
     }
-    for line in _format_debug_yaml_like(input_payload, indent=2):
-        print(line)
-    print()
-    print("[DEBUG] create_state.output:")
-    output_payload = {
-        "state": state.model_dump(mode="json"),
-    }
-    for line in _format_debug_yaml_like(output_payload, indent=2):
-        print(line)
-    print()
+    logger.debug("create_state.input:\n%s", "\n".join(_format_debug_yaml_like(input_payload, indent=2)))
+    logger.debug("create_state.output:\n%s", "\n".join(_format_debug_yaml_like({"state": state.model_dump(mode="json")}, indent=2)))
 
 
 def _debug_print_create_game_input(state: State) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] create_game.input:")
-    input_payload = {
-        "state": state.model_dump(mode="json"),
-    }
-    for line in _format_debug_yaml_like(input_payload, indent=2):
-        print(line)
-    print()
+    logger.debug("create_game.input:\n%s", "\n".join(_format_debug_yaml_like({"state": state.model_dump(mode="json")}, indent=2)))
 
 
 def _debug_print_create_game_output(game_spec: GameSpec) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] create_game.output:")
-    output_payload = {
-        "game_spec": game_spec.model_dump(mode="json"),
-    }
-    for line in _format_debug_yaml_like(output_payload, indent=2):
-        print(line)
-    print()
+    logger.debug("create_game.output:\n%s", "\n".join(_format_debug_yaml_like({"game_spec": game_spec.model_dump(mode="json")}, indent=2)))
 
 
 def _debug_print_create_game_prompt(prompt: str) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] create_game.prompt:")
-    for line in prompt.splitlines() or [""]:
-        print(f"  {line}")
-    print()
+    indented = "\n".join(f"  {line}" for line in (prompt.splitlines() or [""]))
+    logger.debug("create_game.prompt:\n%s", indented)
 
 
 def _debug_print_play_game_input(state: State, game_spec: GameSpec) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] play_game.input:")
     payload = {
         "state": state.model_dump(mode="json"),
         "game_spec": game_spec.model_dump(mode="json"),
     }
-    for line in _format_debug_yaml_like(payload, indent=2):
-        print(line)
-    print()
+    logger.debug("play_game.input:\n%s", "\n".join(_format_debug_yaml_like(payload, indent=2)))
 
 
 def _debug_print_play_game_output(delta: DeltaState | None) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] play_game.output:")
-    payload = {
-        "current_best_delta": None if delta is None else delta.model_dump(mode="json"),
-    }
-    for line in _format_debug_yaml_like(payload, indent=2):
-        print(line)
-    print()
+    payload = {"current_best_delta": None if delta is None else delta.model_dump(mode="json")}
+    logger.debug("play_game.output:\n%s", "\n".join(_format_debug_yaml_like(payload, indent=2)))
 
 
 def _debug_print_play_game_attempt(attempt: int) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] play_game.attempt:")
-    payload = {"attempt": attempt}
-    for line in _format_debug_yaml_like(payload, indent=2):
-        print(line)
-    print()
+    logger.debug("play_game.attempt:\n%s", "\n".join(_format_debug_yaml_like({"attempt": attempt}, indent=2)))
 
 
 def _debug_print_blue_failed_tool_call(tool_call: object) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] blue.failed_tool_call:")
-    for line in _format_debug_yaml_like({"tool_call": str(tool_call)}, indent=2):
-        print(line)
-    print()
+    logger.debug("blue.failed_tool_call:\n%s", "\n".join(_format_debug_yaml_like({"tool_call": str(tool_call)}, indent=2)))
 
 
 def _debug_print_attempt_rejected(attempt: int, reason: str) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] play_game.attempt_rejected:")
-    payload = {
-        "attempt": attempt,
-        "reason": reason,
-    }
-    for line in _format_debug_yaml_like(payload, indent=2):
-        print(line)
-    print()
+    logger.debug("play_game.attempt_rejected:\n%s", "\n".join(_format_debug_yaml_like({"attempt": attempt, "reason": reason}, indent=2)))
 
 
 def _debug_print_blue_input(
@@ -293,28 +241,21 @@ def _debug_print_blue_input(
     attempt_number: int,
     previous_feedback: dict[str, Any] | None,
 ) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] blue.input:")
     payload = {
         "game_spec": game_spec.model_dump(mode="json"),
         "state_view": state_view.model_dump(mode="json"),
         "attempt_number": attempt_number,
         "previous_feedback": previous_feedback,
     }
-    for line in _format_debug_yaml_like(payload, indent=2):
-        print(line)
-    print()
+    logger.debug("blue.input:\n%s", "\n".join(_format_debug_yaml_like(payload, indent=2)))
 
 
 def _debug_print_blue_output(delta: DeltaState) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] blue.output:")
-    payload = {"delta_state": delta.model_dump(mode="json")}
-    for line in _format_debug_yaml_like(payload, indent=2):
-        print(line)
-    print()
+    logger.debug("blue.output:\n%s", "\n".join(_format_debug_yaml_like({"delta_state": delta.model_dump(mode="json")}, indent=2)))
 
 
 def _debug_print_red_input(
@@ -323,9 +264,8 @@ def _debug_print_red_input(
     delta_state: DeltaState,
     verification_result: VerificationResult | None = None,
 ) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] red.input:")
     payload = {
         "game_spec": game_spec.model_dump(mode="json"),
         "state_view": state_view.model_dump(mode="json"),
@@ -343,19 +283,13 @@ def _debug_print_red_input(
             }
         ),
     }
-    for line in _format_debug_yaml_like(payload, indent=2):
-        print(line)
-    print()
+    logger.debug("red.input:\n%s", "\n".join(_format_debug_yaml_like(payload, indent=2)))
 
 
 def _debug_print_red_output(red_finding: RedFinding) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] red.output:")
-    payload = {"red_finding": red_finding.model_dump(mode="json")}
-    for line in _format_debug_yaml_like(payload, indent=2):
-        print(line)
-    print()
+    logger.debug("red.output:\n%s", "\n".join(_format_debug_yaml_like({"red_finding": red_finding.model_dump(mode="json")}, indent=2)))
 
 
 def _debug_print_referee_input(
@@ -365,9 +299,8 @@ def _debug_print_referee_input(
     red_finding: RedFinding,
     verification_result: VerificationResult | None = None,
 ) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] referee.input:")
     payload = {
         "game_spec": game_spec.model_dump(mode="json"),
         "state_view": state_view.model_dump(mode="json"),
@@ -386,86 +319,64 @@ def _debug_print_referee_input(
             }
         ),
     }
-    for line in _format_debug_yaml_like(payload, indent=2):
-        print(line)
-    print()
+    logger.debug("referee.input:\n%s", "\n".join(_format_debug_yaml_like(payload, indent=2)))
 
 
 def _debug_print_referee_output(referee_decision: RefereeDecision) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] referee.output:")
-    payload = {"referee_decision": referee_decision.model_dump(mode="json")}
-    for line in _format_debug_yaml_like(payload, indent=2):
-        print(line)
-    print()
+    logger.debug("referee.output:\n%s", "\n".join(_format_debug_yaml_like({"referee_decision": referee_decision.model_dump(mode="json")}, indent=2)))
 
 
 def _debug_print_northstar_update_proposal(rationale: str, proposed_northstar: str) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] create_game.northstar_update_proposal:")
     payload = {"rationale": rationale, "proposed_northstar": proposed_northstar}
-    for line in _format_debug_yaml_like(payload, indent=2):
-        print(line)
-    print()
+    logger.debug("create_game.northstar_update_proposal:\n%s", "\n".join(_format_debug_yaml_like(payload, indent=2)))
 
 
 def _debug_print_create_game_raw_model_output(raw_text: str) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] create_game.raw_model_output:")
-    for line in raw_text.splitlines() or [""]:
-        print(f"  {line}")
-    print()
+    indented = "\n".join(f"  {line}" for line in (raw_text.splitlines() or [""]))
+    logger.debug("create_game.raw_model_output:\n%s", indented)
 
 
 def _debug_print_create_game_red_input(state_view: StateView, game_spec: GameSpec) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] create_game_red.input:")
     payload = {
         "game_spec": game_spec.model_dump(mode="json"),
         "state_view_id": state_view.id,
     }
-    for line in _format_debug_yaml_like(payload, indent=2):
-        print(line)
-    print()
+    logger.debug("create_game_red.input:\n%s", "\n".join(_format_debug_yaml_like(payload, indent=2)))
 
 
 def _debug_print_create_game_red_output(red_finding: RedFinding) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] create_game_red.output:")
-    payload = {"red_finding": red_finding.model_dump(mode="json")}
-    for line in _format_debug_yaml_like(payload, indent=2):
-        print(line)
-    print()
+    logger.debug("create_game_red.output:\n%s", "\n".join(_format_debug_yaml_like({"red_finding": red_finding.model_dump(mode="json")}, indent=2)))
 
 
 def _debug_print_create_game_validation_input(game_spec: GameSpec) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] create_game.validation_input:")
-    print(f"objective={game_spec.objective}")
-    print(f"success_condition={game_spec.success_condition}")
-    print(f"target_artifact_id={game_spec.target_artifact_id}")
-    print(f"allowed_delta_type={game_spec.allowed_delta_type}")
-    print()
+    logger.debug(
+        "create_game.validation_input:\nobjective=%s\nsuccess_condition=%s\ntarget_artifact_id=%s\nallowed_delta_type=%s",
+        game_spec.objective, game_spec.success_condition,
+        game_spec.target_artifact_id, game_spec.allowed_delta_type,
+    )
 
 
 def _debug_print_create_game_validation_failure(message: str) -> None:
-    if not _debug_enabled():
+    if not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] create_game.validation_failure:")
-    print(f"message={message}")
-    print()
+    logger.debug("create_game.validation_failure:\nmessage=%s", message)
 
 
 def _debug_print_verification_result(result: VerificationResult | None) -> None:
-    if not _debug_enabled() or result is None:
+    if result is None or not logger.isEnabledFor(logging.DEBUG):
         return
-    print("[DEBUG] verify_export.result:")
     payload = {
         "verification": {
             "command": result.command,
@@ -476,9 +387,7 @@ def _debug_print_verification_result(result: VerificationResult | None) -> None:
             "stderr": result.stderr,
         }
     }
-    for line in _format_debug_yaml_like(payload, indent=2):
-        print(line)
-    print()
+    logger.debug("verify_export.result:\n%s", "\n".join(_format_debug_yaml_like(payload, indent=2)))
 
 
 def _build_client_for_backend(backend: str) -> ModelClient:
@@ -1172,8 +1081,7 @@ def _generate_create_game_with_json_retry(
         except ValueError as exc:
             if "valid JSON" not in str(exc) or attempt >= _MAX_JSON_RETRIES:
                 raise
-            if _debug_enabled():
-                print(f"[DEBUG] create_game.json_retry attempt={attempt + 1}: invalid JSON, retrying with correction prompt")
+            logger.debug("create_game.json_retry attempt=%d: invalid JSON, retrying with correction prompt", attempt + 1)
             generated = role.generate(_JSON_CORRECTION_PROMPT)
             _debug_print_create_game_raw_model_output(generated)
     raise AssertionError("unreachable")
@@ -1231,10 +1139,9 @@ def _parse_create_game_output(text: str, max_sub_gaps: int = 5, workspace: Path 
         if not sub_gaps:
             raise ValueError("create_game decompose response sub_gaps contained no valid entries")
         if len(sub_gaps) > max_sub_gaps:
-            print(
-                f"[create_game] DecomposeSpec contained {len(sub_gaps)} sub-gaps; "
-                f"truncating to max_sub_gaps={max_sub_gaps}",
-                flush=True,
+            logger.warning(
+                "[create_game] DecomposeSpec contained %d sub-gaps; truncating to max_sub_gaps=%d",
+                len(sub_gaps), max_sub_gaps,
             )
             sub_gaps = sub_gaps[:max_sub_gaps]
         return DecomposeSpec(rationale=rationale, sub_gaps=sub_gaps)
@@ -1982,8 +1889,8 @@ def _commit_export_with_adapter(
     if committer is None:
         return False
     committed = committer(output_path, game_spec)
-    if _debug_enabled() and committed:
-        print(f"[DEBUG] commit_export: committed export to git at {output_path}")
+    if committed:
+        logger.debug("commit_export: committed export to git at %s", output_path)
     return committed
 
 
@@ -2186,16 +2093,12 @@ def _solve_gap(
 
     if isinstance(result, DecomposeSpec):
         if depth >= max_depth:
-            print(
-                f"[solve_gap] max_depth={max_depth} reached, cannot decompose further; stopping.",
-                flush=True,
-            )
+            logger.info("[solve_gap] max_depth=%d reached, cannot decompose further; stopping.", max_depth)
             ctx.stop_reason = "max_depth_reached"
             return
-        print(
-            f"[solve_gap] depth={depth} decomposing into {len(result.sub_gaps)} sub-gaps: "
-            f"{result.rationale}",
-            flush=True,
+        logger.info(
+            "[solve_gap] depth=%d decomposing into %d sub-gaps: %s",
+            depth, len(result.sub_gaps), result.rationale,
         )
         for sub_gap in result.sub_gaps:
             _solve_gap(
@@ -2217,11 +2120,7 @@ def _solve_gap(
 
     # Leaf: GameSpec — inject full context chain and execute
     game_spec = result.model_copy(update={"context_chain": context_chain})
-    if context_chain:
-        print(
-            f"[solve_gap] depth={depth} playing leaf game: {game_spec.objective}",
-            flush=True,
-        )
+    logger.info("[solve_gap] depth=%d playing leaf game: %s", depth, game_spec.objective)
 
     sandbox_mode = config.get("sandbox", "docker")
     delta_state = play_game(
@@ -2274,7 +2173,7 @@ def _run_project_iterations(
 
     if config.get("project_type") == "coding" and config.get("sandbox") == "none":
         from baps.sandbox import SANDBOX_NONE_WARNING
-        print(SANDBOX_NONE_WARNING, file=sys.stderr, flush=True)
+        logger.warning("%s", SANDBOX_NONE_WARNING)
 
     ctx = _RunContext(initial_state=initial_state, max_iterations=max_iterations)
 
@@ -2344,6 +2243,8 @@ def _active_model_info(config: dict[str, Any] | None = None) -> dict[str, str]:
 def main() -> None:
     from dotenv import load_dotenv
     load_dotenv()
+    _log_level = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
+    logging.basicConfig(level=_log_level, format="%(levelname)s %(name)s %(message)s")
     parser = argparse.ArgumentParser(
         description="baps — bounded adversarial production system.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -2421,7 +2322,7 @@ def main() -> None:
         try:
             workspace, output_path = _resolve_reset_config(args)
         except ValueError as exc:
-            print(f"error: {exc}", file=sys.stderr)
+            logger.error("%s", exc)
             raise SystemExit(2) from exc
         _wipe_state(workspace, output_path)
         print(f"workspace={workspace}")
@@ -2432,7 +2333,7 @@ def main() -> None:
     try:
         config = resolve_run_config(args)
     except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        logger.error("%s", exc)
         raise SystemExit(2) from exc
 
     command = args.command
@@ -2444,7 +2345,7 @@ def main() -> None:
     try:
         adapter = _resolve_project_type_adapter(project_type)
     except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        logger.error("%s", exc)
         raise SystemExit(2) from exc
     update_applied = False
     state_changed = False
@@ -2488,7 +2389,7 @@ def main() -> None:
         iterations_completed = int(results["iterations_completed"])
         stop_reason = str(results["stop_reason"])
     except (ValueError, RuntimeError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        logger.error("%s", exc)
         stop_reason = "error"
         model_info = _active_model_info(config)
         workspace.mkdir(parents=True, exist_ok=True)
