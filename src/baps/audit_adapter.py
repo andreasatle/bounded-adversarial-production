@@ -26,6 +26,7 @@ from baps.state import (
 )
 from baps.document_adapter import (
     document_artifact_from_state,
+    export_document_artifact,
     parse_document_delta_json,
     derive_document_state_update_from_delta,
     render_document_artifact_markdown,
@@ -563,11 +564,4 @@ class AuditProjectAdapter:
         return derive_document_state_update_from_delta(delta_state)
 
     def export_state(self, state: State, output_path: Path, artifact_id: str) -> bool:
-        artifact = document_artifact_from_state(state, artifact_id)
-        rendered = render_document_artifact_markdown(artifact)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        before = output_path.read_text(encoding="utf-8") if output_path.exists() else None
-        changed = before != rendered
-        if changed:
-            output_path.write_text(rendered, encoding="utf-8")
-        return changed
+        return export_document_artifact(document_artifact_from_state(state, artifact_id), output_path)

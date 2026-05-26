@@ -4438,12 +4438,14 @@ def test_document_export_output_changed_false_when_unchanged(tmp_path: Path) -> 
 
 def test_document_export_lives_behind_adapter_not_main_orchestration() -> None:
     import baps.run as run_module
+    import baps.document_adapter as doc_adapter_module
 
     main_src = inspect.getsource(run_module.main)
     assert "output_path.write_text" not in main_src
     assert "run_baps_loop(" not in main_src
-    adapter_src = inspect.getsource(run_module.DocumentProjectAdapter.export_state)
-    assert "write_text" in adapter_src
+    # write_text lives in export_document_artifact, not directly in export_state
+    free_fn_src = inspect.getsource(doc_adapter_module.export_document_artifact)
+    assert "write_text" in free_fn_src
 
 
 def test_baps_start_creates_state_file(monkeypatch, tmp_path: Path) -> None:

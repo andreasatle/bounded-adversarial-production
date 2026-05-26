@@ -294,6 +294,16 @@ def render_document_artifact_markdown(artifact: DocumentArtifact) -> str:
     return "\n\n".join(sections)
 
 
+def export_document_artifact(artifact: DocumentArtifact, output_path: Path) -> bool:
+    rendered = render_document_artifact_markdown(artifact)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    before = output_path.read_text(encoding="utf-8") if output_path.exists() else None
+    changed = before != rendered
+    if changed:
+        output_path.write_text(rendered, encoding="utf-8")
+    return changed
+
+
 class DocumentProjectAdapter:
     project_type = "document"
     supported_delta_type = "DeltaDocumentState"
@@ -511,14 +521,7 @@ class DocumentProjectAdapter:
         return derive_document_state_update_from_delta(delta_state)
 
     def export_state(self, state: State, output_path: Path, artifact_id: str) -> bool:
-        artifact = document_artifact_from_state(state, artifact_id)
-        rendered = render_document_artifact_markdown(artifact)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        before = output_path.read_text(encoding="utf-8") if output_path.exists() else None
-        changed = before != rendered
-        if changed:
-            output_path.write_text(rendered, encoding="utf-8")
-        return changed
+        return export_document_artifact(document_artifact_from_state(state, artifact_id), output_path)
 
     def verify_export(
         self, output_path: Path, state: State, artifact_id: str, sandbox_mode: str = "docker"
