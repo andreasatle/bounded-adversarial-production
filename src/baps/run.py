@@ -22,6 +22,7 @@ from baps.project_adapter import (
     VerificationResult,
     _config_artifact_id,
     _config_northstar_markdown,
+    _verification_result_to_dict,
     sanitize_model_string,
     build_default_project_type_adapters,
     resolve_adapter_for_allowed_delta_type,
@@ -270,16 +271,8 @@ def _debug_print_red_input(
         "state_view": state_view.model_dump(mode="json"),
         "delta_state": delta_state.model_dump(mode="json"),
         "verification_result": (
-            None
-            if verification_result is None
-            else {
-                "command": verification_result.command,
-                "cwd": verification_result.cwd,
-                "exit_code": verification_result.exit_code,
-                "stdout": verification_result.stdout,
-                "stderr": verification_result.stderr,
-                "passed": verification_result.passed,
-            }
+            None if verification_result is None
+            else _verification_result_to_dict(verification_result)
         ),
     }
     logger.debug("red.input:\n%s", "\n".join(_format_debug_yaml_like(payload, indent=2)))
@@ -306,16 +299,8 @@ def _debug_print_referee_input(
         "delta_state": delta_state.model_dump(mode="json"),
         "red_finding": red_finding.model_dump(mode="json"),
         "verification_result": (
-            None
-            if verification_result is None
-            else {
-                "command": verification_result.command,
-                "cwd": verification_result.cwd,
-                "exit_code": verification_result.exit_code,
-                "stdout": verification_result.stdout,
-                "stderr": verification_result.stderr,
-                "passed": verification_result.passed,
-            }
+            None if verification_result is None
+            else _verification_result_to_dict(verification_result)
         ),
     }
     logger.debug("referee.input:\n%s", "\n".join(_format_debug_yaml_like(payload, indent=2)))
@@ -376,16 +361,7 @@ def _debug_print_create_game_validation_failure(message: str) -> None:
 def _debug_print_verification_result(result: VerificationResult | None) -> None:
     if result is None or not logger.isEnabledFor(logging.DEBUG):
         return
-    payload = {
-        "verification": {
-            "command": result.command,
-            "cwd": result.cwd,
-            "exit_code": result.exit_code,
-            "passed": result.passed,
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-        }
-    }
+    payload = {"verification": _verification_result_to_dict(result)}
     logger.debug("verify_export.result:\n%s", "\n".join(_format_debug_yaml_like(payload, indent=2)))
 
 
@@ -663,6 +639,17 @@ def _require_non_empty(value: str, field_name: str) -> str:
     if value.strip() == "":
         raise ValueError(f"{field_name} must be non-empty")
     return value
+
+
+def _render_verification_block(result: VerificationResult | None, *, guidance: str) -> str:
+    if result is None:
+        return ""
+    verification_json = json.dumps(_verification_result_to_dict(result), sort_keys=True)
+    return (
+        f"- verification_result_json: {verification_json}\n"
+        f"{guidance}"
+    )
+
 
 
 
@@ -1368,26 +1355,13 @@ def _render_red_prompt(
 ) -> str:
     state_view_json = json.dumps(state_view.model_dump(mode="json"), sort_keys=True)
     delta_state_json = json.dumps(delta_state.model_dump(mode="json"), sort_keys=True)
-    verification_block = ""
-    if verification_result is not None:
-        verification_json = json.dumps(
-            {
-                "command": verification_result.command,
-                "cwd": verification_result.cwd,
-                "exit_code": verification_result.exit_code,
-                "stdout": verification_result.stdout,
-                "stderr": verification_result.stderr,
-                "passed": verification_result.passed,
-            },
-            sort_keys=True,
-        )
-        verification_block = (
-            f"- verification_result_json: {verification_json}\n"
-            "Verification guidance:\n"
-            "- Treat verification_result_json as execution evidence.\n"
-            "- If verification passed, treat that as strong evidence toward accept.\n"
-            "- If verification failed, reason from exit_code/stdout/stderr evidence.\n\n"
-        )
+    _red_guidance = (
+        "Verification guidance:\n"
+        "- Treat verification_result_json as execution evidence.\n"
+        "- If verification passed, treat that as strong evidence toward accept.\n"
+        "- If verification failed, reason from exit_code/stdout/stderr evidence.\n\n"
+    )
+    verification_block = _render_verification_block(verification_result, guidance=_red_guidance)
     return (
         "Evaluate the candidate DeltaState and return a RedFinding JSON object.\n\n"
         "Input:\n"
@@ -1439,26 +1413,13 @@ def _render_referee_prompt(
     state_view_json = json.dumps(state_view.model_dump(mode="json"), sort_keys=True)
     delta_state_json = json.dumps(delta_state.model_dump(mode="json"), sort_keys=True)
     red_finding_json = json.dumps(red_finding.model_dump(mode="json"), sort_keys=True)
-    verification_block = ""
-    if verification_result is not None:
-        verification_json = json.dumps(
-            {
-                "command": verification_result.command,
-                "cwd": verification_result.cwd,
-                "exit_code": verification_result.exit_code,
-                "stdout": verification_result.stdout,
-                "stderr": verification_result.stderr,
-                "passed": verification_result.passed,
-            },
-            sort_keys=True,
-        )
-        verification_block = (
-            f"- verification_result_json: {verification_json}\n"
-            "Verification guidance:\n"
-            "- Treat verification_result_json as execution evidence.\n"
-            "- If verification passed, treat that as strong evidence toward accept.\n"
-            "- If verification failed, reason from exit_code/stdout/stderr evidence.\n\n"
-        )
+    _referee_guidance = (
+        "Verification guidance:\n"
+        "- Treat verification_result_json as execution evidence.\n"
+        "- If verification passed, treat that as strong evidence toward accept.\n"
+        "- If verification failed, reason from exit_code/stdout/stderr evidence.\n\n"
+    )
+    verification_block = _render_verification_block(verification_result, guidance=_referee_guidance)
     return (
         "Act as Referee and decide whether to accept, revise, or reject the candidate delta.\n\n"
         "Input:\n"

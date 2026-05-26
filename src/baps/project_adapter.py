@@ -67,6 +67,17 @@ class VerificationResult:
     passed: bool
 
 
+def _verification_result_to_dict(result: VerificationResult) -> dict[str, Any]:
+    return {
+        "command": result.command,
+        "cwd": result.cwd,
+        "exit_code": result.exit_code,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "passed": result.passed,
+    }
+
+
 class ProjectTypeAdapter(Protocol):
     project_type: str
     supported_delta_type: str
