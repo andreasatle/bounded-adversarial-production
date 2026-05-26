@@ -13,6 +13,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 from baps.language_plugin import LanguagePlugin
+from baps.model_output import parse_model_output
 from baps.models import ToolCall, ToolDefinition
 from baps.northstar_projection import ProjectionType, StateView
 from baps.project_adapter import (
@@ -367,30 +368,21 @@ def _fix_delta_file_content_quotes(parsed: dict) -> None:
         _fix_one_file_content_quotes(file_data)
 
 
-def parse_coding_delta_json(text: str) -> DeltaCodingState | DeltaCodingBatchState:
-    normalized = normalize_json_candidate(text)
+_BLUE_CODING_KEYS = frozenset({"artifact_id", "operation", "payload"})
+
+
+def parse_coding_delta_json(text: str, workspace: Path | None = None) -> DeltaCodingState | DeltaCodingBatchState:
     try:
-        parsed = json.loads(normalized)
-    except json.JSONDecodeError as exc:
-        parsed = _recover_malformed_coding_delta_json(normalized)
+        parsed = parse_model_output(text, _BLUE_CODING_KEYS, context="blue:coding", workspace=workspace)
+    except ValueError as exc:
+        if "must be valid JSON" not in str(exc):
+            raise
+        # Static recovery for malformed write_file payloads (unescaped content strings)
+        parsed = _recover_malformed_coding_delta_json(normalize_json_candidate(text))
         if parsed is None:
-            raise ValueError("blue model output must be valid JSON") from exc
-
-    if not isinstance(parsed, dict):
-        raise ValueError("blue model output must be a JSON object")
-
-    logger.error("blue_delta raw response: %s", parsed)
-
-    required_keys = {"artifact_id", "operation", "payload"}
-    extra_keys = set(parsed.keys()) - required_keys
-    if extra_keys:
-        logger.warning("blue_delta: stripping extra keys: %s", sorted(extra_keys))
-        for k in extra_keys:
-            del parsed[k]
-    if not required_keys.issubset(parsed.keys()):
-        raise ValueError(
-            "blue model output must contain keys: artifact_id, operation, payload"
-        )
+            raise
+    if not _BLUE_CODING_KEYS.issubset(parsed.keys()):
+        raise ValueError("blue model output must contain keys: artifact_id, operation, payload")
 
     _fix_delta_file_content_quotes(parsed)
 

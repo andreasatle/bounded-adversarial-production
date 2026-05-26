@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from baps.model_output import parse_model_output
 from baps.models import ToolCall, ToolDefinition
 from baps.northstar_projection import ProjectionType, StateView
 from baps.project_adapter import (
@@ -211,20 +212,14 @@ def render_document_blue_prompt(
     )
 
 
-def parse_document_delta_json(text: str) -> DeltaDocumentState | DeltaModifyDocumentState:
-    normalized = normalize_json_candidate(text)
-    try:
-        parsed = json.loads(normalized)
-    except json.JSONDecodeError as exc:
-        raise ValueError("blue model output must be valid JSON") from exc
+_BLUE_DOCUMENT_KEYS = frozenset({"artifact_id", "operation", "payload"})
 
-    if not isinstance(parsed, dict):
-        raise ValueError("blue model output must be a JSON object")
 
-    required_keys = {"artifact_id", "operation", "payload"}
-    if set(parsed.keys()) != required_keys:
+def parse_document_delta_json(text: str, workspace: Path | None = None) -> DeltaDocumentState | DeltaModifyDocumentState:
+    parsed = parse_model_output(text, _BLUE_DOCUMENT_KEYS, context="blue:document", workspace=workspace)
+    if not _BLUE_DOCUMENT_KEYS.issubset(parsed.keys()):
         raise ValueError(
-            "blue model output must contain exactly keys: artifact_id, operation, payload"
+            "blue model output must contain keys: artifact_id, operation, payload"
         )
 
     operation = parsed.get("operation")

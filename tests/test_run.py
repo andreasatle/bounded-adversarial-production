@@ -623,7 +623,7 @@ def test_create_game_invalid_json_with_debug_prints_raw_model_output(
     assert "create_game.prompt:" in caplog.text
     assert "create_game.raw_model_output:" in caplog.text
     assert "not-json-output" in caplog.text
-    assert "create_game.json_retry" in caplog.text
+    assert "retrying with correction prompt" in caplog.text
 
 
 def test_create_game_invalid_json_without_debug_does_not_print_raw_model_output(caplog) -> None:
@@ -1554,7 +1554,7 @@ def test_play_game_invalid_red_json_rejected() -> None:
             "spec_path": None,
         }
     )
-    with pytest.raises(ValueError, match="red model output must be valid JSON"):
+    with pytest.raises(ValueError, match="red: model output must be valid JSON"):
         play_game(
             state,
             spec,
@@ -1616,7 +1616,7 @@ def test_play_game_invalid_referee_json_rejected() -> None:
             "spec_path": None,
         }
     )
-    with pytest.raises(ValueError, match="referee model output must be valid JSON"):
+    with pytest.raises(ValueError, match="referee: model output must be valid JSON"):
         play_game(
             state,
             spec,
@@ -1662,13 +1662,14 @@ def test_red_finding_defaults_when_optional_fields_absent() -> None:
     assert red.findings == ()
 
 
-def test_red_finding_unexpected_key_rejected() -> None:
+def test_red_finding_unexpected_key_stripped() -> None:
     import baps.run as run_module
 
-    with pytest.raises(ValueError, match="unexpected keys"):
-        run_module._parse_red_finding_json(
-            '{"disposition":"accept","rationale":"ok","confidence":0.9}'
-        )
+    red = run_module._parse_red_finding_json(
+        '{"disposition":"accept","rationale":"ok","confidence":0.9}'
+    )
+    assert red.disposition == "accept"
+    assert not hasattr(red, "confidence")
 
 
 def test_red_finding_missing_required_key_rejected() -> None:
@@ -1701,13 +1702,14 @@ def test_referee_decision_defaults_when_optional_fields_absent() -> None:
     assert decision.improvement_hints == ()
 
 
-def test_referee_decision_unexpected_key_rejected() -> None:
+def test_referee_decision_unexpected_key_stripped() -> None:
     import baps.run as run_module
 
-    with pytest.raises(ValueError, match="unexpected keys"):
-        run_module._parse_referee_decision_json(
-            '{"disposition":"accept","rationale":"ok","confidence":0.9}'
-        )
+    decision = run_module._parse_referee_decision_json(
+        '{"disposition":"accept","rationale":"ok","confidence":0.9}'
+    )
+    assert decision.disposition == "accept"
+    assert not hasattr(decision, "confidence")
 
 
 def test_referee_decision_missing_required_key_rejected() -> None:

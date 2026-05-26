@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from baps.model_output import parse_model_output
 from baps.models import ToolCall, ToolDefinition
 from baps.northstar_projection import ProjectionType, StateView
 from baps.project_adapter import (
@@ -539,14 +540,13 @@ class AuditProjectAdapter:
         raise ValueError(f"unexpected tool: {tool_call.name!r}")
 
     def parse_blue_delta(self, text: str) -> DeltaState:
-        from baps.project_adapter import normalize_json_candidate
         from baps.state import DeltaDocumentState
-        normalized = normalize_json_candidate(text)
+        _AUDIT_KEYS = frozenset({"artifact_id", "operation", "file", "rationale", "payload"})
         try:
-            raw = json.loads(normalized)
-        except json.JSONDecodeError:
+            raw = parse_model_output(text, _AUDIT_KEYS, context="blue:audit")
+        except ValueError:
             return parse_document_delta_json(text)
-        if isinstance(raw, dict) and raw.get("operation") == "no_finding":
+        if raw.get("operation") == "no_finding":
             file = str(raw.get("file", ""))
             rationale = str(raw.get("rationale", ""))
             artifact_id = str(raw.get("artifact_id", ""))

@@ -15,6 +15,7 @@ import yaml
 
 from baps.models import AnthropicClient, FallbackClient, ModelClient, OllamaClient, OpenAIClient, Role, ToolCallRecord
 from baps.tools import ToolExecutor, build_default_tool_executor
+from baps.model_output import parse_model_output
 from baps.northstar_projection import ProjectionType, StateView
 from baps.project_adapter import (
     ProjectTypeAdapter,
@@ -58,7 +59,6 @@ _DEFAULT_MAX_PLAY_GAME_ATTEMPTS = 3
 _DEFAULT_MAX_DEPTH = 3
 _BLACKBOARD_DIR = "blackboard"
 _NORTHSTAR_PROPOSALS_FILE = "northstar_proposals.jsonl"
-_STRIPPED_KEYS_FILE = "stripped_keys.jsonl"
 _WORKSPACE_CONFIG_FILE = "baps-config.json"
 
 
@@ -1046,25 +1046,13 @@ def _ensure_target_artifact_exists(state: State, artifact_id: str) -> None:
         raise ValueError(f"create_game target artifact not found in state: {artifact_id}")
 
 
-def _strip_extra_keys(
-    parsed: dict[str, Any],
-    known: set[str],
-    workspace: Path | None,
-    context: str,
-) -> None:
-    extra = set(parsed.keys()) - known
-    if extra:
-        for k in extra:
-            del parsed[k]
-        if workspace is not None:
-            _append_stripped_keys_to_blackboard(workspace, sorted(extra), context)
-
-
-_MAX_JSON_RETRIES = 2
-_JSON_CORRECTION_PROMPT = (
-    "Your previous response was not valid JSON. "
-    "Respond with only a JSON object and nothing else."
-)
+_CREATE_GAME_ALL_KEYS = frozenset({
+    "no_new_game", "reason",
+    "northstar_update_needed", "rationale", "proposed_northstar",
+    "decompose", "sub_gaps",
+    "objective", "target_artifact_id", "allowed_delta_type", "success_condition",
+    "max_words", "context_chain",
+})
 
 
 def _generate_create_game_with_json_retry(
@@ -1075,44 +1063,32 @@ def _generate_create_game_with_json_retry(
 ) -> "GameSpec | DecomposeSpec":
     generated = role.generate(prompt)
     _debug_print_create_game_raw_model_output(generated)
-    for attempt in range(_MAX_JSON_RETRIES + 1):
-        try:
-            return _parse_create_game_output(generated, max_sub_gaps=max_sub_gaps, workspace=workspace)
-        except ValueError as exc:
-            if "valid JSON" not in str(exc) or attempt >= _MAX_JSON_RETRIES:
-                raise
-            logger.debug("create_game.json_retry attempt=%d: invalid JSON, retrying with correction prompt", attempt + 1)
-            generated = role.generate(_JSON_CORRECTION_PROMPT)
-            _debug_print_create_game_raw_model_output(generated)
-    raise AssertionError("unreachable")
+    return _parse_create_game_output(
+        generated, max_sub_gaps=max_sub_gaps, workspace=workspace, retry_fn=role.generate
+    )
 
 
-def _parse_create_game_output(text: str, max_sub_gaps: int = 5, workspace: Path | None = None) -> GameSpec | DecomposeSpec:
-    normalized = normalize_json_candidate(text)
-    try:
-        parsed = json.loads(normalized)
-    except json.JSONDecodeError as exc:
-        raise ValueError("create_game model output must be valid JSON") from exc
-
-    if not isinstance(parsed, dict):
-        raise ValueError("create_game model output must be a JSON object")
-
-    logger.error("create_game raw response: %s", parsed)
+def _parse_create_game_output(
+    text: str,
+    max_sub_gaps: int = 5,
+    workspace: Path | None = None,
+    retry_fn: Any = None,
+) -> "GameSpec | DecomposeSpec":
+    parsed = parse_model_output(
+        text,
+        _CREATE_GAME_ALL_KEYS,
+        context="create_game",
+        workspace=workspace,
+        retry_fn=retry_fn,
+    )
 
     if parsed.get("no_new_game") is True:
-        _strip_extra_keys(parsed, {"no_new_game", "reason"}, workspace, "create_game:no_new_game")
         reason = str(parsed.get("reason", "")).strip()
         if not reason:
             raise ValueError("create_game no-game response reason must be non-empty")
         raise NoNewGameError(reason)
 
     if parsed.get("northstar_update_needed") is True:
-        _strip_extra_keys(
-            parsed,
-            {"northstar_update_needed", "rationale", "proposed_northstar"},
-            workspace,
-            "create_game:northstar_update_needed",
-        )
         rationale = str(parsed.get("rationale", "")).strip()
         if not rationale:
             raise ValueError(
@@ -1126,7 +1102,6 @@ def _parse_create_game_output(text: str, max_sub_gaps: int = 5, workspace: Path 
         raise NorthStarUpdateNeededError(rationale=rationale, proposed_northstar=proposed_northstar)
 
     if parsed.get("decompose") is True:
-        _strip_extra_keys(parsed, {"decompose", "rationale", "sub_gaps"}, workspace, "create_game:decompose")
         rationale = str(parsed.get("rationale", "")).strip()
         if not rationale:
             raise ValueError("create_game decompose response rationale must be non-empty")
@@ -1148,12 +1123,7 @@ def _parse_create_game_output(text: str, max_sub_gaps: int = 5, workspace: Path 
             sub_gaps = sub_gaps[:max_sub_gaps]
         return DecomposeSpec(rationale=rationale, sub_gaps=sub_gaps)
 
-    # GameSpec: strip to known keys, then validate
-    _game_spec_known = {
-        "objective", "target_artifact_id", "allowed_delta_type", "success_condition",
-        "max_words", "context_chain",
-    }
-    _strip_extra_keys(parsed, _game_spec_known, workspace, "create_game:game_spec")
+    # GameSpec branch
     _game_spec_required = {"objective", "target_artifact_id", "allowed_delta_type", "success_condition"}
     if not _game_spec_required.issubset(parsed.keys()):
         raise ValueError(
@@ -1228,53 +1198,27 @@ def _render_referee_prompt_supplement_with_adapter(
 
 
 _RED_REQUIRED_KEYS = frozenset({"disposition", "rationale"})
-_RED_OPTIONAL_KEYS = frozenset({"success_condition_met", "findings"})
+_RED_ALL_KEYS = frozenset({"disposition", "rationale", "success_condition_met", "findings"})
 _REFEREE_REQUIRED_KEYS = frozenset({"disposition", "rationale"})
-_REFEREE_OPTIONAL_KEYS = frozenset({"red_override", "improvement_hints"})
+_REFEREE_ALL_KEYS = frozenset({"disposition", "rationale", "red_override", "improvement_hints"})
 
 
-def _parse_red_finding_json(text: str) -> RedFinding:
-    normalized = normalize_json_candidate(text)
-    try:
-        parsed = json.loads(normalized)
-    except json.JSONDecodeError as exc:
-        raise ValueError("red model output must be valid JSON") from exc
-
-    if not isinstance(parsed, dict):
-        raise ValueError("red model output must be a JSON object")
-
-    present = set(parsed.keys())
-    if not _RED_REQUIRED_KEYS.issubset(present):
-        missing = _RED_REQUIRED_KEYS - present
+def _parse_red_finding_json(text: str, workspace: Path | None = None) -> RedFinding:
+    parsed = parse_model_output(text, _RED_ALL_KEYS, context="red", workspace=workspace)
+    missing = _RED_REQUIRED_KEYS - set(parsed.keys())
+    if missing:
         raise ValueError(f"red model output missing required keys: {sorted(missing)}")
-    unexpected = present - _RED_REQUIRED_KEYS - _RED_OPTIONAL_KEYS
-    if unexpected:
-        raise ValueError(f"red model output contains unexpected keys: {sorted(unexpected)}")
-
     try:
         return RedFinding.model_validate(parsed)
     except ValidationError as exc:
         raise ValueError("red model output failed RedFinding validation") from exc
 
 
-def _parse_referee_decision_json(text: str) -> RefereeDecision:
-    normalized = normalize_json_candidate(text)
-    try:
-        parsed = json.loads(normalized)
-    except json.JSONDecodeError as exc:
-        raise ValueError("referee model output must be valid JSON") from exc
-
-    if not isinstance(parsed, dict):
-        raise ValueError("referee model output must be a JSON object")
-
-    present = set(parsed.keys())
-    if not _REFEREE_REQUIRED_KEYS.issubset(present):
-        missing = _REFEREE_REQUIRED_KEYS - present
+def _parse_referee_decision_json(text: str, workspace: Path | None = None) -> RefereeDecision:
+    parsed = parse_model_output(text, _REFEREE_ALL_KEYS, context="referee", workspace=workspace)
+    missing = _REFEREE_REQUIRED_KEYS - set(parsed.keys())
+    if missing:
         raise ValueError(f"referee model output missing required keys: {sorted(missing)}")
-    unexpected = present - _REFEREE_REQUIRED_KEYS - _REFEREE_OPTIONAL_KEYS
-    if unexpected:
-        raise ValueError(f"referee model output contains unexpected keys: {sorted(unexpected)}")
-
     try:
         return RefereeDecision.model_validate(parsed)
     except ValidationError as exc:
@@ -1362,7 +1306,7 @@ def create_game(
             _debug_print_create_game_red_input(state_view, game_spec)
             red_generated = red_role.generate(red_prompt)
             try:
-                red_finding = _parse_red_finding_json(red_generated)
+                red_finding = _parse_red_finding_json(red_generated, workspace=config.get("workspace"))
             except ValueError:
                 # Unparseable Red output — accept the GameSpec as-is
                 _debug_print_create_game_output(game_spec)
@@ -1744,7 +1688,8 @@ def play_game(
             red_supplement_with_tools,
         )
         red_generated = red_role.generate(red_prompt)
-        red_finding = _parse_red_finding_json(red_generated)
+        _workspace = config.get("workspace") if config else None
+        red_finding = _parse_red_finding_json(red_generated, workspace=_workspace)
         _debug_print_red_output(red_finding)
 
         # Referee research — sees both Blue and Red sessions
@@ -1798,7 +1743,7 @@ def play_game(
             referee_supplement_with_tools,
         )
         referee_generated = referee_role.generate(referee_prompt)
-        referee_decision = _parse_referee_decision_json(referee_generated)
+        referee_decision = _parse_referee_decision_json(referee_generated, workspace=_workspace)
         _debug_print_referee_output(referee_decision)
 
         runtime = apply_referee_decision_to_runtime(
@@ -1909,22 +1854,6 @@ def _append_northstar_proposal_to_blackboard(
     }
     proposals_path = blackboard_dir / _NORTHSTAR_PROPOSALS_FILE
     with proposals_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(entry) + "\n")
-
-
-def _append_stripped_keys_to_blackboard(
-    workspace: Path, stripped_keys: list[str], context: str
-) -> None:
-    blackboard_dir = workspace / _BLACKBOARD_DIR
-    blackboard_dir.mkdir(parents=True, exist_ok=True)
-    entry = {
-        "event": "unexpected_keys_stripped",
-        "context": context,
-        "stripped_keys": sorted(stripped_keys),
-        "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
-    }
-    stripped_path = blackboard_dir / _STRIPPED_KEYS_FILE
-    with stripped_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
 
 
