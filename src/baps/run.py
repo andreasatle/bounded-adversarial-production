@@ -1173,6 +1173,34 @@ def _parse_game_spec_json(text: str, workspace: Path | None = None) -> GameSpec:
         raise ValueError("create_game model output failed GameSpec validation") from exc
 
 
+_MAX_JSON_RETRIES = 2
+_JSON_CORRECTION_PROMPT = (
+    "Your previous response was not valid JSON. "
+    "Respond with only a JSON object and nothing else."
+)
+
+
+def _generate_create_game_with_json_retry(
+    role: "Role",
+    prompt: str,
+    max_sub_gaps: int,
+    workspace: Path | None,
+) -> "GameSpec | DecomposeSpec":
+    generated = role.generate(prompt)
+    _debug_print_create_game_raw_model_output(generated)
+    for attempt in range(_MAX_JSON_RETRIES + 1):
+        try:
+            return _parse_create_game_output(generated, max_sub_gaps=max_sub_gaps, workspace=workspace)
+        except ValueError as exc:
+            if "valid JSON" not in str(exc) or attempt >= _MAX_JSON_RETRIES:
+                raise
+            if _debug_enabled():
+                print(f"[DEBUG] create_game.json_retry attempt={attempt + 1}: invalid JSON, retrying with correction prompt")
+            generated = role.generate(_JSON_CORRECTION_PROMPT)
+            _debug_print_create_game_raw_model_output(generated)
+    raise AssertionError("unreachable")
+
+
 def _parse_create_game_output(text: str, max_sub_gaps: int = 5, workspace: Path | None = None) -> GameSpec | DecomposeSpec:
     normalized = normalize_json_candidate(text)
     try:
@@ -1402,25 +1430,9 @@ def create_game(
             create_game_red_feedback=red_feedback,
         )
         _debug_print_create_game_prompt(prompt)
-        generated = role.generate(prompt)
-        _debug_print_create_game_raw_model_output(generated)
-        try:
-            result = _parse_create_game_output(generated, max_sub_gaps=max_sub_gaps, workspace=config["workspace"])
-        except ValueError as exc:
-            if "valid JSON" not in str(exc) or not use_planner:
-                raise
-            # Planner returned invalid JSON — retry once with executor model (first attempt only)
-            if red_feedback is None:
-                if _debug_enabled():
-                    print(f"[DEBUG] {role_name}.fallback: planner invalid JSON, retrying with executor model")
-                fallback_role = Role(role_name, _build_client_for_role("create_game", config), _CREATE_GAME_SCHEMA, constrained=False)
-                generated = fallback_role.generate(prompt)
-                _debug_print_create_game_raw_model_output(generated)
-                result = _parse_create_game_output(generated, max_sub_gaps=max_sub_gaps, workspace=config["workspace"])
-            else:
-                raise
-        except NoNewGameError:
-            raise
+        result = _generate_create_game_with_json_retry(
+            role, prompt, max_sub_gaps=max_sub_gaps, workspace=config["workspace"]
+        )
 
         if isinstance(result, DecomposeSpec):
             _debug_print_create_game_output(result)
@@ -2503,6 +2515,24 @@ def main() -> None:
             }, indent=2),
             encoding="utf-8",
         )
+        print(f"workspace={workspace}")
+        print(f"project_type={project_type}")
+        print(f"command={command}")
+        print(f"goal={goal}")
+        print(f"output_path={output_path}")
+        print(f"max_iterations={max_iterations}")
+        print(f"update_applied={update_applied}")
+        print(f"state_changed={state_changed}")
+        print(f"output_exported={output_exported}")
+        print(f"output_changed={output_changed}")
+        print(f"northstar_proposal_written={northstar_proposal_written}")
+        print(f"verification_run={verification_run}")
+        print(f"iterations_completed={iterations_completed}")
+        print(f"verification_passed={verification_passed}")
+        print(f"verification_exit_code={verification_exit_code}")
+        print(f"verification_command={verification_command}")
+        print(f"verification_cwd={verification_cwd}")
+        print(f"stop_reason={stop_reason}")
         raise SystemExit(2) from exc
 
     print(f"workspace={workspace}")

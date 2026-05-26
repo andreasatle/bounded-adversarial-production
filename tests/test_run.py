@@ -599,8 +599,9 @@ def test_create_game_invalid_json_fails_cleanly() -> None:
         "spec_path": None,
     }
     state = create_state(config)
+    # Provide one response per attempt (initial + 2 retries) so FakeModelClient doesn't run dry.
     with pytest.raises(ValueError, match="must be valid JSON"):
-        create_game(config, state, model_client=FakeModelClient(["not-json"]))
+        create_game(config, state, model_client=FakeModelClient(["not-json", "not-json", "not-json"]))
 
 
 def test_create_game_invalid_json_with_debug_prints_raw_model_output(
@@ -620,11 +621,12 @@ def test_create_game_invalid_json_with_debug_prints_raw_model_output(
     monkeypatch.setenv("BAPS_DEBUG", "1")
 
     with pytest.raises(ValueError, match="must be valid JSON"):
-        create_game(config, state, model_client=FakeModelClient(["not-json-output"]))
+        create_game(config, state, model_client=FakeModelClient(["not-json-output", "not-json-output", "not-json-output"]))
     out = capsys.readouterr().out
     assert "[DEBUG] create_game.prompt:" in out
     assert "[DEBUG] create_game.raw_model_output:" in out
     assert "  not-json-output" in out
+    assert "[DEBUG] create_game.json_retry" in out
 
 
 def test_create_game_invalid_json_without_debug_does_not_print_raw_model_output(capsys) -> None:
@@ -641,17 +643,13 @@ def test_create_game_invalid_json_without_debug_does_not_print_raw_model_output(
     state = create_state(config)
 
     with pytest.raises(ValueError, match="must be valid JSON"):
-        create_game(config, state, model_client=FakeModelClient(["not-json-output"]))
+        create_game(config, state, model_client=FakeModelClient(["not-json-output", "not-json-output", "not-json-output"]))
     out = capsys.readouterr().out
     assert "[DEBUG] create_game.prompt:" not in out
     assert "[DEBUG] create_game.raw_model_output:" not in out
 
 
-def test_create_game_fallback_to_executor_when_planner_returns_invalid_json(
-    monkeypatch,
-) -> None:
-    import baps.run as run_module
-
+def test_create_game_json_retry_with_correction_prompt_succeeds() -> None:
     valid_response = (
         '{"objective":"Advance goal","target_artifact_id":"main-document",'
         '"allowed_delta_type":"DeltaDocumentState",'
@@ -669,22 +667,13 @@ def test_create_game_fallback_to_executor_when_planner_returns_invalid_json(
     }
     state = create_state(config)
 
-    # First call (planner attempt) returns invalid JSON; second call (fallback) returns valid JSON.
-    call_count = {"n": 0}
-    def _staged_client(role, cfg):
-        call_count["n"] += 1
-        if call_count["n"] == 1:
-            return FakeModelClient(["not-json"])
-        return FakeModelClient([valid_response])
-
-    monkeypatch.setattr("baps.run._build_client_for_role", _staged_client)
-
-    game_spec = run_module.create_game(config, state)
+    # First response is invalid JSON; the retry with the correction prompt returns valid JSON.
+    game_spec = create_game(config, state, model_client=FakeModelClient(["not-json", valid_response]))
 
     assert game_spec.target_artifact_id == "main-document"
 
 
-def test_create_game_explicit_model_client_does_not_use_fallback() -> None:
+def test_create_game_explicit_model_client_retries_on_invalid_json() -> None:
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
@@ -697,9 +686,9 @@ def test_create_game_explicit_model_client_does_not_use_fallback() -> None:
     }
     state = create_state(config)
 
-    # Explicit model_client — no fallback should be attempted even if it returns invalid JSON.
+    # Explicit model_client — correction-prompt retries still apply (same model, not a fallback).
     with pytest.raises(ValueError, match="must be valid JSON"):
-        create_game(config, state, model_client=FakeModelClient(["not-json"]))
+        create_game(config, state, model_client=FakeModelClient(["not-json", "not-json", "not-json"]))
 
 
 def test_create_game_structural_validation_failure_debug_prints_raw_output(
@@ -946,20 +935,15 @@ def test_create_game_prose_before_fence_rejected() -> None:
         "spec_path": None,
     }
     state = create_state(config)
+    bad = (
+        "Here is the result:\n```json\n"
+        '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+        '"allowed_delta_type":"DeltaDocumentState",'
+        '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}\n'
+        "```"
+    )
     with pytest.raises(ValueError, match="must be valid JSON"):
-        create_game(
-            config,
-            state,
-            model_client=FakeModelClient(
-                [
-                    "Here is the result:\n```json\n"
-                    '{"objective":"Advance report objective","target_artifact_id":"main-document",'
-                    '"allowed_delta_type":"DeltaDocumentState",'
-                    '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}\n'
-                    "```"
-                ]
-            ),
-        )
+        create_game(config, state, model_client=FakeModelClient([bad, bad, bad]))
 
 
 def test_create_game_prose_after_fence_rejected() -> None:
@@ -974,20 +958,15 @@ def test_create_game_prose_after_fence_rejected() -> None:
         "spec_path": None,
     }
     state = create_state(config)
+    bad = (
+        "```json\n"
+        '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+        '"allowed_delta_type":"DeltaDocumentState",'
+        '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}\n'
+        "```\nDone."
+    )
     with pytest.raises(ValueError, match="must be valid JSON"):
-        create_game(
-            config,
-            state,
-            model_client=FakeModelClient(
-                [
-                    "```json\n"
-                    '{"objective":"Advance report objective","target_artifact_id":"main-document",'
-                    '"allowed_delta_type":"DeltaDocumentState",'
-                    '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}\n'
-                    "```\nDone."
-                ]
-            ),
-        )
+        create_game(config, state, model_client=FakeModelClient([bad, bad, bad]))
 
 
 def test_create_game_multiple_fenced_blocks_rejected() -> None:
@@ -1002,20 +981,15 @@ def test_create_game_multiple_fenced_blocks_rejected() -> None:
         "spec_path": None,
     }
     state = create_state(config)
+    bad = (
+        "```json\n"
+        '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+        '"allowed_delta_type":"DeltaDocumentState",'
+        '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}\n'
+        "```\n```json\n{}\n```"
+    )
     with pytest.raises(ValueError, match="must be valid JSON"):
-        create_game(
-            config,
-            state,
-            model_client=FakeModelClient(
-                [
-                    "```json\n"
-                    '{"objective":"Advance report objective","target_artifact_id":"main-document",'
-                    '"allowed_delta_type":"DeltaDocumentState",'
-                    '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}\n'
-                    "```\n```json\n{}\n```"
-                ]
-            ),
-        )
+        create_game(config, state, model_client=FakeModelClient([bad, bad, bad]))
 
 
 def test_create_game_invalid_json_inside_fence_rejected() -> None:
@@ -1030,12 +1004,9 @@ def test_create_game_invalid_json_inside_fence_rejected() -> None:
         "spec_path": None,
     }
     state = create_state(config)
+    bad = "```json\n{not valid json}\n```"
     with pytest.raises(ValueError, match="must be valid JSON"):
-        create_game(
-            config,
-            state,
-            model_client=FakeModelClient(["```json\n{not valid json}\n```"]),
-        )
+        create_game(config, state, model_client=FakeModelClient([bad, bad, bad]))
 
 
 def test_create_game_missing_gamespec_fields_fails_cleanly() -> None:
