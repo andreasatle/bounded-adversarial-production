@@ -1137,40 +1137,18 @@ def _ensure_target_artifact_exists(state: State, artifact_id: str) -> None:
         raise ValueError(f"create_game target artifact not found in state: {artifact_id}")
 
 
-def _parse_game_spec_json(text: str, workspace: Path | None = None) -> GameSpec:
-    normalized = normalize_json_candidate(text)
-    try:
-        parsed = json.loads(normalized)
-    except json.JSONDecodeError as exc:
-        raise ValueError("create_game model output must be valid JSON") from exc
-
-    if not isinstance(parsed, dict):
-        raise ValueError("create_game model output must be a JSON object")
-
-    required_keys = {
-        "objective",
-        "target_artifact_id",
-        "allowed_delta_type",
-        "success_condition",
-    }
-    optional_keys = {"max_words", "context_chain"}
-    present_keys = set(parsed.keys())
-    if not required_keys.issubset(present_keys):
-        raise ValueError(
-            "create_game model output must contain exactly keys: "
-            "objective, target_artifact_id, allowed_delta_type, success_condition"
-        )
-    unknown_keys = present_keys - required_keys - optional_keys
-    if unknown_keys:
-        for key in unknown_keys:
-            del parsed[key]
+def _strip_extra_keys(
+    parsed: dict[str, Any],
+    known: set[str],
+    workspace: Path | None,
+    context: str,
+) -> None:
+    extra = set(parsed.keys()) - known
+    if extra:
+        for k in extra:
+            del parsed[k]
         if workspace is not None:
-            _append_stripped_keys_to_blackboard(workspace, list(unknown_keys), "create_game")
-
-    try:
-        return GameSpec.model_validate(parsed)
-    except ValidationError as exc:
-        raise ValueError("create_game model output failed GameSpec validation") from exc
+            _append_stripped_keys_to_blackboard(workspace, sorted(extra), context)
 
 
 _MAX_JSON_RETRIES = 2
@@ -1211,42 +1189,46 @@ def _parse_create_game_output(text: str, max_sub_gaps: int = 5, workspace: Path 
     if not isinstance(parsed, dict):
         raise ValueError("create_game model output must be a JSON object")
 
-    if set(parsed.keys()) == {"no_new_game", "reason"}:
-        if parsed["no_new_game"] is not True:
-            raise ValueError(
-                "create_game no-game response must set no_new_game=true"
-            )
-        reason = str(parsed["reason"]).strip()
+    if "no_new_game" in parsed:
+        _strip_extra_keys(parsed, {"no_new_game", "reason"}, workspace, "create_game:no_new_game")
+        if parsed.get("no_new_game") is not True:
+            raise ValueError("create_game no-game response must set no_new_game=true")
+        reason = str(parsed.get("reason", "")).strip()
         if not reason:
             raise ValueError("create_game no-game response reason must be non-empty")
         raise NoNewGameError(reason)
 
-    if set(parsed.keys()) == {"northstar_update_needed", "rationale", "proposed_northstar"}:
-        if parsed["northstar_update_needed"] is not True:
+    if "northstar_update_needed" in parsed:
+        _strip_extra_keys(
+            parsed,
+            {"northstar_update_needed", "rationale", "proposed_northstar"},
+            workspace,
+            "create_game:northstar_update_needed",
+        )
+        if parsed.get("northstar_update_needed") is not True:
             raise ValueError(
                 "create_game northstar_update_needed response must set northstar_update_needed=true"
             )
-        rationale = str(parsed["rationale"]).strip()
+        rationale = str(parsed.get("rationale", "")).strip()
         if not rationale:
             raise ValueError(
                 "create_game northstar_update_needed response rationale must be non-empty"
             )
-        proposed_northstar = str(parsed["proposed_northstar"]).strip()
+        proposed_northstar = str(parsed.get("proposed_northstar", "")).strip()
         if not proposed_northstar:
             raise ValueError(
                 "create_game northstar_update_needed response proposed_northstar must be non-empty"
             )
-        raise NorthStarUpdateNeededError(
-            rationale=rationale, proposed_northstar=proposed_northstar
-        )
+        raise NorthStarUpdateNeededError(rationale=rationale, proposed_northstar=proposed_northstar)
 
-    if set(parsed.keys()) == {"decompose", "rationale", "sub_gaps"}:
-        if parsed["decompose"] is not True:
+    if "decompose" in parsed:
+        _strip_extra_keys(parsed, {"decompose", "rationale", "sub_gaps"}, workspace, "create_game:decompose")
+        if parsed.get("decompose") is not True:
             raise ValueError("create_game decompose response must set decompose=true")
-        rationale = str(parsed["rationale"]).strip()
+        rationale = str(parsed.get("rationale", "")).strip()
         if not rationale:
             raise ValueError("create_game decompose response rationale must be non-empty")
-        sub_gaps_raw = parsed["sub_gaps"]
+        sub_gaps_raw = parsed.get("sub_gaps")
         if not isinstance(sub_gaps_raw, list) or not sub_gaps_raw:
             raise ValueError("create_game decompose response sub_gaps must be a non-empty list")
         sub_gaps = tuple(
@@ -1265,7 +1247,22 @@ def _parse_create_game_output(text: str, max_sub_gaps: int = 5, workspace: Path 
             sub_gaps = sub_gaps[:max_sub_gaps]
         return DecomposeSpec(rationale=rationale, sub_gaps=sub_gaps)
 
-    return _parse_game_spec_json(normalized, workspace=workspace)
+    # GameSpec: strip to known keys, then validate
+    _game_spec_known = {
+        "objective", "target_artifact_id", "allowed_delta_type", "success_condition",
+        "max_words", "context_chain",
+    }
+    _strip_extra_keys(parsed, _game_spec_known, workspace, "create_game:game_spec")
+    _game_spec_required = {"objective", "target_artifact_id", "allowed_delta_type", "success_condition"}
+    if not _game_spec_required.issubset(parsed.keys()):
+        raise ValueError(
+            "create_game model output must contain exactly keys: "
+            "objective, target_artifact_id, allowed_delta_type, success_condition"
+        )
+    try:
+        return GameSpec.model_validate(parsed)
+    except ValidationError as exc:
+        raise ValueError("create_game model output failed GameSpec validation") from exc
 
 
 def _validate_game_spec(game_spec: GameSpec) -> None:

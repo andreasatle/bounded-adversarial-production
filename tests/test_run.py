@@ -2474,6 +2474,108 @@ def test_create_game_explicit_no_new_game_signal() -> None:
         )
 
 
+def test_create_game_extra_key_on_no_new_game_response_is_stripped() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "goal": "Write a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.create_state(config)
+    with pytest.raises(run_module.NoNewGameError, match="all required sections already present"):
+        run_module.create_game(
+            config,
+            state,
+            model_client=FakeModelClient(
+                ['{"no_new_game": true, "reason": "all required sections already present", "confidence": 0.9}']
+            ),
+        )
+
+
+def test_create_game_extra_key_on_northstar_response_is_stripped() -> None:
+    import baps.run as run_module
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "goal": "Write a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.create_state(config)
+    with pytest.raises(run_module.NorthStarUpdateNeededError):
+        run_module.create_game(
+            config,
+            state,
+            model_client=FakeModelClient(
+                [
+                    '{"northstar_update_needed": true, "rationale": "trajectory drifted",'
+                    ' "proposed_northstar": "new goal", "confidence": 0.8}'
+                ]
+            ),
+        )
+
+
+def test_create_game_extra_key_on_decompose_response_is_stripped() -> None:
+    import baps.run as run_module
+
+    valid_sub_game = (
+        '{"objective":"Advance goal","target_artifact_id":"main-document",'
+        '"allowed_delta_type":"DeltaDocumentState","success_condition":"section exists"}'
+    )
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "goal": "Write a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = run_module.create_state(config)
+    decompose_response = (
+        '{"decompose": true, "rationale": "split into parts",'
+        ' "sub_gaps": [{"description": "part one"}], "confidence": 0.7}'
+    )
+    result = run_module.create_game(
+        config,
+        state,
+        model_client=FakeModelClient([decompose_response, valid_sub_game]),
+    )
+    assert isinstance(result, run_module.DecomposeSpec)
+
+
+def test_create_game_extra_key_on_gamespec_response_is_stripped() -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "goal": "Write a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    response = (
+        '{"objective":"Advance goal","target_artifact_id":"main-document",'
+        '"allowed_delta_type":"DeltaDocumentState","success_condition":"section exists",'
+        '"confidence": 0.95}'
+    )
+    game_spec = create_game(config, state, model_client=FakeModelClient([response]))
+    assert game_spec.target_artifact_id == "main-document"
+
+
 def test_create_game_prompt_includes_northstar_context() -> None:
     import baps.run as run_module
 
