@@ -44,7 +44,7 @@ from baps.state import (
 from baps.state_service import StateService
 from baps.state_store import JsonStateStore
 
-_DEFAULT_OLLAMA_MODEL = "gemma3:4b"
+_DEFAULT_OLLAMA_MODEL = "gemma4:e4b"
 _DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
 _DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
 _DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com"

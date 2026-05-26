@@ -153,9 +153,9 @@ uv run baps-run reset --spec examples/coding-project.yaml
 ## Model configuration
 
 ```bash
-# Default: Ollama with gemma3:4b (no API key required)
+# Default: Ollama with gemma4:e4b (no API key required)
 BAPS_BACKEND=ollama            # default; or: anthropic, openai
-BAPS_OLLAMA_MODEL=gemma3:4b   # default
+BAPS_OLLAMA_MODEL=gemma4:e4b   # default
 
 # Anthropic (requires API key)
 BAPS_BACKEND=anthropic
@@ -176,7 +176,7 @@ BAPS_BLUE_MODEL=claude-sonnet-4-6
 BAPS_RED_MODEL=claude-haiku-4-5-20251001
 BAPS_REFEREE_MODEL=claude-haiku-4-5-20251001
 BAPS_DECOMPOSE_BACKEND=ollama
-BAPS_DECOMPOSE_MODEL=gemma3:4b
+BAPS_DECOMPOSE_MODEL=gemma4:e4b
 ```
 
 The Decompose role handles structural gap-splitting at planning nodes and can use a lighter model than the roles that write code.
