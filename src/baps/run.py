@@ -1189,26 +1189,20 @@ def _parse_create_game_output(text: str, max_sub_gaps: int = 5, workspace: Path 
     if not isinstance(parsed, dict):
         raise ValueError("create_game model output must be a JSON object")
 
-    if "no_new_game" in parsed:
+    if parsed.get("no_new_game") is True:
         _strip_extra_keys(parsed, {"no_new_game", "reason"}, workspace, "create_game:no_new_game")
-        if parsed.get("no_new_game") is not True:
-            raise ValueError("create_game no-game response must set no_new_game=true")
         reason = str(parsed.get("reason", "")).strip()
         if not reason:
             raise ValueError("create_game no-game response reason must be non-empty")
         raise NoNewGameError(reason)
 
-    if "northstar_update_needed" in parsed:
+    if parsed.get("northstar_update_needed") is True:
         _strip_extra_keys(
             parsed,
             {"northstar_update_needed", "rationale", "proposed_northstar"},
             workspace,
             "create_game:northstar_update_needed",
         )
-        if parsed.get("northstar_update_needed") is not True:
-            raise ValueError(
-                "create_game northstar_update_needed response must set northstar_update_needed=true"
-            )
         rationale = str(parsed.get("rationale", "")).strip()
         if not rationale:
             raise ValueError(
@@ -1221,10 +1215,8 @@ def _parse_create_game_output(text: str, max_sub_gaps: int = 5, workspace: Path 
             )
         raise NorthStarUpdateNeededError(rationale=rationale, proposed_northstar=proposed_northstar)
 
-    if "decompose" in parsed:
+    if parsed.get("decompose") is True:
         _strip_extra_keys(parsed, {"decompose", "rationale", "sub_gaps"}, workspace, "create_game:decompose")
-        if parsed.get("decompose") is not True:
-            raise ValueError("create_game decompose response must set decompose=true")
         rationale = str(parsed.get("rationale", "")).strip()
         if not rationale:
             raise ValueError("create_game decompose response rationale must be non-empty")

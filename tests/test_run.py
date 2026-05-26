@@ -6894,15 +6894,16 @@ def test_parse_create_game_output_northstar_update_needed_raises_signal() -> Non
     assert exc_info.value.proposed_northstar == "# Updated Goal\n\nNew direction."
 
 
-def test_parse_create_game_output_northstar_update_needed_flag_must_be_true() -> None:
+def test_parse_create_game_output_northstar_update_needed_flag_false_falls_through_to_game_spec() -> None:
     import baps.run as run_module
 
+    # false marker → not classified as northstar response; falls through to GameSpec missing-keys error
     raw = json.dumps({
         "northstar_update_needed": False,
         "rationale": "some reason",
         "proposed_northstar": "new northstar",
     })
-    with pytest.raises(ValueError, match="northstar_update_needed=true"):
+    with pytest.raises(ValueError, match="must contain exactly keys"):
         run_module._parse_create_game_output(raw)
 
 
@@ -7903,6 +7904,26 @@ def test_parse_create_game_output_max_sub_gaps_1_allows_only_one() -> None:
     assert isinstance(result, run_module.DecomposeSpec)
     assert len(result.sub_gaps) == 1
     assert result.sub_gaps[0].description == "First"
+
+
+def test_parse_create_game_output_game_spec_with_false_marker_keys_and_extra_keys() -> None:
+    import baps.run as run_module
+    from baps.state import GameSpec
+
+    # Local models (e.g. qwen2.5-coder) often include false-valued marker keys and
+    # extra metadata like confidence in what is intended to be a GameSpec response.
+    raw = json.dumps({
+        "objective": "Add introduction section",
+        "target_artifact_id": "doc-main",
+        "allowed_delta_type": "append_section",
+        "success_condition": "Introduction section present",
+        "no_new_game": False,
+        "decompose": False,
+        "confidence": 0.95,
+    })
+    result = run_module._parse_create_game_output(raw)
+    assert isinstance(result, GameSpec)
+    assert result.objective == "Add introduction section"
 
 
 def test_resolve_run_config_max_sub_gaps_defaults_to_5(tmp_path: Path) -> None:
