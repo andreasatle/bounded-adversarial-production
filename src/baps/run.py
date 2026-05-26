@@ -936,7 +936,13 @@ def _render_create_game_prompt(
             lines.append(f"  [{i + 1}] {desc}")
         lines.append("  [current] Plan within this scope.\n")
         context_block = "\n".join(lines) + "\n"
+    _json_only = (
+        "Respond with a single JSON object only. Do not use any tool-calling format, ReAct format, "
+        "or action/action_input structure. Do not add any prose before or after the JSON. "
+        "Your entire response must be valid JSON and nothing else.\n\n"
+    )
     return (
+        f"{_json_only}"
         "Create a GameSpec JSON object that closes the highest-priority gap between current state and NorthStar.\n\n"
         f"{context_block}"
         "Input:\n"
@@ -994,6 +1000,7 @@ def _render_create_game_prompt(
         f"For this project type, allowed_delta_type must be {resolved_adapter.supported_delta_type}.\n"
         f"{red_feedback_block}"
         f"{supplement}"
+        f"\n{_json_only}"
     )
 
 
