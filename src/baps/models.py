@@ -615,7 +615,8 @@ class Role:
     constrained: bool = False
 
     def generate(self, prompt: str) -> str:
-        return self.client.generate(prompt, format=self.schema if self.constrained else None)
+        from baps.model_output import wrap_json_prompt
+        return self.client.generate(wrap_json_prompt(prompt), format=self.schema if self.constrained else None)
 
     def generate_with_tools(self, prompt: str, tools: list[ToolDefinition]) -> ToolCall:
         return self.client.generate_with_tools(prompt, tools)

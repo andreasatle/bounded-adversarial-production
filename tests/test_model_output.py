@@ -6,7 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from baps.model_output import _STRIPPED_KEYS_FILE, _BLACKBOARD_DIR, parse_model_output
+from baps.model_output import (
+    _BLACKBOARD_DIR,
+    _JSON_ONLY_INSTRUCTION,
+    _STRIPPED_KEYS_FILE,
+    parse_model_output,
+    wrap_json_prompt,
+)
 
 
 _KEYS = frozenset({"a", "b", "c"})
@@ -139,3 +145,28 @@ def test_context_prefix_in_json_error() -> None:
 def test_context_prefix_in_object_error() -> None:
     with pytest.raises(ValueError, match="mycontext: model output must be a JSON object"):
         parse_model_output("[1]", _KEYS, context="mycontext")
+
+
+# --- wrap_json_prompt ---
+
+def test_wrap_json_prompt_prepends_and_appends_instruction() -> None:
+    wrapped = wrap_json_prompt("do the thing")
+    assert wrapped.startswith(_JSON_ONLY_INSTRUCTION)
+    assert wrapped.endswith(_JSON_ONLY_INSTRUCTION)
+
+
+def test_wrap_json_prompt_preserves_original_text() -> None:
+    wrapped = wrap_json_prompt("some prompt body")
+    assert "some prompt body" in wrapped
+
+
+def test_wrap_json_prompt_instruction_covers_react_and_tool_calling() -> None:
+    assert "ReAct" in _JSON_ONLY_INSTRUCTION
+    assert "action/action_input" in _JSON_ONLY_INSTRUCTION
+    assert "tool-calling" in _JSON_ONLY_INSTRUCTION
+
+
+def test_wrap_json_prompt_empty_body_still_wraps() -> None:
+    wrapped = wrap_json_prompt("")
+    assert wrapped.startswith(_JSON_ONLY_INSTRUCTION)
+    assert wrapped.endswith(_JSON_ONLY_INSTRUCTION)

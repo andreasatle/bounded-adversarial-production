@@ -158,13 +158,42 @@ def test_ollama_client_generate_raises_runtime_error_on_url_error(monkeypatch) -
 
 
 def test_role_generate_without_constrained_passes_no_format() -> None:
+    from baps.model_output import _JSON_ONLY_INSTRUCTION
     client = FakeModelClient(responses=["result"])
     role = Role("blue", client, schema={"type": "object"}, constrained=False)
 
-    result = role.generate("prompt")
+    result = role.generate("my prompt")
 
     assert result == "result"
-    assert client.prompts == ["prompt"]
+    assert len(client.prompts) == 1
+    sent = client.prompts[0]
+    assert sent.startswith(_JSON_ONLY_INSTRUCTION)
+    assert sent.endswith(_JSON_ONLY_INSTRUCTION)
+    assert "my prompt" in sent
+
+
+def test_role_generate_wraps_prompt_for_every_call() -> None:
+    from baps.model_output import _JSON_ONLY_INSTRUCTION
+    client = FakeModelClient(responses=["r1", "r2"])
+    role = Role("create_game", client)
+
+    role.generate("first")
+    role.generate("second")
+
+    assert _JSON_ONLY_INSTRUCTION in client.prompts[0]
+    assert _JSON_ONLY_INSTRUCTION in client.prompts[1]
+    assert "first" in client.prompts[0]
+    assert "second" in client.prompts[1]
+
+
+def test_role_generate_with_tools_does_not_wrap() -> None:
+    client = FakeModelClient(tool_responses=[ToolCall(name="write_file", arguments={"path": "x.py", "content": ""})])
+    role = Role("blue", client)
+
+    role.generate_with_tools("use a tool", [ToolDefinition(name="write_file", description="write")])
+
+    # generate_with_tools records to tool_prompts, not prompts
+    assert client.tool_prompts == ["use a tool"]
 
 
 def test_role_generate_with_constrained_passes_schema_as_format(monkeypatch) -> None:

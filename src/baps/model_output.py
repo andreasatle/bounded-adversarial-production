@@ -10,6 +10,13 @@ from baps.project_adapter import normalize_json_candidate
 
 logger = logging.getLogger(__name__)
 
+_JSON_ONLY_INSTRUCTION = (
+    "You must respond with a single JSON object only. "
+    "Do not use tool-calling format, ReAct format, or action/action_input structure. "
+    "Do not include any prose, explanation, or markdown before or after the JSON. "
+    "Your entire response must be parseable JSON and nothing else."
+)
+
 _MAX_RETRIES = 2
 _CORRECTION_PROMPT = (
     "Your previous response was not valid JSON. "
@@ -70,6 +77,11 @@ def parse_model_output(
         _log_stripped_keys(workspace, sorted(extra), context)
 
     return parsed
+
+
+def wrap_json_prompt(text: str) -> str:
+    """Wrap a prompt with the JSON-only instruction at both top and bottom."""
+    return f"{_JSON_ONLY_INSTRUCTION}\n\n{text}\n\n{_JSON_ONLY_INSTRUCTION}"
 
 
 def _log_stripped_keys(workspace: Path | None, stripped_keys: list[str], context: str) -> None:
