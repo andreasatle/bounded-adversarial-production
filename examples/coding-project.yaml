@@ -1,9 +1,23 @@
 project_type: coding
 artifact_id: main-codebase
 language: python
-backend: ollama
-model: gemma4:e4b
 workspace: .baps-workspace/coding-project
+roles:
+  blue:
+    backend: ollama
+    model: qwen2.5-coder:7b
+  red:
+    backend: ollama
+    model: qwen2.5-coder:7b
+  referee:
+    backend: ollama
+    model: qwen2.5-coder:7b
+  create_game:
+    backend: ollama
+    model: gemma4:e4b
+  decompose:
+    backend: ollama
+    model: gemma4:e4b
 goal: "Implement a text similarity utility with normalize, token overlap, and compare functions, plus comprehensive pytest tests."
 output: output/project
 max_iterations: 5
