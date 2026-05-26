@@ -1097,6 +1097,8 @@ def _parse_create_game_output(text: str, max_sub_gaps: int = 5, workspace: Path 
     if not isinstance(parsed, dict):
         raise ValueError("create_game model output must be a JSON object")
 
+    logger.error("create_game raw response: %s", parsed)
+
     if parsed.get("no_new_game") is True:
         _strip_extra_keys(parsed, {"no_new_game", "reason"}, workspace, "create_game:no_new_game")
         reason = str(parsed.get("reason", "")).strip()

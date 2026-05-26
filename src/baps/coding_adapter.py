@@ -3,11 +3,14 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import logging
 import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from baps.language_plugin import LanguagePlugin
 from baps.models import ToolCall, ToolDefinition
@@ -376,10 +379,17 @@ def parse_coding_delta_json(text: str) -> DeltaCodingState | DeltaCodingBatchSta
     if not isinstance(parsed, dict):
         raise ValueError("blue model output must be a JSON object")
 
+    logger.error("blue_delta raw response: %s", parsed)
+
     required_keys = {"artifact_id", "operation", "payload"}
-    if set(parsed.keys()) != required_keys:
+    extra_keys = set(parsed.keys()) - required_keys
+    if extra_keys:
+        logger.warning("blue_delta: stripping extra keys: %s", sorted(extra_keys))
+        for k in extra_keys:
+            del parsed[k]
+    if not required_keys.issubset(parsed.keys()):
         raise ValueError(
-            "blue model output must contain exactly keys: artifact_id, operation, payload"
+            "blue model output must contain keys: artifact_id, operation, payload"
         )
 
     _fix_delta_file_content_quotes(parsed)
