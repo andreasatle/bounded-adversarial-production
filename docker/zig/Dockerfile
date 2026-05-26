@@ -1,6 +1,6 @@
 FROM debian:bookworm-slim
 
-ARG ZIG_VERSION=0.14.1
+ARG ZIG_VERSION=0.16.0
 ARG TARGETARCH
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
