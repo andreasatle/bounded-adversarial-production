@@ -153,19 +153,19 @@ uv run baps-run reset --spec examples/coding-project.yaml
 ## Model configuration
 
 ```bash
-# Pick a backend
-BAPS_BACKEND=anthropic        # or: openai, ollama (default)
+# Default: Ollama with gemma3:4b (no API key required)
+BAPS_BACKEND=ollama            # default; or: anthropic, openai
+BAPS_OLLAMA_MODEL=gemma3:4b   # default
 
-# Anthropic
+# Anthropic (requires API key)
+BAPS_BACKEND=anthropic
 ANTHROPIC_API_KEY=sk-...
 BAPS_ANTHROPIC_MODEL=claude-sonnet-4-6
 
-# OpenAI
+# OpenAI (requires API key)
+BAPS_BACKEND=openai
 OPENAI_API_KEY=sk-...
 BAPS_OPENAI_MODEL=gpt-4o
-
-# Ollama (local)
-BAPS_OLLAMA_MODEL=llama3.2
 ```
 
 Each role (Blue, Red, Referee, CreateGame, Decompose) can use a different model:
@@ -176,7 +176,7 @@ BAPS_BLUE_MODEL=claude-sonnet-4-6
 BAPS_RED_MODEL=claude-haiku-4-5-20251001
 BAPS_REFEREE_MODEL=claude-haiku-4-5-20251001
 BAPS_DECOMPOSE_BACKEND=ollama
-BAPS_DECOMPOSE_MODEL=llama3.2
+BAPS_DECOMPOSE_MODEL=gemma3:4b
 ```
 
 The Decompose role handles structural gap-splitting at planning nodes and can use a lighter model than the roles that write code.

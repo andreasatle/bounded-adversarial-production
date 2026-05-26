@@ -221,7 +221,7 @@ def main() -> None:
     policy = ModelPolicy(models)
     policy.load_stats(policy_path)
 
-    print(f"[scheduler] backend={os.getenv('BAPS_BACKEND', 'anthropic')}")
+    print(f"[scheduler] backend={os.getenv('BAPS_BACKEND', 'ollama')}")
     print(f"[scheduler] ladder={[m.name for m in models]}")
     print(f"[scheduler] concurrency={args.concurrency}  threshold={args.escalation_threshold}  rounds={args.rounds}")
     print(f"[scheduler] specs={specs}")
