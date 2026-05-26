@@ -13,14 +13,13 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 from baps.language_plugin import LanguagePlugin
-from baps.model_output import parse_model_output
+from baps.model_output import _extract_json_candidate, parse_model_output
 from baps.models import ToolCall, ToolDefinition
 from baps.northstar_projection import ProjectionType, StateView
 from baps.project_adapter import (
     VerificationResult,
     _config_artifact_id,
     _config_northstar_markdown,
-    normalize_json_candidate,
     render_blue_prompt_core,
     sanitize_model_string,
     sanitize_model_title,
@@ -378,7 +377,7 @@ def parse_coding_delta_json(text: str, workspace: Path | None = None) -> DeltaCo
         if "must be valid JSON" not in str(exc):
             raise
         # Static recovery for malformed write_file payloads (unescaped content strings)
-        parsed = _recover_malformed_coding_delta_json(normalize_json_candidate(text))
+        parsed = _recover_malformed_coding_delta_json(_extract_json_candidate(text))
         if parsed is None:
             raise
     if not _BLUE_CODING_KEYS.issubset(parsed.keys()):

@@ -56,24 +56,6 @@ def _config_northstar_markdown(config: dict[str, Any]) -> str:
     return value
 
 
-_MAX_DELTA_BYTES = 65536
-
-
-def normalize_json_candidate(text: str) -> str:
-    if len(text.encode("utf-8")) > _MAX_DELTA_BYTES:
-        raise ValueError(
-            f"model response exceeds maximum allowed size ({_MAX_DELTA_BYTES} bytes)"
-        )
-    normalized = text.strip()
-    fence_pattern = re.compile(
-        r"\A```(?:json)?[ \t]*\n(?P<body>[\s\S]*?)\n```[ \t]*\Z",
-        re.IGNORECASE,
-    )
-    fence_match = fence_pattern.match(normalized)
-    if fence_match is not None:
-        normalized = fence_match.group("body").strip()
-    return normalized
-
 
 @dataclass(frozen=True)
 class VerificationResult:

@@ -12,7 +12,6 @@ from baps.project_adapter import (
     VerificationResult,
     _config_artifact_id,
     _config_northstar_markdown,
-    normalize_json_candidate,
     render_blue_prompt_core,
     sanitize_model_string,
     sanitize_model_title,
