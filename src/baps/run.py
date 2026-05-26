@@ -2244,7 +2244,7 @@ def main() -> None:
     from dotenv import load_dotenv
     load_dotenv()
     _log_level = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
-    logging.basicConfig(level=_log_level, format="%(levelname)s %(name)s %(message)s")
+    logging.basicConfig(level=_log_level, format="%(asctime)s %(levelname)-5s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
     parser = argparse.ArgumentParser(
         description="baps — bounded adversarial production system.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
