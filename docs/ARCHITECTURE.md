@@ -122,6 +122,12 @@ roles:                   # optional per-role overrides
   blue:
     backend: anthropic
     model: claude-sonnet-4-6
+  create_game:
+    backend: ollama
+    model: gemma4:26b
+    fallback:            # escalated to only after all primary JSON-correction retries are exhausted
+      backend: ollama
+      model: gemma4:27b
   decompose:
     backend: ollama
     model: gemma4:e4b
@@ -130,6 +136,8 @@ roles:                   # optional per-role overrides
 Precedence: role-spec > global-spec > role-env (`BAPS_{ROLE}_BACKEND` / `BAPS_{ROLE}_MODEL`) > global-env (`BAPS_BACKEND` / `BAPS_*_MODEL`). Environment variables remain as a fallback for CI or spec-free usage.
 
 Client construction is handled by `_resolve_backend_model(role, config)` → `_build_client_for_role(role, config)`. Both functions are config-dict-driven and raise `ValueError("No model configured...")` if no backend/model can be resolved.
+
+**Model fallback/escalation:** Each role may optionally declare a `fallback` block with its own `backend` and `model`. The fallback is invoked exactly once — via `parse_model_output`'s `fallback_fn` — only after the primary model has exhausted all JSON-correction retries. If the fallback also fails, the run raises `ValueError`. No escalation occurs outside what is declared in the spec. The `_build_fallback_client_for_role(role, config)` → `_make_fallback_fn(client)` pathway constructs and wraps the fallback client once before the attempt loop. A warning is logged when escalation occurs.
 
 **`DECOMPOSE` role** — used for CreateGame calls at decomposition nodes (`depth > 0`). These are structural planning tasks that require less raw capability than leaf execution. A typical setup assigns a lighter model to `DECOMPOSE` and a stronger model to `BLUE`.
 

@@ -2,6 +2,15 @@ project_type: document
 artifact_id: main-document
 backend: ollama
 model: gemma4:e4b
+# Optional per-role overrides. Each role may specify its own backend/model,
+# and an optional fallback escalated to after all primary retries are exhausted.
+# roles:
+#   create_game:
+#     backend: ollama
+#     model: gemma4:26b
+#     fallback:
+#       backend: ollama
+#       model: gemma4:27b
 workspace: .baps-workspace/document-project
 goal: "Write a technical report on using multiple AI vision models to improve OCR accuracy for historical legal documents, including verification strategies and human review."
 output: output/report.md

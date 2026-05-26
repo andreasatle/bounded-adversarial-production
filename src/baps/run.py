@@ -512,10 +512,27 @@ _VALID_BACKENDS = frozenset({"anthropic", "openai", "ollama"})
 _VALID_SPEC_ROLES = frozenset({"blue", "red", "referee", "create_game", "decompose", "create_game_red"})
 
 
-def _parse_spec_roles(roles_raw: object) -> dict[str, dict[str, str]]:
+def _parse_role_backend_model(cfg: dict, path: str) -> dict[str, str]:
+    """Parse backend and model fields from a role config dict, validating backend."""
+    parsed: dict[str, str] = {}
+    for field in ("backend", "model"):
+        if field in cfg:
+            val = str(cfg[field]).strip()
+            if field == "backend":
+                val = val.lower()
+                if val not in _VALID_BACKENDS:
+                    raise ValueError(
+                        f"spec '{path}.backend' must be one of "
+                        f"{sorted(_VALID_BACKENDS)}, got {val!r}"
+                    )
+            parsed[field] = val
+    return parsed
+
+
+def _parse_spec_roles(roles_raw: object) -> dict[str, dict[str, Any]]:
     if not isinstance(roles_raw, dict):
         raise ValueError("spec 'roles' must be a mapping")
-    result: dict[str, dict[str, str]] = {}
+    result: dict[str, dict[str, Any]] = {}
     for role, role_cfg in roles_raw.items():
         if role not in _VALID_SPEC_ROLES:
             raise ValueError(
@@ -523,18 +540,12 @@ def _parse_spec_roles(roles_raw: object) -> dict[str, dict[str, str]]:
             )
         if not isinstance(role_cfg, dict):
             raise ValueError(f"spec 'roles.{role}' must be a mapping")
-        parsed: dict[str, str] = {}
-        for field in ("backend", "model"):
-            if field in role_cfg:
-                val = str(role_cfg[field]).strip()
-                if field == "backend":
-                    val = val.lower()
-                    if val not in _VALID_BACKENDS:
-                        raise ValueError(
-                            f"spec 'roles.{role}.backend' must be one of "
-                            f"{sorted(_VALID_BACKENDS)}, got {val!r}"
-                        )
-                parsed[field] = val
+        parsed: dict[str, Any] = _parse_role_backend_model(role_cfg, f"roles.{role}")
+        if "fallback" in role_cfg:
+            fallback_raw = role_cfg["fallback"]
+            if not isinstance(fallback_raw, dict):
+                raise ValueError(f"spec 'roles.{role}.fallback' must be a mapping")
+            parsed["fallback"] = _parse_role_backend_model(fallback_raw, f"roles.{role}.fallback")
         result[role] = parsed
     return result
 
@@ -614,6 +625,32 @@ def _build_client_for_role(role: str, config: dict[str, Any]) -> ModelClient:
     """Build a model client for a role, applying spec > env precedence."""
     backend, model = _resolve_backend_model(role, config)
     return _build_client(backend, model)
+
+
+def _build_fallback_client_for_role(role: str, config: dict[str, Any]) -> ModelClient | None:
+    """Build the fallback model client for a role from spec_roles config, if configured.
+
+    Returns None when no fallback is defined. Fallback clients are used by parse_model_output
+    after the primary model exhausts all JSON-correction retries.
+    """
+    spec_roles: dict = config.get("spec_roles") or {}
+    role_cfg: dict = spec_roles.get(role) or {}
+    fallback_cfg: dict = role_cfg.get("fallback") or {}
+    if not fallback_cfg:
+        return None
+    backend = str(fallback_cfg.get("backend", "")).strip().lower()
+    model = str(fallback_cfg.get("model", "")).strip()
+    if not backend or not model:
+        return None
+    return _build_client(backend, model)
+
+
+def _make_fallback_fn(client: ModelClient) -> Any:
+    """Build a fallback generate callable that wraps the correction prompt with JSON-only instruction."""
+    from baps.model_output import wrap_json_prompt
+    def fn(prompt: str) -> str:
+        return client.generate(wrap_json_prompt(prompt))
+    return fn
 
 
 # Role schemas.
@@ -1059,11 +1096,16 @@ def _generate_create_game_with_json_retry(
     prompt: str,
     max_sub_gaps: int,
     workspace: Path | None,
+    fallback_fn: Any = None,
 ) -> "GameSpec | DecomposeSpec":
     generated = role.generate(prompt)
     _debug_print_create_game_raw_model_output(generated)
     return _parse_create_game_output(
-        generated, max_sub_gaps=max_sub_gaps, workspace=workspace, retry_fn=role.generate
+        generated,
+        max_sub_gaps=max_sub_gaps,
+        workspace=workspace,
+        retry_fn=role.generate,
+        fallback_fn=fallback_fn,
     )
 
 
@@ -1072,6 +1114,7 @@ def _parse_create_game_output(
     max_sub_gaps: int = 5,
     workspace: Path | None = None,
     retry_fn: Any = None,
+    fallback_fn: Any = None,
 ) -> "GameSpec | DecomposeSpec":
     parsed = parse_model_output(
         text,
@@ -1079,6 +1122,7 @@ def _parse_create_game_output(
         context="create_game",
         workspace=workspace,
         retry_fn=retry_fn,
+        fallback_fn=fallback_fn,
     )
 
     if parsed.get("no_new_game") is True:
@@ -1206,9 +1250,11 @@ def _parse_red_finding_json(
     text: str,
     workspace: Path | None = None,
     retry_fn: Any = None,
+    fallback_fn: Any = None,
 ) -> RedFinding:
     parsed = parse_model_output(
-        text, _RED_ALL_KEYS, context="red", workspace=workspace, retry_fn=retry_fn
+        text, _RED_ALL_KEYS, context="red", workspace=workspace,
+        retry_fn=retry_fn, fallback_fn=fallback_fn,
     )
     missing = _RED_REQUIRED_KEYS - set(parsed.keys())
     if missing:
@@ -1223,9 +1269,11 @@ def _parse_referee_decision_json(
     text: str,
     workspace: Path | None = None,
     retry_fn: Any = None,
+    fallback_fn: Any = None,
 ) -> RefereeDecision:
     parsed = parse_model_output(
-        text, _REFEREE_ALL_KEYS, context="referee", workspace=workspace, retry_fn=retry_fn
+        text, _REFEREE_ALL_KEYS, context="referee", workspace=workspace,
+        retry_fn=retry_fn, fallback_fn=fallback_fn,
     )
     missing = _REFEREE_REQUIRED_KEYS - set(parsed.keys())
     if missing:
@@ -1272,6 +1320,15 @@ def create_game(
     last_valid_game_spec: GameSpec | None = None
     max_sub_gaps = int(config.get("max_sub_gaps", 5))
 
+    # Build fallback clients once — they don't change across attempts.
+    _create_game_fallback = _build_fallback_client_for_role(role_name, config)
+    _create_game_fallback_fn = _make_fallback_fn(_create_game_fallback) if _create_game_fallback else None
+    _red_cg_fallback = (
+        _build_fallback_client_for_role("create_game_red", config)
+        if red_role is not None else None
+    )
+    _red_cg_fallback_fn = _make_fallback_fn(_red_cg_fallback) if _red_cg_fallback else None
+
     for attempt in range(1, max_create_game_attempts + 1):
         prompt = _render_create_game_prompt(
             config=config,
@@ -1284,7 +1341,8 @@ def create_game(
         )
         _debug_print_create_game_prompt(prompt)
         result = _generate_create_game_with_json_retry(
-            role, prompt, max_sub_gaps=max_sub_gaps, workspace=config["workspace"]
+            role, prompt, max_sub_gaps=max_sub_gaps, workspace=config["workspace"],
+            fallback_fn=_create_game_fallback_fn,
         )
 
         if isinstance(result, DecomposeSpec):
@@ -1318,7 +1376,8 @@ def create_game(
             red_generated = red_role.generate(red_prompt)
             try:
                 red_finding = _parse_red_finding_json(
-                    red_generated, workspace=config.get("workspace"), retry_fn=red_role.generate
+                    red_generated, workspace=config.get("workspace"),
+                    retry_fn=red_role.generate, fallback_fn=_red_cg_fallback_fn,
                 )
             except ValueError:
                 # Unparseable Red output — accept the GameSpec as-is
@@ -1598,6 +1657,14 @@ def play_game(
         _REFEREE_DECISION_SCHEMA,
         constrained=True,
     )
+
+    # Build fallback functions once — they don't change across attempts.
+    _workspace = config.get("workspace") if config else None
+    _red_fallback = _build_fallback_client_for_role("red", config) if config else None
+    _referee_fallback = _build_fallback_client_for_role("referee", config) if config else None
+    _red_fallback_fn = _make_fallback_fn(_red_fallback) if _red_fallback else None
+    _referee_fallback_fn = _make_fallback_fn(_referee_fallback) if _referee_fallback else None
+
     for attempt in range(1, max_attempts + 1):
         _debug_print_play_game_attempt(attempt)
 
@@ -1701,9 +1768,9 @@ def play_game(
             red_supplement_with_tools,
         )
         red_generated = red_role.generate(red_prompt)
-        _workspace = config.get("workspace") if config else None
         red_finding = _parse_red_finding_json(
-            red_generated, workspace=_workspace, retry_fn=red_role.generate
+            red_generated, workspace=_workspace,
+            retry_fn=red_role.generate, fallback_fn=_red_fallback_fn,
         )
         _debug_print_red_output(red_finding)
 
@@ -1759,7 +1826,8 @@ def play_game(
         )
         referee_generated = referee_role.generate(referee_prompt)
         referee_decision = _parse_referee_decision_json(
-            referee_generated, workspace=_workspace, retry_fn=referee_role.generate
+            referee_generated, workspace=_workspace,
+            retry_fn=referee_role.generate, fallback_fn=_referee_fallback_fn,
         )
         _debug_print_referee_output(referee_decision)
 
