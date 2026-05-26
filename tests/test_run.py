@@ -16,8 +16,6 @@ import baps.state as state_module
 # Captured before autouse fixtures patch them — used by backend dispatch tests.
 _real_build_model_client = _real_run._build_model_client
 _real_build_planner_model_client = _real_run._build_planner_model_client
-_real_build_anthropic_client = _real_run._build_anthropic_client
-_real_build_openai_client = _real_run._build_openai_client
 _real_build_role_client = _real_run._build_role_client
 
 
@@ -7137,16 +7135,16 @@ def test_build_model_client_returns_openai_when_backend_set(monkeypatch) -> None
     assert client.api_key == "sk-openai-test"
 
 
-def test_build_anthropic_client_raises_without_api_key(monkeypatch) -> None:
+def test_build_client_anthropic_raises_without_api_key(monkeypatch) -> None:
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
-        _real_build_anthropic_client()
+        _real_run._build_client("anthropic", "claude-sonnet-4-6")
 
 
-def test_build_openai_client_raises_without_api_key(monkeypatch) -> None:
+def test_build_client_openai_raises_without_api_key(monkeypatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with pytest.raises(ValueError, match="OPENAI_API_KEY"):
-        _real_build_openai_client()
+        _real_run._build_client("openai", "gpt-4o")
 
 
 def test_build_create_game_client_uses_cloud_client_without_planner_split(monkeypatch) -> None:

@@ -391,35 +391,10 @@ def _debug_print_verification_result(result: VerificationResult | None) -> None:
 
 def _build_client_for_backend(backend: str) -> ModelClient:
     if backend == "anthropic":
-        return _build_anthropic_client()
+        return _build_client(backend, os.getenv("BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL))
     if backend == "openai":
-        return _build_openai_client()
-    return OllamaClient(
-        model=os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL),
-        base_url=os.getenv("BAPS_OLLAMA_BASE_URL", _DEFAULT_OLLAMA_BASE_URL),
-    )
-
-
-def _build_anthropic_client() -> ModelClient:
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key.strip():
-        raise ValueError("ANTHROPIC_API_KEY must be set when BAPS_BACKEND=anthropic")
-    return AnthropicClient(
-        model=os.getenv("BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL),
-        api_key=api_key,
-        base_url=os.getenv("BAPS_ANTHROPIC_BASE_URL", _DEFAULT_ANTHROPIC_BASE_URL),
-    )
-
-
-def _build_openai_client() -> ModelClient:
-    api_key = os.getenv("OPENAI_API_KEY", "")
-    if not api_key.strip():
-        raise ValueError("OPENAI_API_KEY must be set when BAPS_BACKEND=openai")
-    return OpenAIClient(
-        model=os.getenv("BAPS_OPENAI_MODEL", _DEFAULT_OPENAI_MODEL),
-        api_key=api_key,
-        base_url=os.getenv("BAPS_OPENAI_BASE_URL", _DEFAULT_OPENAI_BASE_URL),
-    )
+        return _build_client(backend, os.getenv("BAPS_OPENAI_MODEL", _DEFAULT_OPENAI_MODEL))
+    return _build_client("ollama", os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL))
 
 
 def _build_model_client() -> ModelClient:
@@ -443,16 +418,14 @@ def _build_planner_model_client() -> ModelClient:
         return FallbackClient(clients) if len(clients) > 1 else clients[0]
     backend = os.getenv("BAPS_BACKEND", "ollama").lower()
     if backend == "anthropic":
-        return _build_anthropic_client()
+        return _build_client(backend, os.getenv("BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL))
     if backend == "openai":
-        return _build_openai_client()
-    return OllamaClient(
-        model=(
-            os.getenv("BAPS_OLLAMA_PLANNER_MODEL")
-            or os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL)
-        ),
-        base_url=os.getenv("BAPS_OLLAMA_BASE_URL", _DEFAULT_OLLAMA_BASE_URL),
+        return _build_client(backend, os.getenv("BAPS_OPENAI_MODEL", _DEFAULT_OPENAI_MODEL))
+    model = (
+        os.getenv("BAPS_OLLAMA_PLANNER_MODEL")
+        or os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL)
     )
+    return _build_client("ollama", model)
 
 
 def _build_decompose_client() -> ModelClient:
@@ -483,29 +456,13 @@ def _build_role_client(role: str) -> ModelClient:
         return _build_model_client()
 
     backend = role_backend or os.getenv("BAPS_BACKEND", "ollama").lower()
-
     if backend == "anthropic":
-        api_key = os.getenv("ANTHROPIC_API_KEY", "")
-        if not api_key.strip():
-            raise ValueError("ANTHROPIC_API_KEY must be set for anthropic backend")
-        return AnthropicClient(
-            model=role_model or os.getenv("BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL),
-            api_key=api_key,
-            base_url=os.getenv("BAPS_ANTHROPIC_BASE_URL", _DEFAULT_ANTHROPIC_BASE_URL),
-        )
-    if backend == "openai":
-        api_key = os.getenv("OPENAI_API_KEY", "")
-        if not api_key.strip():
-            raise ValueError("OPENAI_API_KEY must be set for openai backend")
-        return OpenAIClient(
-            model=role_model or os.getenv("BAPS_OPENAI_MODEL", _DEFAULT_OPENAI_MODEL),
-            api_key=api_key,
-            base_url=os.getenv("BAPS_OPENAI_BASE_URL", _DEFAULT_OPENAI_BASE_URL),
-        )
-    return OllamaClient(
-        model=role_model or os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL),
-        base_url=os.getenv("BAPS_OLLAMA_BASE_URL", _DEFAULT_OLLAMA_BASE_URL),
-    )
+        model = role_model or os.getenv("BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL)
+    elif backend == "openai":
+        model = role_model or os.getenv("BAPS_OPENAI_MODEL", _DEFAULT_OPENAI_MODEL)
+    else:
+        model = role_model or os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL)
+    return _build_client(backend, model)
 
 
 _VALID_BACKENDS = frozenset({"anthropic", "openai", "ollama"})
