@@ -915,7 +915,8 @@ def test_create_game_exact_plain_fence_accepted() -> None:
     assert game_spec.target_artifact_id == "main-document"
 
 
-def test_create_game_prose_before_fence_rejected() -> None:
+def test_create_game_prose_before_fence_extracted_and_parsed() -> None:
+    # Pipeline extracts JSON from prose — prose wrapper is now handled correctly.
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
@@ -927,18 +928,19 @@ def test_create_game_prose_before_fence_rejected() -> None:
         "spec_path": None,
     }
     state = create_state(config)
-    bad = (
+    response = (
         "Here is the result:\n```json\n"
         '{"objective":"Advance report objective","target_artifact_id":"main-document",'
         '"allowed_delta_type":"DeltaDocumentState",'
         '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}\n'
         "```"
     )
-    with pytest.raises(ValueError, match="must be valid JSON"):
-        create_game(config, state, model_client=FakeModelClient([bad, bad, bad]))
+    game_spec = create_game(config, state, model_client=FakeModelClient([response]))
+    assert game_spec.objective == "Advance report objective"
 
 
-def test_create_game_prose_after_fence_rejected() -> None:
+def test_create_game_prose_after_fence_extracted_and_parsed() -> None:
+    # Pipeline extracts JSON via brace search when fence anchoring fails — handled correctly.
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
@@ -950,15 +952,15 @@ def test_create_game_prose_after_fence_rejected() -> None:
         "spec_path": None,
     }
     state = create_state(config)
-    bad = (
+    response = (
         "```json\n"
         '{"objective":"Advance report objective","target_artifact_id":"main-document",'
         '"allowed_delta_type":"DeltaDocumentState",'
         '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}\n'
         "```\nDone."
     )
-    with pytest.raises(ValueError, match="must be valid JSON"):
-        create_game(config, state, model_client=FakeModelClient([bad, bad, bad]))
+    game_spec = create_game(config, state, model_client=FakeModelClient([response]))
+    assert game_spec.objective == "Advance report objective"
 
 
 def test_create_game_multiple_fenced_blocks_rejected() -> None:

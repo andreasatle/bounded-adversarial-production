@@ -22,7 +22,6 @@ from baps.project_adapter import (
     VerificationResult,
     _config_artifact_id,
     _config_northstar_markdown,
-    normalize_json_candidate,
     sanitize_model_string,
     build_default_project_type_adapters,
     resolve_adapter_for_allowed_delta_type,
@@ -1203,8 +1202,14 @@ _REFEREE_REQUIRED_KEYS = frozenset({"disposition", "rationale"})
 _REFEREE_ALL_KEYS = frozenset({"disposition", "rationale", "red_override", "improvement_hints"})
 
 
-def _parse_red_finding_json(text: str, workspace: Path | None = None) -> RedFinding:
-    parsed = parse_model_output(text, _RED_ALL_KEYS, context="red", workspace=workspace)
+def _parse_red_finding_json(
+    text: str,
+    workspace: Path | None = None,
+    retry_fn: Any = None,
+) -> RedFinding:
+    parsed = parse_model_output(
+        text, _RED_ALL_KEYS, context="red", workspace=workspace, retry_fn=retry_fn
+    )
     missing = _RED_REQUIRED_KEYS - set(parsed.keys())
     if missing:
         raise ValueError(f"red model output missing required keys: {sorted(missing)}")
@@ -1214,8 +1219,14 @@ def _parse_red_finding_json(text: str, workspace: Path | None = None) -> RedFind
         raise ValueError("red model output failed RedFinding validation") from exc
 
 
-def _parse_referee_decision_json(text: str, workspace: Path | None = None) -> RefereeDecision:
-    parsed = parse_model_output(text, _REFEREE_ALL_KEYS, context="referee", workspace=workspace)
+def _parse_referee_decision_json(
+    text: str,
+    workspace: Path | None = None,
+    retry_fn: Any = None,
+) -> RefereeDecision:
+    parsed = parse_model_output(
+        text, _REFEREE_ALL_KEYS, context="referee", workspace=workspace, retry_fn=retry_fn
+    )
     missing = _REFEREE_REQUIRED_KEYS - set(parsed.keys())
     if missing:
         raise ValueError(f"referee model output missing required keys: {sorted(missing)}")
@@ -1306,7 +1317,9 @@ def create_game(
             _debug_print_create_game_red_input(state_view, game_spec)
             red_generated = red_role.generate(red_prompt)
             try:
-                red_finding = _parse_red_finding_json(red_generated, workspace=config.get("workspace"))
+                red_finding = _parse_red_finding_json(
+                    red_generated, workspace=config.get("workspace"), retry_fn=red_role.generate
+                )
             except ValueError:
                 # Unparseable Red output — accept the GameSpec as-is
                 _debug_print_create_game_output(game_spec)
@@ -1689,7 +1702,9 @@ def play_game(
         )
         red_generated = red_role.generate(red_prompt)
         _workspace = config.get("workspace") if config else None
-        red_finding = _parse_red_finding_json(red_generated, workspace=_workspace)
+        red_finding = _parse_red_finding_json(
+            red_generated, workspace=_workspace, retry_fn=red_role.generate
+        )
         _debug_print_red_output(red_finding)
 
         # Referee research — sees both Blue and Red sessions
@@ -1743,7 +1758,9 @@ def play_game(
             referee_supplement_with_tools,
         )
         referee_generated = referee_role.generate(referee_prompt)
-        referee_decision = _parse_referee_decision_json(referee_generated, workspace=_workspace)
+        referee_decision = _parse_referee_decision_json(
+            referee_generated, workspace=_workspace, retry_fn=referee_role.generate
+        )
         _debug_print_referee_output(referee_decision)
 
         runtime = apply_referee_decision_to_runtime(
