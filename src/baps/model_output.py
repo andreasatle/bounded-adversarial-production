@@ -4,8 +4,14 @@ import datetime
 import json
 import logging
 import re
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, Callable
+
+
+class BlackboardEvent(StrEnum):
+    NORTHSTAR_UPDATE_PROPOSAL = "northstar_update_proposal"
+    UNEXPECTED_KEYS_STRIPPED = "unexpected_keys_stripped"
 
 logger = logging.getLogger(__name__)
 
@@ -229,7 +235,7 @@ def _log_stripped_keys(workspace: Path | None, stripped_keys: list[str], context
     blackboard_dir = workspace / _BLACKBOARD_DIR
     blackboard_dir.mkdir(parents=True, exist_ok=True)
     entry = {
-        "event": "unexpected_keys_stripped",
+        "event": BlackboardEvent.UNEXPECTED_KEYS_STRIPPED,
         "context": context,
         "stripped_keys": stripped_keys,
         "created_at": datetime.datetime.now(datetime.UTC).isoformat(),

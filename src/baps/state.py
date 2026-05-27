@@ -3,16 +3,28 @@ from __future__ import annotations
 import hashlib
 import json
 import unicodedata
-from enum import Enum
+from enum import StrEnum
 from typing import Annotated, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, model_validator, field_validator
 
 
-class Disposition(str, Enum):
+class Disposition(StrEnum):
     accept = "accept"
     revise = "revise"
     reject = "reject"
+
+
+class StopReason(StrEnum):
+    ITERATION_LIMIT_REACHED = "iteration_limit_reached"
+    CREATE_GAME_NO_NEW_GAME = "create_game_no_new_game"
+    PLAY_GAME_NO_DELTA = "play_game_no_delta"
+    NO_STATE_CHANGE = "no_state_change"
+    NORTHSTAR_UPDATE_PROPOSED = "northstar_update_proposed"
+    MAX_DEPTH_REACHED = "max_depth_reached"
+    NOT_RUN = "not_run"
+    ERROR = "error"
+    UNKNOWN = "unknown"
 
 
 _MAX_SECTION_BODY_BYTES = 65536

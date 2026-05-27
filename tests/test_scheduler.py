@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
+from baps.models import Backend
 from baps.scheduler import (
     _FLOOR_MIN_RUNS,
     _KNOWN_MODELS,
@@ -23,21 +24,21 @@ from baps.scheduler_policy import ModelConfig, ModelPolicy
 # ---------------------------------------------------------------------------
 
 def test_env_for_model_anthropic() -> None:
-    model = ModelConfig("sonnet", "anthropic", "claude-sonnet-4-6")
+    model = ModelConfig("sonnet", Backend.ANTHROPIC, "claude-sonnet-4-6")
     env = _env_for_model(model)
     assert env["BAPS_BACKEND"] == "anthropic"
     assert env["BAPS_ANTHROPIC_MODEL"] == "claude-sonnet-4-6"
 
 
 def test_env_for_model_openai() -> None:
-    model = ModelConfig("gpt-4o", "openai", "gpt-4o")
+    model = ModelConfig("gpt-4o", Backend.OPENAI, "gpt-4o")
     env = _env_for_model(model)
     assert env["BAPS_BACKEND"] == "openai"
     assert env["BAPS_OPENAI_MODEL"] == "gpt-4o"
 
 
 def test_env_for_model_ollama() -> None:
-    model = ModelConfig("llama3", "ollama", "llama3.1:8b")
+    model = ModelConfig("llama3", Backend.OLLAMA, "llama3.1:8b")
     env = _env_for_model(model)
     assert env["BAPS_BACKEND"] == "ollama"
     assert env["BAPS_OLLAMA_MODEL"] == "llama3.1:8b"
@@ -45,13 +46,13 @@ def test_env_for_model_ollama() -> None:
 
 def test_env_for_model_inherits_existing_env() -> None:
     with patch.dict(os.environ, {"MY_CUSTOM_VAR": "hello"}):
-        env = _env_for_model(ModelConfig("sonnet", "anthropic", "claude-sonnet-4-6"))
+        env = _env_for_model(ModelConfig("sonnet", Backend.ANTHROPIC, "claude-sonnet-4-6"))
     assert env["MY_CUSTOM_VAR"] == "hello"
 
 
 def test_env_for_model_does_not_mutate_os_environ() -> None:
     before = os.environ.copy()
-    _env_for_model(ModelConfig("sonnet", "anthropic", "claude-sonnet-4-6"))
+    _env_for_model(ModelConfig("sonnet", Backend.ANTHROPIC, "claude-sonnet-4-6"))
     assert os.environ == before
 
 
@@ -109,7 +110,7 @@ def test_default_model_ladder_falls_back_when_all_unknown() -> None:
     with patch.dict(os.environ, {"BAPS_MODEL_LADDER": "nonexistent", "ANTHROPIC_API_KEY": "k"}, clear=True):
         ladder = _default_model_ladder()
     # falls back to _auto_ladder → anthropic models
-    assert any(m.backend == "anthropic" for m in ladder)
+    assert any(m.backend == Backend.ANTHROPIC for m in ladder)
 
 
 def test_default_model_ladder_falls_back_when_env_empty() -> None:

@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import sys
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -13,10 +14,10 @@ from pydantic import ValidationError
 
 import yaml
 
-from baps.models import AnthropicClient, FallbackClient, ModelClient, OllamaClient, OpenAIClient, Role, ToolCallRecord
+from baps.models import AnthropicClient, Backend, FallbackClient, ModelClient, OllamaClient, OpenAIClient, Role, ToolCallRecord
 from baps.tools import ToolExecutor, build_default_tool_executor
-from baps.model_output import parse_model_output
-from baps.northstar_projection import ProjectionType, StateView
+from baps.model_output import BlackboardEvent, parse_model_output
+from baps.northstar_projection import ProjectionType, STATE_VIEW_START, STATE_VIEW_END, StateView
 from baps.project_adapter import (
     ProjectTypeAdapter,
     VerificationResult,
@@ -37,6 +38,7 @@ from baps.state import (
     RefereeDecision,
     State,
     StateUpdateProposal,
+    StopReason,
     SubGapSpec,
     apply_referee_decision_to_runtime,
     build_default_state_artifact_registry,
@@ -58,6 +60,15 @@ _DEFAULT_MAX_DEPTH = 3
 _BLACKBOARD_DIR = "blackboard"
 _NORTHSTAR_PROPOSALS_FILE = "northstar_proposals.jsonl"
 _WORKSPACE_CONFIG_FILE = "baps-config.json"
+
+
+class SpecRole(StrEnum):
+    BLUE = "blue"
+    RED = "red"
+    REFEREE = "referee"
+    CREATE_GAME = "create_game"
+    DECOMPOSE = "decompose"
+    CREATE_GAME_RED = "create_game_red"
 
 
 class NoNewGameError(ValueError):
@@ -321,11 +332,11 @@ def _debug_print_verification_result(result: VerificationResult | None) -> None:
 
 
 def _build_client_for_backend(backend: str) -> ModelClient:
-    if backend == "anthropic":
+    if backend == Backend.ANTHROPIC:
         return _build_client(backend, os.getenv("BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL))
-    if backend == "openai":
+    if backend == Backend.OPENAI:
         return _build_client(backend, os.getenv("BAPS_OPENAI_MODEL", _DEFAULT_OPENAI_MODEL))
-    return _build_client("ollama", os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL))
+    return _build_client(Backend.OLLAMA, os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL))
 
 
 def _build_multi_backend_client() -> ModelClient | None:
@@ -352,15 +363,15 @@ def _build_planner_model_client() -> ModelClient:
     if client is not None:
         return client
     backend = os.getenv("BAPS_BACKEND", "ollama").lower()
-    if backend == "anthropic":
+    if backend == Backend.ANTHROPIC:
         return _build_client(backend, os.getenv("BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL))
-    if backend == "openai":
+    if backend == Backend.OPENAI:
         return _build_client(backend, os.getenv("BAPS_OPENAI_MODEL", _DEFAULT_OPENAI_MODEL))
     model = (
         os.getenv("BAPS_OLLAMA_PLANNER_MODEL")
         or os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL)
     )
-    return _build_client("ollama", model)
+    return _build_client(Backend.OLLAMA, model)
 
 
 def _build_decompose_client() -> ModelClient:
@@ -373,7 +384,7 @@ def _build_decompose_client() -> ModelClient:
     role_backend = os.getenv("BAPS_DECOMPOSE_BACKEND", "").strip().lower()
     role_model = os.getenv("BAPS_DECOMPOSE_MODEL", "").strip()
     if role_backend or role_model:
-        return _build_role_client("decompose")
+        return _build_role_client(SpecRole.DECOMPOSE)
     return _build_planner_model_client()
 
 
@@ -391,17 +402,17 @@ def _build_role_client(role: str) -> ModelClient:
         return _build_model_client()
 
     backend = role_backend or os.getenv("BAPS_BACKEND", "ollama").lower()
-    if backend == "anthropic":
+    if backend == Backend.ANTHROPIC:
         model = role_model or os.getenv("BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL)
-    elif backend == "openai":
+    elif backend == Backend.OPENAI:
         model = role_model or os.getenv("BAPS_OPENAI_MODEL", _DEFAULT_OPENAI_MODEL)
     else:
         model = role_model or os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL)
     return _build_client(backend, model)
 
 
-_VALID_BACKENDS = frozenset({"anthropic", "openai", "ollama"})
-_VALID_SPEC_ROLES = frozenset({"blue", "red", "referee", "create_game", "decompose", "create_game_red"})
+_VALID_BACKENDS = frozenset(Backend)
+_VALID_SPEC_ROLES = frozenset(SpecRole)
 
 
 def _parse_role_backend_model(cfg: dict, path: str) -> dict[str, str]:
@@ -465,9 +476,9 @@ def _resolve_backend_model(role: str, config: dict[str, Any]) -> tuple[str, str]
     )
 
     env_model: str = ""
-    if backend == "anthropic":
+    if backend == Backend.ANTHROPIC:
         env_model = os.getenv("BAPS_ANTHROPIC_MODEL", "").strip()
-    elif backend == "openai":
+    elif backend == Backend.OPENAI:
         env_model = os.getenv("BAPS_OPENAI_MODEL", "").strip()
     elif backend:
         env_model = os.getenv("BAPS_OLLAMA_MODEL", "").strip()
@@ -494,7 +505,7 @@ def _resolve_backend_model(role: str, config: dict[str, Any]) -> tuple[str, str]
 
 def _build_client(backend: str, model: str) -> ModelClient:
     """Construct a model client for the given backend and model id."""
-    if backend == "anthropic":
+    if backend == Backend.ANTHROPIC:
         api_key = os.getenv("ANTHROPIC_API_KEY", "")
         if not api_key.strip():
             raise ValueError("ANTHROPIC_API_KEY must be set when using anthropic backend")
@@ -503,7 +514,7 @@ def _build_client(backend: str, model: str) -> ModelClient:
             api_key=api_key,
             base_url=os.getenv("BAPS_ANTHROPIC_BASE_URL", _DEFAULT_ANTHROPIC_BASE_URL),
         )
-    if backend == "openai":
+    if backend == Backend.OPENAI:
         api_key = os.getenv("OPENAI_API_KEY", "")
         if not api_key.strip():
             raise ValueError("OPENAI_API_KEY must be set when using openai backend")
@@ -1086,7 +1097,7 @@ def _parse_create_game_output(
     parsed = parse_model_output(
         text,
         _CREATE_GAME_ALL_KEYS,
-        context="create_game",
+        context=SpecRole.CREATE_GAME,
         workspace=workspace,
         retry_fn=retry_fn,
         fallback_fn=fallback_fn,
@@ -1262,7 +1273,7 @@ def _parse_red_finding_json(
 ) -> RedFinding:
     return _parse_role_output(
         text, _RED_ALL_KEYS, _RED_REQUIRED_KEYS, RedFinding,
-        context="red", workspace=workspace, retry_fn=retry_fn, fallback_fn=fallback_fn,
+        context=SpecRole.RED, workspace=workspace, retry_fn=retry_fn, fallback_fn=fallback_fn,
     )
 
 
@@ -1274,7 +1285,7 @@ def _parse_referee_decision_json(
 ) -> RefereeDecision:
     return _parse_role_output(
         text, _REFEREE_ALL_KEYS, _REFEREE_REQUIRED_KEYS, RefereeDecision,
-        context="referee", workspace=workspace, retry_fn=retry_fn, fallback_fn=fallback_fn,
+        context=SpecRole.REFEREE, workspace=workspace, retry_fn=retry_fn, fallback_fn=fallback_fn,
     )
 
 
@@ -1298,14 +1309,14 @@ def create_game(
     state_view = resolved_adapter.build_create_game_state_view(state, config)
     use_planner = model_client is None
     if use_planner:
-        role_name_for_client = "decompose" if depth > 0 else "create_game"
+        role_name_for_client = SpecRole.DECOMPOSE if depth > 0 else SpecRole.CREATE_GAME
         client = _build_client_for_role(role_name_for_client, config)
     else:
         client = model_client
-    role_name = "decompose" if depth > 0 else "create_game"
+    role_name = SpecRole.DECOMPOSE if depth > 0 else SpecRole.CREATE_GAME
     role = Role(role_name, client, _CREATE_GAME_SCHEMA, constrained=False)
     red_role = (
-        Role("create_game_red", create_game_red_client, _RED_FINDING_SCHEMA, constrained=True)
+        Role(SpecRole.CREATE_GAME_RED, create_game_red_client, _RED_FINDING_SCHEMA, constrained=True)
         if create_game_red_client is not None
         else None
     )
@@ -1324,11 +1335,11 @@ def create_game(
     )
     if red_role is not None:
         try:
-            _red_cg_primary_model = _resolve_backend_model("create_game_red", config)[1]
+            _red_cg_primary_model = _resolve_backend_model(SpecRole.CREATE_GAME_RED, config)[1]
         except ValueError:
             _red_cg_primary_model = "(unknown)"
         _red_cg_fallback_fn = _make_fallback_chain_fn(
-            "create_game_red", _red_cg_primary_model, _build_fallback_chain_for_role("create_game_red", config)
+            SpecRole.CREATE_GAME_RED, _red_cg_primary_model, _build_fallback_chain_for_role(SpecRole.CREATE_GAME_RED, config)
         )
     else:
         _red_cg_fallback_fn = None
@@ -1618,20 +1629,20 @@ def play_game(
         return _build_role_client(role)
 
     blue_role = Role(
-        "blue",
-        _get_client(model_client, "blue"),
+        SpecRole.BLUE,
+        _get_client(model_client, SpecRole.BLUE),
         resolved_adapter.build_blue_output_format(),
         constrained=False,
     )
     red_role = Role(
-        "red",
-        _get_client(red_model_client, "red"),
+        SpecRole.RED,
+        _get_client(red_model_client, SpecRole.RED),
         _RED_FINDING_SCHEMA,
         constrained=True,
     )
     referee_role = Role(
-        "referee",
-        _get_client(referee_model_client, "referee"),
+        SpecRole.REFEREE,
+        _get_client(referee_model_client, SpecRole.REFEREE),
         _REFEREE_DECISION_SCHEMA,
         constrained=True,
     )
@@ -1640,15 +1651,15 @@ def play_game(
     _workspace = config.get("workspace") if config else None
     if config is not None:
         try:
-            _red_primary = _resolve_backend_model("red", config)[1] if red_model_client is None else "(provided)"
+            _red_primary = _resolve_backend_model(SpecRole.RED, config)[1] if red_model_client is None else "(provided)"
         except ValueError:
             _red_primary = "(unknown)"
         try:
-            _referee_primary = _resolve_backend_model("referee", config)[1] if referee_model_client is None else "(provided)"
+            _referee_primary = _resolve_backend_model(SpecRole.REFEREE, config)[1] if referee_model_client is None else "(provided)"
         except ValueError:
             _referee_primary = "(unknown)"
-        _red_fallback_fn = _make_fallback_chain_fn("red", _red_primary, _build_fallback_chain_for_role("red", config))
-        _referee_fallback_fn = _make_fallback_chain_fn("referee", _referee_primary, _build_fallback_chain_for_role("referee", config))
+        _red_fallback_fn = _make_fallback_chain_fn(SpecRole.RED, _red_primary, _build_fallback_chain_for_role(SpecRole.RED, config))
+        _referee_fallback_fn = _make_fallback_chain_fn(SpecRole.REFEREE, _referee_primary, _build_fallback_chain_for_role(SpecRole.REFEREE, config))
     else:
         _red_fallback_fn = None
         _referee_fallback_fn = None
@@ -1660,9 +1671,9 @@ def play_game(
         blue_session: list[ToolCallRecord] = []
         blue_summary = ""
         if executor is not None:
-            blue_research_tools = _get_research_tools(resolved_adapter, "blue")
+            blue_research_tools = _get_research_tools(resolved_adapter, SpecRole.BLUE)
             if blue_research_tools:
-                research_prompt = _render_research_prompt("blue", state_view, game_spec, [])
+                research_prompt = _render_research_prompt(SpecRole.BLUE, state_view, game_spec, [])
                 blue_summary, blue_session = blue_role.generate_agentic(
                     research_prompt, blue_research_tools, executor
                 )
@@ -1672,7 +1683,7 @@ def play_game(
             state_view, game_spec, attempt, previous_feedback
         )
         if blue_session or blue_summary:
-            blue_prompt = _render_tool_session_block([("blue", blue_session, blue_summary)]) + "\n\n" + blue_prompt
+            blue_prompt = _render_tool_session_block([(SpecRole.BLUE, blue_session, blue_summary)]) + "\n\n" + blue_prompt
         blue_tools = resolved_adapter.build_blue_tools()
         blue_tool_call = None
         if blue_tools:
@@ -1689,7 +1700,7 @@ def play_game(
                 _debug_print_attempt_rejected(attempt, reason)
                 previous_feedback = {
                     "attempt_rejection": {
-                        "stage": "blue",
+                        "stage": SpecRole.BLUE,
                         "reason": reason,
                         "validation_error": str(exc),
                     }
@@ -1704,7 +1715,7 @@ def play_game(
                 _debug_print_attempt_rejected(attempt, reason)
                 previous_feedback = {
                     "attempt_rejection": {
-                        "stage": "blue",
+                        "stage": SpecRole.BLUE,
                         "reason": reason,
                         "validation_error": str(exc),
                     }
@@ -1716,10 +1727,10 @@ def play_game(
         red_session: list[ToolCallRecord] = []
         red_summary = ""
         if executor is not None:
-            red_research_tools = _get_research_tools(resolved_adapter, "red")
+            red_research_tools = _get_research_tools(resolved_adapter, SpecRole.RED)
             if red_research_tools:
-                prior = [("blue", blue_session, blue_summary)] if blue_session or blue_summary else []
-                research_prompt = _render_research_prompt("red", state_view, game_spec, prior)
+                prior = [(SpecRole.BLUE, blue_session, blue_summary)] if blue_session or blue_summary else []
+                research_prompt = _render_research_prompt(SpecRole.RED, state_view, game_spec, prior)
                 red_summary, red_session = red_role.generate_agentic(
                     research_prompt, red_research_tools, executor
                 )
@@ -1738,7 +1749,7 @@ def play_game(
             verification_result,
         )
         tool_context = _render_tool_session_block([
-            s for s in [("blue", blue_session, blue_summary), ("red", red_session, red_summary)]
+            s for s in [(SpecRole.BLUE, blue_session, blue_summary), (SpecRole.RED, red_session, red_summary)]
             if s[1] or s[2]
         ])
         red_supplement_with_tools = (
@@ -1766,13 +1777,13 @@ def play_game(
         referee_session: list[ToolCallRecord] = []
         referee_summary = ""
         if executor is not None:
-            referee_research_tools = _get_research_tools(resolved_adapter, "referee")
+            referee_research_tools = _get_research_tools(resolved_adapter, SpecRole.REFEREE)
             if referee_research_tools:
                 prior = [s for s in [
-                    ("blue", blue_session, blue_summary),
-                    ("red", red_session, red_summary),
+                    (SpecRole.BLUE, blue_session, blue_summary),
+                    (SpecRole.RED, red_session, red_summary),
                 ] if s[1] or s[2]]
-                research_prompt = _render_research_prompt("referee", state_view, game_spec, prior)
+                research_prompt = _render_research_prompt(SpecRole.REFEREE, state_view, game_spec, prior)
                 referee_summary, referee_session = referee_role.generate_agentic(
                     research_prompt, referee_research_tools, executor
                 )
@@ -1793,9 +1804,9 @@ def play_game(
             verification_result,
         )
         all_sessions = [s for s in [
-            ("blue", blue_session, blue_summary),
-            ("red", red_session, red_summary),
-            ("referee", referee_session, referee_summary),
+            (SpecRole.BLUE, blue_session, blue_summary),
+            (SpecRole.RED, red_session, red_summary),
+            (SpecRole.REFEREE, referee_session, referee_summary),
         ] if s[1] or s[2]]
         referee_tool_context = _render_tool_session_block(all_sessions)
         referee_supplement_with_tools = (
@@ -1920,7 +1931,7 @@ def _append_northstar_proposal_to_blackboard(
     blackboard_dir = workspace / _BLACKBOARD_DIR
     blackboard_dir.mkdir(parents=True, exist_ok=True)
     entry = {
-        "event": "northstar_update_proposal",
+        "event": BlackboardEvent.NORTHSTAR_UPDATE_PROPOSAL,
         "rationale": sanitize_model_string(rationale),
         "proposed_northstar": sanitize_model_string(proposed_northstar),
         "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
@@ -2052,7 +2063,7 @@ class _RunContext:
         self.output_changed = False
         self.northstar_proposal_written = False
         self.verification_result: VerificationResult | None = None
-        self.stop_reason: str | None = None
+        self.stop_reason: StopReason | None = None
         # Set when no_new_game is overridden because verification is failing.
         # A second consecutive override (no leaf game ran in between) escalates.
         self.no_new_game_verification_override: bool = False
@@ -2081,7 +2092,7 @@ def _solve_gap(
             verification_result=ctx.verification_result,
             context_chain=context_chain,
             depth=depth,
-            create_game_red_client=_build_client_for_role("create_game_red", config),
+            create_game_red_client=_build_client_for_role(SpecRole.CREATE_GAME_RED, config),
         )
     except NoNewGameError:
         if depth == 0:
@@ -2114,9 +2125,9 @@ def _solve_gap(
                     proposed_northstar=_config_northstar_markdown(config),
                 )
                 ctx.northstar_proposal_written = True
-                ctx.stop_reason = "northstar_update_proposed"
+                ctx.stop_reason = StopReason.NORTHSTAR_UPDATE_PROPOSED
                 return
-            ctx.stop_reason = "create_game_no_new_game"
+            ctx.stop_reason = StopReason.CREATE_GAME_NO_NEW_GAME
         return
     except NorthStarUpdateNeededError as exc:
         _debug_print_northstar_update_proposal(exc.rationale, exc.proposed_northstar)
@@ -2126,13 +2137,13 @@ def _solve_gap(
             proposed_northstar=exc.proposed_northstar,
         )
         ctx.northstar_proposal_written = True
-        ctx.stop_reason = "northstar_update_proposed"
+        ctx.stop_reason = StopReason.NORTHSTAR_UPDATE_PROPOSED
         return
 
     if isinstance(result, DecomposeSpec):
         if depth >= max_depth:
             logger.info("[solve_gap] max_depth=%d reached, cannot decompose further; stopping.", max_depth)
-            ctx.stop_reason = "max_depth_reached"
+            ctx.stop_reason = StopReason.MAX_DEPTH_REACHED
             return
         logger.info(
             "[solve_gap] depth=%d decomposing into %d sub-gaps: %s",
@@ -2150,7 +2161,7 @@ def _solve_gap(
                 max_depth,
                 depth + 1,
             )
-            if ctx.stop_reason == "play_game_no_delta":
+            if ctx.stop_reason == StopReason.PLAY_GAME_NO_DELTA:
                 ctx.stop_reason = None  # leaf found nothing; continue sibling sub-gaps
             elif ctx.stop_reason is not None:
                 return
@@ -2171,7 +2182,7 @@ def _solve_gap(
         config=config,
     )
     if delta_state is None:
-        ctx.stop_reason = "play_game_no_delta"
+        ctx.stop_reason = StopReason.PLAY_GAME_NO_DELTA
         return
 
     before_state = state_service.load_state()
@@ -2196,7 +2207,7 @@ def _solve_gap(
     if changed:
         ctx.state_changed = True
     else:
-        ctx.stop_reason = "no_state_change"
+        ctx.stop_reason = StopReason.NO_STATE_CHANGE
 
 
 def _run_project_iterations(
@@ -2231,8 +2242,8 @@ def _run_project_iterations(
         # A gap was identified but the system could not close it.  Escalate to
         # a NorthStar proposal so the human is alerted through the normal
         # approval channel rather than receiving a silent stop.
-        if ctx.stop_reason in ("play_game_no_delta", "no_state_change"):
-            if ctx.stop_reason == "play_game_no_delta":
+        if ctx.stop_reason in (StopReason.PLAY_GAME_NO_DELTA, StopReason.NO_STATE_CHANGE):
+            if ctx.stop_reason == StopReason.PLAY_GAME_NO_DELTA:
                 rationale = (
                     "Gap was identified but play_game produced no accepted delta — "
                     "Blue was unable to close the gap. "
@@ -2253,10 +2264,10 @@ def _run_project_iterations(
                 proposed_northstar=_config_northstar_markdown(config),
             )
             ctx.northstar_proposal_written = True
-            ctx.stop_reason = "northstar_update_proposed"
+            ctx.stop_reason = StopReason.NORTHSTAR_UPDATE_PROPOSED
 
     if ctx.stop_reason is None:
-        ctx.stop_reason = "iteration_limit_reached"
+        ctx.stop_reason = StopReason.ITERATION_LIMIT_REACHED
 
     return {
         "update_applied": ctx.update_applied,
@@ -2273,7 +2284,7 @@ def _run_project_iterations(
 def _active_model_info(config: dict[str, Any] | None = None) -> dict[str, str]:
     try:
         cfg = config or {}
-        backend, model = _resolve_backend_model("blue", cfg)
+        backend, model = _resolve_backend_model(SpecRole.BLUE, cfg)
         return {"backend": backend, "model": model}
     except ValueError:
         return {"backend": "unknown", "model": "unknown"}
@@ -2397,7 +2408,7 @@ def main() -> None:
     verification_command: str | None = None
     verification_cwd: str | None = None
     iterations_completed = 0
-    stop_reason = "not_run"
+    stop_reason: StopReason = StopReason.NOT_RUN
 
     try:
         state_path = _state_path_for_workspace(workspace)
@@ -2426,10 +2437,10 @@ def main() -> None:
             verification_command = verification_result.command
             verification_cwd = verification_result.cwd
         iterations_completed = int(results["iterations_completed"])
-        stop_reason = str(results["stop_reason"])
+        stop_reason = results["stop_reason"]
     except (ValueError, RuntimeError) as exc:
         logger.error("%s", exc)
-        stop_reason = "error"
+        stop_reason = StopReason.ERROR
         model_info = _active_model_info(config)
         workspace.mkdir(parents=True, exist_ok=True)
         (workspace / "run-result.json").write_text(

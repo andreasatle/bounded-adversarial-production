@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from enum import Enum
+from enum import StrEnum
 from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -14,7 +14,7 @@ def _require_non_empty(value: str) -> str:
     return value
 
 
-class ProjectionPolicy(str, Enum):
+class ProjectionPolicy(StrEnum):
     VERBATIM = "verbatim"
     SUMMARIZED = "summarized"
     FILTERED = "filtered"
@@ -43,7 +43,11 @@ class NorthStarProjectionInput(BaseModel):
     runtime_context: tuple[NorthStarProjectionItem, ...] = ()
 
 
-class ProjectionType(str, Enum):
+STATE_VIEW_START = "=== StateView Start ==="
+STATE_VIEW_END = "=== StateView End ==="
+
+
+class ProjectionType(StrEnum):
     NORTH_STAR = "north_star"
 
 

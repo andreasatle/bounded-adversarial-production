@@ -4,10 +4,17 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any
 from urllib import error, request
 
 logger = logging.getLogger(__name__)
+
+
+class Backend(StrEnum):
+    ANTHROPIC = "anthropic"
+    OPENAI = "openai"
+    OLLAMA = "ollama"
 
 _RETRY_DELAYS = (5.0, 15.0, 30.0)  # seconds to wait on 429, per attempt
 

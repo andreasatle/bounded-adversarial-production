@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 from baps.language_plugin import LanguagePlugin
 from baps.model_output import _extract_json_candidate, parse_model_output
 from baps.models import ToolCall, ToolDefinition
-from baps.northstar_projection import ProjectionType, StateView
+from baps.northstar_projection import ProjectionType, STATE_VIEW_END, STATE_VIEW_START, StateView
 from baps.project_adapter import (
     VerificationResult,
     _config_artifact_id,
@@ -137,7 +137,7 @@ def build_coding_create_game_state_view(state: State, config: dict[str, Any]) ->
 
     content = "\n".join(
         [
-            "=== StateView Start ===",
+            STATE_VIEW_START,
             "",
             "--- NorthStar ---",
             "",
@@ -153,7 +153,7 @@ def build_coding_create_game_state_view(state: State, config: dict[str, Any]) ->
             "### Current Files",
             "",
             *file_lines,
-            "=== StateView End ===",
+            STATE_VIEW_END,
         ]
     ).rstrip()
     input_fingerprint = hashlib.sha256(content.encode("utf-8")).hexdigest()
@@ -187,7 +187,7 @@ def build_coding_state_view(state: State, game_spec: GameSpec) -> StateView:
 
     content = "\n".join(
         [
-            "=== StateView Start ===",
+            STATE_VIEW_START,
             "",
             "--- State Artifacts ---",
             "",
@@ -198,7 +198,7 @@ def build_coding_state_view(state: State, game_spec: GameSpec) -> StateView:
             "### Current Files",
             "",
             *file_lines,
-            "=== StateView End ===",
+            STATE_VIEW_END,
         ]
     ).rstrip()
     input_fingerprint = hashlib.sha256(content.encode("utf-8")).hexdigest()

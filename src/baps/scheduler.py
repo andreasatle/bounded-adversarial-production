@@ -8,6 +8,7 @@ import os
 import shutil
 from pathlib import Path
 
+from baps.models import Backend
 from baps.scheduler_policy import ModelConfig, ModelPolicy, compute_reward
 
 logger = logging.getLogger(__name__)
@@ -30,20 +31,20 @@ _DEFAULT_SPECS = [
 # Referenced by short name in BAPS_MODEL_LADDER.
 _KNOWN_MODELS: dict[str, ModelConfig] = {
     # Anthropic
-    "haiku":       ModelConfig("haiku",       "anthropic", "claude-haiku-4-5-20251001"),
-    "sonnet":      ModelConfig("sonnet",      "anthropic", "claude-sonnet-4-6"),
-    "opus":        ModelConfig("opus",        "anthropic", "claude-opus-4-7"),
+    "haiku":       ModelConfig("haiku",       Backend.ANTHROPIC, "claude-haiku-4-5-20251001"),
+    "sonnet":      ModelConfig("sonnet",      Backend.ANTHROPIC, "claude-sonnet-4-6"),
+    "opus":        ModelConfig("opus",        Backend.ANTHROPIC, "claude-opus-4-7"),
     # OpenAI
-    "gpt-4o-mini": ModelConfig("gpt-4o-mini", "openai",    "gpt-4o-mini"),
-    "gpt-4o":      ModelConfig("gpt-4o",      "openai",    "gpt-4o"),
+    "gpt-4o-mini": ModelConfig("gpt-4o-mini", Backend.OPENAI,    "gpt-4o-mini"),
+    "gpt-4o":      ModelConfig("gpt-4o",      Backend.OPENAI,    "gpt-4o"),
     # Ollama (local)
-    "deepseek":    ModelConfig("deepseek",    "ollama",    "deepseek-r1:7b"),
-    "llama3":      ModelConfig("llama3",      "ollama",    "llama3.1:8b"),
-    "qwen-coder":  ModelConfig("qwen-coder",  "ollama",    "qwen2.5-coder:7b"),
-    "phi3":        ModelConfig("phi3",        "ollama",    "phi3:14b"),
-    "gemma3":      ModelConfig("gemma3",      "ollama",    "gemma3:latest"),
-    "gemma4-e4b":  ModelConfig("gemma4-e4b",  "ollama",    "gemma4:e4b"),
-    "gemma4-26b":  ModelConfig("gemma4-26b",  "ollama",    "gemma4:26b"),
+    "deepseek":    ModelConfig("deepseek",    Backend.OLLAMA,    "deepseek-r1:7b"),
+    "llama3":      ModelConfig("llama3",      Backend.OLLAMA,    "llama3.1:8b"),
+    "qwen-coder":  ModelConfig("qwen-coder",  Backend.OLLAMA,    "qwen2.5-coder:7b"),
+    "phi3":        ModelConfig("phi3",        Backend.OLLAMA,    "phi3:14b"),
+    "gemma3":      ModelConfig("gemma3",      Backend.OLLAMA,    "gemma3:latest"),
+    "gemma4-e4b":  ModelConfig("gemma4-e4b",  Backend.OLLAMA,    "gemma4:e4b"),
+    "gemma4-26b":  ModelConfig("gemma4-26b",  Backend.OLLAMA,    "gemma4:26b"),
 }
 
 
@@ -79,9 +80,9 @@ def _default_model_ladder() -> list[ModelConfig]:
 def _env_for_model(model: ModelConfig) -> dict[str, str]:
     env = os.environ.copy()
     env["BAPS_BACKEND"] = model.backend
-    if model.backend == "anthropic":
+    if model.backend == Backend.ANTHROPIC:
         env["BAPS_ANTHROPIC_MODEL"] = model.model_id
-    elif model.backend == "openai":
+    elif model.backend == Backend.OPENAI:
         env["BAPS_OPENAI_MODEL"] = model.model_id
     else:
         env["BAPS_OLLAMA_MODEL"] = model.model_id

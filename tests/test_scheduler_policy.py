@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from baps.models import Backend
 from baps.scheduler_policy import ModelConfig, ModelPolicy, compute_reward
 
 
@@ -67,8 +68,8 @@ def test_reward_missing_fields_does_not_raise() -> None:
 
 def _two_models() -> list[ModelConfig]:
     return [
-        ModelConfig("cheap",  "anthropic", "claude-haiku-4-5-20251001"),
-        ModelConfig("strong", "anthropic", "claude-sonnet-4-6"),
+        ModelConfig("cheap",  Backend.ANTHROPIC, "claude-haiku-4-5-20251001"),
+        ModelConfig("strong", Backend.ANTHROPIC, "claude-sonnet-4-6"),
     ]
 
 

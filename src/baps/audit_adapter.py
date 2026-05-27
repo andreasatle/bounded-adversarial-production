@@ -7,7 +7,7 @@ from typing import Any
 
 from baps.model_output import parse_model_output
 from baps.models import ToolCall, ToolDefinition
-from baps.northstar_projection import ProjectionType, StateView
+from baps.northstar_projection import ProjectionType, STATE_VIEW_END, STATE_VIEW_START, StateView
 from baps.project_adapter import (
     VerificationResult,
     _config_artifact_id,
@@ -190,7 +190,7 @@ def build_audit_create_game_state_view(state: State, config: dict[str, Any]) -> 
 
     stale_note = f", {stale_count} stale" if stale_count else ""
     content = "\n".join([
-        "=== StateView Start ===",
+        STATE_VIEW_START,
         "",
         "--- NorthStar ---",
         "",
@@ -207,7 +207,7 @@ def build_audit_create_game_state_view(state: State, config: dict[str, Any]) -> 
         f"findings so far: {len(artifact.sections)}{stale_note}",
         "",
         *section_lines,
-        "=== StateView End ===",
+        STATE_VIEW_END,
     ]).rstrip()
 
     input_fingerprint = hashlib.sha256(content.encode("utf-8")).hexdigest()
@@ -250,7 +250,7 @@ def build_audit_play_game_state_view(state: State, game_spec: GameSpec) -> State
         section_lines.append("No findings yet.")
 
     content = "\n".join([
-        "=== StateView Start ===",
+        STATE_VIEW_START,
         "",
         "--- Source Code (read-only) ---",
         "",
@@ -263,7 +263,7 @@ def build_audit_play_game_state_view(state: State, game_spec: GameSpec) -> State
         f"## Artifact: {artifact.id}",
         "",
         *section_lines,
-        "=== StateView End ===",
+        STATE_VIEW_END,
     ]).rstrip()
 
     input_fingerprint = hashlib.sha256(content.encode("utf-8")).hexdigest()

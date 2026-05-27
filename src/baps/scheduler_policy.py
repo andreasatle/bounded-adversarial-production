@@ -6,23 +6,25 @@ import random
 from dataclasses import dataclass
 from pathlib import Path
 
+from baps.models import Backend
+from baps.state import StopReason
+
 
 @dataclass
 class ModelConfig:
     name: str       # short display name, used as key in policy state
-    backend: str    # anthropic | openai | ollama
+    backend: Backend
     model_id: str   # the model string passed to the API
 
 
 # Base reward by stop_reason. Verification result adds a bonus/penalty on top.
-_STOP_REASON_BASE: dict[str, float] = {
-    "no_state_change":           0.7,
-    "iteration_limit_reached":   0.5,
-    "create_game_no_new_game":   0.6,
-    "northstar_update_proposed": 0.4,
-    "play_game_no_delta":        0.1,
-    "initialized_only":          0.5,
-    "error":                     0.2,  # transient failure; low but doesn't permanently tank score
+_STOP_REASON_BASE: dict[StopReason, float] = {
+    StopReason.NO_STATE_CHANGE:           0.7,
+    StopReason.ITERATION_LIMIT_REACHED:   0.5,
+    StopReason.CREATE_GAME_NO_NEW_GAME:   0.6,
+    StopReason.NORTHSTAR_UPDATE_PROPOSED: 0.4,
+    StopReason.PLAY_GAME_NO_DELTA:        0.1,
+    StopReason.ERROR:                     0.2,  # transient failure; low but doesn't permanently tank score
 }
 
 
