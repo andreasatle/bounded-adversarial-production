@@ -233,6 +233,24 @@ mutations.
 
 ---
 
+## Coding rules — enforce in every session
+
+**No string literals as identifiers.** Roles, backends, stop reasons, event types, projection types, and blackboard events must use the defined enums or named constants (`SpecRole`, `Backend`, `StopReason`, `BlackboardEvent`, `ProjectionType`, `STATE_VIEW_START`/`STATE_VIEW_END`). If a new identifier is needed, add it to the appropriate enum first, then use the enum member.
+
+**No silent defaults.** Required configuration must be explicit. Never fall back to a hardcoded model, backend, or path without raising a clear error. If something is unconfigured, raise `ValueError`.
+
+**One parsing pipeline.** All model output goes through `model_output.py:parse_model_output`. Never add an ad-hoc JSON parser elsewhere.
+
+**One mutation boundary.** All state changes go through `StateService`. Never mutate `State` directly.
+
+**Adapters own project-specific logic.** Never add document-, coding-, or audit-specific logic to `run.py`. If it touches artifact fields or delta types, it belongs in an adapter.
+
+**Tests must verify content.** Assertions like `isinstance(result, State)` or `len(calls) == 2` without content verification are not acceptable. Assert specific field values.
+
+**Do not grow `run.py`.** Before adding a new function to `run.py`, ask whether it belongs in an adapter, `state.py`, `model_output.py`, or another focused module. `run.py` is already large.
+
+---
+
 ## Suggested next milestones (from ARCHITECTURE.md)
 
 These are additive and preserve the canonical spine:
