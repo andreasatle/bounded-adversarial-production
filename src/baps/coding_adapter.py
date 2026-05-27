@@ -28,6 +28,7 @@ from baps.project_adapter import (
 from baps.state import (
     CodingArtifact,
     CodeFile,
+    DeleteFilePayload,
     DeltaCodingBatchState,
     DeltaCodingState,
     DeltaDeleteCodingState,
@@ -37,7 +38,9 @@ from baps.state import (
     StateUpdateProposal,
     StateUpdateTarget,
     WriteFileDelta,
+    WriteFilePayload,
     WriteFilesDelta,
+    WriteFilesPayload,
 )
 
 
@@ -548,10 +551,7 @@ def derive_coding_state_update_from_delta(delta_state: DeltaState) -> StateUpdat
                 f"Write {len(delta_state.payload.files)} file(s) "
                 f"({paths}) in coding artifact {delta_state.artifact_id}"
             ),
-            payload={
-                "operation": "write_files",
-                "files": [f.model_dump(mode="json") for f in delta_state.payload.files],
-            },
+            payload=WriteFilesPayload(files=delta_state.payload.files),
         )
     if isinstance(delta_state, DeltaCodingState):
         return StateUpdateProposal(
@@ -561,20 +561,14 @@ def derive_coding_state_update_from_delta(delta_state: DeltaState) -> StateUpdat
                 f"Write file '{delta_state.payload.file.path}' "
                 f"in coding artifact {delta_state.artifact_id}"
             ),
-            payload={
-                "operation": "write_file",
-                "file": delta_state.payload.file.model_dump(mode="json"),
-            },
+            payload=WriteFilePayload(file=delta_state.payload.file),
         )
     if isinstance(delta_state, DeltaDeleteCodingState):
         return StateUpdateProposal(
             id=f"state-update:{delta_state.artifact_id}:delete_file:{delta_state.payload.path}",
             target=StateUpdateTarget(artifact_id=delta_state.artifact_id),
             summary=f"Delete file '{delta_state.payload.path}' from coding artifact {delta_state.artifact_id}",
-            payload={
-                "operation": "delete_file",
-                "path": delta_state.payload.path,
-            },
+            payload=DeleteFilePayload(path=delta_state.payload.path),
         )
     raise ValueError(f"unsupported delta type for integration: {type(delta_state).__name__}")
 

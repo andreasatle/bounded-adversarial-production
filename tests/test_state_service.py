@@ -118,22 +118,19 @@ def test_apply_update_loads_validates_applies_validates_saves_and_returns_state(
     assert updated == store.state
 
 
-def test_apply_update_does_not_save_when_update_fails() -> None:
-    calls: list[str] = []
+def test_apply_update_does_not_save_when_proposal_construction_fails() -> None:
+    from pydantic import ValidationError as PydanticValidationError
     store = InMemoryStateStore(state=_state())
-    registry = _registry_with_counting_adapters(calls)
-    service = StateService(store=store, registry=registry)
-    proposal = StateUpdateProposal(
-        id="proposal-1",
-        target=StateUpdateTarget(artifact_id="artifact-1"),
-        summary="Unsupported operation",
-        payload={"operation": "unsupported_operation"},
-    )
 
-    with pytest.raises(NotImplementedError):
-        service.apply_update(proposal)
+    with pytest.raises(PydanticValidationError):
+        StateUpdateProposal(
+            id="proposal-1",
+            target=StateUpdateTarget(artifact_id="artifact-1"),
+            summary="Unsupported operation",
+            payload={"operation": "unsupported_operation"},
+        )
 
-    assert store.load_calls == 1
+    assert store.load_calls == 0
     assert store.save_calls == 0
 
 

@@ -5,10 +5,14 @@ from baps.state import (
     apply_state_delta,
     apply_state_update,
     apply_referee_decision_to_runtime,
+    AddArtifactPayload,
     AppendSectionDelta,
+    AppendSectionPayload,
     build_default_state_artifact_registry,
     CodeFile,
     CodingArtifact,
+    DeleteFilePayload,
+    DeleteSectionPayload,
     DeltaCodingBatchState,
     DeltaCodingState,
     DeltaDeleteCodingState,
@@ -24,9 +28,12 @@ from baps.state import (
     fingerprint_state,
     GameSpec,
     ModifySectionDelta,
+    ModifySectionPayload,
+    NoFindingPayload,
     PlayGameRuntime,
     RedFinding,
     RefereeDecision,
+    ReplaceArtifactPayload,
     GitRepositoryArtifactAdapter,
     NorthStar,
     Section,
@@ -37,7 +44,9 @@ from baps.state import (
     StateUpdateProposal,
     StateUpdateTarget,
     WriteFileDelta,
+    WriteFilePayload,
     WriteFilesDelta,
+    WriteFilesPayload,
     project_state,
     validate_update_base_state,
     validate_state_artifacts,
@@ -533,12 +542,13 @@ def test_state_update_proposal_accepts_valid_values() -> None:
         id="proposal-1",
         target=StateUpdateTarget(artifact_id="artifact-1", section="intro"),
         summary="Update introduction wording.",
-        payload={"key": "value"},
+        payload=WriteFilePayload(file=CodeFile(path="src/main.py", content="print('hello')")),
     )
     assert proposal.id == "proposal-1"
     assert proposal.target.artifact_id == "artifact-1"
     assert proposal.summary == "Update introduction wording."
-    assert proposal.payload == {"key": "value"}
+    assert isinstance(proposal.payload, WriteFilePayload)
+    assert proposal.payload.operation == "write_file"
 
 
 @pytest.mark.parametrize("bad_id", ["", "   ", "\n\t"])
@@ -548,6 +558,7 @@ def test_state_update_proposal_rejects_empty_id(bad_id: str) -> None:
             id=bad_id,
             target=StateUpdateTarget(artifact_id="artifact-1"),
             summary="Valid summary",
+            payload=ReplaceArtifactPayload(artifact={"id": "artifact-1", "kind": "document"}),
         )
 
 
@@ -558,24 +569,27 @@ def test_state_update_proposal_rejects_empty_summary(bad_summary: str) -> None:
             id="proposal-1",
             target=StateUpdateTarget(artifact_id="artifact-1"),
             summary=bad_summary,
+            payload=ReplaceArtifactPayload(artifact={"id": "artifact-1", "kind": "document"}),
         )
 
 
-def test_state_update_proposal_payload_default_is_isolated_per_instance() -> None:
+def test_state_update_proposal_payloads_are_independent_per_instance() -> None:
     first = StateUpdateProposal(
         id="proposal-1",
         target=StateUpdateTarget(artifact_id="artifact-1"),
         summary="First summary",
+        payload=WriteFilePayload(file=CodeFile(path="a.py", content="x")),
     )
     second = StateUpdateProposal(
         id="proposal-2",
         target=StateUpdateTarget(artifact_id="artifact-2"),
         summary="Second summary",
+        payload=WriteFilePayload(file=CodeFile(path="b.py", content="y")),
     )
 
-    first.payload["mutated"] = "yes"
-    assert first.payload == {"mutated": "yes"}
-    assert second.payload == {}
+    assert first.payload is not second.payload
+    assert first.payload.file.path == "a.py"
+    assert second.payload.file.path == "b.py"
 
 
 def test_state_update_proposal_accepts_omitted_base_state_fingerprint() -> None:
@@ -583,6 +597,7 @@ def test_state_update_proposal_accepts_omitted_base_state_fingerprint() -> None:
         id="proposal-1",
         target=StateUpdateTarget(artifact_id="artifact-1"),
         summary="Summary",
+        payload=ReplaceArtifactPayload(artifact={"id": "artifact-1", "kind": "document"}),
     )
     assert proposal.base_state_fingerprint is None
 
@@ -592,6 +607,7 @@ def test_state_update_proposal_accepts_non_empty_base_state_fingerprint() -> Non
         id="proposal-1",
         target=StateUpdateTarget(artifact_id="artifact-1"),
         summary="Summary",
+        payload=ReplaceArtifactPayload(artifact={"id": "artifact-1", "kind": "document"}),
         base_state_fingerprint="state-fingerprint-123",
     )
     assert proposal.base_state_fingerprint == "state-fingerprint-123"
@@ -606,6 +622,7 @@ def test_state_update_proposal_rejects_empty_base_state_fingerprint(
             id="proposal-1",
             target=StateUpdateTarget(artifact_id="artifact-1"),
             summary="Summary",
+            payload=ReplaceArtifactPayload(artifact={"id": "artifact-1", "kind": "document"}),
             base_state_fingerprint=bad_fingerprint,
         )
 
@@ -671,6 +688,7 @@ def test_validate_update_base_state_without_fingerprint_returns_true() -> None:
         id="proposal-1",
         target=StateUpdateTarget(artifact_id="ns-1"),
         summary="Summary",
+        payload=ReplaceArtifactPayload(artifact={"id": "ns-1", "kind": "document"}),
     )
 
     assert validate_update_base_state(state, proposal) is True
@@ -683,6 +701,7 @@ def test_validate_update_base_state_with_matching_fingerprint_returns_true() -> 
         id="proposal-1",
         target=StateUpdateTarget(artifact_id="ns-1"),
         summary="Summary",
+        payload=ReplaceArtifactPayload(artifact={"id": "ns-1", "kind": "document"}),
         base_state_fingerprint=fingerprint_state(state),
     )
 
@@ -696,6 +715,7 @@ def test_validate_update_base_state_with_non_matching_fingerprint_returns_false(
         id="proposal-1",
         target=StateUpdateTarget(artifact_id="ns-1"),
         summary="Summary",
+        payload=ReplaceArtifactPayload(artifact={"id": "ns-1", "kind": "document"}),
         base_state_fingerprint="not-a-matching-fingerprint",
     )
 
@@ -708,10 +728,10 @@ def test_validate_update_base_state_does_not_mutate_inputs() -> None:
     )
     proposal = StateUpdateProposal(
         id="proposal-1",
-        target=StateUpdateTarget(artifact_id="ns-1"),
+        target=StateUpdateTarget(artifact_id="artifact-1"),
         summary="Summary",
         base_state_fingerprint=fingerprint_state(state),
-        payload={"operation": "replace_artifact"},
+        payload=ReplaceArtifactPayload(artifact={"id": "artifact-1", "kind": "git_repository"}),
     )
     state_before = state.model_dump(mode="json")
     proposal_before = proposal.model_dump(mode="json")
@@ -768,6 +788,7 @@ def test_apply_state_update_raises_value_error_for_missing_target_artifact() -> 
         id="proposal-1",
         target=StateUpdateTarget(artifact_id="missing"),
         summary="Attempt update on unknown artifact.",
+        payload=ReplaceArtifactPayload(artifact={"id": "missing", "kind": "document"}),
     )
     with pytest.raises(ValueError, match="artifact id not found in state"):
         apply_state_update(state, proposal)
@@ -996,46 +1017,34 @@ def test_apply_state_update_replace_artifact_preserves_coding_artifact_type() ->
     assert replaced.files[0].content == "print('world')"
 
 
-def test_apply_state_update_unsupported_operation_raises_not_implemented() -> None:
-    state = State(
-        artifacts=(StateArtifact(id="n1", kind="document"),),
-    )
-    proposal = StateUpdateProposal(
-        id="proposal-1",
-        target=StateUpdateTarget(artifact_id="n1"),
-        summary="Unsupported operation.",
-        payload={"operation": "unsupported_operation"},
-    )
-    with pytest.raises(NotImplementedError, match="unsupported state update operation"):
-        apply_state_update(state, proposal)
+def test_state_update_proposal_rejects_unknown_operation_at_construction() -> None:
+    with pytest.raises(ValidationError):
+        StateUpdateProposal(
+            id="proposal-1",
+            target=StateUpdateTarget(artifact_id="n1"),
+            summary="Unsupported operation.",
+            payload={"operation": "unsupported_operation"},
+        )
 
 
-def test_apply_state_update_missing_operation_raises_clear_error() -> None:
-    state = State(
-        artifacts=(StateArtifact(id="n1", kind="document"),),
-    )
-    proposal = StateUpdateProposal(
-        id="proposal-1",
-        target=StateUpdateTarget(artifact_id="n1"),
-        summary="Missing operation.",
-        payload={},
-    )
-    with pytest.raises(NotImplementedError, match="unsupported state update operation"):
-        apply_state_update(state, proposal)
+def test_state_update_proposal_rejects_missing_operation_at_construction() -> None:
+    with pytest.raises(ValidationError):
+        StateUpdateProposal(
+            id="proposal-1",
+            target=StateUpdateTarget(artifact_id="n1"),
+            summary="Missing operation.",
+            payload={},
+        )
 
 
-def test_apply_state_update_missing_artifact_raises_value_error() -> None:
-    state = State(
-        artifacts=(StateArtifact(id="n1", kind="document"),),
-    )
-    proposal = StateUpdateProposal(
-        id="proposal-1",
-        target=StateUpdateTarget(artifact_id="n1"),
-        summary="Missing artifact payload field.",
-        payload={"operation": "replace_artifact"},
-    )
-    with pytest.raises(ValueError, match="requires payload\\['artifact'\\]"):
-        apply_state_update(state, proposal)
+def test_state_update_proposal_rejects_replace_artifact_without_artifact_at_construction() -> None:
+    with pytest.raises(ValidationError):
+        StateUpdateProposal(
+            id="proposal-1",
+            target=StateUpdateTarget(artifact_id="n1"),
+            summary="Missing artifact payload field.",
+            payload={"operation": "replace_artifact"},
+        )
 
 
 def test_apply_state_update_does_not_mutate_input_state() -> None:
@@ -1775,3 +1784,162 @@ def test_mutation_path_equivalence_delete_file() -> None:
         payload=DeleteFileDelta(path="a.py"),
     ))
     assert via_update == via_delta
+
+
+# ---------------------------------------------------------------------------
+# Typed payload construction and invalid-payload rejection
+# ---------------------------------------------------------------------------
+
+def test_state_update_proposal_accepts_write_file_payload() -> None:
+    p = StateUpdateProposal(
+        id="u1", target=StateUpdateTarget(artifact_id="code"), summary="s",
+        payload=WriteFilePayload(file=CodeFile(path="a.py", content="x")),
+    )
+    assert isinstance(p.payload, WriteFilePayload)
+    assert p.payload.operation == "write_file"
+    assert p.payload.file.path == "a.py"
+
+
+def test_state_update_proposal_accepts_write_files_payload() -> None:
+    p = StateUpdateProposal(
+        id="u1", target=StateUpdateTarget(artifact_id="code"), summary="s",
+        payload=WriteFilesPayload(files=(CodeFile(path="a.py", content="x"),)),
+    )
+    assert isinstance(p.payload, WriteFilesPayload)
+    assert p.payload.operation == "write_files"
+
+
+def test_state_update_proposal_accepts_append_section_payload() -> None:
+    p = StateUpdateProposal(
+        id="u1", target=StateUpdateTarget(artifact_id="doc"), summary="s",
+        payload=AppendSectionPayload(section=Section(title="T", body="B")),
+    )
+    assert isinstance(p.payload, AppendSectionPayload)
+    assert p.payload.operation == "append_section"
+
+
+def test_state_update_proposal_accepts_modify_section_payload() -> None:
+    p = StateUpdateProposal(
+        id="u1", target=StateUpdateTarget(artifact_id="doc"), summary="s",
+        payload=ModifySectionPayload(section_title="T", new_body="B"),
+    )
+    assert isinstance(p.payload, ModifySectionPayload)
+    assert p.payload.operation == "modify_section"
+
+
+def test_state_update_proposal_accepts_delete_section_payload() -> None:
+    p = StateUpdateProposal(
+        id="u1", target=StateUpdateTarget(artifact_id="doc"), summary="s",
+        payload=DeleteSectionPayload(section_title="T"),
+    )
+    assert isinstance(p.payload, DeleteSectionPayload)
+    assert p.payload.operation == "delete_section"
+
+
+def test_state_update_proposal_accepts_delete_file_payload() -> None:
+    p = StateUpdateProposal(
+        id="u1", target=StateUpdateTarget(artifact_id="code"), summary="s",
+        payload=DeleteFilePayload(path="a.py"),
+    )
+    assert isinstance(p.payload, DeleteFilePayload)
+    assert p.payload.operation == "delete_file"
+
+
+def test_state_update_proposal_accepts_no_finding_payload() -> None:
+    p = StateUpdateProposal(
+        id="u1", target=StateUpdateTarget(artifact_id="doc"), summary="s",
+        payload=NoFindingPayload(file="src/foo.py", rationale="No issues found."),
+    )
+    assert isinstance(p.payload, NoFindingPayload)
+    assert p.payload.operation == "no_finding"
+
+
+def test_state_update_proposal_rejects_write_file_without_file() -> None:
+    with pytest.raises(ValidationError):
+        StateUpdateProposal(
+            id="u1", target=StateUpdateTarget(artifact_id="code"), summary="s",
+            payload={"operation": "write_file"},
+        )
+
+
+def test_state_update_proposal_rejects_write_files_with_empty_files() -> None:
+    with pytest.raises(ValidationError):
+        StateUpdateProposal(
+            id="u1", target=StateUpdateTarget(artifact_id="code"), summary="s",
+            payload={"operation": "write_files", "files": []},
+        )
+
+
+def test_state_update_proposal_rejects_append_section_without_section() -> None:
+    with pytest.raises(ValidationError):
+        StateUpdateProposal(
+            id="u1", target=StateUpdateTarget(artifact_id="doc"), summary="s",
+            payload={"operation": "append_section"},
+        )
+
+
+def test_state_update_proposal_rejects_modify_section_without_required_fields() -> None:
+    with pytest.raises(ValidationError):
+        StateUpdateProposal(
+            id="u1", target=StateUpdateTarget(artifact_id="doc"), summary="s",
+            payload={"operation": "modify_section"},
+        )
+
+
+def test_state_update_proposal_rejects_delete_section_without_section_title() -> None:
+    with pytest.raises(ValidationError):
+        StateUpdateProposal(
+            id="u1", target=StateUpdateTarget(artifact_id="doc"), summary="s",
+            payload={"operation": "delete_section"},
+        )
+
+
+def test_state_update_proposal_rejects_delete_file_without_path() -> None:
+    with pytest.raises(ValidationError):
+        StateUpdateProposal(
+            id="u1", target=StateUpdateTarget(artifact_id="code"), summary="s",
+            payload={"operation": "delete_file"},
+        )
+
+
+def test_state_update_proposal_rejects_no_finding_without_required_fields() -> None:
+    with pytest.raises(ValidationError):
+        StateUpdateProposal(
+            id="u1", target=StateUpdateTarget(artifact_id="doc"), summary="s",
+            payload={"operation": "no_finding"},
+        )
+
+
+def test_state_update_proposal_rejects_extra_fields_in_payload() -> None:
+    with pytest.raises(ValidationError):
+        StateUpdateProposal(
+            id="u1", target=StateUpdateTarget(artifact_id="code"), summary="s",
+            payload={
+                "operation": "write_file",
+                "file": {"path": "a.py", "content": "x"},
+                "extra": "forbidden",
+            },
+        )
+
+
+def test_apply_state_update_no_finding_appends_section() -> None:
+    state = State(artifacts=(DocumentArtifact(id="doc", sections=()),))
+    proposal = StateUpdateProposal(
+        id="u1", target=StateUpdateTarget(artifact_id="doc"), summary="s",
+        payload=NoFindingPayload(file="src/foo.py", rationale="Checked carefully, no issues."),
+    )
+    updated = apply_state_update(state, proposal)
+    artifact = next(a for a in updated.artifacts if a.id == "doc")
+    assert isinstance(artifact, DocumentArtifact)
+    assert len(artifact.sections) == 1
+    assert artifact.sections[0].title == "Audited: src/foo.py"
+    assert artifact.sections[0].body == "Checked carefully, no issues."
+
+
+def test_payload_coerced_from_dict_via_discriminator() -> None:
+    p = StateUpdateProposal(
+        id="u1", target=StateUpdateTarget(artifact_id="code"), summary="s",
+        payload={"operation": "write_file", "file": {"path": "a.py", "content": "x"}},
+    )
+    assert isinstance(p.payload, WriteFilePayload)
+    assert p.payload.file.path == "a.py"

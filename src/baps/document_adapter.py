@@ -18,6 +18,8 @@ from baps.project_adapter import (
 )
 from baps.state import (
     AppendSectionDelta,
+    AppendSectionPayload,
+    DeleteSectionPayload,
     DeltaDeleteDocumentState,
     DeltaDocumentState,
     DeltaModifyDocumentState,
@@ -25,6 +27,7 @@ from baps.state import (
     DocumentArtifact,
     GameSpec,
     ModifySectionDelta,
+    ModifySectionPayload,
     Section,
     State,
     StateUpdateProposal,
@@ -255,11 +258,10 @@ def derive_document_state_update_from_delta(delta_state: DeltaState) -> StateUpd
                 f"Modify section '{delta_state.payload.section_title}' "
                 f"in document artifact {delta_state.artifact_id}"
             ),
-            payload={
-                "operation": "modify_section",
-                "section_title": delta_state.payload.section_title,
-                "new_body": delta_state.payload.new_body,
-            },
+            payload=ModifySectionPayload(
+                section_title=delta_state.payload.section_title,
+                new_body=delta_state.payload.new_body,
+            ),
         )
     if isinstance(delta_state, DeltaDocumentState):
         if delta_state.operation != "append_section":
@@ -271,20 +273,14 @@ def derive_document_state_update_from_delta(delta_state: DeltaState) -> StateUpd
                 f"Append section '{delta_state.payload.section.title}' "
                 f"to document artifact {delta_state.artifact_id}"
             ),
-            payload={
-                "operation": "append_section",
-                "section": delta_state.payload.section.model_dump(mode="json"),
-            },
+            payload=AppendSectionPayload(section=delta_state.payload.section),
         )
     if isinstance(delta_state, DeltaDeleteDocumentState):
         return StateUpdateProposal(
             id=f"state-update:{delta_state.artifact_id}:delete_section:{delta_state.payload.section_title}",
             target=StateUpdateTarget(artifact_id=delta_state.artifact_id),
             summary=f"Delete section '{delta_state.payload.section_title}' from document artifact {delta_state.artifact_id}",
-            payload={
-                "operation": "delete_section",
-                "section_title": delta_state.payload.section_title,
-            },
+            payload=DeleteSectionPayload(section_title=delta_state.payload.section_title),
         )
     raise ValueError(f"unsupported delta type for integration: {type(delta_state).__name__}")
 

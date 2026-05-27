@@ -427,12 +427,9 @@ def test_derive_state_update_from_delta_converts_append_section() -> None:
         delta, adapter=run_module.DocumentProjectAdapter()
     )
     assert proposal.target.artifact_id == "main-document"
-    assert proposal.payload["operation"] == "append_section"
-    assert proposal.payload["section"] == {
-        "title": "Introduction",
-        "body": "Body text",
-        "source_hash": None,
-    }
+    assert proposal.payload.operation == "append_section"
+    assert proposal.payload.section.title == "Introduction"
+    assert proposal.payload.section.body == "Body text"
 
 
 def test_main_integration_uses_state_service_apply_update(monkeypatch, tmp_path: Path) -> None:
@@ -5700,8 +5697,8 @@ def test_coding_adapter_maps_file_write_delta_to_state_update() -> None:
         ),
     )
     proposal = adapter.delta_to_state_update(delta)
-    assert proposal.payload["operation"] == "write_file"
-    assert proposal.payload["file"]["path"] == "src/fibonacci.py"
+    assert proposal.payload.operation == "write_file"
+    assert proposal.payload.file.path == "src/fibonacci.py"
 
 
 def test_coding_adapter_export_writes_files(tmp_path: Path) -> None:
@@ -8213,9 +8210,9 @@ def test_coding_adapter_maps_write_files_batch_delta_to_state_update() -> None:
         ),
     )
     proposal = adapter.delta_to_state_update(delta)
-    assert proposal.payload["operation"] == "write_files"
-    assert len(proposal.payload["files"]) == 2
-    assert proposal.payload["files"][0]["path"] == "src/a.py"
+    assert proposal.payload.operation == "write_files"
+    assert len(proposal.payload.files) == 2
+    assert proposal.payload.files[0].path == "src/a.py"
 
 
 def test_parse_coding_delta_json_handles_write_files_operation() -> None:
@@ -8328,9 +8325,9 @@ def test_document_adapter_maps_modify_section_delta_to_state_update() -> None:
         ),
     )
     proposal = adapter.delta_to_state_update(delta)
-    assert proposal.payload["operation"] == "modify_section"
-    assert proposal.payload["section_title"] == "Intro"
-    assert proposal.payload["new_body"] == "Updated intro."
+    assert proposal.payload.operation == "modify_section"
+    assert proposal.payload.section_title == "Intro"
+    assert proposal.payload.new_body == "Updated intro."
 
 
 def test_document_adapter_tool_call_modify_section_returns_correct_delta() -> None:
@@ -8417,8 +8414,8 @@ def test_coding_adapter_maps_delete_file_delta_to_state_update() -> None:
         payload=state_module.DeleteFileDelta(path="src/old.py"),
     )
     proposal = adapter.delta_to_state_update(delta)
-    assert proposal.payload["operation"] == "delete_file"
-    assert proposal.payload["path"] == "src/old.py"
+    assert proposal.payload.operation == "delete_file"
+    assert proposal.payload.path == "src/old.py"
 
 
 def test_coding_adapter_tool_call_delete_file_returns_correct_delta() -> None:
@@ -8461,8 +8458,8 @@ def test_document_adapter_maps_delete_section_delta_to_state_update() -> None:
         payload=state_module.DeleteSectionDelta(section_title="Obsolete"),
     )
     proposal = adapter.delta_to_state_update(delta)
-    assert proposal.payload["operation"] == "delete_section"
-    assert proposal.payload["section_title"] == "Obsolete"
+    assert proposal.payload.operation == "delete_section"
+    assert proposal.payload.section_title == "Obsolete"
 
 
 def test_document_adapter_tool_call_delete_section_returns_correct_delta() -> None:

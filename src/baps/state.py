@@ -249,6 +249,104 @@ class DeltaDeleteCodingState(DeltaState):
     payload: DeleteFileDelta
 
 
+# ---------------------------------------------------------------------------
+# Typed payload models for StateUpdateProposal
+# ---------------------------------------------------------------------------
+
+class AppendSectionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    operation: Literal["append_section"] = "append_section"
+    section: Section
+
+
+class ModifySectionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    operation: Literal["modify_section"] = "modify_section"
+    section_title: str
+    new_body: str
+
+    _validate_section_title = field_validator("section_title")(_require_non_empty)
+
+    @field_validator("new_body")
+    @classmethod
+    def _validate_new_body(cls, value: str) -> str:
+        _require_non_empty(value)
+        if len(value.encode("utf-8")) > _MAX_SECTION_BODY_BYTES:
+            raise ValueError(f"section body must not exceed {_MAX_SECTION_BODY_BYTES} bytes")
+        return value
+
+
+class DeleteSectionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    operation: Literal["delete_section"] = "delete_section"
+    section_title: str
+
+    _validate_section_title = field_validator("section_title")(_require_non_empty)
+
+
+class WriteFilePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    operation: Literal["write_file"] = "write_file"
+    file: CodeFile
+
+
+class WriteFilesPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    operation: Literal["write_files"] = "write_files"
+    files: tuple[CodeFile, ...]
+
+    @field_validator("files")
+    @classmethod
+    def _validate_non_empty(cls, files: tuple) -> tuple:
+        if not files:
+            raise ValueError("write_files payload must contain at least one file")
+        return files
+
+
+class DeleteFilePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    operation: Literal["delete_file"] = "delete_file"
+    path: str
+
+    _validate_path = field_validator("path")(_require_non_empty)
+
+
+class NoFindingPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    operation: Literal["no_finding"] = "no_finding"
+    file: str
+    rationale: str
+
+    _validate_file = field_validator("file")(_require_non_empty)
+    _validate_rationale = field_validator("rationale")(_require_non_empty)
+
+
+class AddArtifactPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    operation: Literal["add_artifact"] = "add_artifact"
+    artifact: dict[str, object]
+
+
+class ReplaceArtifactPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    operation: Literal["replace_artifact"] = "replace_artifact"
+    artifact: dict[str, object]
+
+
+StateUpdatePayload = Annotated[
+    AppendSectionPayload
+    | ModifySectionPayload
+    | DeleteSectionPayload
+    | WriteFilePayload
+    | WriteFilesPayload
+    | DeleteFilePayload
+    | NoFindingPayload
+    | AddArtifactPayload
+    | ReplaceArtifactPayload,
+    Field(discriminator="operation"),
+]
+
+
 class GameSpec(BaseModel):
     objective: str
     target_artifact_id: str
@@ -383,7 +481,7 @@ class StateUpdateProposal(BaseModel):
     id: str
     target: StateUpdateTarget
     summary: str
-    payload: dict[str, object] = Field(default_factory=dict)
+    payload: StateUpdatePayload
     base_state_fingerprint: str | None = None
 
     _validate_id = field_validator("id")(_require_non_empty)
@@ -438,102 +536,81 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
     """Apply a StateUpdateProposal to State.
 
     For operations that have typed DeltaState equivalents (append_section,
-    modify_section, delete_section, write_file, write_files, delete_file),
-    delegates to apply_state_delta so all durable mutation flows through
-    the single canonical path.
+    modify_section, delete_section, write_file, write_files, delete_file,
+    no_finding), delegates to apply_state_delta so all durable mutation flows
+    through the single canonical path.
 
     Operations add_artifact and replace_artifact have no typed delta equivalent
     and are handled directly here.
     """
-    operation = proposal.payload.get("operation")
+    p = proposal.payload
     target_artifact_id = proposal.target.artifact_id
 
-    if operation == "write_file":
-        if "file" not in proposal.payload:
-            raise ValueError("write_file operation requires payload['file']")
+    if isinstance(p, WriteFilePayload):
         return apply_state_delta(state, DeltaCodingState(
             artifact_id=target_artifact_id,
             operation="write_file",
-            payload=WriteFileDelta(file=CodeFile.model_validate(proposal.payload["file"])),
+            payload=WriteFileDelta(file=p.file),
         ))
 
-    if operation == "write_files":
-        if "files" not in proposal.payload:
-            raise ValueError("write_files operation requires payload['files']")
+    if isinstance(p, WriteFilesPayload):
         return apply_state_delta(state, DeltaCodingBatchState(
             artifact_id=target_artifact_id,
             operation="write_files",
-            payload=WriteFilesDelta(
-                files=tuple(CodeFile.model_validate(f) for f in proposal.payload["files"])
-            ),
+            payload=WriteFilesDelta(files=p.files),
         ))
 
-    if operation == "append_section":
-        if "section" not in proposal.payload:
-            raise ValueError("append_section operation requires payload['section']")
+    if isinstance(p, AppendSectionPayload):
         return apply_state_delta(state, DeltaDocumentState(
             artifact_id=target_artifact_id,
             operation="append_section",
-            payload=AppendSectionDelta(section=Section.model_validate(proposal.payload["section"])),
+            payload=AppendSectionDelta(section=p.section),
         ))
 
-    if operation == "modify_section":
-        if "section_title" not in proposal.payload or "new_body" not in proposal.payload:
-            raise ValueError(
-                "modify_section operation requires payload['section_title'] and payload['new_body']"
-            )
+    if isinstance(p, ModifySectionPayload):
         return apply_state_delta(state, DeltaModifyDocumentState(
             artifact_id=target_artifact_id,
             operation="modify_section",
-            payload=ModifySectionDelta(
-                section_title=str(proposal.payload["section_title"]),
-                new_body=str(proposal.payload["new_body"]),
-            ),
+            payload=ModifySectionDelta(section_title=p.section_title, new_body=p.new_body),
         ))
 
-    if operation == "delete_section":
-        if "section_title" not in proposal.payload:
-            raise ValueError("delete_section operation requires payload['section_title']")
+    if isinstance(p, DeleteSectionPayload):
         return apply_state_delta(state, DeltaDeleteDocumentState(
             artifact_id=target_artifact_id,
             operation="delete_section",
-            payload=DeleteSectionDelta(section_title=str(proposal.payload["section_title"])),
+            payload=DeleteSectionDelta(section_title=p.section_title),
         ))
 
-    if operation == "delete_file":
-        if "path" not in proposal.payload:
-            raise ValueError("delete_file operation requires payload['path']")
+    if isinstance(p, DeleteFilePayload):
         return apply_state_delta(state, DeltaDeleteCodingState(
             artifact_id=target_artifact_id,
             operation="delete_file",
-            payload=DeleteFileDelta(path=str(proposal.payload["path"])),
+            payload=DeleteFileDelta(path=p.path),
         ))
 
-    if operation == "add_artifact":
-        if "artifact" not in proposal.payload:
-            raise ValueError("add_artifact operation requires payload['artifact']")
-        artifact_payload = proposal.payload["artifact"]
-        if isinstance(artifact_payload, dict) and "sections" in artifact_payload:
-            added_artifact = DocumentArtifact.model_validate(artifact_payload)
-        elif isinstance(artifact_payload, dict) and "files" in artifact_payload:
-            added_artifact = CodingArtifact.model_validate(artifact_payload)
+    if isinstance(p, NoFindingPayload):
+        return apply_state_delta(state, DeltaDocumentState(
+            artifact_id=target_artifact_id,
+            operation="append_section",
+            payload=AppendSectionDelta(section=Section(
+                title=f"Audited: {p.file}",
+                body=p.rationale,
+            )),
+        ))
+
+    if isinstance(p, AddArtifactPayload):
+        artifact_data = p.artifact
+        if "sections" in artifact_data:
+            added_artifact = DocumentArtifact.model_validate(artifact_data)
+        elif "files" in artifact_data:
+            added_artifact = CodingArtifact.model_validate(artifact_data)
         else:
-            added_artifact = StateArtifact.model_validate(artifact_payload)
+            added_artifact = StateArtifact.model_validate(artifact_data)
         return State(artifacts=(*state.artifacts, added_artifact))
 
+    # isinstance(p, ReplaceArtifactPayload)
     existing = find_state_artifact(state, target_artifact_id)
-
-    if operation != "replace_artifact":
-        raise NotImplementedError(
-            "unsupported state update operation: "
-            f"{operation!r}; supported: 'replace_artifact', 'add_artifact', "
-            "'append_section', 'modify_section', 'delete_section', "
-            "'write_file', 'write_files', 'delete_file'"
-        )
-
-    if "artifact" not in proposal.payload:
-        raise ValueError("replace_artifact operation requires payload['artifact']")
-    replacement = _coerce_state_artifact(proposal.payload["artifact"])
+    replacement = _coerce_state_artifact(p.artifact)
 
     if replacement.id != target_artifact_id:
         raise ValueError(
