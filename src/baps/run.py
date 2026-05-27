@@ -2091,6 +2091,9 @@ class _RunContext:
         self.northstar_proposal_written = False
         self.verification_result: VerificationResult | None = None
         self.stop_reason: str | None = None
+        # Set when no_new_game is overridden because verification is failing.
+        # A second consecutive override (no leaf game ran in between) escalates.
+        self.no_new_game_verification_override: bool = False
 
 
 def _solve_gap(
@@ -2120,6 +2123,37 @@ def _solve_gap(
         )
     except NoNewGameError:
         if depth == 0:
+            vr = ctx.verification_result
+            if vr is not None and not vr.passed:
+                # Failing tests are evidence of a gap.  Refuse to stop.
+                if not ctx.no_new_game_verification_override:
+                    logger.warning(
+                        "[solve_gap] create_game returned no_new_game but last "
+                        "verification failed (exit_code=%d); not stopping — "
+                        "retrying with verification failure as context.",
+                        vr.exit_code,
+                    )
+                    ctx.no_new_game_verification_override = True
+                    return  # outer loop retries; verification context already in ctx
+                # Second consecutive no_new_game with failing verification — model
+                # cannot identify the gap.  Escalate so the human is alerted.
+                logger.warning(
+                    "[solve_gap] create_game returned no_new_game twice with "
+                    "failing verification; escalating to northstar_update_proposed."
+                )
+                _append_northstar_proposal_to_blackboard(
+                    workspace=config["workspace"],
+                    rationale=(
+                        "create_game returned no_new_game despite failing verification "
+                        "(tests still failing). The model could not identify a gap to "
+                        "close the failing tests. NorthStar or the success condition "
+                        "may need revision."
+                    ),
+                    proposed_northstar=_config_northstar_markdown(config),
+                )
+                ctx.northstar_proposal_written = True
+                ctx.stop_reason = "northstar_update_proposed"
+                return
             ctx.stop_reason = "create_game_no_new_game"
         return
     except NorthStarUpdateNeededError as exc:
@@ -2194,6 +2228,7 @@ def _solve_gap(
     ctx.update_applied = True
     ctx.iterations_completed += 1
     ctx.iterations_remaining -= 1
+    ctx.no_new_game_verification_override = False
     ctx.current_state = updated_state
 
     if changed:

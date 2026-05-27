@@ -137,13 +137,15 @@ Blackboard is append-only and non-authoritative. It never feeds back into `State
 | Stop reason | Meaning |
 |---|---|
 | `iteration_limit_reached` | `max_iterations` leaf games executed |
-| `create_game_no_new_game` | No gap remains at depth 0 |
+| `create_game_no_new_game` | No gap remains at depth 0; only valid when no verification has run or last verification passed |
 | `play_game_no_delta` | PlayGame produced no accepted delta; at depth 0, escalates to `northstar_update_proposed` |
 | `no_state_change` | Accepted delta produced no state change; at depth 0, escalates to `northstar_update_proposed` |
 | `northstar_update_proposed` | Trajectory drift, or gap was identified but could not be closed; human approval needed |
 | `max_depth_reached` | Decomposition exceeded `max_depth` |
 
 `play_game_no_delta` and `no_state_change` are internal conditions. At depth 0, `_run_project_iterations` converts them to `northstar_update_proposed` and appends a blackboard proposal explaining the stuck condition so the human is alerted through the standard NorthStar approval channel rather than receiving a silent stop.
+
+`create_game_no_new_game` is only a valid terminal stop when verification has not run (non-coding project) or the last verification passed (`verification_passed=True`). If the last verification failed, `no_new_game` is treated as a model error — the runtime refuses to stop, passes the failing verification as context to the next CreateGame call, and retries. If the retry also returns `no_new_game` with failing verification, the runtime escalates to `northstar_update_proposed` so the human is alerted.
 
 ## 9. Anti-Invariants (Forbidden Drift)
 
@@ -163,6 +165,7 @@ Blackboard is append-only and non-authoritative. It never feeds back into `State
 14. Running model-generated code unsandboxed without explicit `sandbox=none` opt-in and warning.
 15. Silently halting when a gap was identified but could not be closed (`play_game_no_delta` or `no_state_change` at depth 0); the runtime must escalate to `northstar_update_proposed` and write a blackboard proposal.
 16. Resolving the language plugin from config at verification time; the language is set once at `create_initial_state` and persists in `CodingArtifact.language` — all operations read it from the artifact.
+17. Accepting `create_game_no_new_game` as a stop condition when the last verification failed; failing tests are evidence of an open gap and must not be silently ignored.
 
 ## 10. Authority and Boundaries
 

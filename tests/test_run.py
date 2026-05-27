@@ -4088,6 +4088,228 @@ def test_main_stops_when_create_game_cannot_produce_new_game(
     assert "stop_reason=create_game_no_new_game" in out
 
 
+def test_no_new_game_accepted_when_no_verification_has_run(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    """no_new_game is a valid stop when verification has never run (non-coding)."""
+    import baps.run as run_module
+
+    monkeypatch.setattr(
+        run_module,
+        "create_game",
+        lambda _c, _s, adapter=None, verification_result=None, context_chain=(), depth=0, **_kw: (
+            (_ for _ in ()).throw(run_module.NoNewGameError("done"))
+        ),
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run", "start",
+            "--workspace", str(tmp_path / "ws-no-vr-no-new-game"),
+            "--project-type", "document",
+            "--artifact-id", "main-document",
+            "--goal", "Write a report.", "--output", "output/report.md",
+        ],
+    )
+    run_module.main()
+    out = capsys.readouterr().out
+    assert "stop_reason=create_game_no_new_game" in out
+
+
+def test_no_new_game_accepted_when_verification_passed(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    """no_new_game is a valid stop when the last verification passed."""
+    import baps.run as run_module
+
+    create_calls = {"n": 0}
+
+    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
+        create_calls["n"] += 1
+        if create_calls["n"] == 1:
+            return run_module.GameSpec(
+                objective="Write a file",
+                target_artifact_id="main-codebase",
+                allowed_delta_type="DeltaCodingState",
+                success_condition="file exists",
+            )
+        raise run_module.NoNewGameError("done — tests pass")
+
+    import baps.state as state_module
+
+    def _play_game(_state, _spec, adapter=None, verification_result=None, **_kwargs):
+        return state_module.DeltaCodingState(
+            artifact_id="main-codebase",
+            operation="write_file",
+            payload=state_module.WriteFileDelta(
+                file=state_module.CodeFile(path="main.py", content="x=1\n")
+            ),
+        )
+
+    monkeypatch.setattr(run_module, "create_game", _create_game)
+    monkeypatch.setattr(run_module, "play_game", _play_game)
+    monkeypatch.setattr(
+        run_module,
+        "_verify_export_with_adapter",
+        lambda _a, _o, _s, _id, **_kw: run_module.VerificationResult(
+            command="pytest", cwd="/tmp", exit_code=0, stdout="1 passed", stderr="", passed=True
+        ),
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run", "start",
+            "--workspace", str(tmp_path / "ws-vr-pass-no-new-game"),
+            "--project-type", "coding",
+            "--artifact-id", "main-codebase",
+            "--goal", "Write a file.", "--output", "output/project",
+            "--language", "python",
+        ],
+    )
+    run_module.main()
+    out = capsys.readouterr().out
+    assert "stop_reason=create_game_no_new_game" in out
+
+
+def test_no_new_game_rejected_when_verification_failed(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    """no_new_game is NOT accepted when the last verification failed.
+    The runtime retries once, then escalates if still stuck."""
+    import baps.run as run_module
+
+    create_calls = {"n": 0}
+    verification_results_seen: list[run_module.VerificationResult | None] = []
+
+    failing_vr = run_module.VerificationResult(
+        command="pytest", cwd="/tmp", exit_code=1,
+        stdout="FAILED test_foo.py::test_bar", stderr="", passed=False,
+    )
+
+    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
+        create_calls["n"] += 1
+        verification_results_seen.append(verification_result)
+        if create_calls["n"] == 1:
+            return run_module.GameSpec(
+                objective="Write a file",
+                target_artifact_id="main-codebase",
+                allowed_delta_type="DeltaCodingState",
+                success_condition="file exists",
+            )
+        raise run_module.NoNewGameError("no gap seen")  # on call 2 and 3 — model wrong
+
+    import baps.state as state_module
+
+    def _play_game(_state, _spec, adapter=None, verification_result=None, **_kwargs):
+        return state_module.DeltaCodingState(
+            artifact_id="main-codebase",
+            operation="write_file",
+            payload=state_module.WriteFileDelta(
+                file=state_module.CodeFile(path="main.py", content="x=1\n")
+            ),
+        )
+
+    monkeypatch.setattr(run_module, "create_game", _create_game)
+    monkeypatch.setattr(run_module, "play_game", _play_game)
+    monkeypatch.setattr(
+        run_module, "_verify_export_with_adapter",
+        lambda _a, _o, _s, _id, **_kw: failing_vr,
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run", "start",
+            "--workspace", str(tmp_path / "ws-vr-fail-no-new-game"),
+            "--project-type", "coding",
+            "--artifact-id", "main-codebase",
+            "--goal", "Write a file with tests.", "--output", "output/project",
+            "--language", "python",
+            "--max-iterations", "5",
+        ],
+    )
+    run_module.main()
+    out = capsys.readouterr().out
+
+    # Must NOT stop with create_game_no_new_game while verification is failing
+    assert "stop_reason=create_game_no_new_game" not in out
+    # After two consecutive no_new_game with failing verification, escalates
+    assert "stop_reason=northstar_update_proposed" in out
+    # create_game was called 3 times: 1 (GameSpec) + 2 (no_new_game override + escalation)
+    assert create_calls["n"] == 3
+    # Second and third calls received the failing verification result
+    assert verification_results_seen[1] is not None
+    assert verification_results_seen[1].passed is False
+    assert verification_results_seen[2] is not None
+    assert verification_results_seen[2].passed is False
+
+
+def test_no_new_game_override_resets_after_leaf_game(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    """After a leaf game runs, the override flag resets so another retry is allowed."""
+    import baps.run as run_module
+
+    # Sequence: GameSpec → (leaf runs, verification fails) → no_new_game (override 1)
+    # → GameSpec → (leaf runs, verification fails) → no_new_game (override 2, fresh slate)
+    # → no_new_game (escalate after fresh override)
+    create_calls = {"n": 0}
+
+    failing_vr = run_module.VerificationResult(
+        command="pytest", cwd="/tmp", exit_code=1,
+        stdout="FAILED", stderr="", passed=False,
+    )
+
+    def _create_game(_config, _state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
+        create_calls["n"] += 1
+        if create_calls["n"] in (1, 3):
+            return run_module.GameSpec(
+                objective="Write a file",
+                target_artifact_id="main-codebase",
+                allowed_delta_type="DeltaCodingState",
+                success_condition="file exists",
+            )
+        raise run_module.NoNewGameError("no gap")
+
+    import baps.state as state_module
+
+    play_calls = {"n": 0}
+
+    def _play_game(_state, _spec, adapter=None, verification_result=None, **_kwargs):
+        play_calls["n"] += 1
+        return state_module.DeltaCodingState(
+            artifact_id="main-codebase",
+            operation="write_file",
+            payload=state_module.WriteFileDelta(
+                file=state_module.CodeFile(path=f"file_{play_calls['n']}.py", content="x=1\n")
+            ),
+        )
+
+    monkeypatch.setattr(run_module, "create_game", _create_game)
+    monkeypatch.setattr(run_module, "play_game", _play_game)
+    monkeypatch.setattr(
+        run_module, "_verify_export_with_adapter",
+        lambda _a, _o, _s, _id, **_kw: failing_vr,
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run", "start",
+            "--workspace", str(tmp_path / "ws-override-reset"),
+            "--project-type", "coding",
+            "--artifact-id", "main-codebase",
+            "--goal", "Write files.", "--output", "output/project",
+            "--language", "python",
+            "--max-iterations", "10",
+        ],
+    )
+    run_module.main()
+    out = capsys.readouterr().out
+
+    assert "stop_reason=northstar_update_proposed" in out
+    # GameSpec(1) → leaf → no_new_game(2, override) → GameSpec(3) → leaf → no_new_game(4, fresh override) → no_new_game(5, escalate)
+    assert create_calls["n"] == 5
+
+
 def test_main_stop_reason_iteration_limit_reached_after_all_iterations_used(
     monkeypatch, capsys, tmp_path: Path
 ) -> None:
