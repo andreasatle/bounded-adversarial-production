@@ -1217,14 +1217,6 @@ def _parse_create_game_output(
 
 def _validate_game_spec(game_spec: GameSpec) -> None:
     _debug_print_create_game_validation_input(game_spec)
-    if not game_spec.objective.strip():
-        raise ValueError("create_game model output objective must be non-empty")
-    if not game_spec.success_condition.strip():
-        raise ValueError("create_game model output success_condition must be non-empty")
-    if not game_spec.target_artifact_id.strip():
-        raise ValueError("create_game model output target_artifact_id must be non-empty")
-    if not game_spec.allowed_delta_type.strip():
-        raise ValueError("create_game model output allowed_delta_type must be non-empty")
 
 
 def _normalize_game_spec_with_adapter(
