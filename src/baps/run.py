@@ -1282,23 +1282,41 @@ _REFEREE_REQUIRED_KEYS = frozenset({"disposition", "rationale"})
 _REFEREE_ALL_KEYS = frozenset({"disposition", "rationale", "red_override", "improvement_hints"})
 
 
+def _parse_role_output(
+    text: str,
+    all_keys: frozenset[str],
+    required_keys: frozenset[str],
+    model_cls: type,
+    context: str,
+    workspace: Path | None = None,
+    retry_fn: Any = None,
+    fallback_fn: Any = None,
+) -> Any:
+    parsed = parse_model_output(
+        text, all_keys, context=context, workspace=workspace,
+        retry_fn=retry_fn, fallback_fn=fallback_fn,
+    )
+    missing = required_keys - set(parsed.keys())
+    if missing:
+        raise ValueError(f"{context} model output missing required keys: {sorted(missing)}")
+    try:
+        return model_cls.model_validate(parsed)
+    except ValidationError as exc:
+        raise ValueError(
+            f"{context} model output failed {model_cls.__name__} validation"
+        ) from exc
+
+
 def _parse_red_finding_json(
     text: str,
     workspace: Path | None = None,
     retry_fn: Any = None,
     fallback_fn: Any = None,
 ) -> RedFinding:
-    parsed = parse_model_output(
-        text, _RED_ALL_KEYS, context="red", workspace=workspace,
-        retry_fn=retry_fn, fallback_fn=fallback_fn,
+    return _parse_role_output(
+        text, _RED_ALL_KEYS, _RED_REQUIRED_KEYS, RedFinding,
+        context="red", workspace=workspace, retry_fn=retry_fn, fallback_fn=fallback_fn,
     )
-    missing = _RED_REQUIRED_KEYS - set(parsed.keys())
-    if missing:
-        raise ValueError(f"red model output missing required keys: {sorted(missing)}")
-    try:
-        return RedFinding.model_validate(parsed)
-    except ValidationError as exc:
-        raise ValueError("red model output failed RedFinding validation") from exc
 
 
 def _parse_referee_decision_json(
@@ -1307,17 +1325,10 @@ def _parse_referee_decision_json(
     retry_fn: Any = None,
     fallback_fn: Any = None,
 ) -> RefereeDecision:
-    parsed = parse_model_output(
-        text, _REFEREE_ALL_KEYS, context="referee", workspace=workspace,
-        retry_fn=retry_fn, fallback_fn=fallback_fn,
+    return _parse_role_output(
+        text, _REFEREE_ALL_KEYS, _REFEREE_REQUIRED_KEYS, RefereeDecision,
+        context="referee", workspace=workspace, retry_fn=retry_fn, fallback_fn=fallback_fn,
     )
-    missing = _REFEREE_REQUIRED_KEYS - set(parsed.keys())
-    if missing:
-        raise ValueError(f"referee model output missing required keys: {sorted(missing)}")
-    try:
-        return RefereeDecision.model_validate(parsed)
-    except ValidationError as exc:
-        raise ValueError("referee model output failed RefereeDecision validation") from exc
 
 
 def create_game(
