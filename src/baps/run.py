@@ -28,8 +28,6 @@ from baps.project_adapter import (
     resolve_adapter_for_allowed_delta_type,
     resolve_project_type_adapter,
 )
-from baps.document_adapter import DocumentProjectAdapter
-from baps.coding_adapter import CodingProjectAdapter
 from baps.state import (
     DecomposeSpec,
     DeltaState,
@@ -139,10 +137,13 @@ def _format_debug_yaml_like(value: Any, indent: int = 0) -> list[str]:
     return [f"{prefix}{value}"]
 
 
+def _debug_log(key: str, payload: object) -> None:
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("%s:\n%s", key, "\n".join(_format_debug_yaml_like(payload, indent=2)))
+
+
 def _debug_print_read_config(args: argparse.Namespace, spec_data: dict[str, Any], config: dict[str, Any]) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    input_payload = {
+    _debug_log("read_config.input", {
         "cli_args": {
             "workspace": args.workspace,
             "artifact_id": args.artifact_id,
@@ -152,23 +153,19 @@ def _debug_print_read_config(args: argparse.Namespace, spec_data: dict[str, Any]
             "spec": args.spec,
         },
         "yaml_values": spec_data,
-    }
-    logger.debug("read_config.input:\n%s", "\n".join(_format_debug_yaml_like(input_payload, indent=2)))
-    output_payload = {
+    })
+    _debug_log("read_config.output", {
         "workspace": str(config["workspace"]),
         "artifact_id": config["artifact_id"],
         "northstar_markdown": config["northstar_markdown"],
         "goal": config["goal"],
         "output_path": str(config["output_path"]),
         "max_iterations": config["max_iterations"],
-    }
-    logger.debug("read_config.output:\n%s", "\n".join(_format_debug_yaml_like(output_payload, indent=2)))
+    })
 
 
 def _debug_print_create_state(config: dict[str, Any], state: State) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    input_payload = {
+    _debug_log("create_state.input", {
         "project_type": config["project_type"],
         "artifact_id": _config_artifact_id(config),
         "northstar_markdown": _config_northstar_markdown(config),
@@ -176,63 +173,47 @@ def _debug_print_create_state(config: dict[str, Any], state: State) -> None:
         "goal": config["goal"],
         "output_path": str(config["output_path"]),
         "max_iterations": config["max_iterations"],
-    }
-    logger.debug("create_state.input:\n%s", "\n".join(_format_debug_yaml_like(input_payload, indent=2)))
-    logger.debug("create_state.output:\n%s", "\n".join(_format_debug_yaml_like({"state": state.model_dump(mode="json")}, indent=2)))
+    })
+    _debug_log("create_state.output", {"state": state.model_dump(mode="json")})
 
 
 def _debug_print_create_game_input(state: State) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    logger.debug("create_game.input:\n%s", "\n".join(_format_debug_yaml_like({"state": state.model_dump(mode="json")}, indent=2)))
+    _debug_log("create_game.input", {"state": state.model_dump(mode="json")})
 
 
 def _debug_print_create_game_output(game_spec: GameSpec) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    logger.debug("create_game.output:\n%s", "\n".join(_format_debug_yaml_like({"game_spec": game_spec.model_dump(mode="json")}, indent=2)))
+    _debug_log("create_game.output", {"game_spec": game_spec.model_dump(mode="json")})
 
 
 def _debug_print_create_game_prompt(prompt: str) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    indented = "\n".join(f"  {line}" for line in (prompt.splitlines() or [""]))
-    logger.debug("create_game.prompt:\n%s", indented)
+    if logger.isEnabledFor(logging.DEBUG):
+        indented = "\n".join(f"  {line}" for line in (prompt.splitlines() or [""]))
+        logger.debug("create_game.prompt:\n%s", indented)
 
 
 def _debug_print_play_game_input(state: State, game_spec: GameSpec) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    payload = {
+    _debug_log("play_game.input", {
         "state": state.model_dump(mode="json"),
         "game_spec": game_spec.model_dump(mode="json"),
-    }
-    logger.debug("play_game.input:\n%s", "\n".join(_format_debug_yaml_like(payload, indent=2)))
+    })
 
 
 def _debug_print_play_game_output(delta: DeltaState | None) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    payload = {"current_best_delta": None if delta is None else delta.model_dump(mode="json")}
-    logger.debug("play_game.output:\n%s", "\n".join(_format_debug_yaml_like(payload, indent=2)))
+    _debug_log("play_game.output", {
+        "current_best_delta": None if delta is None else delta.model_dump(mode="json"),
+    })
 
 
 def _debug_print_play_game_attempt(attempt: int) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    logger.debug("play_game.attempt:\n%s", "\n".join(_format_debug_yaml_like({"attempt": attempt}, indent=2)))
+    _debug_log("play_game.attempt", {"attempt": attempt})
 
 
 def _debug_print_blue_failed_tool_call(tool_call: object) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    logger.debug("blue.failed_tool_call:\n%s", "\n".join(_format_debug_yaml_like({"tool_call": str(tool_call)}, indent=2)))
+    _debug_log("blue.failed_tool_call", {"tool_call": str(tool_call)})
 
 
 def _debug_print_attempt_rejected(attempt: int, reason: str) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    logger.debug("play_game.attempt_rejected:\n%s", "\n".join(_format_debug_yaml_like({"attempt": attempt, "reason": reason}, indent=2)))
+    _debug_log("play_game.attempt_rejected", {"attempt": attempt, "reason": reason})
 
 
 def _debug_print_blue_input(
@@ -241,21 +222,16 @@ def _debug_print_blue_input(
     attempt_number: int,
     previous_feedback: dict[str, Any] | None,
 ) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    payload = {
+    _debug_log("blue.input", {
         "game_spec": game_spec.model_dump(mode="json"),
         "state_view": state_view.model_dump(mode="json"),
         "attempt_number": attempt_number,
         "previous_feedback": previous_feedback,
-    }
-    logger.debug("blue.input:\n%s", "\n".join(_format_debug_yaml_like(payload, indent=2)))
+    })
 
 
 def _debug_print_blue_output(delta: DeltaState) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    logger.debug("blue.output:\n%s", "\n".join(_format_debug_yaml_like({"delta_state": delta.model_dump(mode="json")}, indent=2)))
+    _debug_log("blue.output", {"delta_state": delta.model_dump(mode="json")})
 
 
 def _debug_print_red_input(
@@ -264,9 +240,7 @@ def _debug_print_red_input(
     delta_state: DeltaState,
     verification_result: VerificationResult | None = None,
 ) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    payload = {
+    _debug_log("red.input", {
         "game_spec": game_spec.model_dump(mode="json"),
         "state_view": state_view.model_dump(mode="json"),
         "delta_state": delta_state.model_dump(mode="json"),
@@ -274,14 +248,11 @@ def _debug_print_red_input(
             None if verification_result is None
             else _verification_result_to_dict(verification_result)
         ),
-    }
-    logger.debug("red.input:\n%s", "\n".join(_format_debug_yaml_like(payload, indent=2)))
+    })
 
 
 def _debug_print_red_output(red_finding: RedFinding) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    logger.debug("red.output:\n%s", "\n".join(_format_debug_yaml_like({"red_finding": red_finding.model_dump(mode="json")}, indent=2)))
+    _debug_log("red.output", {"red_finding": red_finding.model_dump(mode="json")})
 
 
 def _debug_print_referee_input(
@@ -291,9 +262,7 @@ def _debug_print_referee_input(
     red_finding: RedFinding,
     verification_result: VerificationResult | None = None,
 ) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    payload = {
+    _debug_log("referee.input", {
         "game_spec": game_spec.model_dump(mode="json"),
         "state_view": state_view.model_dump(mode="json"),
         "delta_state": delta_state.model_dump(mode="json"),
@@ -302,67 +271,53 @@ def _debug_print_referee_input(
             None if verification_result is None
             else _verification_result_to_dict(verification_result)
         ),
-    }
-    logger.debug("referee.input:\n%s", "\n".join(_format_debug_yaml_like(payload, indent=2)))
+    })
 
 
 def _debug_print_referee_output(referee_decision: RefereeDecision) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    logger.debug("referee.output:\n%s", "\n".join(_format_debug_yaml_like({"referee_decision": referee_decision.model_dump(mode="json")}, indent=2)))
+    _debug_log("referee.output", {"referee_decision": referee_decision.model_dump(mode="json")})
 
 
 def _debug_print_northstar_update_proposal(rationale: str, proposed_northstar: str) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    payload = {"rationale": rationale, "proposed_northstar": proposed_northstar}
-    logger.debug("create_game.northstar_update_proposal:\n%s", "\n".join(_format_debug_yaml_like(payload, indent=2)))
+    _debug_log("create_game.northstar_update_proposal", {
+        "rationale": rationale,
+        "proposed_northstar": proposed_northstar,
+    })
 
 
 def _debug_print_create_game_raw_model_output(raw_text: str) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    indented = "\n".join(f"  {line}" for line in (raw_text.splitlines() or [""]))
-    logger.debug("create_game.raw_model_output:\n%s", indented)
+    if logger.isEnabledFor(logging.DEBUG):
+        indented = "\n".join(f"  {line}" for line in (raw_text.splitlines() or [""]))
+        logger.debug("create_game.raw_model_output:\n%s", indented)
 
 
 def _debug_print_create_game_red_input(state_view: StateView, game_spec: GameSpec) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    payload = {
+    _debug_log("create_game_red.input", {
         "game_spec": game_spec.model_dump(mode="json"),
         "state_view_id": state_view.id,
-    }
-    logger.debug("create_game_red.input:\n%s", "\n".join(_format_debug_yaml_like(payload, indent=2)))
+    })
 
 
 def _debug_print_create_game_red_output(red_finding: RedFinding) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    logger.debug("create_game_red.output:\n%s", "\n".join(_format_debug_yaml_like({"red_finding": red_finding.model_dump(mode="json")}, indent=2)))
+    _debug_log("create_game_red.output", {"red_finding": red_finding.model_dump(mode="json")})
 
 
 def _debug_print_create_game_validation_input(game_spec: GameSpec) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    logger.debug(
-        "create_game.validation_input:\nobjective=%s\nsuccess_condition=%s\ntarget_artifact_id=%s\nallowed_delta_type=%s",
-        game_spec.objective, game_spec.success_condition,
-        game_spec.target_artifact_id, game_spec.allowed_delta_type,
-    )
+    _debug_log("create_game.validation_input", {
+        "objective": game_spec.objective,
+        "success_condition": game_spec.success_condition,
+        "target_artifact_id": game_spec.target_artifact_id,
+        "allowed_delta_type": game_spec.allowed_delta_type,
+    })
 
 
 def _debug_print_create_game_validation_failure(message: str) -> None:
-    if not logger.isEnabledFor(logging.DEBUG):
-        return
-    logger.debug("create_game.validation_failure:\nmessage=%s", message)
+    _debug_log("create_game.validation_failure", {"message": message})
 
 
 def _debug_print_verification_result(result: VerificationResult | None) -> None:
-    if result is None or not logger.isEnabledFor(logging.DEBUG):
-        return
-    payload = {"verification": _verification_result_to_dict(result)}
-    logger.debug("verify_export.result:\n%s", "\n".join(_format_debug_yaml_like(payload, indent=2)))
+    if result is not None:
+        _debug_log("verify_export.result", {"verification": _verification_result_to_dict(result)})
 
 
 def _build_client_for_backend(backend: str) -> ModelClient:

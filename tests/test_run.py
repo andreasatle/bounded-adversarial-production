@@ -10,6 +10,8 @@ import pytest
 
 from baps.models import AnthropicClient, FakeModelClient, OllamaClient, OpenAIClient, ToolCall
 from baps.run import create_game, create_state, main, play_game
+from baps.document_adapter import DocumentProjectAdapter
+from baps.coding_adapter import CodingProjectAdapter
 import baps.run as _real_run
 import baps.state as state_module
 
@@ -424,7 +426,7 @@ def test_derive_state_update_from_delta_converts_append_section() -> None:
         ),
     )
     proposal = run_module._derive_state_update_from_delta(
-        delta, adapter=run_module.DocumentProjectAdapter()
+        delta, adapter=DocumentProjectAdapter()
     )
     assert proposal.target.artifact_id == "main-document"
     assert proposal.payload.operation == "append_section"
@@ -740,10 +742,10 @@ def test_create_game_validation_input_debug_enabled(caplog) -> None:
             ),
         )
     assert "create_game.validation_input:" in caplog.text
-    assert "objective=Advance report objective" in caplog.text
-    assert "success_condition=PlayGame must return a valid DeltaDocumentState targeting main-document." in caplog.text
-    assert "target_artifact_id=main-document" in caplog.text
-    assert "allowed_delta_type=DeltaDocumentState" in caplog.text
+    assert "objective: Advance report objective" in caplog.text
+    assert "success_condition: PlayGame must return a valid DeltaDocumentState targeting main-document." in caplog.text
+    assert "target_artifact_id: main-document" in caplog.text
+    assert "allowed_delta_type: DeltaDocumentState" in caplog.text
 
 
 def test_create_game_semantic_refinement_objective_is_accepted(caplog) -> None:
@@ -1051,7 +1053,7 @@ def test_create_game_target_artifact_not_in_state_fails_cleanly() -> None:
 def test_create_game_uses_adapter_build_create_game_state_view(monkeypatch) -> None:
     import baps.run as run_module
 
-    class _CapturingAdapter(run_module.DocumentProjectAdapter):
+    class _CapturingAdapter(DocumentProjectAdapter):
         def __init__(self):
             super().__init__()
             self.called = False
@@ -1110,7 +1112,7 @@ def test_create_game_prompt_forbids_markdown_fences_and_lists_required_shape() -
         "spec_path": None,
     }
     state = create_state(config)
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
     prompt = run_module._render_create_game_prompt(
         config,
         state,
@@ -2218,7 +2220,7 @@ def test_blue_prompt_includes_state_view_and_gamespec() -> None:
             "spec_path": None,
         }
     )
-    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
+    state_view = DocumentProjectAdapter().build_state_view(state, spec)
     prompt = project_adapter_module.render_blue_prompt_core(
         state_view=state_view,
         game_spec=spec,
@@ -2277,7 +2279,7 @@ def test_red_prompt_intro_only_guides_revise_for_intro_and_conclusion_success_co
             "spec_path": None,
         }
     )
-    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
+    state_view = DocumentProjectAdapter().build_state_view(state, spec)
     delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
@@ -2591,7 +2593,7 @@ def test_create_game_prompt_includes_northstar_context() -> None:
         "spec_path": None,
     }
     state = run_module.create_state(config)
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
     state_view = adapter.build_create_game_state_view(state, config)
     prompt = run_module._render_create_game_prompt(
         config,
@@ -2732,7 +2734,7 @@ def test_blue_prompt_and_source_do_not_hardcode_project_policy_literals() -> Non
         northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.DocumentArtifact(id="doc-a", sections=()),),
     )
-    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
+    state_view = DocumentProjectAdapter().build_state_view(state, spec)
     prompt = project_adapter_module.render_blue_prompt_core(
         state_view=state_view, game_spec=spec, attempt_number=1, previous_feedback=None
     )
@@ -2758,8 +2760,8 @@ def test_document_blue_prompt_contains_document_specific_shape_rules() -> None:
         northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.DocumentArtifact(id="doc-a", sections=()),),
     )
-    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
-    prompt = run_module.DocumentProjectAdapter().render_blue_prompt(state_view, spec, 1, None)
+    state_view = DocumentProjectAdapter().build_state_view(state, spec)
+    prompt = DocumentProjectAdapter().render_blue_prompt(state_view, spec, 1, None)
     assert "Document delta rules:" in prompt
     assert "section.title and section.body must be non-empty strings." in prompt
     assert '"artifact_id": "<game_spec.target_artifact_id>"' in prompt
@@ -2788,7 +2790,7 @@ def test_referee_prompt_intro_and_conclusion_guides_accept_policy() -> None:
             "spec_path": None,
         }
     )
-    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
+    state_view = DocumentProjectAdapter().build_state_view(state, spec)
     delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
@@ -2834,7 +2836,7 @@ def test_referee_prompt_declares_game_local_authority_and_not_final_integration(
             "spec_path": None,
         }
     )
-    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
+    state_view = DocumentProjectAdapter().build_state_view(state, spec)
     delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
@@ -2869,7 +2871,7 @@ def test_referee_prompt_uses_red_material_findings_in_decision_policy() -> None:
             "spec_path": None,
         }
     )
-    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
+    state_view = DocumentProjectAdapter().build_state_view(state, spec)
     delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
@@ -2904,7 +2906,7 @@ def test_red_and_referee_prompts_do_not_treat_state_mutation_alone_as_failure() 
             "spec_path": None,
         }
     )
-    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
+    state_view = DocumentProjectAdapter().build_state_view(state, spec)
     delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
@@ -2950,7 +2952,7 @@ def test_coding_red_prompt_includes_verification_evidence_when_provided() -> Non
             ),
         ),
     )
-    state_view = run_module.CodingProjectAdapter().build_state_view(state, spec)
+    state_view = CodingProjectAdapter().build_state_view(state, spec)
     delta = state_module.DeltaCodingState(
         artifact_id="main-codebase",
         operation="write_file",
@@ -2969,7 +2971,7 @@ def test_coding_red_prompt_includes_verification_evidence_when_provided() -> Non
         stderr="",
         passed=True,
     )
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     supplement = adapter.render_red_prompt_supplement(state_view, spec, delta, verification)
     prompt = run_module._render_red_prompt(
         state_view, spec, delta, verification_result=verification, prompt_supplement=supplement
@@ -2994,7 +2996,7 @@ def test_coding_referee_prompt_includes_failing_verification_evidence() -> None:
         northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.CodingArtifact(id="main-codebase", files=()),),
     )
-    state_view = run_module.CodingProjectAdapter().build_state_view(state, spec)
+    state_view = CodingProjectAdapter().build_state_view(state, spec)
     delta = state_module.DeltaCodingState(
         artifact_id="main-codebase",
         operation="write_file",
@@ -3037,7 +3039,7 @@ def test_document_prompts_do_not_include_verification_evidence_by_default() -> N
         northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
     )
-    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
+    state_view = DocumentProjectAdapter().build_state_view(state, spec)
     delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
@@ -3065,7 +3067,7 @@ def test_document_red_referee_prompts_do_not_include_coding_guidance() -> None:
         northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
     )
-    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
+    state_view = DocumentProjectAdapter().build_state_view(state, spec)
     delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
@@ -3095,7 +3097,7 @@ def test_coding_red_referee_prompts_include_coding_guidance() -> None:
         northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.CodingArtifact(id="main-codebase", files=()),),
     )
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     state_view = adapter.build_state_view(state, spec)
     delta = state_module.DeltaCodingState(
         artifact_id="main-codebase",
@@ -3140,7 +3142,7 @@ def test_red_referee_prompts_forbid_goalpost_drift_language() -> None:
         northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.CodingArtifact(id="main-codebase", files=()),),
     )
-    state_view = run_module.CodingProjectAdapter().build_state_view(state, spec)
+    state_view = CodingProjectAdapter().build_state_view(state, spec)
     delta = state_module.DeltaCodingState(
         artifact_id="main-codebase",
         operation="write_file",
@@ -3189,7 +3191,7 @@ def test_state_view_is_derived_from_state_and_gamespec_with_existing_sections() 
             ),
         ),
     )
-    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
+    state_view = DocumentProjectAdapter().build_state_view(state, spec)
     assert state_view.metadata["target_artifact_id"] == "main-document"
     assert state_view.metadata["sections"] == [{"title": "Existing", "body": "Already here"}]
     assert state_view.content.startswith("=== StateView Start ===")
@@ -3220,7 +3222,7 @@ def test_document_state_view_content_for_empty_document() -> None:
         artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
     )
 
-    state_view = run_module.DocumentProjectAdapter().build_state_view(state, spec)
+    state_view = DocumentProjectAdapter().build_state_view(state, spec)
     content = state_view.content
     assert content.startswith("=== StateView Start ===")
     assert content.endswith("=== StateView End ===")
@@ -3242,7 +3244,7 @@ def test_create_game_state_view_content_is_markdown_for_empty_document() -> None
         artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
     )
 
-    state_view = run_module.DocumentProjectAdapter().build_create_game_state_view(
+    state_view = DocumentProjectAdapter().build_create_game_state_view(
         state,
         {
             "artifact_id": "main-document",
@@ -3280,7 +3282,7 @@ def test_create_game_state_view_content_includes_sections_as_markdown() -> None:
         ),
     )
 
-    state_view = run_module.DocumentProjectAdapter().build_create_game_state_view(
+    state_view = DocumentProjectAdapter().build_create_game_state_view(
         state,
         {
             "artifact_id": "main-document",
@@ -4602,7 +4604,7 @@ def test_active_main_writes_output_path_from_state(tmp_path: Path, monkeypatch, 
 def test_document_export_markdown_contains_sections_in_order(tmp_path: Path) -> None:
     import baps.run as run_module
 
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
     state = run_module.State(
         northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
@@ -4627,7 +4629,7 @@ def test_document_export_markdown_contains_sections_in_order(tmp_path: Path) -> 
 def test_document_export_creates_parent_directories(tmp_path: Path) -> None:
     import baps.run as run_module
 
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
     state = run_module.State(
         northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
@@ -4640,7 +4642,7 @@ def test_document_export_creates_parent_directories(tmp_path: Path) -> None:
 def test_document_export_output_changed_false_when_unchanged(tmp_path: Path) -> None:
     import baps.run as run_module
 
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
     state = run_module.State(
         northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
@@ -5209,7 +5211,7 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
 
         def __init__(self) -> None:
             self.calls: list[str] = []
-            self._delegate = run_module.DocumentProjectAdapter()
+            self._delegate = DocumentProjectAdapter()
 
         def create_initial_state(self, config):
             self.calls.append("create_initial_state")
@@ -5351,7 +5353,7 @@ def test_coding_create_game_state_view_is_textual_with_delimiters() -> None:
         "spec_path": None,
     }
     state = run_module.create_state(config)
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     view = adapter.build_create_game_state_view(state, config)
     assert view.content.startswith("=== StateView Start ===")
     assert view.content.endswith("=== StateView End ===")
@@ -5375,8 +5377,8 @@ def test_coding_blue_prompt_supplement_prefers_src_and_pytest_layout() -> None:
         allowed_delta_type="DeltaCodingState",
         success_condition="Working code and tests exist",
     )
-    view = run_module.CodingProjectAdapter().build_state_view(state, spec)
-    prompt = run_module.CodingProjectAdapter().render_blue_prompt(
+    view = CodingProjectAdapter().build_state_view(state, spec)
+    prompt = CodingProjectAdapter().render_blue_prompt(
         view,
         spec,
         attempt_number=1,
@@ -5402,7 +5404,7 @@ def test_coding_create_game_prompt_includes_multi_file_guidance() -> None:
         "spec_path": None,
     }
     state = run_module.create_state(config)
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     state_view = adapter.build_create_game_state_view(state, config)
     prompt = run_module._render_create_game_prompt(
         config=config,
@@ -5430,7 +5432,7 @@ def test_coding_create_game_prompt_includes_previous_verification_evidence() -> 
         "spec_path": None,
     }
     state = run_module.create_state(config)
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     state_view = adapter.build_create_game_state_view(state, config)
     verification = run_module.VerificationResult(
         command="uv run pytest",
@@ -5466,7 +5468,7 @@ def test_document_create_game_prompt_has_no_verification_block_by_default() -> N
         "spec_path": None,
     }
     state = run_module.create_state(config)
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
     state_view = adapter.build_create_game_state_view(state, config)
     prompt = run_module._render_create_game_prompt(
         config=config,
@@ -5660,7 +5662,7 @@ def test_coding_normalization_overrides_file_path_target_artifact_id() -> None:
 def test_document_adapter_normalize_game_spec_is_identity() -> None:
     import baps.run as run_module
 
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
     config = {
         "workspace": Path(".baps-workspace"),
         "project_type": "document",
@@ -5685,7 +5687,7 @@ def test_document_adapter_normalize_game_spec_is_identity() -> None:
 def test_coding_adapter_maps_file_write_delta_to_state_update() -> None:
     import baps.run as run_module
 
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     delta = state_module.DeltaCodingState(
         artifact_id="main-codebase",
         operation="write_file",
@@ -5722,7 +5724,7 @@ def test_coding_adapter_export_writes_files(tmp_path: Path) -> None:
             ),
         ),
     )
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     changed = adapter.export_state(
         state=state,
         output_path=tmp_path / "project",
@@ -5758,7 +5760,7 @@ def test_coding_adapter_export_writes_src_and_tests_layout(tmp_path: Path) -> No
             ),
         ),
     )
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     changed = adapter.export_state(
         state=state,
         output_path=tmp_path / "project",
@@ -5786,7 +5788,7 @@ def test_coding_export_normalizes_escaped_newline_content(tmp_path: Path) -> Non
             ),
         ),
     )
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     adapter.export_state(state, tmp_path / "project", "main-codebase")
     exported = (tmp_path / "project" / "tests" / "test_fibonacci.py").read_text(
         encoding="utf-8"
@@ -5812,7 +5814,7 @@ def test_coding_export_normalizes_escaped_quotes_content(tmp_path: Path) -> None
             ),
         ),
     )
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     adapter.export_state(state, tmp_path / "project", "main-codebase")
     exported = (tmp_path / "project" / "src" / "fibonacci.py").read_text(
         encoding="utf-8"
@@ -5843,7 +5845,7 @@ def test_coding_export_normalizes_multiline_pytest_and_parses(tmp_path: Path) ->
             ),
         ),
     )
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     adapter.export_state(state, tmp_path / "project", "main-codebase")
     exported = (tmp_path / "project" / "tests" / "test_fibonacci.py").read_text(
         encoding="utf-8"
@@ -5895,7 +5897,7 @@ def test_coding_adapter_verify_export_discovers_and_runs_pytest_tests(
             ),
         ),
     )
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     output_dir = tmp_path / "project"
     _ = adapter.export_state(state, output_dir, "main-codebase")
     result = adapter.verify_export(output_dir, state, "main-codebase", sandbox_mode="none")
@@ -5922,7 +5924,7 @@ def test_coding_export_creates_nested_parent_directories(tmp_path: Path) -> None
             ),
         ),
     )
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     _ = adapter.export_state(
         state=state,
         output_path=tmp_path / "project",
@@ -5948,7 +5950,7 @@ def test_coding_export_output_changed_false_when_unchanged(tmp_path: Path) -> No
             ),
         ),
     )
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     output_dir = tmp_path / "project"
     first = adapter.export_state(state, output_dir, "main-codebase")
     second = adapter.export_state(state, output_dir, "main-codebase")
@@ -5971,7 +5973,7 @@ def test_document_adapter_verify_export_passes_for_matching_export(tmp_path: Pat
             ),
         ),
     )
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
     output_path = tmp_path / "report.md"
     output_path.write_text("## Introduction\n\nHello\n\n## Conclusion\n\nWorld", encoding="utf-8")
     result = adapter.verify_export(output_path, state, "main-document")
@@ -5994,7 +5996,7 @@ def test_document_adapter_verify_export_fails_when_section_content_missing(
             ),
         ),
     )
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
     output_path = tmp_path / "report.md"
     output_path.write_text("## Different\n\nBody", encoding="utf-8")
     result = adapter.verify_export(output_path, state, "main-document")
@@ -6018,7 +6020,7 @@ def test_coding_adapter_verify_export_runs_pytest_and_captures_success(
         return subprocess.CompletedProcess(args=args, returncode=0, stdout="2 passed\n", stderr="")
 
     monkeypatch.setattr(sandbox_module.subprocess, "run", _fake_run)
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     output_dir = tmp_path / "project"
     state = run_module.State(
         northstar=state_module.NorthStar(artifacts=()),
@@ -6046,7 +6048,7 @@ def test_coding_adapter_verify_export_captures_failure(
         return subprocess.CompletedProcess(args=args, returncode=1, stdout="1 failed\n", stderr="traceback\n")
 
     monkeypatch.setattr(sandbox_module.subprocess, "run", _fake_run)
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     state = run_module.State(
         northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.CodingArtifact(id="main-codebase", files=()),),
@@ -6073,7 +6075,7 @@ def test_coding_adapter_verify_export_fails_for_missing_state_file(tmp_path: Pat
             ),
         ),
     )
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     output_dir = tmp_path / "project"
     output_dir.mkdir()
     result = adapter.verify_export(output_dir, state, "main-codebase")
@@ -6109,7 +6111,7 @@ def test_coding_adapter_verify_export_skips_pytest_when_files_missing(
             ),
         ),
     )
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     output_dir = tmp_path / "project"
     output_dir.mkdir()
     result = adapter.verify_export(output_dir, state, "main-codebase")
@@ -6137,7 +6139,7 @@ def test_coding_adapter_commit_export_inits_and_commits(monkeypatch, tmp_path: P
         allowed_delta_type="DeltaCodingState",
         success_condition="tests pass",
     )
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     committed = adapter.commit_export(output_dir, game_spec)
     assert committed is True
     assert any(args[:2] == ["git", "init"] for args in calls)
@@ -6168,7 +6170,7 @@ def test_coding_adapter_commit_export_skips_init_when_git_dir_exists(
         allowed_delta_type="DeltaCodingState",
         success_condition="tests pass",
     )
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     adapter.commit_export(output_dir, game_spec)
     assert not any(args[:2] == ["git", "init"] for args in calls)
 
@@ -6191,7 +6193,7 @@ def test_coding_adapter_commit_export_returns_false_when_git_unavailable(
         allowed_delta_type="DeltaCodingState",
         success_condition="tests pass",
     )
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     committed = adapter.commit_export(output_dir, game_spec)
     assert committed is False
 
@@ -6216,7 +6218,7 @@ def test_coding_adapter_commit_export_returns_false_when_commit_fails(
         allowed_delta_type="DeltaCodingState",
         success_condition="tests pass",
     )
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     committed = adapter.commit_export(output_dir, game_spec)
     assert committed is False
 
@@ -6267,7 +6269,7 @@ def test_commit_export_with_adapter_skips_adapter_without_method(tmp_path: Path)
 def test_document_adapter_render_create_game_prompt_supplement_includes_delta_guidance() -> None:
     import baps.run as run_module
 
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
     state = run_module.State(
         northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
@@ -6293,7 +6295,7 @@ def test_document_adapter_render_create_game_prompt_supplement_includes_delta_gu
 def test_document_adapter_render_create_game_prompt_supplement_includes_guidance_on_failure() -> None:
     import baps.run as run_module
 
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
     state = run_module.State(
         northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
@@ -7157,7 +7159,7 @@ def test_create_game_prompt_includes_northstar_update_needed_instruction() -> No
         "spec_path": None,
     }
     state = run_module.create_state(config)
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
     prompt = run_module._render_create_game_prompt(
         config, state, adapter.build_create_game_state_view(state, config), adapter=adapter
     )
@@ -8198,7 +8200,7 @@ def test_no_fallback_behavior_unchanged_when_primary_succeeds(monkeypatch) -> No
 def test_coding_adapter_maps_write_files_batch_delta_to_state_update() -> None:
     import baps.run as run_module
 
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     delta = state_module.DeltaCodingBatchState(
         artifact_id="main-codebase",
         operation="write_files",
@@ -8266,7 +8268,7 @@ def test_coding_adapter_tool_call_write_files_returns_batch_delta() -> None:
     import baps.run as run_module
     from baps.models import ToolCall
 
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     tool_call = ToolCall(
         name="write_files",
         arguments={
@@ -8315,7 +8317,7 @@ def test_parse_document_delta_json_still_accepts_append_section() -> None:
 def test_document_adapter_maps_modify_section_delta_to_state_update() -> None:
     import baps.run as run_module
 
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
     delta = state_module.DeltaModifyDocumentState(
         artifact_id="main-document",
         operation="modify_section",
@@ -8334,7 +8336,7 @@ def test_document_adapter_tool_call_modify_section_returns_correct_delta() -> No
     import baps.run as run_module
     from baps.models import ToolCall
 
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
     tool_call = ToolCall(
         name="modify_section",
         arguments={
@@ -8362,7 +8364,7 @@ def test_document_blue_prompt_includes_modify_section_shape() -> None:
         "spec_path": None,
     }
     state = run_module.create_state(config)
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
     state_view = adapter.build_state_view(
         state,
         state_module.GameSpec(
@@ -8407,7 +8409,7 @@ def test_parse_coding_delta_json_handles_delete_file_operation() -> None:
 def test_coding_adapter_maps_delete_file_delta_to_state_update() -> None:
     import baps.run as run_module
 
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     delta = state_module.DeltaDeleteCodingState(
         artifact_id="main-codebase",
         operation="delete_file",
@@ -8422,7 +8424,7 @@ def test_coding_adapter_tool_call_delete_file_returns_correct_delta() -> None:
     import baps.run as run_module
     from baps.models import ToolCall
 
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     tool_call = ToolCall(
         name="delete_file",
         arguments={"artifact_id": "main-codebase", "path": "src/old.py"},
@@ -8451,7 +8453,7 @@ def test_parse_document_delta_json_handles_delete_section_operation() -> None:
 def test_document_adapter_maps_delete_section_delta_to_state_update() -> None:
     import baps.run as run_module
 
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
     delta = state_module.DeltaDeleteDocumentState(
         artifact_id="main-document",
         operation="delete_section",
@@ -8466,7 +8468,7 @@ def test_document_adapter_tool_call_delete_section_returns_correct_delta() -> No
     import baps.run as run_module
     from baps.models import ToolCall
 
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
     tool_call = ToolCall(
         name="delete_section",
         arguments={"artifact_id": "main-document", "section_title": "Obsolete"},
@@ -8500,7 +8502,7 @@ def test_coding_create_game_state_view_includes_file_contents() -> None:
         "max_iterations": 1,
         "spec_path": None,
     }
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     view = adapter.build_create_game_state_view(state, config)
     assert "src/hello.py" in view.content
     assert "def hello():" in view.content
@@ -8527,7 +8529,7 @@ def test_coding_create_game_state_view_truncates_long_files() -> None:
         "max_iterations": 1,
         "spec_path": None,
     }
-    adapter = run_module.CodingProjectAdapter()
+    adapter = CodingProjectAdapter()
     view = adapter.build_create_game_state_view(state, config)
     assert "more lines" in view.content
     assert "line_0 = 0" in view.content
@@ -8964,7 +8966,7 @@ def test_create_game_prompt_includes_context_chain_when_provided() -> None:
         "spec_path": None,
     }
     state = run_module.create_state(config)
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
     state_view = adapter.build_create_game_state_view(state, config)
     prompt = run_module._render_create_game_prompt(
         config, state, state_view, adapter=adapter,
@@ -8990,7 +8992,7 @@ def test_create_game_prompt_no_context_block_when_chain_empty() -> None:
         "spec_path": None,
     }
     state = run_module.create_state(config)
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
     state_view = adapter.build_create_game_state_view(state, config)
     prompt = run_module._render_create_game_prompt(
         config, state, state_view, adapter=adapter,
@@ -9097,7 +9099,7 @@ def test_solve_gap_decompose_then_play(monkeypatch, tmp_path: Path) -> None:
         "spec_path": None,
     }
     service, state = run_module._initialize_project(config)
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
 
     result = run_module._run_project_iterations(config, adapter, service, state)
 
@@ -9156,7 +9158,7 @@ def test_solve_gap_context_chain_injected_into_game_spec(monkeypatch, tmp_path: 
         "spec_path": None,
     }
     service, state = run_module._initialize_project(config)
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
     run_module._run_project_iterations(config, adapter, service, state)
 
     assert len(captured_chain) == 1
@@ -9187,7 +9189,7 @@ def test_solve_gap_max_depth_stops_recursion(monkeypatch, tmp_path: Path) -> Non
         "spec_path": None,
     }
     service, state = run_module._initialize_project(config)
-    adapter = run_module.DocumentProjectAdapter()
+    adapter = DocumentProjectAdapter()
     result = run_module._run_project_iterations(config, adapter, service, state)
 
     assert result["stop_reason"] == "max_depth_reached"
