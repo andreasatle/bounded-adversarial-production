@@ -20,18 +20,11 @@ Method: full file read, line-by-line inspection
 
 ---
 
-### DL-01 — `_MAX_DELTA_BYTES` constant defined twice
+### DL-01 — `_MAX_DELTA_BYTES` constant defined twice — **RESOLVED**
 
-**Severity:** Medium
+**Severity:** Medium → ~~resolved~~
 
-The sentinel value `65536` for maximum model response size is hard-coded independently in two modules. Both are identical.
-
-| Location | Line |
-|---|---|
-| `src/baps/model_output.py` | 40 |
-| `src/baps/project_adapter.py` | 59 |
-
-**Impact:** If the limit ever changes, both files need updating independently. Given that `project_adapter.py` imports from `model_output.py` anyway, the constant should live in one place and be imported.
+`normalize_json_candidate` and its duplicate constant were deleted from `project_adapter.py`. `_MAX_DELTA_BYTES` now lives only in `model_output.py`. See DL-03.
 
 ---
 
@@ -50,82 +43,43 @@ The string literal `"blackboard"` for the blackboard subdirectory name is define
 
 ---
 
-### DL-03 — JSON fence-stripping logic duplicated across `model_output` and `project_adapter`
+### DL-03 — JSON fence-stripping logic duplicated across `model_output` and `project_adapter` — **RESOLVED**
 
-**Severity:** High
+**Severity:** High → ~~resolved~~
 
-`_extract_json_candidate` in `model_output.py` and `normalize_json_candidate` in `project_adapter.py` implement nearly identical pipelines: size-check → strip → compile fence regex → match → extract body. The fence regex is compiled inline in both, using the same pattern.
-
-| Location | Lines | Notes |
-|---|---|---|
-| `src/baps/model_output.py:_extract_json_candidate` | 48–74 | Full pipeline; also extracts from prose via `find("{")` |
-| `src/baps/project_adapter.py:normalize_json_candidate` | 62–75 | Partial pipeline; stops before prose-extraction step |
-
-`normalize_json_candidate` is called from `coding_adapter.py:381` as a static recovery fallback. However, it compiles the same fence regex each call and does not benefit from the prose-extraction step that `_extract_json_candidate` provides. The two should be unified into a single function in `model_output.py`.
+`normalize_json_candidate` deleted from `project_adapter.py`. All fence-stripping now goes through `_extract_json_candidate` in `model_output.py`. The coding adapter's static recovery fallback was also removed. See commit `41997ec`.
 
 ---
 
-### DL-04 — `VerificationResult` dict serialization repeated six times
+### DL-04 — `VerificationResult` dict serialization repeated six times — **RESOLVED**
 
-**Severity:** High
+**Severity:** High → ~~resolved~~
 
-The same six-field dictionary literal `{command, cwd, exit_code, stdout, stderr, passed}` is constructed from a `VerificationResult` object at six distinct call sites. No shared helper exists.
-
-| Location | Lines | Context |
-|---|---|---|
-| `src/baps/run.py:_debug_print_red_input` | 272–282 | Debug logging |
-| `src/baps/run.py:_debug_print_referee_input` | 308–318 | Debug logging |
-| `src/baps/run.py:_debug_print_verification_result` | 379–387 | Debug logging (keys in different order than the others) |
-| `src/baps/run.py:_render_red_prompt` | 1416–1426 | Prompt construction |
-| `src/baps/run.py:_render_referee_prompt` | 1487–1497 | Prompt construction |
-| `src/baps/coding_adapter.py:render_create_game_prompt_supplement` | 631–641 | Prompt construction |
-
-Note also the key ordering inconsistency: the debug version at 379–387 uses `command, cwd, exit_code, passed, stdout, stderr` while all prompt-construction sites use `command, cwd, exit_code, stdout, stderr, passed`. A single `_verification_result_to_dict(result)` helper would eliminate both the duplication and the inconsistency.
+`_verification_result_to_dict(result)` extracted to `northstar_projection.py` and imported by all six former call sites. Key ordering is now consistent. See commit `7b25232`.
 
 ---
 
-### DL-05 — Verification block string construction duplicated in `_render_red_prompt` and `_render_referee_prompt`
+### DL-05 — Verification block string construction duplicated in `_render_red_prompt` and `_render_referee_prompt` — **RESOLVED**
 
-**Severity:** Medium
+**Severity:** Medium → ~~resolved~~
 
-Both prompt renderers construct an identical conditional `verification_block` from a `VerificationResult`. The entire block — null-guard, `json.dumps`, and the multi-line guidance string — is byte-for-byte identical.
-
-| Location | Lines |
-|---|---|
-| `src/baps/run.py:_render_red_prompt` | 1414–1433 |
-| `src/baps/run.py:_render_referee_prompt` | 1485–1504 |
-
-**Impact:** Verification guidance text has diverged slightly (the red prompt says "reason from exit_code/stdout/stderr evidence" while referee uses "evidence"). A helper `_render_verification_block(result)` should be extracted.
+`_render_verification_block(result, *, guidance)` extracted in `run.py`; called by both `_render_red_prompt` and `_render_referee_prompt` with role-specific guidance text. See commit `7b25232`.
 
 ---
 
-### DL-06 — AnthropicClient construction duplicated across `_build_anthropic_client` and `_build_role_client`
+### DL-06 — AnthropicClient construction duplicated across `_build_anthropic_client` and `_build_role_client` — **RESOLVED**
 
-**Severity:** High
+**Severity:** High → ~~resolved~~
 
-`_build_client` (run.py:598) is the canonical client factory introduced after `_build_anthropic_client` and `_build_openai_client`. The older functions construct identical client objects without delegating to `_build_client`.
-
-| Location | Lines | Notes |
-|---|---|---|
-| `src/baps/run.py:_build_anthropic_client` | 403–411 | Standalone builder; same logic as `_build_client` anthropic branch |
-| `src/baps/run.py:_build_role_client` (anthropic branch) | 487–495 | Inline duplicate of `_build_anthropic_client` |
-| `src/baps/run.py:_build_client` (anthropic branch) | 600–608 | Canonical version |
-
-`_build_anthropic_client` should be reimplemented as `_build_client("anthropic", os.getenv(...))`. The anthropic branch inside `_build_role_client` should be replaced with a call to `_build_client`.
+`_build_anthropic_client` deleted. `_build_role_client` now delegates all construction to `_build_client`. `_build_client` is the single `AnthropicClient` factory. See commit `3fdc7d8`.
 
 ---
 
-### DL-07 — OpenAIClient construction duplicated across `_build_openai_client` and `_build_role_client`
+### DL-07 — OpenAIClient construction duplicated across `_build_openai_client` and `_build_role_client` — **RESOLVED**
 
-**Severity:** High
+**Severity:** High → ~~resolved~~
 
-Same pattern as DL-06 for the OpenAI backend.
-
-| Location | Lines |
-|---|---|
-| `src/baps/run.py:_build_openai_client` | 414–422 |
-| `src/baps/run.py:_build_role_client` (openai branch) | 496–504 |
-| `src/baps/run.py:_build_client` (openai branch) | 609–617 |
+`_build_openai_client` deleted. `_build_role_client` delegates to `_build_client`. See commit `3fdc7d8`.
 
 ---
 
@@ -189,18 +143,11 @@ Both required-key sets resolve to the same value, `frozenset({"disposition", "ra
 
 ---
 
-### DL-12 — `DocumentProjectAdapter.export_state` and `AuditProjectAdapter.export_state` are byte-for-byte identical
+### DL-12 — `DocumentProjectAdapter.export_state` and `AuditProjectAdapter.export_state` are byte-for-byte identical — **RESOLVED**
 
-**Severity:** High
+**Severity:** High → ~~resolved~~
 
-Both methods read-compare-write a rendered markdown artifact to an output path. The full method body is identical.
-
-| Location | Lines |
-|---|---|
-| `src/baps/document_adapter.py:DocumentProjectAdapter.export_state` | 514–522 |
-| `src/baps/audit_adapter.py:AuditProjectAdapter.export_state` | 565–573 |
-
-Since `AuditProjectAdapter` already imports `document_artifact_from_state` and `render_document_artifact_markdown` from `document_adapter`, `AuditProjectAdapter.export_state` should delegate to `DocumentProjectAdapter.export_state` or a shared free function.
+`export_document_artifact` extracted as a free function in `document_adapter.py`. Both adapters' `export_state` methods now delegate to it as a one-liner. See commit `8e449cc`.
 
 ---
 
@@ -310,18 +257,11 @@ The state.py version is more thorough (normalizes unicode before stripping). The
 
 ---
 
-### IP-01 — Two separate client-building entry points with different configuration precedence
+### IP-01 — Two separate client-building entry points with different configuration precedence — **RESOLVED**
 
-**Severity:** High
+**Severity:** High → ~~resolved~~
 
-The codebase contains two live client-building functions with different semantics that are both in active use:
-
-| Function | Location | Precedence |
-|---|---|---|
-| `_build_role_client(role)` | `run.py:472–508` | env vars only |
-| `_build_client_for_role(role, config)` | `run.py:624–627` | spec > env |
-
-`play_game` bridges between them via an inner closure at run.py:1635–1640 that calls `_build_client_for_role` when `config` is present and falls back to `_build_role_client` when it is not. In the active execution spine, `config` is always present (passed through `_solve_gap` at run.py:2149). The `_build_role_client` fallback path is functionally unreachable in production, but its existence means callers have to reason about two precedence systems.
+`_build_role_client` now delegates all actual client construction to `_build_client` (no more inline construction). `_build_client_for_role(role, config)` is the active entry point for the canonical spine; `_build_role_client(role)` is the env-only fallback retained for CI/legacy usage. The duplication of construction logic is gone. See commit `3fdc7d8`.
 
 ---
 
@@ -398,20 +338,11 @@ All 15 functions repeat the identical DEBUG guard. They exist solely to avoid ru
 
 ---
 
-### SV-03 — `_build_client` supersedes `_build_anthropic_client`, `_build_openai_client`, and the inner branches of `_build_role_client`, but the older functions remain
+### SV-03 — `_build_client` supersedes `_build_anthropic_client`, `_build_openai_client`, and the inner branches of `_build_role_client`, but the older functions remain — **RESOLVED**
 
-**Severity:** Medium
+**Severity:** Medium → ~~resolved~~
 
-`_build_client(backend, model)` at run.py:598–621 is the correct, consolidated client factory: it accepts explicit `backend` and `model` strings and handles all three backends. It was introduced after the earlier per-backend helpers. The older functions (`_build_anthropic_client`, `_build_openai_client`, and the inline branches in `_build_role_client`) contain overlapping logic that should have been deleted when `_build_client` was added.
-
-| Location | Lines |
-|---|---|
-| `src/baps/run.py:_build_anthropic_client` | 403–411 (should delegate to `_build_client`) |
-| `src/baps/run.py:_build_openai_client` | 414–422 (should delegate to `_build_client`) |
-| `src/baps/run.py:_build_role_client` (anthropic/openai branches) | 487–504 (should delegate to `_build_client`) |
-| `src/baps/run.py:_build_client` | 598–621 (canonical version) |
-
-**Impact:** There are now three different code paths that construct `AnthropicClient` and `OpenAIClient`. Changing the constructor signature (e.g., adding `timeout`) requires updates in multiple places.
+`_build_anthropic_client` and `_build_openai_client` deleted. `_build_role_client` now delegates all client construction to `_build_client`. `_build_client` is the single factory for all three backends. See commit `3fdc7d8`.
 
 ---
 
@@ -528,36 +459,36 @@ The constant `_WORKSPACE_CONFIG_FILE = "baps-config.json"` is defined at run.py:
 
 ## Summary Table
 
-| ID | Category | Severity | Short Description |
-|---|---|---|---|
-| DL-01 | Duplicate Logic | Medium | `_MAX_DELTA_BYTES` defined in two modules |
-| DL-02 | Duplicate Logic | Medium | `_BLACKBOARD_DIR` defined in two modules |
-| DL-03 | Duplicate Logic | High | Fence-stripping in `model_output` and `project_adapter` |
-| DL-04 | Duplicate Logic | High | `VerificationResult` dict serialized at 6 sites |
-| DL-05 | Duplicate Logic | Medium | Verification block string identical in red and referee prompts |
-| DL-06 | Duplicate Logic | High | `AnthropicClient` construction duplicated |
-| DL-07 | Duplicate Logic | High | `OpenAIClient` construction duplicated |
-| DL-08 | Duplicate Logic | Medium | `BAPS_BACKENDS` parsing block copy-pasted |
-| DL-09 | Duplicate Logic | Medium | `_parse_red_finding_json` and `_parse_referee_decision_json` are identical in structure |
-| DL-10 | Duplicate Logic | Low | Two optional-dispatch supplement helpers are identical in structure |
-| DL-11 | Duplicate Logic | Low | `_RED_REQUIRED_KEYS` and `_REFEREE_REQUIRED_KEYS` are identical frozensets |
-| DL-12 | Duplicate Logic | High | `export_state` byte-for-byte identical in Document and Audit adapters |
-| DL-13 | Duplicate Logic | Low | `document_artifact_from_state` and `coding_artifact_from_state` are structural duplicates |
-| DL-14 | Duplicate Logic | Medium | SHA-256 fingerprint computation repeated in 6 state-view builders |
-| DL-15 | Duplicate Logic | Low | StateView delimiter strings `=== StateView Start/End ===` hard-coded 6 times |
-| DL-16 | Duplicate Logic | Low | Main output print block duplicated in error and success paths |
-| DL-17 | Duplicate Logic | Low | `_require_non_empty` defined in `state.py` and `run.py` independently |
-| DL-18 | Duplicate Logic | Medium | `_validate_game_spec` reimplements Pydantic-enforced non-empty checks |
-| IP-01 | Inconsistent Pattern | High | Two client entry points with different config precedence |
-| IP-02 | Inconsistent Pattern | Low | API key error messages use 6 different phrasings |
-| IP-03 | Inconsistent Pattern | Low | Document and coding parsers diverge in JSON recovery strategy |
-| SV-01 | Structural Violation | Medium | `DocumentProjectAdapter` and `CodingProjectAdapter` imported but never used in `run.py` |
-| SV-02 | Structural Violation | Medium | 15 debug-print boilerplate functions clog `run.py` |
-| SV-03 | Structural Violation | Medium | `_build_client` supersedes earlier builders but they were never removed |
-| WT-01 | Weakened Test | Medium | Two `apply_update` tests assert type but not artifact content |
-| WT-02 | Weakened Test | Low | `test_validate_state` asserts call count but not artifact identity |
-| WT-03 | Weakened Test | Low | `test_apply_update_loads_validates...` asserts count only |
-| DC-01 | Dead Code | Low | `DocumentProjectAdapter` import in `run.py` unused |
-| DC-02 | Dead Code | Low | `CodingProjectAdapter` import in `run.py` unused |
-| DC-03 | Dead Code | Low | `_build_role_client` fallback in `play_game._get_client` unreachable in active spine |
-| DC-04 | Dead Code | Low | `_WORKSPACE_CONFIG_FILE` only used in one private function (informational) |
+| ID | Category | Severity | Status | Short Description |
+|---|---|---|---|---|
+| DL-01 | Duplicate Logic | Medium | ✅ resolved | `_MAX_DELTA_BYTES` defined in two modules |
+| DL-02 | Duplicate Logic | Medium | open | `_BLACKBOARD_DIR` defined in two modules (`run.py` and `model_output.py`) |
+| DL-03 | Duplicate Logic | High | ✅ resolved | Fence-stripping in `model_output` and `project_adapter` |
+| DL-04 | Duplicate Logic | High | ✅ resolved | `VerificationResult` dict serialized at 6 sites |
+| DL-05 | Duplicate Logic | Medium | ✅ resolved | Verification block string identical in red and referee prompts |
+| DL-06 | Duplicate Logic | High | ✅ resolved | `AnthropicClient` construction duplicated |
+| DL-07 | Duplicate Logic | High | ✅ resolved | `OpenAIClient` construction duplicated |
+| DL-08 | Duplicate Logic | Medium | open | `BAPS_BACKENDS` parsing block copy-pasted in `_build_model_client` and `_build_planner_model_client` |
+| DL-09 | Duplicate Logic | Medium | open | `_parse_red_finding_json` and `_parse_referee_decision_json` are identical in structure |
+| DL-10 | Duplicate Logic | Low | open | Two optional-dispatch supplement helpers are identical in structure |
+| DL-11 | Duplicate Logic | Low | open | `_RED_REQUIRED_KEYS` and `_REFEREE_REQUIRED_KEYS` are identical frozensets |
+| DL-12 | Duplicate Logic | High | ✅ resolved | `export_state` byte-for-byte identical in Document and Audit adapters |
+| DL-13 | Duplicate Logic | Low | open | `document_artifact_from_state` and `coding_artifact_from_state` are structural duplicates |
+| DL-14 | Duplicate Logic | Medium | open | SHA-256 fingerprint computation repeated in 6 state-view builders |
+| DL-15 | Duplicate Logic | Low | open | StateView delimiter strings `=== StateView Start/End ===` hard-coded 6 times |
+| DL-16 | Duplicate Logic | Low | open | Main output print block duplicated in error and success paths |
+| DL-17 | Duplicate Logic | Low | open | `_require_non_empty` defined in `state.py` and `run.py` independently |
+| DL-18 | Duplicate Logic | Medium | open | `_validate_game_spec` reimplements Pydantic-enforced non-empty checks |
+| IP-01 | Inconsistent Pattern | High | ✅ resolved | Two client entry points with different config precedence |
+| IP-02 | Inconsistent Pattern | Low | open | API key error messages use different phrasings |
+| IP-03 | Inconsistent Pattern | Low | open | Document and coding parsers diverge in JSON recovery strategy (intentional) |
+| SV-01 | Structural Violation | Medium | open | `DocumentProjectAdapter` and `CodingProjectAdapter` imported but never used in `run.py` |
+| SV-02 | Structural Violation | Medium | open | 15 debug-print boilerplate functions clog `run.py` |
+| SV-03 | Structural Violation | Medium | ✅ resolved | `_build_client` supersedes earlier builders but they were never removed |
+| WT-01 | Weakened Test | Medium | open | Two `apply_update` tests assert type but not artifact content |
+| WT-02 | Weakened Test | Low | open | `test_validate_state` asserts call count but not artifact identity |
+| WT-03 | Weakened Test | Low | open | `test_apply_update_loads_validates...` asserts count only |
+| DC-01 | Dead Code | Low | open | `DocumentProjectAdapter` import in `run.py` unused |
+| DC-02 | Dead Code | Low | open | `CodingProjectAdapter` import in `run.py` unused |
+| DC-03 | Dead Code | Low | open | `_build_role_client` fallback in `play_game._get_client` unreachable in active spine |
+| DC-04 | Dead Code | Low | open | `_WORKSPACE_CONFIG_FILE` only used in one private function (informational) |

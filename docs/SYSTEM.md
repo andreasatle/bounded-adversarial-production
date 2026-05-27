@@ -46,7 +46,7 @@ CreateGame is a **gap-analysis operation**, not a step-forward operation. It com
 15. Prompts consume `StateView` context, not raw authoritative `State` internals.
 16. Model-generated content is sanitized (NFKC-normalized, injection patterns removed) before embedding in any subsequent prompt.
 17. Delta payload models reject extra fields (`extra="forbid"`); unexpected model output fields cause validation failure rather than silent discard.
-18. Model response size is bounded before JSON deserialization (64 KB cap in `normalize_json_candidate`).
+18. Model response size is bounded before JSON deserialization (64 KB cap enforced by `_extract_json_candidate` in `model_output.py`).
 19. Decomposition branching is bounded by `max_sub_gaps` (config key, default 5); a `DecomposeSpec` with more sub-gaps is truncated to the first `max_sub_gaps` entries before execution.
 20. Model-generated code executes inside a Docker container during verification via `sandbox.run_sandboxed(cwd, mode, test_command, docker_image)`; the container image and test command are owned by the language plugin; `sandbox=none` is an explicit opt-in that emits a runtime warning and must not be used in production.
 

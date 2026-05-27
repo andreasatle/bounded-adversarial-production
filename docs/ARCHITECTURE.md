@@ -146,13 +146,15 @@ Client construction is handled by `_resolve_backend_model(role, config)` → `_b
 | Stop reason | Trigger |
 |---|---|
 | `iteration_limit_reached` | `max_iterations` leaf games consumed |
-| `create_game_no_new_game` | No gap at depth 0 |
+| `create_game_no_new_game` | No gap at depth 0; only valid when no verification has run or last verification passed |
 | `play_game_no_delta` | PlayGame returned no accepted delta; at depth 0, escalates to `northstar_update_proposed` |
 | `no_state_change` | Delta produced no state change; at depth 0, escalates to `northstar_update_proposed` |
 | `northstar_update_proposed` | CreateGame signalled trajectory drift, or gap identified but not closable |
 | `max_depth_reached` | Decomposition exceeded `max_depth` |
 
 `_run_project_iterations` converts `play_game_no_delta` and `no_state_change` to `northstar_update_proposed` at the outer loop, appending a blackboard proposal so the human is alerted through the NorthStar approval channel.
+
+`create_game_no_new_game` is only accepted as a stop when no verification has run (non-coding project) or the last verification passed. When verification is failing, `no_new_game` is treated as a model error: the runtime logs a warning and retries `create_game` with the failing verification already in context. A second consecutive `no_new_game` with failing verification escalates to `northstar_update_proposed`.
 
 ---
 
@@ -530,6 +532,7 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 15. Model-generated code executes inside a Docker container during verification; unsandboxed execution requires explicit opt-in.
 16. Decomposition branching factor is bounded by `max_sub_gaps`; excess sub-gaps are truncated before recursion begins.
 17. Language plugin is selected from `CodingArtifact.language` (persisted in state at creation time); all operations read from the artifact, not from runtime config.
+18. `create_game_no_new_game` is only a valid stop when no verification has run or the last verification passed; failing tests are evidence of an open gap and must not be silently ignored.
 
 ---
 
