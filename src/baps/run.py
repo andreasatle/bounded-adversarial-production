@@ -683,6 +683,13 @@ _REFEREE_DECISION_SCHEMA: dict = {
 }
 
 
+_DECOMPOSE_EMPTY_SUBGAPS_CORRECTION_PROMPT = (
+    "Your previous decompose response contained sub_gaps with empty description fields. "
+    "Every sub_gap must have a non-empty, meaningful description string. "
+    "Return a corrected JSON object where each sub_gap.description is a non-empty string."
+)
+
+
 def _require_non_empty(value: str, field_name: str) -> str:
     if value.strip() == "":
         raise ValueError(f"{field_name} must be non-empty")
@@ -1143,13 +1150,30 @@ def _parse_create_game_output(
         sub_gaps_raw = parsed.get("sub_gaps")
         if not isinstance(sub_gaps_raw, list) or not sub_gaps_raw:
             raise ValueError("create_game decompose response sub_gaps must be a non-empty list")
-        sub_gaps = tuple(
-            SubGapSpec(description=str(sg.get("description", "")).strip())
+
+        # Build descriptions, filtering empty ones before Pydantic validation.
+        raw_descriptions = [
+            str(sg.get("description", "")).strip()
             for sg in sub_gaps_raw
             if isinstance(sg, dict)
-        )
-        if not sub_gaps:
+        ]
+        valid_descriptions = [d for d in raw_descriptions if d]
+        if len(valid_descriptions) < len(raw_descriptions):
+            logger.warning(
+                "[create_game] stripped %d sub-gap(s) with empty description",
+                len(raw_descriptions) - len(valid_descriptions),
+            )
+
+        if not valid_descriptions:
+            if fallback_fn is not None:
+                logger.warning(
+                    "[create_game] all sub-gaps had empty descriptions; escalating to fallback model"
+                )
+                raw = fallback_fn(_DECOMPOSE_EMPTY_SUBGAPS_CORRECTION_PROMPT)
+                return _parse_create_game_output(raw, max_sub_gaps=max_sub_gaps, workspace=workspace)
             raise ValueError("create_game decompose response sub_gaps contained no valid entries")
+
+        sub_gaps = tuple(SubGapSpec(description=d) for d in valid_descriptions)
         if len(sub_gaps) > max_sub_gaps:
             logger.warning(
                 "[create_game] DecomposeSpec contained %d sub-gaps; truncating to max_sub_gaps=%d",
