@@ -174,6 +174,10 @@ def test_apply_update_accepts_proposal_without_base_state_fingerprint() -> None:
 
     assert isinstance(updated, State)
     assert store.save_calls == 1
+    replaced = next(a for a in updated.artifacts if a.id == "artifact-1")
+    assert replaced.kind == "document"
+    sibling = next(a for a in updated.artifacts if a.id == "artifact-2")
+    assert sibling.kind == "git_repository"
 
 
 def test_apply_update_accepts_matching_base_state_fingerprint() -> None:
@@ -196,6 +200,10 @@ def test_apply_update_accepts_matching_base_state_fingerprint() -> None:
 
     assert isinstance(updated, State)
     assert store.save_calls == 1
+    replaced = next(a for a in updated.artifacts if a.id == "artifact-1")
+    assert replaced.kind == "document"
+    sibling = next(a for a in updated.artifacts if a.id == "artifact-2")
+    assert sibling.kind == "git_repository"
 
 
 def test_apply_update_rejects_non_matching_base_state_fingerprint() -> None:
