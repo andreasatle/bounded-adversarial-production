@@ -9764,3 +9764,327 @@ def test_integration_writes_integration_blackboard_event(
     assert isinstance(evt["state_changed"], bool)
     assert "delta_type" in evt
     assert evt["delta_type"] != ""
+
+
+# ---------------------------------------------------------------------------
+# play_game blackboard — final_disposition branches
+# ---------------------------------------------------------------------------
+
+def _make_play_game_config(workspace: Path) -> dict:
+    return {
+        "workspace": workspace,
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "goal": "Write a short report.",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "output_path": workspace / "output" / "report.md",
+        "max_iterations": 1,
+        "spec_path": None,
+    }
+
+
+def _make_document_game_spec(**kwargs) -> "_real_run.GameSpec":
+    return _real_run.GameSpec(
+        objective="Add introduction section",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="Introduction section must be present.",
+        **kwargs,
+    )
+
+
+def test_play_game_blackboard_final_disposition_accepted(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws-accept"
+    config = _make_play_game_config(workspace)
+    state = create_state(config)
+    play_game(state, _make_document_game_spec(), config=config)
+
+    entry = json.loads(
+        (workspace / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip()
+    )
+    assert entry["final_disposition"] == "accepted"
+    attempt = entry["attempts"][0]
+    assert attempt["blue_delta"] is not None
+    assert attempt["red_finding"]["disposition"] == "accept"
+    assert attempt["referee_decision"]["disposition"] == "accept"
+
+
+def test_play_game_blackboard_final_disposition_rejected(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws-reject"
+    config = _make_play_game_config(workspace)
+    state = create_state(config)
+    play_game(
+        state,
+        _make_document_game_spec(),
+        config=config,
+        referee_model_client=FakeModelClient(
+            ['{"disposition":"reject","rationale":"not good enough"}']
+        ),
+        max_attempts=1,
+    )
+
+    entry = json.loads(
+        (workspace / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip()
+    )
+    assert entry["final_disposition"] == "rejected"
+    attempt = entry["attempts"][0]
+    assert attempt["blue_delta"] is not None
+    assert attempt["referee_decision"]["disposition"] == "reject"
+
+
+def test_play_game_blackboard_final_disposition_no_delta(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws-nodelta"
+    config = _make_play_game_config(workspace)
+    state = create_state(config)
+    # Empty body fails Section._validate_body → tool_call_to_delta raises → blue_delta stays None
+    play_game(
+        state,
+        _make_document_game_spec(),
+        config=config,
+        model_client=FakeModelClient(
+            tool_responses=[ToolCall("append_section", {"artifact_id": "main-document", "title": "Intro", "body": ""})]
+        ),
+        max_attempts=1,
+    )
+
+    entry = json.loads(
+        (workspace / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip()
+    )
+    assert entry["final_disposition"] == "no_delta"
+    assert all(r["blue_delta"] is None for r in entry["attempts"])
+
+
+# ---------------------------------------------------------------------------
+# depth and context_chain captured in create_game and play_game events
+# ---------------------------------------------------------------------------
+
+def test_create_game_blackboard_captures_depth_and_context_chain(tmp_path: Path) -> None:
+    config = {
+        "workspace": tmp_path / "ws-cg-depth",
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "goal": "Write a report.",
+        "northstar_markdown": "# Goal\n\nWrite a report.",
+        "output_path": tmp_path / "ws-cg-depth" / "output" / "report.md",
+        "max_iterations": 1,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    chain = ("Top-level gap", "Sub-level concern")
+    create_game(
+        config,
+        state,
+        depth=2,
+        context_chain=chain,
+        model_client=FakeModelClient([
+            '{"objective":"Close the gap","target_artifact_id":"main-document",'
+            '"allowed_delta_type":"DeltaDocumentState",'
+            '"success_condition":"Section present."}'
+        ]),
+    )
+
+    entry = json.loads(
+        (config["workspace"] / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip()
+    )
+    assert entry["depth"] == 2
+    assert entry["context_chain"] == list(chain)
+
+
+def test_play_game_blackboard_captures_depth_and_context_chain(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws-pg-depth"
+    config = _make_play_game_config(workspace)
+    state = create_state(config)
+    chain = ("Parent gap", "Child concern")
+    game_spec = _make_document_game_spec(context_chain=chain)
+    play_game(state, game_spec, config=config, depth=1)
+
+    entry = json.loads(
+        (workspace / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip()
+    )
+    assert entry["depth"] == 1
+    assert entry["context_chain"] == list(chain)
+
+
+# ---------------------------------------------------------------------------
+# Verification summary truncation — blackboard truncates, source is unchanged
+# ---------------------------------------------------------------------------
+
+def test_blackboard_verification_summary_truncated_to_cap(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import baps.run as run_module
+
+    long_stdout = "O" * 700
+    long_stderr = "E" * 600
+    mock_vr = run_module.VerificationResult(
+        command="pytest", cwd="/tmp", exit_code=0,
+        stdout=long_stdout, stderr=long_stderr, passed=True,
+    )
+    monkeypatch.setattr(
+        run_module, "_verify_candidate_with_adapter", lambda *a, **kw: mock_vr
+    )
+
+    workspace = tmp_path / "ws-trunc"
+    config = _make_play_game_config(workspace)
+    state = create_state(config)
+    play_game(state, _make_document_game_spec(), config=config)
+
+    entry = json.loads(
+        (workspace / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip()
+    )
+    cap = run_module._VERIFICATION_SUMMARY_CAP
+    vr_summary = entry["verification_result"]
+    assert vr_summary["stdout_summary"] == "O" * cap
+    assert vr_summary["stderr_summary"] == "E" * cap
+    assert len(vr_summary["stdout_summary"]) == cap
+    assert len(vr_summary["stderr_summary"]) == cap
+
+    attempt_vr = entry["attempts"][0]["candidate_verification"]
+    assert attempt_vr["stdout_summary"] == "O" * cap
+    assert attempt_vr["stderr_summary"] == "E" * cap
+
+    # Original VerificationResult object is not mutated
+    assert mock_vr.stdout == long_stdout
+    assert mock_vr.stderr == long_stderr
+
+
+def test_blackboard_verification_feedback_loop_uses_full_text(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """When candidate verification fails and Blue retries, the full stdout/stderr
+    must appear in Blue's next prompt — only the blackboard summary is truncated."""
+    import baps.run as run_module
+
+    long_stdout = "F" * 700
+    failing_vr = run_module.VerificationResult(
+        command="pytest", cwd="/tmp", exit_code=1,
+        stdout=long_stdout, stderr="", passed=False,
+    )
+    passing_vr = run_module.VerificationResult(
+        command="pytest", cwd="/tmp", exit_code=0,
+        stdout="ok", stderr="", passed=True,
+    )
+    call_count = {"n": 0}
+
+    def _mock_verify(*a, **kw):
+        call_count["n"] += 1
+        return failing_vr if call_count["n"] == 1 else passing_vr
+
+    monkeypatch.setattr(run_module, "_verify_candidate_with_adapter", _mock_verify)
+
+    workspace = tmp_path / "ws-feedbackloop"
+    config = _make_play_game_config(workspace)
+    state = create_state(config)
+    blue_client = FakeModelClient(
+        tool_responses=[
+            ToolCall("append_section", {"artifact_id": "main-document", "title": "Intro", "body": "first"}),
+            ToolCall("append_section", {"artifact_id": "main-document", "title": "Intro2", "body": "second"}),
+        ]
+    )
+    accept_response = '{"disposition":"accept","rationale":"ok"}'
+    play_game(
+        state,
+        _make_document_game_spec(),
+        config=config,
+        model_client=blue_client,
+        red_model_client=FakeModelClient([accept_response, accept_response]),
+        referee_model_client=FakeModelClient([accept_response, accept_response]),
+        max_attempts=2,
+    )
+
+    # Blue's second prompt must contain the full stdout, not the truncated version
+    assert len(blue_client.tool_prompts) == 2
+    second_prompt = blue_client.tool_prompts[1]
+    assert long_stdout in second_prompt
+
+
+# ---------------------------------------------------------------------------
+# integration event — explicit field value verification
+# ---------------------------------------------------------------------------
+
+def test_integration_event_all_required_fields_with_correct_types(
+    monkeypatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "ws-int-fields"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run", "start",
+            "--workspace", str(workspace),
+            "--project-type", "document",
+            "--artifact-id", "main-document",
+            "--goal", "Write a short report.",
+            "--output", "output/report.md",
+            "--max-iterations", "1",
+        ],
+    )
+    from baps.run import main as run_main
+    run_main()
+
+    lines = [
+        json.loads(line)
+        for line in (workspace / "blackboard" / "games.jsonl")
+        .read_text(encoding="utf-8")
+        .strip()
+        .splitlines()
+    ]
+    evt = next(e for e in lines if e["event"] == "integration")
+
+    assert evt["event"] == "integration"
+    assert isinstance(evt["created_at"], str) and evt["created_at"] != ""
+    assert isinstance(evt["depth"], int)
+    assert isinstance(evt["proposal_id"], str) and len(evt["proposal_id"]) == 36  # UUID
+    assert isinstance(evt["proposal_summary"], str) and evt["proposal_summary"] != ""
+    assert isinstance(evt["state_changed"], bool)
+    assert isinstance(evt["delta_type"], str) and evt["delta_type"] != ""
+    # For a document project the only supported delta op is append_section
+    assert evt["delta_type"] == "append_section"
+
+
+# ---------------------------------------------------------------------------
+# create_game no_new_game blackboard event — with failing verification context
+# ---------------------------------------------------------------------------
+
+def test_create_game_blackboard_no_new_game_with_failing_verification(
+    tmp_path: Path,
+) -> None:
+    """create_game writes result_type=no_new_game even when a failing verification
+    result is in context. Runtime-level rejection of no_new_game happens in
+    _solve_gap, not inside create_game; the blackboard must faithfully record
+    what the model actually returned."""
+    import baps.run as run_module
+
+    config = {
+        "workspace": tmp_path / "ws-nng-vr",
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "goal": "Write a short report.",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "output_path": tmp_path / "ws-nng-vr" / "output" / "report.md",
+        "max_iterations": 1,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    failing_vr = run_module.VerificationResult(
+        command="pytest", cwd="/tmp", exit_code=1,
+        stdout="FAILED tests/test_foo.py::test_bar", stderr="", passed=False,
+    )
+
+    with pytest.raises(run_module.NoNewGameError):
+        create_game(
+            config,
+            state,
+            verification_result=failing_vr,
+            model_client=FakeModelClient(
+                ['{"no_new_game": true, "reason": "No gap identified."}']
+            ),
+        )
+
+    games_path = config["workspace"] / "blackboard" / "games.jsonl"
+    assert games_path.exists()
+    entry = json.loads(games_path.read_text(encoding="utf-8").strip())
+    assert entry["event"] == "create_game"
+    assert entry["result_type"] == "no_new_game"
+    assert entry["result"] is None
+    assert "created_at" in entry
+    assert entry["depth"] == 0
