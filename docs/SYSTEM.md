@@ -132,6 +132,73 @@ When CreateGame signals trajectory drift:
 
 Blackboard is append-only and non-authoritative. It never feeds back into `State`.
 
+## 7a. Blackboard Audit Trail
+
+Every game execution writes its full reasoning trail to `<workspace>/blackboard/games.jsonl`. All entries use the `BlackboardEvent` enum and are sanitized before writing. The file is append-only.
+
+**`create_game` event** — written at the end of every `create_game()` call when `result_type` is determined:
+
+```json
+{
+  "event": "create_game",
+  "created_at": "<ISO 8601 UTC>",
+  "depth": 0,
+  "context_chain": ["parent gap description", ...],
+  "state_view_fingerprint": "<SHA-256 of StateView input>",
+  "result_type": "game_spec" | "decompose_spec" | "no_new_game" | "northstar_update_needed",
+  "result": { "<sanitized GameSpec or DecomposeSpec fields>" } | null,
+  "model_used": "<primary model name or client class>"
+}
+```
+
+`result` is null for `no_new_game` and `northstar_update_needed`. Parse errors and validation errors that precede a final result type are not written.
+
+**`play_game` event** — written at the end of every leaf `play_game()` call:
+
+```json
+{
+  "event": "play_game",
+  "game_id": "<UUID>",
+  "created_at": "<ISO 8601 UTC>",
+  "depth": 0,
+  "context_chain": ["..."],
+  "game_spec": { "objective": "...", "target_artifact_id": "...", "allowed_delta_type": "...", "success_condition": "..." },
+  "attempts": [
+    {
+      "attempt_number": 1,
+      "blue_delta": { "<sanitized delta fields>" } | null,
+      "red_finding": { "disposition": "...", "rationale": "...", ... } | null,
+      "referee_decision": { "disposition": "...", "rationale": "...", ... } | null,
+      "candidate_verification": { "passed": true, "exit_code": 0, "stdout_summary": "...", "stderr_summary": "..." } | null
+    }
+  ],
+  "final_disposition": "accepted" | "rejected" | "no_delta",
+  "verification_result": { "passed": true, "exit_code": 0, "stdout_summary": "...", "stderr_summary": "..." } | null
+}
+```
+
+**`integration` event** — written immediately after `StateService.apply_delta()` succeeds:
+
+```json
+{
+  "event": "integration",
+  "created_at": "<ISO 8601 UTC>",
+  "depth": 0,
+  "proposal_id": "<UUID>",
+  "proposal_summary": "<sanitized game objective>",
+  "state_changed": true,
+  "delta_type": "append_section" | "write_file" | ...
+}
+```
+
+`delta_type` is the `operation` field of the applied `DeltaState` (e.g. `append_section`, `write_file`, `write_files`, `delete_file`, `modify_section`, `delete_section`).
+
+**Invariants:**
+- All model-generated string fields are sanitized via `sanitize_model_string()` before writing.
+- Events are appended in chronological order: `create_game` → `play_game` → `integration`.
+- The file is never read back as input to model prompts or state mutations.
+- `northstar_update_proposal` events continue to go to `northstar_proposals.jsonl` (separate file).
+
 ## 8. Stop Conditions
 
 | Stop reason | Meaning |

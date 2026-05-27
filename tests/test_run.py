@@ -9582,3 +9582,185 @@ def test_coding_blue_prompt_includes_candidate_verification_failures() -> None:
     assert "tests/test_calc.py::test_add" in prompt
     assert "Candidate verification failed" in prompt
     assert "Repair these test failures" in prompt
+
+
+# ---------------------------------------------------------------------------
+# Blackboard auditability: CREATE_GAME / PLAY_GAME / INTEGRATION events
+# ---------------------------------------------------------------------------
+
+def test_create_game_writes_create_game_blackboard_event(tmp_path: Path) -> None:
+    config = {
+        "workspace": tmp_path / "ws-cg-bb",
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "goal": "Write a short report.",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "output_path": tmp_path / "ws-cg-bb" / "output" / "report.md",
+        "max_iterations": 1,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    create_game(
+        config,
+        state,
+        model_client=FakeModelClient([
+            '{"objective":"Close the gap","target_artifact_id":"main-document",'
+            '"allowed_delta_type":"DeltaDocumentState",'
+            '"success_condition":"Section present."}'
+        ]),
+    )
+
+    games_path = config["workspace"] / "blackboard" / "games.jsonl"
+    assert games_path.exists(), "games.jsonl must be written by create_game"
+    entry = json.loads(games_path.read_text(encoding="utf-8").strip())
+
+    assert entry["event"] == "create_game"
+    assert "created_at" in entry
+    assert entry["depth"] == 0
+    assert entry["context_chain"] == []
+    assert "state_view_fingerprint" in entry
+    assert entry["state_view_fingerprint"] != ""
+    assert entry["result_type"] == "game_spec"
+    assert entry["result"]["objective"] == "Close the gap"
+    assert entry["result"]["target_artifact_id"] == "main-document"
+    assert "model_used" in entry
+
+
+def test_create_game_writes_no_new_game_event(tmp_path: Path) -> None:
+    config = {
+        "workspace": tmp_path / "ws-nng-bb",
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "goal": "Write a short report.",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "output_path": tmp_path / "ws-nng-bb" / "output" / "report.md",
+        "max_iterations": 1,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    import baps.run as run_module
+    with pytest.raises(run_module.NoNewGameError):
+        create_game(
+            config,
+            state,
+            model_client=FakeModelClient(['{"no_new_game": true, "reason": "All gaps closed."}']),
+        )
+
+    games_path = config["workspace"] / "blackboard" / "games.jsonl"
+    assert games_path.exists()
+    entry = json.loads(games_path.read_text(encoding="utf-8").strip())
+    assert entry["event"] == "create_game"
+    assert entry["result_type"] == "no_new_game"
+    assert entry["result"] is None
+    assert "created_at" in entry
+
+
+def test_create_game_writes_decompose_spec_event(tmp_path: Path) -> None:
+    config = {
+        "workspace": tmp_path / "ws-dc-bb",
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "goal": "Write a long report.",
+        "northstar_markdown": "# Goal\n\nWrite a long report.",
+        "output_path": tmp_path / "ws-dc-bb" / "output" / "report.md",
+        "max_iterations": 1,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    create_game(
+        config,
+        state,
+        model_client=FakeModelClient([
+            '{"decompose": true, "rationale": "Too large", '
+            '"sub_gaps": [{"description": "Part one"}, {"description": "Part two"}]}'
+        ]),
+    )
+
+    games_path = config["workspace"] / "blackboard" / "games.jsonl"
+    assert games_path.exists()
+    entry = json.loads(games_path.read_text(encoding="utf-8").strip())
+    assert entry["event"] == "create_game"
+    assert entry["result_type"] == "decompose_spec"
+    assert entry["result"]["rationale"] == "Too large"
+    assert len(entry["result"]["sub_gaps"]) == 2
+    assert entry["result"]["sub_gaps"][0]["description"] == "Part one"
+
+
+def test_play_game_writes_play_game_blackboard_event(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws-pg-bb"
+    config = {
+        "workspace": workspace,
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "goal": "Write a short report.",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "output_path": workspace / "output" / "report.md",
+        "max_iterations": 1,
+        "spec_path": None,
+    }
+    state = create_state(config)
+    game_spec = _real_run.GameSpec(
+        objective="Add introduction section",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="Introduction section must be present.",
+    )
+    play_game(state, game_spec, config=config)
+
+    games_path = workspace / "blackboard" / "games.jsonl"
+    assert games_path.exists(), "games.jsonl must be written by play_game"
+    entry = json.loads(games_path.read_text(encoding="utf-8").strip())
+
+    assert entry["event"] == "play_game"
+    assert "game_id" in entry
+    assert "created_at" in entry
+    assert entry["depth"] == 0
+    assert entry["context_chain"] == []
+    assert "game_spec" in entry
+    assert entry["game_spec"]["objective"] == "Add introduction section"
+    assert isinstance(entry["attempts"], list)
+    assert len(entry["attempts"]) >= 1
+    attempt = entry["attempts"][0]
+    assert attempt["attempt_number"] == 1
+    assert "blue_delta" in attempt
+    assert "red_finding" in attempt
+    assert "referee_decision" in attempt
+    assert entry["final_disposition"] in ("accepted", "rejected", "no_delta")
+
+
+def test_integration_writes_integration_blackboard_event(
+    monkeypatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "ws-int-bb"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "start",
+            "--workspace", str(workspace),
+            "--project-type", "document",
+            "--artifact-id", "main-document",
+            "--goal", "Write a short report.",
+            "--output", "output/report.md",
+            "--max-iterations", "1",
+        ],
+    )
+    from baps.run import main as run_main
+    run_main()
+
+    games_path = workspace / "blackboard" / "games.jsonl"
+    assert games_path.exists(), "games.jsonl must exist after a successful run"
+
+    lines = [json.loads(l) for l in games_path.read_text(encoding="utf-8").strip().splitlines()]
+    integration_events = [e for e in lines if e["event"] == "integration"]
+    assert len(integration_events) >= 1, "at least one integration event must be written"
+
+    evt = integration_events[0]
+    assert "created_at" in evt
+    assert "depth" in evt
+    assert "proposal_id" in evt
+    assert evt["proposal_id"] != ""
+    assert "proposal_summary" in evt
+    assert isinstance(evt["state_changed"], bool)
+    assert "delta_type" in evt
+    assert evt["delta_type"] != ""

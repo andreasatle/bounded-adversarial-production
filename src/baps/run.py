@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import sys
+import uuid
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -59,7 +60,9 @@ _DEFAULT_MAX_PLAY_GAME_ATTEMPTS = 3
 _DEFAULT_MAX_DEPTH = 3
 _BLACKBOARD_DIR = "blackboard"
 _NORTHSTAR_PROPOSALS_FILE = "northstar_proposals.jsonl"
+_GAMES_FILE = "games.jsonl"
 _WORKSPACE_CONFIG_FILE = "baps-config.json"
+_VERIFICATION_SUMMARY_CAP = 500
 
 
 class SpecRole(StrEnum):
@@ -1344,76 +1347,116 @@ def create_game(
     else:
         _red_cg_fallback_fn = None
 
-    for attempt in range(1, max_create_game_attempts + 1):
-        prompt = _render_create_game_prompt(
-            config=config,
-            state=state,
-            state_view=state_view,
-            verification_result=verification_result,
-            adapter=resolved_adapter,
-            context_chain=context_chain,
-            create_game_red_feedback=red_feedback,
-        )
-        _debug_print_create_game_prompt(prompt)
-        result = _generate_create_game_with_json_retry(
-            role, prompt, max_sub_gaps=max_sub_gaps, workspace=config["workspace"],
-            fallback_fn=_create_game_fallback_fn,
-        )
+    _cg_workspace = config.get("workspace")
+    _bb_result_type: str | None = None
+    _bb_result: dict | None = None
+    _bb_model_used = _client_model_name(role.client)
 
-        if isinstance(result, DecomposeSpec):
-            _debug_print_create_game_output(result)
-            return result
-
-        game_spec = _normalize_game_spec_with_adapter(resolved_adapter, result, state, config)
-        try:
-            _validate_game_spec(game_spec)
-        except ValueError as exc:
-            _debug_print_create_game_validation_failure(str(exc))
-            raise
-        expected_artifact_id = _config_artifact_id(config)
-        if game_spec.target_artifact_id != expected_artifact_id:
-            raise ValueError(
-                "create_game target artifact must match configured artifact_id: "
-                f"expected {expected_artifact_id}, got {game_spec.target_artifact_id}"
+    try:
+        for attempt in range(1, max_create_game_attempts + 1):
+            prompt = _render_create_game_prompt(
+                config=config,
+                state=state,
+                state_view=state_view,
+                verification_result=verification_result,
+                adapter=resolved_adapter,
+                context_chain=context_chain,
+                create_game_red_feedback=red_feedback,
             )
-        _ensure_target_artifact_exists(state, game_spec.target_artifact_id)
-        if game_spec.allowed_delta_type != resolved_adapter.supported_delta_type:
-            raise ValueError(
-                "create_game allowed_delta_type must match project adapter: "
-                f"expected {resolved_adapter.supported_delta_type}, got {game_spec.allowed_delta_type}"
+            _debug_print_create_game_prompt(prompt)
+            result = _generate_create_game_with_json_retry(
+                role, prompt, max_sub_gaps=max_sub_gaps, workspace=config["workspace"],
+                fallback_fn=_create_game_fallback_fn,
             )
-        last_valid_game_spec = game_spec
 
-        # Red challenge — only when a Red client is wired and this is not the final attempt
-        if red_role is not None and attempt < max_create_game_attempts:
-            red_prompt = _render_create_game_red_prompt(state_view, game_spec, config)
-            _debug_print_create_game_red_input(state_view, game_spec)
-            red_generated = red_role.generate(red_prompt)
+            if isinstance(result, DecomposeSpec):
+                _debug_print_create_game_output(result)
+                _bb_result_type = "decompose_spec"
+                _bb_result = {
+                    "rationale": sanitize_model_string(result.rationale),
+                    "sub_gaps": [
+                        {"description": sanitize_model_string(sg.description)}
+                        for sg in result.sub_gaps
+                    ],
+                }
+                return result
+
+            game_spec = _normalize_game_spec_with_adapter(resolved_adapter, result, state, config)
             try:
-                red_finding = _parse_red_finding_json(
-                    red_generated, workspace=config.get("workspace"),
-                    retry_fn=red_role.generate, fallback_fn=_red_cg_fallback_fn,
+                _validate_game_spec(game_spec)
+            except ValueError as exc:
+                _debug_print_create_game_validation_failure(str(exc))
+                raise
+            expected_artifact_id = _config_artifact_id(config)
+            if game_spec.target_artifact_id != expected_artifact_id:
+                raise ValueError(
+                    "create_game target artifact must match configured artifact_id: "
+                    f"expected {expected_artifact_id}, got {game_spec.target_artifact_id}"
                 )
-            except ValueError:
-                # Unparseable Red output — accept the GameSpec as-is
-                _debug_print_create_game_output(game_spec)
-                return game_spec
-            _debug_print_create_game_red_output(red_finding)
-            if red_finding.disposition == "accept":
-                _debug_print_create_game_output(game_spec)
-                return game_spec
-            # Red rejects/revises — inject feedback and retry
-            red_feedback = red_finding.model_dump(mode="json")
-            continue
+            _ensure_target_artifact_exists(state, game_spec.target_artifact_id)
+            if game_spec.allowed_delta_type != resolved_adapter.supported_delta_type:
+                raise ValueError(
+                    "create_game allowed_delta_type must match project adapter: "
+                    f"expected {resolved_adapter.supported_delta_type}, got {game_spec.allowed_delta_type}"
+                )
+            last_valid_game_spec = game_spec
 
-        _debug_print_create_game_output(game_spec)
-        return game_spec
+            # Red challenge — only when a Red client is wired and this is not the final attempt
+            if red_role is not None and attempt < max_create_game_attempts:
+                red_prompt = _render_create_game_red_prompt(state_view, game_spec, config)
+                _debug_print_create_game_red_input(state_view, game_spec)
+                red_generated = red_role.generate(red_prompt)
+                try:
+                    red_finding = _parse_red_finding_json(
+                        red_generated, workspace=config.get("workspace"),
+                        retry_fn=red_role.generate, fallback_fn=_red_cg_fallback_fn,
+                    )
+                except ValueError:
+                    # Unparseable Red output — accept the GameSpec as-is
+                    _debug_print_create_game_output(game_spec)
+                    _bb_result_type = "game_spec"
+                    _bb_result = _sanitize_game_spec_dict(game_spec)
+                    return game_spec
+                _debug_print_create_game_red_output(red_finding)
+                if red_finding.disposition == "accept":
+                    _debug_print_create_game_output(game_spec)
+                    _bb_result_type = "game_spec"
+                    _bb_result = _sanitize_game_spec_dict(game_spec)
+                    return game_spec
+                # Red rejects/revises — inject feedback and retry
+                red_feedback = red_finding.model_dump(mode="json")
+                continue
 
-    # All attempts exhausted — return best available spec
-    if last_valid_game_spec is not None:
-        _debug_print_create_game_output(last_valid_game_spec)
-        return last_valid_game_spec
-    raise ValueError("create_game failed to produce a valid GameSpec after all attempts")
+            _debug_print_create_game_output(game_spec)
+            _bb_result_type = "game_spec"
+            _bb_result = _sanitize_game_spec_dict(game_spec)
+            return game_spec
+
+        # All attempts exhausted — return best available spec
+        if last_valid_game_spec is not None:
+            _debug_print_create_game_output(last_valid_game_spec)
+            _bb_result_type = "game_spec"
+            _bb_result = _sanitize_game_spec_dict(last_valid_game_spec)
+            return last_valid_game_spec
+        raise ValueError("create_game failed to produce a valid GameSpec after all attempts")
+
+    except NoNewGameError:
+        _bb_result_type = "no_new_game"
+        raise
+    except NorthStarUpdateNeededError:
+        _bb_result_type = "northstar_update_needed"
+        raise
+    finally:
+        if _cg_workspace is not None and _bb_result_type is not None:
+            _append_create_game_to_blackboard(
+                _cg_workspace,
+                depth,
+                context_chain,
+                state_view.input_fingerprint,
+                _bb_result_type,
+                _bb_result,
+                _bb_model_used,
+            )
 
 
 
@@ -1600,6 +1643,7 @@ def play_game(
     executor: ToolExecutor | None = None,
     sandbox_mode: str = "docker",
     config: dict[str, Any] | None = None,
+    depth: int = 0,
 ) -> DeltaState | None:
     if max_attempts < 1:
         raise ValueError("max_attempts must be >= 1")
@@ -1621,6 +1665,9 @@ def play_game(
                 "stderr": verification_result.stderr,
             }
         }
+    attempt_records: list[dict] = []
+    last_candidate_result: VerificationResult | None = None
+    game_id = str(uuid.uuid4())
     def _get_client(explicit: ModelClient | None, role: str) -> ModelClient:
         if explicit is not None:
             return explicit
@@ -1666,6 +1713,13 @@ def play_game(
 
     for attempt in range(1, max_attempts + 1):
         _debug_print_play_game_attempt(attempt)
+        attempt_rec: dict = {
+            "attempt_number": attempt,
+            "blue_delta": None,
+            "red_finding": None,
+            "referee_decision": None,
+            "candidate_verification": None,
+        }
 
         # Research phase — each role researches before producing output
         blue_session: list[ToolCallRecord] = []
@@ -1705,6 +1759,7 @@ def play_game(
                         "validation_error": str(exc),
                     }
                 }
+                attempt_records.append(attempt_rec)
                 continue
         else:
             blue_generated = blue_role.generate(blue_prompt)
@@ -1720,8 +1775,10 @@ def play_game(
                         "validation_error": str(exc),
                     }
                 }
+                attempt_records.append(attempt_rec)
                 continue
         _debug_print_blue_output(candidate_delta)
+        attempt_rec["blue_delta"] = _sanitize_feedback_dict(candidate_delta.model_dump(mode="json"))
 
         # Red research — sees Blue's tool session for transparency
         red_session: list[ToolCallRecord] = []
@@ -1772,6 +1829,7 @@ def play_game(
             retry_fn=red_role.generate, fallback_fn=_red_fallback_fn,
         )
         _debug_print_red_output(red_finding)
+        attempt_rec["red_finding"] = _sanitize_feedback_dict(red_finding.model_dump(mode="json"))
 
         # Referee research — sees both Blue and Red sessions
         referee_session: list[ToolCallRecord] = []
@@ -1829,6 +1887,7 @@ def play_game(
             retry_fn=referee_role.generate, fallback_fn=_referee_fallback_fn,
         )
         _debug_print_referee_output(referee_decision)
+        attempt_rec["referee_decision"] = _sanitize_feedback_dict(referee_decision.model_dump(mode="json"))
 
         runtime = apply_referee_decision_to_runtime(
             runtime=runtime,
@@ -1840,6 +1899,8 @@ def play_game(
                 resolved_adapter, candidate_delta, state, game_spec.target_artifact_id,
                 sandbox_mode=sandbox_mode,
             )
+            last_candidate_result = candidate_result
+            attempt_rec["candidate_verification"] = _summarize_verification_result(candidate_result)
             if (
                 candidate_result is not None
                 and not candidate_result.passed
@@ -1855,14 +1916,32 @@ def play_game(
                         "stderr": candidate_result.stderr,
                     },
                 }
+                attempt_records.append(attempt_rec)
                 continue
-            _debug_print_play_game_output(runtime.current_best_delta)
-            return runtime.current_best_delta
+            attempt_records.append(attempt_rec)
+            break
         previous_feedback = {
             "red_finding": _sanitize_feedback_dict(red_finding.model_dump(mode="json")),
             "referee_decision": _sanitize_feedback_dict(referee_decision.model_dump(mode="json")),
         }
+        attempt_records.append(attempt_rec)
+
     _debug_print_play_game_output(runtime.current_best_delta)
+    if _workspace is not None:
+        final_disposition = (
+            "accepted" if runtime.current_best_delta is not None
+            else "rejected" if any(r["blue_delta"] is not None for r in attempt_records)
+            else "no_delta"
+        )
+        _append_game_to_blackboard(
+            workspace=_workspace,
+            game_id=game_id,
+            depth=depth,
+            game_spec=game_spec,
+            attempt_records=attempt_records,
+            final_disposition=final_disposition,
+            verification_result=last_candidate_result,
+        )
     return runtime.current_best_delta
 
 
@@ -1938,6 +2017,107 @@ def _append_northstar_proposal_to_blackboard(
     }
     proposals_path = blackboard_dir / _NORTHSTAR_PROPOSALS_FILE
     with proposals_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def _summarize_verification_result(result: "VerificationResult | None") -> "dict | None":
+    if result is None:
+        return None
+    return {
+        "passed": result.passed,
+        "exit_code": result.exit_code,
+        "stdout_summary": result.stdout[:_VERIFICATION_SUMMARY_CAP] if result.stdout else None,
+        "stderr_summary": result.stderr[:_VERIFICATION_SUMMARY_CAP] if result.stderr else None,
+    }
+
+
+def _sanitize_game_spec_dict(game_spec: "GameSpec") -> dict:
+    return {
+        "objective": sanitize_model_string(game_spec.objective),
+        "target_artifact_id": game_spec.target_artifact_id,
+        "allowed_delta_type": game_spec.allowed_delta_type,
+        "success_condition": sanitize_model_string(game_spec.success_condition),
+    }
+
+
+def _append_game_to_blackboard(
+    workspace: Path,
+    game_id: str,
+    depth: int,
+    game_spec: "GameSpec",
+    attempt_records: list[dict],
+    final_disposition: str,
+    verification_result: "VerificationResult | None",
+) -> None:
+    blackboard_dir = workspace / _BLACKBOARD_DIR
+    blackboard_dir.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "event": BlackboardEvent.PLAY_GAME,
+        "game_id": game_id,
+        "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
+        "depth": depth,
+        "context_chain": list(game_spec.context_chain),
+        "game_spec": _sanitize_game_spec_dict(game_spec),
+        "attempts": attempt_records,
+        "final_disposition": final_disposition,
+        "verification_result": _summarize_verification_result(verification_result),
+    }
+    games_path = blackboard_dir / _GAMES_FILE
+    with games_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def _client_model_name(client: "ModelClient") -> str:
+    return getattr(client, "model", type(client).__name__)
+
+
+def _append_create_game_to_blackboard(
+    workspace: Path,
+    depth: int,
+    context_chain: "tuple[str, ...]",
+    state_view_fingerprint: str,
+    result_type: str,
+    result: "dict | None",
+    model_used: str,
+) -> None:
+    blackboard_dir = workspace / _BLACKBOARD_DIR
+    blackboard_dir.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "event": BlackboardEvent.CREATE_GAME,
+        "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
+        "depth": depth,
+        "context_chain": list(context_chain),
+        "state_view_fingerprint": state_view_fingerprint,
+        "result_type": result_type,
+        "result": result,
+        "model_used": model_used,
+    }
+    games_path = blackboard_dir / _GAMES_FILE
+    with games_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def _append_integration_to_blackboard(
+    workspace: Path,
+    depth: int,
+    proposal_id: str,
+    proposal_summary: str,
+    state_changed: bool,
+    delta_type: str,
+) -> None:
+    blackboard_dir = workspace / _BLACKBOARD_DIR
+    blackboard_dir.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "event": BlackboardEvent.INTEGRATION,
+        "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
+        "depth": depth,
+        "proposal_id": proposal_id,
+        "proposal_summary": sanitize_model_string(proposal_summary),
+        "state_changed": state_changed,
+        "delta_type": delta_type,
+    }
+    games_path = blackboard_dir / _GAMES_FILE
+    with games_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
 
 
@@ -2180,6 +2360,7 @@ def _solve_gap(
         executor=build_default_tool_executor(),
         sandbox_mode=sandbox_mode,
         config=config,
+        depth=depth,
     )
     if delta_state is None:
         ctx.stop_reason = StopReason.PLAY_GAME_NO_DELTA
@@ -2188,6 +2369,17 @@ def _solve_gap(
     before_state = state_service.load_state()
     updated_state = state_service.apply_delta(delta_state)
     changed = state_service.states_differ(before_state, updated_state)
+
+    _integration_workspace = config.get("workspace")
+    if _integration_workspace is not None:
+        _append_integration_to_blackboard(
+            workspace=_integration_workspace,
+            depth=depth,
+            proposal_id=str(uuid.uuid4()),
+            proposal_summary=game_spec.objective,
+            state_changed=changed,
+            delta_type=getattr(delta_state, "operation", type(delta_state).__name__),
+        )
 
     ctx.output_changed = adapter.export_state(updated_state, output_path, artifact_id)
     ctx.output_exported = ctx.output_exported or ctx.output_changed

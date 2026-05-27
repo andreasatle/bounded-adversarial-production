@@ -12,6 +12,10 @@ from typing import Any, Callable
 class BlackboardEvent(StrEnum):
     NORTHSTAR_UPDATE_PROPOSAL = "northstar_update_proposal"
     UNEXPECTED_KEYS_STRIPPED = "unexpected_keys_stripped"
+    GAME = "game"
+    CREATE_GAME = "create_game"
+    PLAY_GAME = "play_game"
+    INTEGRATION = "integration"
 
 logger = logging.getLogger(__name__)
 
