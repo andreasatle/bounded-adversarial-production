@@ -435,122 +435,79 @@ def _replace_artifact_in_state(
 
 
 def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
+    """Apply a StateUpdateProposal to State.
+
+    For operations that have typed DeltaState equivalents (append_section,
+    modify_section, delete_section, write_file, write_files, delete_file),
+    delegates to apply_state_delta so all durable mutation flows through
+    the single canonical path.
+
+    Operations add_artifact and replace_artifact have no typed delta equivalent
+    and are handled directly here.
+    """
     operation = proposal.payload.get("operation")
+    target_artifact_id = proposal.target.artifact_id
+
     if operation == "write_file":
-        target_artifact_id = proposal.target.artifact_id
-        existing = find_state_artifact(state, target_artifact_id)
-        if not isinstance(existing, CodingArtifact):
-            raise ValueError("write_file operation requires a CodingArtifact target")
         if "file" not in proposal.payload:
             raise ValueError("write_file operation requires payload['file']")
-        incoming_file = CodeFile.model_validate(proposal.payload["file"])
-
-        replaced = False
-        updated_files: list[CodeFile] = []
-        for existing_file in existing.files:
-            if existing_file.path == incoming_file.path:
-                updated_files.append(incoming_file)
-                replaced = True
-            else:
-                updated_files.append(existing_file)
-        if not replaced:
-            updated_files.append(incoming_file)
-
-        replacement = CodingArtifact(
-            id=existing.id,
-            language=existing.language,
-            files=tuple(updated_files),
-        )
-        return _replace_artifact_in_state(state, target_artifact_id, replacement)
+        return apply_state_delta(state, DeltaCodingState(
+            artifact_id=target_artifact_id,
+            operation="write_file",
+            payload=WriteFileDelta(file=CodeFile.model_validate(proposal.payload["file"])),
+        ))
 
     if operation == "write_files":
-        target_artifact_id = proposal.target.artifact_id
-        existing = find_state_artifact(state, target_artifact_id)
-        if not isinstance(existing, CodingArtifact):
-            raise ValueError("write_files operation requires a CodingArtifact target")
         if "files" not in proposal.payload:
             raise ValueError("write_files operation requires payload['files']")
-        incoming_files = [CodeFile.model_validate(f) for f in proposal.payload["files"]]
-        files_by_path = {f.path: f for f in existing.files}
-        for incoming_file in incoming_files:
-            files_by_path[incoming_file.path] = incoming_file
-        replacement = CodingArtifact(id=existing.id, language=existing.language, files=tuple(files_by_path.values()))
-        return _replace_artifact_in_state(state, target_artifact_id, replacement)
+        return apply_state_delta(state, DeltaCodingBatchState(
+            artifact_id=target_artifact_id,
+            operation="write_files",
+            payload=WriteFilesDelta(
+                files=tuple(CodeFile.model_validate(f) for f in proposal.payload["files"])
+            ),
+        ))
 
     if operation == "append_section":
-        target_artifact_id = proposal.target.artifact_id
-        existing = find_state_artifact(state, target_artifact_id)
-        if not isinstance(existing, DocumentArtifact):
-            raise ValueError("append_section operation requires a DocumentArtifact target")
         if "section" not in proposal.payload:
             raise ValueError("append_section operation requires payload['section']")
-        appended_section = Section.model_validate(proposal.payload["section"])
-        replacement = DocumentArtifact(
-            id=existing.id,
-            sections=(*existing.sections, appended_section),
-        )
-        return _replace_artifact_in_state(state, target_artifact_id, replacement)
+        return apply_state_delta(state, DeltaDocumentState(
+            artifact_id=target_artifact_id,
+            operation="append_section",
+            payload=AppendSectionDelta(section=Section.model_validate(proposal.payload["section"])),
+        ))
 
     if operation == "modify_section":
-        target_artifact_id = proposal.target.artifact_id
-        existing = find_state_artifact(state, target_artifact_id)
-        if not isinstance(existing, DocumentArtifact):
-            raise ValueError("modify_section operation requires a DocumentArtifact target")
         if "section_title" not in proposal.payload or "new_body" not in proposal.payload:
             raise ValueError(
                 "modify_section operation requires payload['section_title'] and payload['new_body']"
             )
-        section_title = str(proposal.payload["section_title"])
-        new_body = str(proposal.payload["new_body"])
-        if not any(s.title == section_title for s in existing.sections):
-            raise ValueError(
-                f"modify_section: no section with title {section_title!r} found in artifact {target_artifact_id!r}"
-            )
-        replacement = DocumentArtifact(
-            id=existing.id,
-            sections=tuple(
-                Section(title=s.title, body=new_body) if s.title == section_title else s
-                for s in existing.sections
+        return apply_state_delta(state, DeltaModifyDocumentState(
+            artifact_id=target_artifact_id,
+            operation="modify_section",
+            payload=ModifySectionDelta(
+                section_title=str(proposal.payload["section_title"]),
+                new_body=str(proposal.payload["new_body"]),
             ),
-        )
-        return _replace_artifact_in_state(state, target_artifact_id, replacement)
+        ))
 
     if operation == "delete_section":
-        target_artifact_id = proposal.target.artifact_id
-        existing = find_state_artifact(state, target_artifact_id)
-        if not isinstance(existing, DocumentArtifact):
-            raise ValueError("delete_section operation requires a DocumentArtifact target")
         if "section_title" not in proposal.payload:
             raise ValueError("delete_section operation requires payload['section_title']")
-        section_title = str(proposal.payload["section_title"])
-        if not any(s.title == section_title for s in existing.sections):
-            raise ValueError(
-                f"delete_section: no section with title {section_title!r} found in artifact {target_artifact_id!r}"
-            )
-        replacement = DocumentArtifact(
-            id=existing.id,
-            sections=tuple(s for s in existing.sections if s.title != section_title),
-        )
-        return _replace_artifact_in_state(state, target_artifact_id, replacement)
+        return apply_state_delta(state, DeltaDeleteDocumentState(
+            artifact_id=target_artifact_id,
+            operation="delete_section",
+            payload=DeleteSectionDelta(section_title=str(proposal.payload["section_title"])),
+        ))
 
     if operation == "delete_file":
-        target_artifact_id = proposal.target.artifact_id
-        existing = find_state_artifact(state, target_artifact_id)
-        if not isinstance(existing, CodingArtifact):
-            raise ValueError("delete_file operation requires a CodingArtifact target")
         if "path" not in proposal.payload:
             raise ValueError("delete_file operation requires payload['path']")
-        path = str(proposal.payload["path"])
-        if not any(f.path == path for f in existing.files):
-            raise ValueError(
-                f"delete_file: no file with path {path!r} found in artifact {target_artifact_id!r}"
-            )
-        replacement = CodingArtifact(
-            id=existing.id,
-            language=existing.language,
-            files=tuple(f for f in existing.files if f.path != path),
-        )
-        return _replace_artifact_in_state(state, target_artifact_id, replacement)
+        return apply_state_delta(state, DeltaDeleteCodingState(
+            artifact_id=target_artifact_id,
+            operation="delete_file",
+            payload=DeleteFileDelta(path=str(proposal.payload["path"])),
+        ))
 
     if operation == "add_artifact":
         if "artifact" not in proposal.payload:
@@ -562,11 +519,8 @@ def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
             added_artifact = CodingArtifact.model_validate(artifact_payload)
         else:
             added_artifact = StateArtifact.model_validate(artifact_payload)
-        return State(
-            artifacts=(*state.artifacts, added_artifact),
-        )
+        return State(artifacts=(*state.artifacts, added_artifact))
 
-    target_artifact_id = proposal.target.artifact_id
     existing = find_state_artifact(state, target_artifact_id)
 
     if operation != "replace_artifact":

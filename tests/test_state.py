@@ -2,6 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from baps.state import (
+    apply_state_delta,
     apply_state_update,
     apply_referee_decision_to_runtime,
     AppendSectionDelta,
@@ -9,6 +10,7 @@ from baps.state import (
     CodeFile,
     CodingArtifact,
     DeltaCodingBatchState,
+    DeltaCodingState,
     DeltaDeleteCodingState,
     DeltaDeleteDocumentState,
     DeltaModifyDocumentState,
@@ -34,6 +36,7 @@ from baps.state import (
     StateProjection,
     StateUpdateProposal,
     StateUpdateTarget,
+    WriteFileDelta,
     WriteFilesDelta,
     project_state,
     validate_update_base_state,
@@ -1468,7 +1471,7 @@ def test_apply_state_update_write_files_requires_coding_artifact() -> None:
         summary="bad",
         payload={"operation": "write_files", "files": [{"path": "a.py", "content": "x"}]},
     )
-    with pytest.raises(ValueError, match="CodingArtifact"):
+    with pytest.raises(ValueError, match="does not support delta type"):
         apply_state_update(state, proposal)
 
 
@@ -1557,7 +1560,7 @@ def test_apply_state_update_modify_section_requires_document_artifact() -> None:
             "new_body": "x",
         },
     )
-    with pytest.raises(ValueError, match="DocumentArtifact"):
+    with pytest.raises(ValueError, match="does not support delta type"):
         apply_state_update(state, proposal)
 
 
@@ -1614,7 +1617,7 @@ def test_apply_state_update_delete_section_requires_document_artifact() -> None:
         summary="bad",
         payload={"operation": "delete_section", "section_title": "Intro"},
     )
-    with pytest.raises(ValueError, match="DocumentArtifact"):
+    with pytest.raises(ValueError, match="does not support delta type"):
         apply_state_update(state, proposal)
 
 
@@ -1671,5 +1674,104 @@ def test_apply_state_update_delete_file_requires_coding_artifact() -> None:
         summary="bad",
         payload={"operation": "delete_file", "path": "a.py"},
     )
-    with pytest.raises(ValueError, match="CodingArtifact"):
+    with pytest.raises(ValueError, match="does not support delta type"):
         apply_state_update(state, proposal)
+
+
+# ---------------------------------------------------------------------------
+# Equivalence: apply_state_update and apply_state_delta produce identical State
+# ---------------------------------------------------------------------------
+
+def test_mutation_path_equivalence_append_section() -> None:
+    state = State(artifacts=(DocumentArtifact(id="doc", sections=(Section(title="A", body="a"),)),))
+    new_section = Section(title="B", body="b")
+    via_update = apply_state_update(state, StateUpdateProposal(
+        id="u1", target=StateUpdateTarget(artifact_id="doc"), summary="s",
+        payload={"operation": "append_section", "section": {"title": "B", "body": "b"}},
+    ))
+    via_delta = apply_state_delta(state, DeltaDocumentState(
+        artifact_id="doc", operation="append_section",
+        payload=AppendSectionDelta(section=new_section),
+    ))
+    assert via_update == via_delta
+
+
+def test_mutation_path_equivalence_modify_section() -> None:
+    state = State(artifacts=(DocumentArtifact(id="doc", sections=(
+        Section(title="Intro", body="old"), Section(title="End", body="end"),
+    )),))
+    via_update = apply_state_update(state, StateUpdateProposal(
+        id="u1", target=StateUpdateTarget(artifact_id="doc"), summary="s",
+        payload={"operation": "modify_section", "section_title": "Intro", "new_body": "new"},
+    ))
+    via_delta = apply_state_delta(state, DeltaModifyDocumentState(
+        artifact_id="doc", operation="modify_section",
+        payload=ModifySectionDelta(section_title="Intro", new_body="new"),
+    ))
+    assert via_update == via_delta
+
+
+def test_mutation_path_equivalence_delete_section() -> None:
+    state = State(artifacts=(DocumentArtifact(id="doc", sections=(
+        Section(title="A", body="a"), Section(title="B", body="b"),
+    )),))
+    via_update = apply_state_update(state, StateUpdateProposal(
+        id="u1", target=StateUpdateTarget(artifact_id="doc"), summary="s",
+        payload={"operation": "delete_section", "section_title": "A"},
+    ))
+    via_delta = apply_state_delta(state, DeltaDeleteDocumentState(
+        artifact_id="doc", operation="delete_section",
+        payload=DeleteSectionDelta(section_title="A"),
+    ))
+    assert via_update == via_delta
+
+
+def test_mutation_path_equivalence_write_file() -> None:
+    state = State(artifacts=(CodingArtifact(id="code", files=(
+        CodeFile(path="a.py", content="a"), CodeFile(path="b.py", content="b"),
+    )),))
+    via_update = apply_state_update(state, StateUpdateProposal(
+        id="u1", target=StateUpdateTarget(artifact_id="code"), summary="s",
+        payload={"operation": "write_file", "file": {"path": "b.py", "content": "new-b"}},
+    ))
+    via_delta = apply_state_delta(state, DeltaCodingState(
+        artifact_id="code", operation="write_file",
+        payload=WriteFileDelta(file=CodeFile(path="b.py", content="new-b")),
+    ))
+    assert via_update == via_delta
+
+
+def test_mutation_path_equivalence_write_files() -> None:
+    state = State(artifacts=(CodingArtifact(id="code", files=(
+        CodeFile(path="a.py", content="a"),
+    )),))
+    via_update = apply_state_update(state, StateUpdateProposal(
+        id="u1", target=StateUpdateTarget(artifact_id="code"), summary="s",
+        payload={"operation": "write_files", "files": [
+            {"path": "a.py", "content": "new-a"},
+            {"path": "b.py", "content": "b"},
+        ]},
+    ))
+    via_delta = apply_state_delta(state, DeltaCodingBatchState(
+        artifact_id="code", operation="write_files",
+        payload=WriteFilesDelta(files=(
+            CodeFile(path="a.py", content="new-a"),
+            CodeFile(path="b.py", content="b"),
+        )),
+    ))
+    assert via_update == via_delta
+
+
+def test_mutation_path_equivalence_delete_file() -> None:
+    state = State(artifacts=(CodingArtifact(id="code", files=(
+        CodeFile(path="a.py", content="a"), CodeFile(path="b.py", content="b"),
+    )),))
+    via_update = apply_state_update(state, StateUpdateProposal(
+        id="u1", target=StateUpdateTarget(artifact_id="code"), summary="s",
+        payload={"operation": "delete_file", "path": "a.py"},
+    ))
+    via_delta = apply_state_delta(state, DeltaDeleteCodingState(
+        artifact_id="code", operation="delete_file",
+        payload=DeleteFileDelta(path="a.py"),
+    ))
+    assert via_update == via_delta
