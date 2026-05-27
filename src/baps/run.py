@@ -373,25 +373,29 @@ def _build_client_for_backend(backend: str) -> ModelClient:
     return _build_client("ollama", os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL))
 
 
-def _build_model_client() -> ModelClient:
+def _build_multi_backend_client() -> ModelClient | None:
+    """Parse BAPS_BACKENDS and return a (Fallback)Client if set, else None."""
     backends_raw = os.getenv("BAPS_BACKENDS", "").strip()
-    if backends_raw:
-        backends = [b.strip().lower() for b in backends_raw.split(",") if b.strip()]
-        if not backends:
-            raise ValueError("BAPS_BACKENDS must contain at least one backend")
-        clients = [_build_client_for_backend(b) for b in backends]
-        return FallbackClient(clients) if len(clients) > 1 else clients[0]
+    if not backends_raw:
+        return None
+    backends = [b.strip().lower() for b in backends_raw.split(",") if b.strip()]
+    if not backends:
+        raise ValueError("BAPS_BACKENDS must contain at least one backend")
+    clients = [_build_client_for_backend(b) for b in backends]
+    return FallbackClient(clients) if len(clients) > 1 else clients[0]
+
+
+def _build_model_client() -> ModelClient:
+    client = _build_multi_backend_client()
+    if client is not None:
+        return client
     return _build_client_for_backend(os.getenv("BAPS_BACKEND", "ollama").lower())
 
 
 def _build_planner_model_client() -> ModelClient:
-    backends_raw = os.getenv("BAPS_BACKENDS", "").strip()
-    if backends_raw:
-        backends = [b.strip().lower() for b in backends_raw.split(",") if b.strip()]
-        if not backends:
-            raise ValueError("BAPS_BACKENDS must contain at least one backend")
-        clients = [_build_client_for_backend(b) for b in backends]
-        return FallbackClient(clients) if len(clients) > 1 else clients[0]
+    client = _build_multi_backend_client()
+    if client is not None:
+        return client
     backend = os.getenv("BAPS_BACKEND", "ollama").lower()
     if backend == "anthropic":
         return _build_client(backend, os.getenv("BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL))
