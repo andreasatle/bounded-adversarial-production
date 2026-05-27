@@ -17,6 +17,7 @@ import baps.state as state_module
 _real_build_model_client = _real_run._build_model_client
 _real_build_planner_model_client = _real_run._build_planner_model_client
 _real_build_role_client = _real_run._build_role_client
+_real_build_fallback_chain_for_role = _real_run._build_fallback_chain_for_role
 
 
 @pytest.fixture(autouse=True)
@@ -58,7 +59,8 @@ def _patch_create_game_model_client(monkeypatch):
     # _build_role_client must delegate to the live _build_model_client so per-test
     # overrides of _build_model_client (e.g. fallback tests) continue to work.
     monkeypatch.setattr("baps.run._build_role_client", lambda _role: _real_run._build_model_client())
-    # Fallback client resolution returns None by default (no fallback configured in tests).
+    # Fallback resolution returns no chain by default (no fallback configured in tests).
+    monkeypatch.setattr("baps.run._build_fallback_chain_for_role", lambda role, config: [])
     monkeypatch.setattr("baps.run._build_fallback_client_for_role", lambda role, config: None)
 
 
@@ -7598,8 +7600,8 @@ def test_create_game_fallback_called_when_primary_exhausts_retries(monkeypatch) 
     )
     fallback_client = FakeModelClient(responses=[valid_response])
     monkeypatch.setattr(
-        "baps.run._build_fallback_client_for_role",
-        lambda role, cfg: fallback_client if role == "create_game" else None,
+        "baps.run._build_fallback_chain_for_role",
+        lambda role, cfg: [("gemma4:26b", fallback_client)] if role == "create_game" else [],
     )
 
     config = {
@@ -7631,8 +7633,8 @@ def test_create_game_fallback_not_called_when_primary_succeeds(monkeypatch) -> N
     )
     fallback_client = FakeModelClient(responses=[valid_response])
     monkeypatch.setattr(
-        "baps.run._build_fallback_client_for_role",
-        lambda role, cfg: fallback_client if role == "create_game" else None,
+        "baps.run._build_fallback_chain_for_role",
+        lambda role, cfg: [("gemma4:26b", fallback_client)] if role == "create_game" else [],
     )
 
     config = {
@@ -7661,8 +7663,8 @@ def test_play_game_red_fallback_called_when_primary_exhausts_retries(monkeypatch
     valid_accept = '{"disposition":"accept","rationale":"looks good"}'
     fallback_red_client = FakeModelClient(responses=[valid_accept])
     monkeypatch.setattr(
-        "baps.run._build_fallback_client_for_role",
-        lambda role, cfg: fallback_red_client if role == "red" else None,
+        "baps.run._build_fallback_chain_for_role",
+        lambda role, cfg: [("gemma4:26b", fallback_red_client)] if role == "red" else [],
     )
 
     spec = run_module.GameSpec(
@@ -7709,8 +7711,8 @@ def test_play_game_referee_fallback_called_when_primary_exhausts_retries(monkeyp
     valid_accept = '{"disposition":"accept","rationale":"looks good"}'
     fallback_referee_client = FakeModelClient(responses=[valid_accept])
     monkeypatch.setattr(
-        "baps.run._build_fallback_client_for_role",
-        lambda role, cfg: fallback_referee_client if role == "referee" else None,
+        "baps.run._build_fallback_chain_for_role",
+        lambda role, cfg: [("gemma4:26b", fallback_referee_client)] if role == "referee" else [],
     )
 
     spec = run_module.GameSpec(
@@ -7749,6 +7751,227 @@ def test_play_game_referee_fallback_called_when_primary_exhausts_retries(monkeyp
 
     assert result is not None
     assert len(fallback_referee_client.prompts) == 1
+
+
+def test_spec_roles_parsed_with_deep_fallback_chain(tmp_path: Path) -> None:
+    import argparse
+    import yaml
+    import baps.run as run_module
+
+    spec = {
+        "project_type": "document",
+        "artifact_id": "doc",
+        "northstar_markdown": "# Goal",
+        "goal": "write",
+        "output": "output/doc.md",
+        "backend": "ollama",
+        "model": "gemma4:e4b",
+        "roles": {
+            "create_game": {
+                "backend": "ollama",
+                "model": "gemma4:e4b",
+                "fallback": {
+                    "backend": "ollama",
+                    "model": "gemma4:26b",
+                    "fallback": {
+                        "backend": "ollama",
+                        "model": "gemma4:72b",
+                    },
+                },
+            },
+        },
+    }
+    spec_path = tmp_path / "spec.yaml"
+    spec_path.write_text(yaml.dump(spec))
+    args = argparse.Namespace(
+        spec=str(spec_path), workspace=None, artifact_id=None, goal=None,
+        output=None, max_iterations=None, project_type=None, sandbox=None,
+        command="start", language=None,
+    )
+    config = run_module.resolve_run_config(args)
+    role_cfg = config["spec_roles"]["create_game"]
+    assert role_cfg["model"] == "gemma4:e4b"
+    assert role_cfg["fallback"]["model"] == "gemma4:26b"
+    assert role_cfg["fallback"]["fallback"]["model"] == "gemma4:72b"
+
+
+def test_spec_role_deep_fallback_invalid_backend_raises(tmp_path: Path) -> None:
+    import argparse
+    import yaml
+    import baps.run as run_module
+
+    spec = {
+        "project_type": "document",
+        "artifact_id": "doc",
+        "northstar_markdown": "# Goal",
+        "goal": "write",
+        "output": "output/doc.md",
+        "backend": "ollama",
+        "model": "gemma4:e4b",
+        "roles": {
+            "create_game": {
+                "backend": "ollama",
+                "model": "gemma4:e4b",
+                "fallback": {
+                    "backend": "ollama",
+                    "model": "gemma4:26b",
+                    "fallback": {
+                        "backend": "bogus",
+                        "model": "gemma4:72b",
+                    },
+                },
+            },
+        },
+    }
+    spec_path = tmp_path / "spec.yaml"
+    spec_path.write_text(yaml.dump(spec))
+    args = argparse.Namespace(
+        spec=str(spec_path), workspace=None, artifact_id=None, goal=None,
+        output=None, max_iterations=None, project_type=None, sandbox=None,
+        command="start", language=None,
+    )
+    with pytest.raises(ValueError, match="roles.create_game.fallback.fallback.backend"):
+        run_module.resolve_run_config(args)
+
+
+def test_build_fallback_chain_for_role_returns_empty_when_no_fallback() -> None:
+    config: dict = {
+        "spec_roles": {"create_game": {"backend": "ollama", "model": "gemma4:e4b"}},
+    }
+    chain = _real_build_fallback_chain_for_role("create_game", config)
+    assert chain == []
+
+
+def test_build_fallback_chain_for_role_returns_empty_for_unconfigured_role() -> None:
+    config: dict = {"spec_roles": {}}
+    chain = _real_build_fallback_chain_for_role("create_game", config)
+    assert chain == []
+
+
+def test_build_fallback_chain_for_role_returns_single_entry_chain() -> None:
+    config: dict = {
+        "spec_roles": {
+            "create_game": {
+                "backend": "ollama",
+                "model": "gemma4:e4b",
+                "fallback": {"backend": "ollama", "model": "gemma4:26b"},
+            }
+        }
+    }
+    chain = _real_build_fallback_chain_for_role("create_game", config)
+    assert len(chain) == 1
+    assert chain[0][0] == "gemma4:26b"
+    assert isinstance(chain[0][1], OllamaClient)
+
+
+def test_build_fallback_chain_for_role_returns_two_entry_chain() -> None:
+    config: dict = {
+        "spec_roles": {
+            "create_game": {
+                "backend": "ollama",
+                "model": "gemma4:e4b",
+                "fallback": {
+                    "backend": "ollama",
+                    "model": "gemma4:26b",
+                    "fallback": {"backend": "ollama", "model": "gemma4:72b"},
+                },
+            }
+        }
+    }
+    chain = _real_build_fallback_chain_for_role("create_game", config)
+    assert len(chain) == 2
+    assert chain[0][0] == "gemma4:26b"
+    assert chain[1][0] == "gemma4:72b"
+    assert isinstance(chain[0][1], OllamaClient)
+    assert isinstance(chain[1][1], OllamaClient)
+
+
+def test_create_game_fallback_chain_escalates_through_all_links(monkeypatch) -> None:
+    valid_response = (
+        '{"objective":"Advance goal","target_artifact_id":"main-document",'
+        '"allowed_delta_type":"DeltaDocumentState",'
+        '"success_condition":"section exists"}'
+    )
+    fail_client = FakeModelClient(responses=[])  # raises RuntimeError immediately
+    success_client = FakeModelClient(responses=[valid_response])
+    monkeypatch.setattr(
+        "baps.run._build_fallback_chain_for_role",
+        lambda role, cfg: [("gemma4:26b", fail_client), ("gemma4:72b", success_client)]
+        if role == "create_game" else [],
+    )
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "goal": "Write a short report.",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+        "spec_roles": {},
+    }
+    state = create_state(config)
+
+    primary_client = FakeModelClient(responses=["not-json"] * 3)
+    game_spec = create_game(config, state, model_client=primary_client)
+
+    assert game_spec.target_artifact_id == "main-document"
+    assert len(fail_client.prompts) == 1  # called once, raised RuntimeError
+    assert len(success_client.prompts) == 1  # called once, succeeded
+
+
+def test_create_game_chain_exhaustion_raises_runtime_error(monkeypatch) -> None:
+    fail_client1 = FakeModelClient(responses=[])
+    fail_client2 = FakeModelClient(responses=[])
+    monkeypatch.setattr(
+        "baps.run._build_fallback_chain_for_role",
+        lambda role, cfg: [("gemma4:26b", fail_client1), ("gemma4:72b", fail_client2)]
+        if role == "create_game" else [],
+    )
+
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "goal": "Write a short report.",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+        "spec_roles": {},
+    }
+    state = create_state(config)
+
+    primary_client = FakeModelClient(responses=["not-json"] * 3)
+    with pytest.raises(RuntimeError, match="all models in fallback chain exhausted"):
+        create_game(config, state, model_client=primary_client)
+
+
+def test_no_fallback_behavior_unchanged_when_primary_succeeds(monkeypatch) -> None:
+    valid_response = (
+        '{"objective":"Advance goal","target_artifact_id":"main-document",'
+        '"allowed_delta_type":"DeltaDocumentState",'
+        '"success_condition":"section exists"}'
+    )
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "document",
+        "artifact_id": "main-document",
+        "goal": "Write a short report.",
+        "northstar_markdown": "# Goal\n\nWrite a short report.",
+        "output_path": Path(".baps-workspace/output/report.md"),
+        "max_iterations": 2,
+        "spec_path": None,
+        "spec_roles": {},
+    }
+    state = create_state(config)
+
+    primary_client = FakeModelClient(responses=[valid_response])
+    game_spec = create_game(config, state, model_client=primary_client)
+
+    assert game_spec.target_artifact_id == "main-document"
+    assert len(primary_client.prompts) == 1  # called once, no retries needed
 
 
 # --- write_files adapter tests ---

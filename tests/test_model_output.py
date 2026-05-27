@@ -506,14 +506,14 @@ class TestFallbackEscalation:
             )
         assert call_count[0] == 1
 
-    def test_fallback_exception_does_not_mask_original_error(self) -> None:
+    def test_fallback_runtime_error_propagates(self) -> None:
         def retry_fn(prompt: str) -> str:
             return "bad"
 
         def fallback_fn(prompt: str) -> str:
             raise RuntimeError("fallback client is down")
 
-        with pytest.raises(ValueError, match="must be valid JSON"):
+        with pytest.raises(RuntimeError, match="fallback client is down"):
             parse_model_output(
                 "bad", _KEYS, context="test", retry_fn=retry_fn, fallback_fn=fallback_fn
             )

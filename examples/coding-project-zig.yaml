@@ -15,9 +15,15 @@ roles:
   create_game:
     backend: ollama
     model: gemma4:e4b
+    fallback:
+      backend: ollama
+      model: gemma4:26b
   decompose:
     backend: ollama
     model: gemma4:e4b
+    fallback:
+      backend: ollama
+      model: gemma4:26b
 goal: "Implement a simple stack data structure in Zig with push, pop, and peek operations, plus tests."
 output: output/project-zig
 max_iterations: 5

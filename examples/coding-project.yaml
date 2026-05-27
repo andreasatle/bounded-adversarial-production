@@ -14,14 +14,16 @@ roles:
     model: qwen2.5-coder:7b
   create_game:
     backend: ollama
-    model: gemma4:26b
-    # fallback: escalated to after all primary JSON-correction retries are exhausted.
-    # fallback:
-    #   backend: ollama
-    #   model: gemma4:27b
+    model: gemma4:e4b
+    fallback:
+      backend: ollama
+      model: gemma4:26b
   decompose:
     backend: ollama
-    model: gemma4:26b
+    model: gemma4:e4b
+    fallback:
+      backend: ollama
+      model: gemma4:26b
 goal: "Implement a text similarity utility with normalize, token overlap, and compare functions, plus comprehensive pytest tests."
 output: output/project
 max_iterations: 5

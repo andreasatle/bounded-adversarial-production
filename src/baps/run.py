@@ -462,6 +462,17 @@ def _parse_role_backend_model(cfg: dict, path: str) -> dict[str, str]:
     return parsed
 
 
+def _parse_role_config(cfg: dict, path: str) -> dict[str, Any]:
+    """Parse a role config dict, recursively including arbitrarily deep fallback chains."""
+    parsed: dict[str, Any] = _parse_role_backend_model(cfg, path)
+    if "fallback" in cfg:
+        fallback_raw = cfg["fallback"]
+        if not isinstance(fallback_raw, dict):
+            raise ValueError(f"spec '{path}.fallback' must be a mapping")
+        parsed["fallback"] = _parse_role_config(fallback_raw, f"{path}.fallback")
+    return parsed
+
+
 def _parse_spec_roles(roles_raw: object) -> dict[str, dict[str, Any]]:
     if not isinstance(roles_raw, dict):
         raise ValueError("spec 'roles' must be a mapping")
@@ -473,13 +484,7 @@ def _parse_spec_roles(roles_raw: object) -> dict[str, dict[str, Any]]:
             )
         if not isinstance(role_cfg, dict):
             raise ValueError(f"spec 'roles.{role}' must be a mapping")
-        parsed: dict[str, Any] = _parse_role_backend_model(role_cfg, f"roles.{role}")
-        if "fallback" in role_cfg:
-            fallback_raw = role_cfg["fallback"]
-            if not isinstance(fallback_raw, dict):
-                raise ValueError(f"spec 'roles.{role}.fallback' must be a mapping")
-            parsed["fallback"] = _parse_role_backend_model(fallback_raw, f"roles.{role}.fallback")
-        result[role] = parsed
+        result[role] = _parse_role_config(role_cfg, f"roles.{role}")
     return result
 
 
@@ -560,22 +565,65 @@ def _build_client_for_role(role: str, config: dict[str, Any]) -> ModelClient:
     return _build_client(backend, model)
 
 
-def _build_fallback_client_for_role(role: str, config: dict[str, Any]) -> ModelClient | None:
-    """Build the fallback model client for a role from spec_roles config, if configured.
+def _build_fallback_chain_for_role(role: str, config: dict[str, Any]) -> list[tuple[str, ModelClient]]:
+    """Build the ordered fallback chain for a role.
 
-    Returns None when no fallback is defined. Fallback clients are used by parse_model_output
-    after the primary model exhausts all JSON-correction retries.
+    Returns a list of (model_label, client) pairs from the spec's fallback chain,
+    following arbitrarily deep fallback.fallback nesting. Returns [] when no fallback
+    is configured.
     """
     spec_roles: dict = config.get("spec_roles") or {}
     role_cfg: dict = spec_roles.get(role) or {}
-    fallback_cfg: dict = role_cfg.get("fallback") or {}
-    if not fallback_cfg:
+    chain: list[tuple[str, ModelClient]] = []
+    current: dict = role_cfg.get("fallback") or {}
+    while current:
+        backend = str(current.get("backend", "")).strip().lower()
+        model = str(current.get("model", "")).strip()
+        if not backend or not model:
+            break
+        chain.append((model, _build_client(backend, model)))
+        current = current.get("fallback") or {}
+    return chain
+
+
+def _build_fallback_client_for_role(role: str, config: dict[str, Any]) -> ModelClient | None:
+    """Return the first fallback client for a role, or None if no fallback is configured.
+
+    Kept for backward compatibility. Use _build_fallback_chain_for_role for full chain support.
+    """
+    chain = _build_fallback_chain_for_role(role, config)
+    return chain[0][1] if chain else None
+
+
+def _make_fallback_chain_fn(
+    role_name: str,
+    primary_model: str,
+    chain: list[tuple[str, ModelClient]],
+) -> Any:
+    """Build a fallback callable that tries each client in the chain in order.
+
+    Logs a WARNING before escalating to each subsequent model. Raises RuntimeError
+    when the entire chain is exhausted. Returns None when chain is empty.
+    """
+    if not chain:
         return None
-    backend = str(fallback_cfg.get("backend", "")).strip().lower()
-    model = str(fallback_cfg.get("model", "")).strip()
-    if not backend or not model:
-        return None
-    return _build_client(backend, model)
+    from baps.model_output import wrap_json_prompt
+
+    def fn(prompt: str) -> str:
+        prev = primary_model
+        for model_label, client in chain:
+            logger.warning(
+                "%s: model %s exhausted retries, escalating to %s",
+                role_name, prev, model_label,
+            )
+            try:
+                return client.generate(wrap_json_prompt(prompt))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("%s: fallback model %s failed: %s", role_name, model_label, exc)
+                prev = model_label
+        raise RuntimeError(f"{role_name}: all models in fallback chain exhausted")
+
+    return fn
 
 
 def _make_fallback_fn(client: ModelClient) -> Any:
@@ -1264,14 +1312,24 @@ def create_game(
     last_valid_game_spec: GameSpec | None = None
     max_sub_gaps = int(config.get("max_sub_gaps", 5))
 
-    # Build fallback clients once — they don't change across attempts.
-    _create_game_fallback = _build_fallback_client_for_role(role_name, config)
-    _create_game_fallback_fn = _make_fallback_fn(_create_game_fallback) if _create_game_fallback else None
-    _red_cg_fallback = (
-        _build_fallback_client_for_role("create_game_red", config)
-        if red_role is not None else None
+    # Build fallback chains once — they don't change across attempts.
+    try:
+        _cg_primary_model = _resolve_backend_model(role_name, config)[1] if use_planner else "(provided)"
+    except ValueError:
+        _cg_primary_model = "(unknown)"
+    _create_game_fallback_fn = _make_fallback_chain_fn(
+        role_name, _cg_primary_model, _build_fallback_chain_for_role(role_name, config)
     )
-    _red_cg_fallback_fn = _make_fallback_fn(_red_cg_fallback) if _red_cg_fallback else None
+    if red_role is not None:
+        try:
+            _red_cg_primary_model = _resolve_backend_model("create_game_red", config)[1]
+        except ValueError:
+            _red_cg_primary_model = "(unknown)"
+        _red_cg_fallback_fn = _make_fallback_chain_fn(
+            "create_game_red", _red_cg_primary_model, _build_fallback_chain_for_role("create_game_red", config)
+        )
+    else:
+        _red_cg_fallback_fn = None
 
     for attempt in range(1, max_create_game_attempts + 1):
         prompt = _render_create_game_prompt(
@@ -1576,12 +1634,22 @@ def play_game(
         constrained=True,
     )
 
-    # Build fallback functions once — they don't change across attempts.
+    # Build fallback chains once — they don't change across attempts.
     _workspace = config.get("workspace") if config else None
-    _red_fallback = _build_fallback_client_for_role("red", config) if config else None
-    _referee_fallback = _build_fallback_client_for_role("referee", config) if config else None
-    _red_fallback_fn = _make_fallback_fn(_red_fallback) if _red_fallback else None
-    _referee_fallback_fn = _make_fallback_fn(_referee_fallback) if _referee_fallback else None
+    if config is not None:
+        try:
+            _red_primary = _resolve_backend_model("red", config)[1] if red_model_client is None else "(provided)"
+        except ValueError:
+            _red_primary = "(unknown)"
+        try:
+            _referee_primary = _resolve_backend_model("referee", config)[1] if referee_model_client is None else "(provided)"
+        except ValueError:
+            _referee_primary = "(unknown)"
+        _red_fallback_fn = _make_fallback_chain_fn("red", _red_primary, _build_fallback_chain_for_role("red", config))
+        _referee_fallback_fn = _make_fallback_chain_fn("referee", _referee_primary, _build_fallback_chain_for_role("referee", config))
+    else:
+        _red_fallback_fn = None
+        _referee_fallback_fn = None
 
     for attempt in range(1, max_attempts + 1):
         _debug_print_play_game_attempt(attempt)

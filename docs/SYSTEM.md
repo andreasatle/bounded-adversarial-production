@@ -115,7 +115,7 @@ PlayGame involves three roles, each optionally preceded by a research phase:
 
 Each role may use a different model backend/model via environment variables (`BAPS_{ROLE}_BACKEND`, `BAPS_{ROLE}_MODEL`). The **DECOMPOSE** role handles CreateGame calls at decomposition nodes (`depth > 0`) and may be assigned a lighter model than the leaf-execution roles.
 
-Each role may optionally declare a `fallback` block in the spec (`roles.<role>.fallback.{backend,model}`). The fallback is invoked exactly once after the primary model exhausts all JSON-correction retries. Escalation occurs only for roles with an explicit fallback declared in the spec; no implicit escalation. If the fallback also fails to produce valid output, the run raises `ValueError`. Fallback usage is logged at WARNING level.
+Each role may optionally declare a `fallback` block in the spec. Fallback chains can be arbitrarily deep: a `fallback` block may itself contain a `fallback`, and so on. The chain is traversed in order after the primary model exhausts all JSON-correction retries — each link is tried exactly once. Escalation occurs only for roles with an explicit fallback declared in the spec; no implicit escalation. A WARNING is logged at each escalation step with the source and target model names. If the entire chain is exhausted without producing valid output, the run raises `RuntimeError("<role>: all models in fallback chain exhausted")`.
 
 Research phases (agentic tool use before role output) are optional and adapter-controlled. Tool call logs are passed between roles for transparency.
 

@@ -200,6 +200,8 @@ def parse_model_output(
         )
         try:
             raw = fallback_fn(_FALLBACK_CORRECTION_PROMPT)
+        except RuntimeError:
+            raise
         except Exception as exc:  # noqa: BLE001
             logger.warning("%s: fallback_fn raised: %s", context, exc)
         else:
