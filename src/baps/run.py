@@ -689,6 +689,15 @@ _DECOMPOSE_EMPTY_SUBGAPS_CORRECTION_PROMPT = (
     "Return a corrected JSON object where each sub_gap.description is a non-empty string."
 )
 
+_UNRECOGNIZABLE_SHAPE_CORRECTION_PROMPT = (
+    "Your previous response did not match any valid create_game response shape. "
+    "Return exactly one of:\n"
+    '- GameSpec: {"objective": "...", "target_artifact_id": "...", "allowed_delta_type": "...", "success_condition": "..."}\n'
+    '- Decompose: {"decompose": true, "rationale": "...", "sub_gaps": [{"description": "..."}, ...]}\n'
+    '- No new game: {"no_new_game": true, "reason": "..."}\n'
+    "Return only a JSON object. No prose, no extra keys."
+)
+
 
 def _require_non_empty(value: str, field_name: str) -> str:
     if value.strip() == "":
@@ -1185,6 +1194,13 @@ def _parse_create_game_output(
     # GameSpec branch
     _game_spec_required = {"objective", "target_artifact_id", "allowed_delta_type", "success_condition"}
     if not _game_spec_required.issubset(parsed.keys()):
+        if fallback_fn is not None:
+            logger.warning(
+                "[create_game] unrecognizable response shape (keys: %s); escalating to fallback model",
+                sorted(parsed.keys()),
+            )
+            raw = fallback_fn(_UNRECOGNIZABLE_SHAPE_CORRECTION_PROMPT)
+            return _parse_create_game_output(raw, max_sub_gaps=max_sub_gaps, workspace=workspace)
         raise ValueError(
             "create_game model output must contain exactly keys: "
             "objective, target_artifact_id, allowed_delta_type, success_condition"

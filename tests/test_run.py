@@ -8454,6 +8454,79 @@ def test_parse_create_game_output_all_empty_sub_gaps_with_fallback_escalates() -
     assert len(fallback_calls) == 1
 
 
+def test_parse_create_game_output_unrecognizable_shape_no_fallback_raises() -> None:
+    import baps.run as run_module
+
+    text = json.dumps({"something_unexpected": "value"})
+    with pytest.raises(ValueError, match="must contain exactly keys"):
+        run_module._parse_create_game_output(text, max_sub_gaps=5)
+
+
+def test_parse_create_game_output_unrecognizable_shape_with_fallback_escalates() -> None:
+    import baps.run as run_module
+
+    valid_game_spec = json.dumps({
+        "objective": "Close the gap",
+        "target_artifact_id": "main-document",
+        "allowed_delta_type": "DeltaDocumentState",
+        "success_condition": "section present",
+    })
+    fallback_calls: list[str] = []
+
+    def fallback_fn(prompt: str) -> str:
+        fallback_calls.append(prompt)
+        return valid_game_spec
+
+    text = json.dumps({"something_unexpected": "value"})
+    result = run_module._parse_create_game_output(text, max_sub_gaps=5, fallback_fn=fallback_fn)
+    assert isinstance(result, run_module.GameSpec)
+    assert result.target_artifact_id == "main-document"
+    assert len(fallback_calls) == 1
+
+
+def test_parse_create_game_output_unrecognizable_shape_fallback_logs_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import baps.run as run_module
+
+    valid_game_spec = json.dumps({
+        "objective": "Close the gap",
+        "target_artifact_id": "main-document",
+        "allowed_delta_type": "DeltaDocumentState",
+        "success_condition": "section present",
+    })
+
+    def fallback_fn(prompt: str) -> str:
+        return valid_game_spec
+
+    text = json.dumps({"something_unexpected": "value"})
+    with caplog.at_level(logging.WARNING):
+        run_module._parse_create_game_output(text, max_sub_gaps=5, fallback_fn=fallback_fn)
+    assert "unrecognizable response shape" in caplog.text
+
+
+def test_parse_create_game_output_empty_dict_with_fallback_escalates() -> None:
+    import baps.run as run_module
+
+    valid_game_spec = json.dumps({
+        "objective": "Close the gap",
+        "target_artifact_id": "main-document",
+        "allowed_delta_type": "DeltaDocumentState",
+        "success_condition": "section present",
+    })
+    fallback_calls: list[str] = []
+
+    def fallback_fn(prompt: str) -> str:
+        fallback_calls.append(prompt)
+        return valid_game_spec
+
+    # Empty dict: all keys stripped as unexpected, leaving nothing
+    text = json.dumps({})
+    result = run_module._parse_create_game_output(text, max_sub_gaps=5, fallback_fn=fallback_fn)
+    assert isinstance(result, run_module.GameSpec)
+    assert len(fallback_calls) == 1
+
+
 def test_parse_create_game_output_game_spec_with_false_marker_keys_and_extra_keys() -> None:
     import baps.run as run_module
     from baps.state import GameSpec
