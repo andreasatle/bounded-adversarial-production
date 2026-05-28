@@ -45,6 +45,9 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
 
 
 def test_derive_state_update_from_delta_converts_append_section() -> None:
+    # NON-RUNTIME PATH — tests that _derive_state_update_from_delta correctly
+    # maps a DeltaState to a StateUpdateProposal. This function is for tooling
+    # and tests only; the runtime path never constructs a StateUpdateProposal.
 
     delta = state_module.DeltaDocumentState(
         artifact_id="main-document",

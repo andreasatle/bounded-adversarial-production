@@ -519,6 +519,9 @@ def test_audit_adapter_registered_in_default_adapters() -> None:
 def _append_finding(
     state: state_module.State, artifact_id: str, title: str, body: str
 ) -> state_module.State:
+    # NON-RUNTIME PATH: uses derive_document_state_update_from_delta + apply_update
+    # as a test fixture helper. Production code applies DeltaState directly via
+    # StateService.apply_delta and never constructs a StateUpdateProposal at runtime.
     from baps.state.state_service import StateService
     from baps.state.state_store import JsonStateStore
     import tempfile

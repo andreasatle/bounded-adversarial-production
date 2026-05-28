@@ -247,6 +247,9 @@ def parse_document_delta_json(text: str, workspace: Path | None = None) -> Delta
 
 
 def derive_document_state_update_from_delta(delta_state: DeltaState) -> StateUpdateProposal:
+    # NON-RUNTIME PATH: converts DeltaState to a StateUpdateProposal for
+    # tooling and test fixture use only. Runtime integration goes through
+    # StateService.apply_delta, not through StateUpdateProposal.
     if isinstance(delta_state, DeltaModifyDocumentState):
         return StateUpdateProposal(
             id=f"state-update:{delta_state.artifact_id}:modify_section:{delta_state.payload.section_title}",

@@ -1,4 +1,15 @@
-"""Tests for delta operations, mutation path equivalence, and typed payload construction."""
+"""Tests for delta operations, mutation path equivalence, and typed payload construction.
+
+Integration path note
+---------------------
+Runtime path:     DeltaState → StateService.apply_delta  (used by orchestration._solve_gap)
+Non-runtime path: DeltaState → StateUpdateProposal → StateService.apply_update
+                  (used by tooling such as baps-apply-northstar and test fixtures)
+
+apply_state_update tests and mutation path equivalence tests below exercise the
+NON-RUNTIME path. The equivalence tests additionally verify that both paths produce
+identical State — they do not imply both paths are valid for runtime use.
+"""
 import pytest
 from pydantic import ValidationError
 
@@ -324,6 +335,11 @@ def test_apply_state_update_delete_file_requires_coding_artifact() -> None:
 
 # ---------------------------------------------------------------------------
 # Equivalence: apply_state_update and apply_state_delta produce identical State
+#
+# NON-RUNTIME PATH. These tests confirm that the proposal path (apply_state_update)
+# and the runtime path (apply_state_delta) produce the same State for the
+# operations they share. Only apply_state_delta is called in production;
+# apply_state_update is reserved for tooling and tests.
 # ---------------------------------------------------------------------------
 
 def test_mutation_path_equivalence_append_section() -> None:

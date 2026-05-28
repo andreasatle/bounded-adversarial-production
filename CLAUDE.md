@@ -20,7 +20,7 @@ config/NorthStar -> State -> StateView -> CreateGame -> GameSpec ->
 PlayGame -> DeltaState -> StateService.apply_delta -> export
 ```
 
-Note: `StateUpdateProposal` / `StateService.apply_update` is a non-runtime proposal workflow (used by tests and `baps-apply-northstar`). The canonical runtime integration path calls `apply_delta` directly.
+Note: `StateUpdateProposal` / `StateService.apply_update` is a non-runtime proposal workflow (used by tests and `baps-apply-northstar`). The canonical runtime integration path calls `apply_delta` directly. Likewise, `delta_to_state_update` on the adapter protocol and `_derive_state_update_from_delta` in `engine.py` are non-runtime — they exist for tooling and tests, never for production orchestration.
 
 This is the **only** active product path. Do not propose changes that bypass or fork this spine.
 
@@ -181,7 +181,7 @@ When working on adapters, they must implement:
 11. `build_research_tools(role)` — tool definitions for research phases by role
 12. `tool_call_to_delta(tool_call)` — convert Blue tool call to `DeltaState`
 13. `parse_blue_delta(text)` — parse Blue JSON output into typed `DeltaState`
-14. `delta_to_state_update(delta_state)` — `DeltaState` → `StateUpdateProposal`
+14. `delta_to_state_update(delta_state)` — `DeltaState` → `StateUpdateProposal` (**non-runtime only**: used by `baps-apply-northstar` tooling and tests; never called by `orchestration._solve_gap`)
 15. `export_state(...)` — write output files
 
 Optional: `verify_export(...)`, `verify_candidate(...)`, `commit_export(...)`.

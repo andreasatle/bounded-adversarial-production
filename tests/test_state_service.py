@@ -94,6 +94,13 @@ def test_validate_state_loads_and_validates_artifacts_through_registry() -> None
     assert validated == store.state
 
 
+# ---------------------------------------------------------------------------
+# apply_update — NON-RUNTIME PATH
+# These tests exercise StateService.apply_update (StateUpdateProposal envelope).
+# The live orchestration path never calls apply_update; it calls apply_delta.
+# apply_update is used only by tooling (baps-apply-northstar) and test fixtures.
+# ---------------------------------------------------------------------------
+
 def test_apply_update_loads_validates_applies_validates_saves_and_returns_state() -> None:
     calls: list[str] = []
     store = InMemoryStateStore(state=_state())

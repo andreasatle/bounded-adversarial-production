@@ -79,6 +79,9 @@ def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
 
 
 def test_integration_uses_adapter_delta_to_update_mapper() -> None:
+    # NON-RUNTIME PATH — tests that _derive_state_update_from_delta delegates to
+    # the adapter's delta_to_state_update mapper. This function is used by tooling
+    # and tests; the runtime path (orchestration._solve_gap) never calls it.
 
     class _MapperAdapter:
         project_type = "document"

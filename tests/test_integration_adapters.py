@@ -28,8 +28,16 @@ def test_coding_create_state_creates_coding_artifact() -> None:
     assert artifact.files == ()
 
 
-def test_coding_adapter_maps_file_write_delta_to_state_update() -> None:
+# ---------------------------------------------------------------------------
+# delta_to_state_update adapter contract — NON-RUNTIME PATH
+# These tests verify that adapters correctly map DeltaState to StateUpdateProposal.
+# delta_to_state_update is never called by the live orchestration path; it is used
+# only by tooling (baps-apply-northstar) and test fixtures. Runtime integration
+# applies DeltaState directly through StateService.apply_delta.
+# ---------------------------------------------------------------------------
 
+def test_coding_adapter_maps_file_write_delta_to_state_update() -> None:
+    # NON-RUNTIME PATH — tests the DeltaState → StateUpdateProposal mapper.
     adapter = CodingProjectAdapter()
     delta = state_module.DeltaCodingState(
         artifact_id="main-codebase",
@@ -103,7 +111,7 @@ def test_document_adapter_render_create_game_prompt_supplement_includes_guidance
 
 
 def test_coding_adapter_maps_write_files_batch_delta_to_state_update() -> None:
-
+    # NON-RUNTIME PATH — tests the DeltaState → StateUpdateProposal mapper.
     adapter = CodingProjectAdapter()
     delta = state_module.DeltaCodingBatchState(
         artifact_id="main-codebase",
@@ -141,7 +149,7 @@ def test_coding_adapter_tool_call_write_files_returns_batch_delta() -> None:
 
 
 def test_document_adapter_maps_modify_section_delta_to_state_update() -> None:
-
+    # NON-RUNTIME PATH — tests the DeltaState → StateUpdateProposal mapper.
     adapter = DocumentProjectAdapter()
     delta = state_module.DeltaModifyDocumentState(
         artifact_id="main-document",
@@ -175,7 +183,7 @@ def test_document_adapter_tool_call_modify_section_returns_correct_delta() -> No
 
 
 def test_coding_adapter_maps_delete_file_delta_to_state_update() -> None:
-
+    # NON-RUNTIME PATH — tests the DeltaState → StateUpdateProposal mapper.
     adapter = CodingProjectAdapter()
     delta = state_module.DeltaDeleteCodingState(
         artifact_id="main-codebase",
@@ -201,7 +209,7 @@ def test_coding_adapter_tool_call_delete_file_returns_correct_delta() -> None:
 
 
 def test_document_adapter_maps_delete_section_delta_to_state_update() -> None:
-
+    # NON-RUNTIME PATH — tests the DeltaState → StateUpdateProposal mapper.
     adapter = DocumentProjectAdapter()
     delta = state_module.DeltaDeleteDocumentState(
         artifact_id="main-document",

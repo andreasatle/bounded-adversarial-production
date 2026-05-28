@@ -124,10 +124,12 @@ _CREATE_GAME_RED_FINDING_SCHEMA: dict = {
 def _derive_state_update_from_delta(
     delta_state: DeltaState, adapter: ProjectTypeAdapter
 ) -> StateUpdateProposal:
-    """Map DeltaState to StateUpdateProposal for non-runtime proposal workflows.
+    """Map DeltaState to StateUpdateProposal.
 
-    Canonical runtime integration in orchestration applies integration-eligible
-    DeltaState directly through StateService.apply_delta.
+    NON-RUNTIME PATH — for tooling and tests only. The live orchestration path
+    (orchestration._solve_gap) never calls this function. Runtime integration
+    applies the integration-eligible DeltaState directly through
+    StateService.apply_delta without constructing a StateUpdateProposal.
     """
     return adapter.delta_to_state_update(delta_state)
 

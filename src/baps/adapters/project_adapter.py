@@ -148,6 +148,9 @@ class ProjectTypeAdapter(Protocol):
         ...
 
     def delta_to_state_update(self, delta_state: DeltaState) -> StateUpdateProposal:
+        # NON-RUNTIME PATH: maps DeltaState to a StateUpdateProposal for tooling
+        # and tests only. Never called by the live orchestration path, which
+        # applies DeltaState directly via StateService.apply_delta.
         ...
 
     def export_state(self, state: State, output_path: Path, artifact_id: str) -> bool:

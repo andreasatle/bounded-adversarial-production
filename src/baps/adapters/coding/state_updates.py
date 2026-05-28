@@ -14,6 +14,9 @@ from baps.state.state import (
 
 
 def derive_coding_state_update_from_delta(delta_state: DeltaState) -> StateUpdateProposal:
+    # NON-RUNTIME PATH: converts DeltaState to a StateUpdateProposal for
+    # tooling and test fixture use only. Runtime integration goes through
+    # StateService.apply_delta, not through StateUpdateProposal.
     if isinstance(delta_state, DeltaCodingBatchState):
         paths = ", ".join(f.path for f in delta_state.payload.files)
         return StateUpdateProposal(
