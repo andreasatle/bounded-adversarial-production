@@ -40,7 +40,7 @@ CreateGame is a **gap-analysis operation**, not a step-forward operation. It com
 9. CreateGame is `State`/`NorthStar`-aware through `StateView`. It performs gap analysis, not step derivation.
 10. PlayGame is `GameSpec`-bound. It has no access to `NorthStar` directly.
 11. `GameSpec.context_chain` carries all ancestor gap descriptions from the coarsest decomposition to the immediate task. Blue sees the full chain.
-12. `StateService` is the mutation boundary for durable state changes. The canonical runtime path uses `StateService.apply_delta(delta_state)` directly; `StateService.apply_update(proposal)` is for non-runtime proposal workflows only.
+12. `StateService` is the mutation boundary for durable state changes. The only integration path is `StateService.apply_delta(delta_state)`.
 13. NorthStar is protected by isolation, not by a runtime guard. For document/coding adapters it lives in `baps-config.json` — `StateService` only mutates `State` and structurally cannot reach it. For the audit adapter, NorthStar is stored inside `State` as a meta artifact, but the pipeline is constrained to only target the configured findings artifact, so the meta artifact is never mutated in practice.
 14. Export is one-way materialization from `State` to output files.
 15. Prompts consume `StateView` context, not raw authoritative `State` internals.
@@ -65,8 +65,7 @@ CreateGame is a **gap-analysis operation**, not a step-forward operation. It com
 9. Blue output format (`build_blue_output_format`) — JSON schema or `None`
 10. Research phase tools per role (`build_research_tools(role)`)
 11. Blue delta parsing (`parse_blue_delta`) — JSON path
-12. Delta → `StateUpdateProposal` mapping (`delta_to_state_update`) — for non-runtime proposal workflows
-13. Export (`export_state`)
+12. Export (`export_state`)
 14. Optional: `verify_export`, `verify_candidate`, `commit_export`
 15. Language plugin resolution (coding adapter only): the `language` spec key selects a `LanguagePlugin` at state-creation time; the plugin owns `docker_image`, `test_command`, `initialize`, `run_tests`, `has_tests`, and `parse_test_failures`; unknown language names raise immediately with the list of available languages; adding a new language requires implementing `LanguagePlugin` and registering it — `sandbox.py` requires no changes
 

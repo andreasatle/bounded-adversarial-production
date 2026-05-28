@@ -64,7 +64,6 @@ from baps.state.state import (
     GameSpec,
     PlayGameRuntime,
     State,
-    StateUpdateProposal,
 )
 from baps.tools.tools import ToolExecutor
 
@@ -77,7 +76,6 @@ __all__ = [
     "_append_integration_to_blackboard",
     "_append_northstar_proposal_to_blackboard",
     "_commit_export_with_adapter",
-    "_derive_state_update_from_delta",
     "_verify_export_with_adapter",
     "create_game",
     "play_game",
@@ -119,19 +117,6 @@ _CREATE_GAME_RED_FINDING_SCHEMA: dict = {
     "required": ["disposition", "rationale"],
     "additionalProperties": False,
 }
-
-
-def _derive_state_update_from_delta(
-    delta_state: DeltaState, adapter: ProjectTypeAdapter
-) -> StateUpdateProposal:
-    """Map DeltaState to StateUpdateProposal.
-
-    NON-RUNTIME PATH — for tooling and tests only. The live orchestration path
-    (orchestration._solve_gap) never calls this function. Runtime integration
-    applies the integration-eligible DeltaState directly through
-    StateService.apply_delta without constructing a StateUpdateProposal.
-    """
-    return adapter.delta_to_state_update(delta_state)
 
 
 def _verify_export_with_adapter(

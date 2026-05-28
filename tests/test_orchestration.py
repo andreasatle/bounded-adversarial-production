@@ -117,10 +117,10 @@ def test_orchestration_does_not_apply_delta_when_play_game_has_no_integration_el
     assert called["apply_delta"] == 0
 
 
-def test_orchestration_runtime_integration_calls_apply_delta_not_apply_update(
+def test_orchestration_runtime_integration_calls_apply_delta(
     monkeypatch, tmp_path: Path
 ) -> None:
-    calls = {"apply_delta": 0, "apply_update": 0}
+    calls = {"apply_delta": 0}
 
     original_apply_delta = StateService.apply_delta
 
@@ -128,12 +128,7 @@ def test_orchestration_runtime_integration_calls_apply_delta_not_apply_update(
         calls["apply_delta"] += 1
         return original_apply_delta(self, delta)
 
-    def _capture_apply_update(self, proposal):
-        calls["apply_update"] += 1
-        return self.store.load()
-
     monkeypatch.setattr("baps.core.orchestration.StateService.apply_delta", _capture_apply_delta)
-    monkeypatch.setattr("baps.core.orchestration.StateService.apply_update", _capture_apply_update)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -149,7 +144,6 @@ def test_orchestration_runtime_integration_calls_apply_delta_not_apply_update(
     )
     main()
     assert calls["apply_delta"] >= 1
-    assert calls["apply_update"] == 0
 
 
 def test_main_max_iterations_two_runs_two_iterations_with_state_carry_forward(

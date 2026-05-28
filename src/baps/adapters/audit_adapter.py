@@ -21,13 +21,11 @@ from baps.state.state import (
     GameSpec,
     Section,
     State,
-    StateUpdateProposal,
 )
 from baps.adapters.document_adapter import (
     document_artifact_from_state,
     export_document_artifact,
     parse_document_delta_json,
-    derive_document_state_update_from_delta,
 )
 
 
@@ -557,9 +555,6 @@ class AuditProjectAdapter:
                 "payload": {"section": {"title": f"Audited: {file}", "body": rationale, "source_hash": self._current_source_hash}},
             })
         return parse_document_delta_json(text)
-
-    def delta_to_state_update(self, delta_state: DeltaState) -> StateUpdateProposal:
-        return derive_document_state_update_from_delta(delta_state)
 
     def export_state(self, state: State, output_path: Path, artifact_id: str) -> bool:
         return export_document_artifact(document_artifact_from_state(state, artifact_id), output_path)

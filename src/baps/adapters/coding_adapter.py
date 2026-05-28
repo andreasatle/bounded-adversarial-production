@@ -26,7 +26,6 @@ from baps.adapters.coding.prompting import (
     _truncate_lines,
     render_coding_blue_prompt,
 )
-from baps.adapters.coding.state_updates import derive_coding_state_update_from_delta
 from baps.adapters.coding.views import build_coding_create_game_state_view, build_coding_state_view
 from baps.models.models import ToolCall, ToolDefinition
 from baps.northstar.northstar_projection import StateView
@@ -38,7 +37,6 @@ from baps.state.state import (
     DeltaState,
     GameSpec,
     State,
-    StateUpdateProposal,
 )
 
 __all__ = [
@@ -48,7 +46,6 @@ __all__ = [
     "build_coding_create_game_state_view",
     "build_coding_state_view",
     "coding_artifact_from_state",
-    "derive_coding_state_update_from_delta",
     "parse_coding_delta_json",
     "render_coding_blue_prompt",
 ]
@@ -304,9 +301,6 @@ class CodingProjectAdapter:
 
     def parse_blue_delta(self, text: str) -> DeltaState:
         return parse_coding_delta_json(text)
-
-    def delta_to_state_update(self, delta_state: DeltaState) -> StateUpdateProposal:
-        return derive_coding_state_update_from_delta(delta_state)
 
     def export_state(self, state: State, output_path: Path, artifact_id: str) -> bool:
         artifact = coding_artifact_from_state(state, artifact_id)

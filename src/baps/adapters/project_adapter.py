@@ -10,7 +10,7 @@ from typing import Any, Protocol
 
 from baps.models.models import ToolCall, ToolDefinition
 from baps.northstar.northstar_projection import StateView
-from baps.state.state import DeltaState, GameSpec, State, StateUpdateProposal
+from baps.state.state import DeltaState, GameSpec, State
 
 
 _MODEL_INJECTION_RE = re.compile(
@@ -145,12 +145,6 @@ class ProjectTypeAdapter(Protocol):
         ...
 
     def parse_blue_delta(self, text: str) -> DeltaState:
-        ...
-
-    def delta_to_state_update(self, delta_state: DeltaState) -> StateUpdateProposal:
-        # NON-RUNTIME PATH: maps DeltaState to a StateUpdateProposal for tooling
-        # and tests only. Never called by the live orchestration path, which
-        # applies DeltaState directly via StateService.apply_delta.
         ...
 
     def export_state(self, state: State, output_path: Path, artifact_id: str) -> bool:

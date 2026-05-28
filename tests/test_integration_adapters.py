@@ -5,6 +5,8 @@ from baps.state.state import GameSpec
 from baps.adapters.coding_adapter import CodingProjectAdapter
 from baps.adapters.document_adapter import DocumentProjectAdapter
 import baps.state.state as state_module
+
+
 def test_coding_create_state_creates_coding_artifact() -> None:
     import baps.core.run as run_module
 
@@ -28,30 +30,6 @@ def test_coding_create_state_creates_coding_artifact() -> None:
     assert artifact.files == ()
 
 
-# ---------------------------------------------------------------------------
-# delta_to_state_update adapter contract — NON-RUNTIME PATH
-# These tests verify that adapters correctly map DeltaState to StateUpdateProposal.
-# delta_to_state_update is never called by the live orchestration path; it is used
-# only by tooling (baps-apply-northstar) and test fixtures. Runtime integration
-# applies DeltaState directly through StateService.apply_delta.
-# ---------------------------------------------------------------------------
-
-def test_coding_adapter_maps_file_write_delta_to_state_update() -> None:
-    # NON-RUNTIME PATH — tests the DeltaState → StateUpdateProposal mapper.
-    adapter = CodingProjectAdapter()
-    delta = state_module.DeltaCodingState(
-        artifact_id="main-codebase",
-        operation="write_file",
-        payload=state_module.WriteFileDelta(
-            file=state_module.CodeFile(
-                path="src/fibonacci.py",
-                content="def fibonacci(n):\n    return n\n",
-            )
-        ),
-    )
-    proposal = adapter.delta_to_state_update(delta)
-    assert proposal.payload.operation == "write_file"
-    assert proposal.payload.file.path == "src/fibonacci.py"
 def test_document_adapter_render_create_game_prompt_supplement_includes_delta_guidance() -> None:
 
     adapter = DocumentProjectAdapter()
@@ -110,25 +88,6 @@ def test_document_adapter_render_create_game_prompt_supplement_includes_guidance
     assert "missing sections" in result
 
 
-def test_coding_adapter_maps_write_files_batch_delta_to_state_update() -> None:
-    # NON-RUNTIME PATH — tests the DeltaState → StateUpdateProposal mapper.
-    adapter = CodingProjectAdapter()
-    delta = state_module.DeltaCodingBatchState(
-        artifact_id="main-codebase",
-        operation="write_files",
-        payload=state_module.WriteFilesDelta(
-            files=(
-                state_module.CodeFile(path="src/a.py", content="a"),
-                state_module.CodeFile(path="src/b.py", content="b"),
-            )
-        ),
-    )
-    proposal = adapter.delta_to_state_update(delta)
-    assert proposal.payload.operation == "write_files"
-    assert len(proposal.payload.files) == 2
-    assert proposal.payload.files[0].path == "src/a.py"
-
-
 def test_coding_adapter_tool_call_write_files_returns_batch_delta() -> None:
     from baps.models.models import ToolCall
 
@@ -148,23 +107,6 @@ def test_coding_adapter_tool_call_write_files_returns_batch_delta() -> None:
     assert len(delta.payload.files) == 2
 
 
-def test_document_adapter_maps_modify_section_delta_to_state_update() -> None:
-    # NON-RUNTIME PATH — tests the DeltaState → StateUpdateProposal mapper.
-    adapter = DocumentProjectAdapter()
-    delta = state_module.DeltaModifyDocumentState(
-        artifact_id="main-document",
-        operation="modify_section",
-        payload=state_module.ModifySectionDelta(
-            section_title="Intro",
-            new_body="Updated intro.",
-        ),
-    )
-    proposal = adapter.delta_to_state_update(delta)
-    assert proposal.payload.operation == "modify_section"
-    assert proposal.payload.section_title == "Intro"
-    assert proposal.payload.new_body == "Updated intro."
-
-
 def test_document_adapter_tool_call_modify_section_returns_correct_delta() -> None:
     from baps.models.models import ToolCall
 
@@ -182,19 +124,6 @@ def test_document_adapter_tool_call_modify_section_returns_correct_delta() -> No
     assert delta.payload.section_title == "Intro"
 
 
-def test_coding_adapter_maps_delete_file_delta_to_state_update() -> None:
-    # NON-RUNTIME PATH — tests the DeltaState → StateUpdateProposal mapper.
-    adapter = CodingProjectAdapter()
-    delta = state_module.DeltaDeleteCodingState(
-        artifact_id="main-codebase",
-        operation="delete_file",
-        payload=state_module.DeleteFileDelta(path="src/old.py"),
-    )
-    proposal = adapter.delta_to_state_update(delta)
-    assert proposal.payload.operation == "delete_file"
-    assert proposal.payload.path == "src/old.py"
-
-
 def test_coding_adapter_tool_call_delete_file_returns_correct_delta() -> None:
     from baps.models.models import ToolCall
 
@@ -206,19 +135,6 @@ def test_coding_adapter_tool_call_delete_file_returns_correct_delta() -> None:
     delta = adapter.tool_call_to_delta(tool_call)
     assert isinstance(delta, state_module.DeltaDeleteCodingState)
     assert delta.payload.path == "src/old.py"
-
-
-def test_document_adapter_maps_delete_section_delta_to_state_update() -> None:
-    # NON-RUNTIME PATH — tests the DeltaState → StateUpdateProposal mapper.
-    adapter = DocumentProjectAdapter()
-    delta = state_module.DeltaDeleteDocumentState(
-        artifact_id="main-document",
-        operation="delete_section",
-        payload=state_module.DeleteSectionDelta(section_title="Obsolete"),
-    )
-    proposal = adapter.delta_to_state_update(delta)
-    assert proposal.payload.operation == "delete_section"
-    assert proposal.payload.section_title == "Obsolete"
 
 
 def test_document_adapter_tool_call_delete_section_returns_correct_delta() -> None:

@@ -261,104 +261,6 @@ class DeltaDeleteCodingState(DeltaState):
     payload: DeleteFileDelta
 
 
-# ---------------------------------------------------------------------------
-# Typed payload models for StateUpdateProposal
-# ---------------------------------------------------------------------------
-
-class AppendSectionPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    operation: Literal["append_section"] = "append_section"
-    section: Section
-
-
-class ModifySectionPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    operation: Literal["modify_section"] = "modify_section"
-    section_title: str
-    new_body: str
-
-    _validate_section_title = field_validator("section_title")(_require_non_empty)
-
-    @field_validator("new_body")
-    @classmethod
-    def _validate_new_body(cls, value: str) -> str:
-        _require_non_empty(value)
-        if len(value.encode("utf-8")) > _MAX_SECTION_BODY_BYTES:
-            raise ValueError(f"section body must not exceed {_MAX_SECTION_BODY_BYTES} bytes")
-        return value
-
-
-class DeleteSectionPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    operation: Literal["delete_section"] = "delete_section"
-    section_title: str
-
-    _validate_section_title = field_validator("section_title")(_require_non_empty)
-
-
-class WriteFilePayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    operation: Literal["write_file"] = "write_file"
-    file: CodeFile
-
-
-class WriteFilesPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    operation: Literal["write_files"] = "write_files"
-    files: tuple[CodeFile, ...]
-
-    @field_validator("files")
-    @classmethod
-    def _validate_non_empty(cls, files: tuple) -> tuple:
-        if not files:
-            raise ValueError("write_files payload must contain at least one file")
-        return files
-
-
-class DeleteFilePayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    operation: Literal["delete_file"] = "delete_file"
-    path: str
-
-    _validate_path = field_validator("path")(_require_non_empty)
-
-
-class NoFindingPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    operation: Literal["no_finding"] = "no_finding"
-    file: str
-    rationale: str
-
-    _validate_file = field_validator("file")(_require_non_empty)
-    _validate_rationale = field_validator("rationale")(_require_non_empty)
-
-
-class AddArtifactPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    operation: Literal["add_artifact"] = "add_artifact"
-    artifact: dict[str, object]
-
-
-class ReplaceArtifactPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    operation: Literal["replace_artifact"] = "replace_artifact"
-    artifact: dict[str, object]
-
-
-StateUpdatePayload = Annotated[
-    AppendSectionPayload
-    | ModifySectionPayload
-    | DeleteSectionPayload
-    | WriteFilePayload
-    | WriteFilesPayload
-    | DeleteFilePayload
-    | NoFindingPayload
-    | AddArtifactPayload
-    | ReplaceArtifactPayload,
-    Field(discriminator="operation"),
-]
-
-
 class GameSpec(BaseModel):
     objective: str
     target_artifact_id: str
@@ -500,38 +402,6 @@ class State(BaseModel):
         return artifacts
 
 
-class StateUpdateTarget(BaseModel):
-    artifact_id: str
-    section: str | None = None
-
-    _validate_artifact_id = field_validator("artifact_id")(_require_non_empty)
-
-    @field_validator("section")
-    @classmethod
-    def _validate_optional_section(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        return _require_non_empty(value)
-
-
-class StateUpdateProposal(BaseModel):
-    id: str
-    target: StateUpdateTarget
-    summary: str
-    payload: StateUpdatePayload
-    base_state_fingerprint: str | None = None
-
-    _validate_id = field_validator("id")(_require_non_empty)
-    _validate_summary = field_validator("summary")(_require_non_empty)
-
-    @field_validator("base_state_fingerprint")
-    @classmethod
-    def _validate_optional_base_state_fingerprint(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        return _require_non_empty(value)
-
-
 class StateProjection(BaseModel):
     artifacts: tuple[str, ...] = ()
 
@@ -543,12 +413,6 @@ def fingerprint_state(state: State) -> str:
         separators=(",", ":"),
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def validate_update_base_state(state: State, proposal: StateUpdateProposal) -> bool:
-    if proposal.base_state_fingerprint is None:
-        return True
-    return proposal.base_state_fingerprint == fingerprint_state(state)
 
 
 def find_state_artifact(state: State, artifact_id: str) -> StateArtifact:
@@ -567,100 +431,6 @@ def _replace_artifact_in_state(
         for a in state.artifacts
     )
     return State(artifacts=new_artifacts)
-
-
-def apply_state_update(state: State, proposal: StateUpdateProposal) -> State:
-    """Apply a StateUpdateProposal to State.
-
-    For operations that have typed DeltaState equivalents (append_section,
-    modify_section, delete_section, write_file, write_files, delete_file,
-    no_finding), delegates to apply_state_delta so all durable mutation flows
-    through the single canonical path.
-
-    Operations add_artifact and replace_artifact have no typed delta equivalent
-    and are handled directly here.
-    """
-    p = proposal.payload
-    target_artifact_id = proposal.target.artifact_id
-
-    if isinstance(p, WriteFilePayload):
-        return apply_state_delta(state, DeltaCodingState(
-            artifact_id=target_artifact_id,
-            operation="write_file",
-            payload=WriteFileDelta(file=p.file),
-        ))
-
-    if isinstance(p, WriteFilesPayload):
-        return apply_state_delta(state, DeltaCodingBatchState(
-            artifact_id=target_artifact_id,
-            operation="write_files",
-            payload=WriteFilesDelta(files=p.files),
-        ))
-
-    if isinstance(p, AppendSectionPayload):
-        return apply_state_delta(state, DeltaDocumentState(
-            artifact_id=target_artifact_id,
-            operation="append_section",
-            payload=AppendSectionDelta(section=p.section),
-        ))
-
-    if isinstance(p, ModifySectionPayload):
-        return apply_state_delta(state, DeltaModifyDocumentState(
-            artifact_id=target_artifact_id,
-            operation="modify_section",
-            payload=ModifySectionDelta(section_title=p.section_title, new_body=p.new_body),
-        ))
-
-    if isinstance(p, DeleteSectionPayload):
-        return apply_state_delta(state, DeltaDeleteDocumentState(
-            artifact_id=target_artifact_id,
-            operation="delete_section",
-            payload=DeleteSectionDelta(section_title=p.section_title),
-        ))
-
-    if isinstance(p, DeleteFilePayload):
-        return apply_state_delta(state, DeltaDeleteCodingState(
-            artifact_id=target_artifact_id,
-            operation="delete_file",
-            payload=DeleteFileDelta(path=p.path),
-        ))
-
-    if isinstance(p, NoFindingPayload):
-        return apply_state_delta(state, DeltaDocumentState(
-            artifact_id=target_artifact_id,
-            operation="append_section",
-            payload=AppendSectionDelta(section=Section(
-                title=f"Audited: {p.file}",
-                body=p.rationale,
-            )),
-        ))
-
-    if isinstance(p, AddArtifactPayload):
-        artifact_data = p.artifact
-        if "sections" in artifact_data:
-            added_artifact = DocumentArtifact.model_validate(artifact_data)
-        elif "files" in artifact_data:
-            added_artifact = CodingArtifact.model_validate(artifact_data)
-        else:
-            added_artifact = StateArtifact.model_validate(artifact_data)
-        return State(artifacts=(*state.artifacts, added_artifact))
-
-    # isinstance(p, ReplaceArtifactPayload)
-    existing = find_state_artifact(state, target_artifact_id)
-    replacement = _coerce_state_artifact(p.artifact)
-
-    if replacement.id != target_artifact_id:
-        raise ValueError(
-            "replacement artifact id must match proposal.target.artifact_id: "
-            f"expected {target_artifact_id}, got {replacement.id}"
-        )
-    if replacement.kind != existing.kind:
-        raise ValueError(
-            "replacement artifact kind must match existing artifact kind: "
-            f"expected {existing.kind}, got {replacement.kind}"
-        )
-
-    return _replace_artifact_in_state(state, target_artifact_id, replacement)
 
 
 def apply_state_delta(state: State, delta: DeltaState) -> State:

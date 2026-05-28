@@ -1,8 +1,8 @@
 from baps.adapters.project_adapter import VerificationResult
-from baps.game.engine import _derive_state_update_from_delta, play_game
+from baps.game.engine import play_game
 from baps.models.models import FakeModelClient, ToolCall
 from baps.northstar.northstar_projection import ProjectionType, StateView
-from baps.state.state import GameSpec, StateUpdateProposal
+from baps.state.state import GameSpec
 import baps.state.state as state_module
 def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
     from baps.models.models import ToolDefinition
@@ -50,9 +50,6 @@ def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
                 ),
             )
 
-        def delta_to_state_update(self, _delta_state):
-            raise NotImplementedError
-
     adapter = _PlayAdapter()
     spec = GameSpec(
         objective="Add section",
@@ -77,50 +74,6 @@ def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
     assert isinstance(delta, state_module.DeltaDocumentState)
     assert adapter.calls == ["build_state_view", "render_blue_prompt", "build_blue_tools", "tool_call_to_delta"]
 
-
-def test_integration_uses_adapter_delta_to_update_mapper() -> None:
-    # NON-RUNTIME PATH — tests that _derive_state_update_from_delta delegates to
-    # the adapter's delta_to_state_update mapper. This function is used by tooling
-    # and tests; the runtime path (orchestration._solve_gap) never calls it.
-
-    class _MapperAdapter:
-        project_type = "document"
-        supported_delta_type = "DeltaDocumentState"
-
-        def create_initial_state(self, _config):
-            raise NotImplementedError
-
-        def build_state_view(self, _state, _game_spec):
-            raise NotImplementedError
-
-        def render_blue_prompt(
-            self, _state_view, _game_spec, _attempt_number, _previous_feedback
-        ):
-            raise NotImplementedError
-
-        def parse_blue_delta(self, _text):
-            raise NotImplementedError
-
-        def delta_to_state_update(self, delta_state):
-                return StateUpdateProposal(
-                    id="mapped",
-                    target=state_module.StateUpdateTarget(artifact_id=delta_state.artifact_id),
-                    summary="mapped",
-                    payload={
-                        "operation": "replace_artifact",
-                    "artifact": {"id": delta_state.artifact_id, "kind": "document"},
-                },
-            )
-
-    delta = state_module.DeltaDocumentState(
-        artifact_id="main-document",
-        operation="append_section",
-        payload=state_module.AppendSectionDelta(
-            section=state_module.Section(title="T", body="B")
-        ),
-    )
-    proposal = _derive_state_update_from_delta(delta, adapter=_MapperAdapter())
-    assert proposal.id == "mapped"
 
 def test_play_game_pre_seeds_verification_result_as_previous_feedback(monkeypatch) -> None:
 
@@ -155,9 +108,6 @@ def test_play_game_pre_seeds_verification_result_as_previous_feedback(monkeypatc
 
         def render_referee_prompt_supplement(self, *a, **kw):
             return ""
-
-        def delta_to_state_update(self, delta):
-            raise ValueError("unused")
 
     vr = VerificationResult(
         command="uv run pytest", cwd="/tmp", exit_code=1,

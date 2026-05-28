@@ -88,11 +88,9 @@ Current implementation philosophy:
 - `RefereeDecision` — adjudication output (`disposition`, `rationale`, `improvement_hints`)
 - `PlayGameRuntime` — attempt tracking
 
-**Integration — two paths, one canonical:**
+**Integration:**
 
-- Runtime path: `DeltaState` → `StateService.apply_delta` — the only path called by `orchestration._solve_gap`
-- Non-runtime path: `DeltaState` → `StateUpdateProposal` → `StateService.apply_update` — used by `baps-apply-northstar` tooling and test fixtures only; never called in the live execution loop
-- Schema types: `StateUpdateProposal`, `StateUpdateTarget` (non-runtime envelope only)
+- `DeltaState` → `StateService.apply_delta` — the only path; called by `orchestration._solve_gap`
 
 ---
 
@@ -426,10 +424,9 @@ docker/
    - Referee decides accept/revise/reject
    - Bounded retries with sanitized feedback on rejected attempts
 
-3. **Integration (runtime path)**
+3. **Integration**
    - `play_game` returns an integration-eligible `DeltaState` (or `None`)
-   - `_solve_gap` applies that `DeltaState` directly via `StateService.apply_delta` — the only integration call in production
-   - `StateUpdateProposal` / `StateService.apply_update` are **not used here**; they belong to non-runtime tooling only
+   - `_solve_gap` applies that `DeltaState` directly via `StateService.apply_delta`
 
 4. **Export**
    - Adapter exports state-derived artifacts to output path
@@ -520,12 +517,6 @@ All payload models use `model_config = ConfigDict(extra="forbid")`:
 - Fields: `disposition` (accept|revise|reject), `rationale`, `red_override`, `improvement_hints`
 - Purpose: game-local adjudication output; rationale is sanitized before re-embedding in feedback
 
-### `StateUpdateProposal`
-
-- Fields: `id`, `target`, `summary`, `payload`, `base_state_fingerprint` (optional)
-- `base_state_fingerprint`: SHA-256 of state at proposal time; if set, `apply_update` rejects on fingerprint mismatch
-- Purpose: non-runtime mutation envelope consumed by `StateService.apply_update` for proposal/workflow use cases
-
 ---
 
 ## 6. Prompt System
@@ -595,7 +586,7 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 4. CreateGame performs gap analysis, not step derivation.
 5. `context_chain` carries full ancestor context to every leaf game.
 6. Adapter owns all project-specific mechanics.
-7. `StateService` is the runtime mutation boundary. The canonical runtime integration path uses `StateService.apply_delta(delta_state)` directly. `StateService.apply_update(proposal)` and the `delta_to_state_update` / `_derive_state_update_from_delta` helpers are non-runtime: they serve tooling (`baps-apply-northstar`) and test fixtures only and are never called by `orchestration._solve_gap`.
+7. `StateService` is the runtime mutation boundary. The only integration path is `StateService.apply_delta(delta_state)`, called directly by `orchestration._solve_gap`.
 8. Core orchestration remains project-type generic.
 9. Export is one-way from `State`.
 10. Schema validation enforced via typed models and runtime checks.

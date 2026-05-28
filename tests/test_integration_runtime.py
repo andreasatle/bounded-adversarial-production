@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from baps.game.engine import _derive_state_update_from_delta, create_game
 from baps.adapters.document_adapter import DocumentProjectAdapter
+from baps.game.engine import create_game
 import baps.state.state as state_module
 def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path) -> None:
     workspace = tmp_path / "flow-ws"
@@ -42,27 +42,6 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
     assert forwarded_state.model_dump(mode="json") == {
         "artifacts": [{"id": "main-document", "kind": "document", "sections": []}],
     }
-
-
-def test_derive_state_update_from_delta_converts_append_section() -> None:
-    # NON-RUNTIME PATH — tests that _derive_state_update_from_delta correctly
-    # maps a DeltaState to a StateUpdateProposal. This function is for tooling
-    # and tests only; the runtime path never constructs a StateUpdateProposal.
-
-    delta = state_module.DeltaDocumentState(
-        artifact_id="main-document",
-        operation="append_section",
-        payload=state_module.AppendSectionDelta(
-            section=state_module.Section(title="Introduction", body="Body text")
-        ),
-    )
-    proposal = _derive_state_update_from_delta(
-        delta, adapter=DocumentProjectAdapter()
-    )
-    assert proposal.target.artifact_id == "main-document"
-    assert proposal.payload.operation == "append_section"
-    assert proposal.payload.section.title == "Introduction"
-    assert proposal.payload.section.body == "Body text"
 
 
 def test_main_integration_uses_state_service_apply_delta(monkeypatch, tmp_path: Path) -> None:
@@ -264,10 +243,6 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
         def tool_call_to_delta(self, tool_call):
             self.calls.append("tool_call_to_delta")
             return self._delegate.tool_call_to_delta(tool_call)
-
-        def delta_to_state_update(self, delta_state):
-            self.calls.append("delta_to_state_update")
-            return self._delegate.delta_to_state_update(delta_state)
 
         def export_state(self, state, output_path, artifact_id):
             self.calls.append("export_state")

@@ -16,19 +16,14 @@ from baps.adapters.project_adapter import (
     sanitize_model_title,
 )
 from baps.state.state import (
-    AppendSectionPayload,
-    DeleteSectionPayload,
     DeltaDeleteDocumentState,
     DeltaDocumentState,
     DeltaModifyDocumentState,
     DeltaState,
     DocumentArtifact,
     GameSpec,
-    ModifySectionPayload,
     Section,
     State,
-    StateUpdateProposal,
-    StateUpdateTarget,
 )
 
 
@@ -244,45 +239,6 @@ def parse_document_delta_json(text: str, workspace: Path | None = None) -> Delta
         raise ValueError(
             f"blue model output failed DeltaDocumentState validation: {exc}"
         ) from exc
-
-
-def derive_document_state_update_from_delta(delta_state: DeltaState) -> StateUpdateProposal:
-    # NON-RUNTIME PATH: converts DeltaState to a StateUpdateProposal for
-    # tooling and test fixture use only. Runtime integration goes through
-    # StateService.apply_delta, not through StateUpdateProposal.
-    if isinstance(delta_state, DeltaModifyDocumentState):
-        return StateUpdateProposal(
-            id=f"state-update:{delta_state.artifact_id}:modify_section:{delta_state.payload.section_title}",
-            target=StateUpdateTarget(artifact_id=delta_state.artifact_id),
-            summary=(
-                f"Modify section '{delta_state.payload.section_title}' "
-                f"in document artifact {delta_state.artifact_id}"
-            ),
-            payload=ModifySectionPayload(
-                section_title=delta_state.payload.section_title,
-                new_body=delta_state.payload.new_body,
-            ),
-        )
-    if isinstance(delta_state, DeltaDocumentState):
-        if delta_state.operation != "append_section":
-            raise ValueError(f"unsupported delta operation for integration: {delta_state.operation}")
-        return StateUpdateProposal(
-            id=f"state-update:{delta_state.artifact_id}:append_section",
-            target=StateUpdateTarget(artifact_id=delta_state.artifact_id),
-            summary=(
-                f"Append section '{delta_state.payload.section.title}' "
-                f"to document artifact {delta_state.artifact_id}"
-            ),
-            payload=AppendSectionPayload(section=delta_state.payload.section),
-        )
-    if isinstance(delta_state, DeltaDeleteDocumentState):
-        return StateUpdateProposal(
-            id=f"state-update:{delta_state.artifact_id}:delete_section:{delta_state.payload.section_title}",
-            target=StateUpdateTarget(artifact_id=delta_state.artifact_id),
-            summary=f"Delete section '{delta_state.payload.section_title}' from document artifact {delta_state.artifact_id}",
-            payload=DeleteSectionPayload(section_title=delta_state.payload.section_title),
-        )
-    raise ValueError(f"unsupported delta type for integration: {type(delta_state).__name__}")
 
 
 def render_document_artifact_markdown(artifact: DocumentArtifact) -> str:
@@ -512,9 +468,6 @@ class DocumentProjectAdapter:
 
     def parse_blue_delta(self, text: str) -> DeltaState:
         return parse_document_delta_json(text)
-
-    def delta_to_state_update(self, delta_state: DeltaState) -> StateUpdateProposal:
-        return derive_document_state_update_from_delta(delta_state)
 
     def export_state(self, state: State, output_path: Path, artifact_id: str) -> bool:
         return export_document_artifact(document_artifact_from_state(state, artifact_id), output_path)

@@ -519,28 +519,15 @@ def test_audit_adapter_registered_in_default_adapters() -> None:
 def _append_finding(
     state: state_module.State, artifact_id: str, title: str, body: str
 ) -> state_module.State:
-    # NON-RUNTIME PATH: uses derive_document_state_update_from_delta + apply_update
-    # as a test fixture helper. Production code applies DeltaState directly via
-    # StateService.apply_delta and never constructs a StateUpdateProposal at runtime.
-    from baps.state.state_service import StateService
-    from baps.state.state_store import JsonStateStore
-    import tempfile
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        store = JsonStateStore(Path(tmpdir) / "state.json")
-        store.save(state)
-        from baps.state.state import build_default_state_artifact_registry
-        service = StateService(store, build_default_state_artifact_registry())
-        delta = state_module.DeltaDocumentState(
-            artifact_id=artifact_id,
-            operation="append_section",
-            payload=state_module.AppendSectionDelta(
-                section=state_module.Section(title=title, body=body)
-            ),
-        )
-        from baps.adapters.document_adapter import derive_document_state_update_from_delta
-        proposal = derive_document_state_update_from_delta(delta)
-        return service.apply_update(proposal)
+    from baps.state.state import apply_state_delta
+    delta = state_module.DeltaDocumentState(
+        artifact_id=artifact_id,
+        operation="append_section",
+        payload=state_module.AppendSectionDelta(
+            section=state_module.Section(title=title, body=body)
+        ),
+    )
+    return apply_state_delta(state, delta)
 
 
 # ---------------------------------------------------------------------------
