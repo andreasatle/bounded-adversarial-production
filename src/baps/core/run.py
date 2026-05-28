@@ -6,7 +6,6 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any
 
 import yaml
 
@@ -72,7 +71,7 @@ _KNOWN_SPEC_KEYS = frozenset({
 })
 
 
-def _load_spec(spec_path: Path) -> dict[str, Any]:
+def _load_spec(spec_path: Path) -> dict[str, object]:
     if not spec_path.exists():
         raise ValueError(f"spec file not found: {spec_path}")
 
@@ -92,7 +91,7 @@ def _resolve_output_path(workspace: Path, output_value: str) -> Path:
 
 
 def resolve_run_config(args: argparse.Namespace) -> RunConfig:
-    spec_data: dict[str, Any] = {}
+    spec_data: dict[str, object] = {}
     if args.spec:
         spec_path = Path(args.spec)
         spec_data = _load_spec(spec_path)
@@ -105,17 +104,17 @@ def resolve_run_config(args: argparse.Namespace) -> RunConfig:
         else spec_data.get("workspace", _DEFAULT_WORKSPACE)
     )
 
-    workspace_config: dict[str, Any] = {}
+    workspace_settings: dict[str, object] = {}
     if getattr(args, "command", None) == "start":
-        workspace_config = _load_workspace_config(Path(str(workspace_raw)))
+        workspace_settings = _load_workspace_config(Path(str(workspace_raw)))
 
     def _resolve(cli_val: object, spec_key: str, default: object = None) -> object:
         if cli_val is not None:
             return cli_val
         if spec_key in spec_data:
             return spec_data[spec_key]
-        if spec_key in workspace_config:
-            return workspace_config[spec_key]
+        if spec_key in workspace_settings:
+            return workspace_settings[spec_key]
         return default
 
     project_type_raw = _resolve(args.project_type, "project_type")
@@ -288,7 +287,7 @@ def _save_workspace_config(config: RunConfig, workspace: Path) -> None:
     )
 
 
-def _load_workspace_config(workspace: Path) -> dict[str, Any]:
+def _load_workspace_config(workspace: Path) -> dict[str, object]:
     path = _workspace_config_path(workspace)
     if not path.exists():
         return {}
@@ -323,7 +322,7 @@ def _resolve_reset_config(args: argparse.Namespace) -> tuple[Path, Path | None]:
     reset only needs to know where state lives and what output file to wipe.
     All other fields (goal, project_type, etc.) are irrelevant.
     """
-    spec_data: dict[str, Any] = {}
+    spec_data: dict[str, object] = {}
     if args.spec:
         spec_data = _load_spec(Path(args.spec))
 
@@ -333,12 +332,12 @@ def _resolve_reset_config(args: argparse.Namespace) -> tuple[Path, Path | None]:
         else spec_data.get("workspace", _DEFAULT_WORKSPACE)
     )
     workspace = Path(str(workspace_raw))
-    workspace_config = _load_workspace_config(workspace)
+    workspace_settings = _load_workspace_config(workspace)
 
     output_raw = (
         args.output
         if args.output is not None
-        else spec_data.get("output") or workspace_config.get("output")
+        else spec_data.get("output") or workspace_settings.get("output")
     )
     if not output_raw or not str(output_raw).strip():
         return workspace, None
