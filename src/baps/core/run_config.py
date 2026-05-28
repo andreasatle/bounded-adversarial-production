@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -48,7 +49,7 @@ class RunConfig(BaseModel):
     spec_path: Path | None = None
     source_path: str | None = None
     source_include: list[str] | None = None
-    sandbox: str = "docker"
+    sandbox: Literal["docker", "none"] = "docker"
     spec_backend: Backend | None = None
     spec_model: str | None = None
     spec_roles: dict[str, RoleConfig] = Field(default_factory=dict)
