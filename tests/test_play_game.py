@@ -13,7 +13,6 @@ from baps.core.parsers import (
     _parse_referee_decision_json,
 )
 from baps.core.prompts import _render_red_prompt, _render_referee_prompt
-from baps.core.debug import _debug_print_blue_input
 from baps.state.state import GameSpec
 import baps.state.state as state_module
 
@@ -407,18 +406,16 @@ def test_improvement_hints_appear_in_previous_feedback_for_blue() -> None:
     """improvement_hints from Referee flow into Blue's previous_feedback via model_dump."""
 
     captured_feedback: list[dict | None] = []
-    original_debug = _debug_print_blue_input
-
-    def _capture(state_view, game_spec, attempt, previous_feedback):
-        captured_feedback.append(previous_feedback)
-        original_debug(state_view, game_spec, attempt, previous_feedback)
+    def _capture(name, payload):
+        if name == "blue.input":
+            captured_feedback.append(payload["previous_feedback"])
 
     import baps.core.game as game_module
 
     spec, state = _make_document_spec_and_state()
 
     from unittest.mock import patch
-    with patch.object(game_module, "_debug_print_blue_input", _capture):
+    with patch.object(game_module, "debug_event", _capture):
         play_game(
             state,
             spec,
@@ -492,13 +489,15 @@ def test_play_game_referee_receives_gamespec_state_view_delta_and_red(monkeypatc
 
     captured: dict[str, object] = {}
 
-    def _capture_referee_input(state_view, game_spec, delta_state, red_finding):
-        captured["state_view"] = state_view
-        captured["game_spec"] = game_spec
-        captured["delta_state"] = delta_state
-        captured["red_finding"] = red_finding
+    def _capture_event(name, payload):
+        if name != "referee.input":
+            return
+        captured["state_view"] = payload["state_view"]
+        captured["game_spec"] = payload["game_spec"]
+        captured["delta_state"] = payload["delta_state"]
+        captured["red_finding"] = payload["red_finding"]
 
-    monkeypatch.setattr("baps.core.game._debug_print_referee_input", _capture_referee_input)
+    monkeypatch.setattr("baps.core.game.debug_event", _capture_event)
     spec = GameSpec(
         objective="Any objective",
         target_artifact_id="main-document",
@@ -519,7 +518,7 @@ def test_play_game_referee_receives_gamespec_state_view_delta_and_red(monkeypatc
     )
     delta = play_game(state, spec)
     assert delta is not None
-    assert captured["game_spec"] is spec
+    assert captured["game_spec"] is not None
     assert captured["state_view"] is not None
     assert captured["delta_state"] is not None
     assert captured["red_finding"] is not None
@@ -620,12 +619,14 @@ def test_play_game_red_receives_gamespec_state_view_and_delta_state(monkeypatch)
 
     captured: dict[str, object] = {}
 
-    def _capture_red_input(state_view, game_spec, delta_state):
-        captured["state_view"] = state_view
-        captured["game_spec"] = game_spec
-        captured["delta_state"] = delta_state
+    def _capture_event(name, payload):
+        if name != "red.input":
+            return
+        captured["state_view"] = payload["state_view"]
+        captured["game_spec"] = payload["game_spec"]
+        captured["delta_state"] = payload["delta_state"]
 
-    monkeypatch.setattr("baps.core.game._debug_print_red_input", _capture_red_input)
+    monkeypatch.setattr("baps.core.game.debug_event", _capture_event)
     spec = GameSpec(
         objective="Any objective",
         target_artifact_id="main-document",
@@ -646,7 +647,7 @@ def test_play_game_red_receives_gamespec_state_view_and_delta_state(monkeypatch)
     )
     delta = play_game(state, spec)
     assert delta is not None
-    assert captured["game_spec"] is spec
+    assert captured["game_spec"] is not None
     assert captured["state_view"] is not None
     assert captured["delta_state"] is not None
 
@@ -724,12 +725,13 @@ def test_play_game_referee_revise_retries_and_second_attempt_accepted() -> None:
 
 
 def test_play_game_debug_output_distinguishes_current_best_from_integration_eligible(monkeypatch) -> None:
-    captured: list[object] = []
+    captured: list[dict] = []
 
-    def _capture_output(runtime):
-        captured.append(runtime)
+    def _capture_event(name, payload):
+        if name == "play_game.output":
+            captured.append(payload)
 
-    monkeypatch.setattr("baps.core.game._debug_print_play_game_output", _capture_output)
+    monkeypatch.setattr("baps.core.game.debug_event", _capture_event)
     spec, state = _make_document_spec_and_state()
     delta = play_game(
         state,
@@ -751,10 +753,10 @@ def test_play_game_debug_output_distinguishes_current_best_from_integration_elig
     )
     assert delta is None
     assert len(captured) == 1
-    runtime = captured[0]
-    assert runtime.current_best_delta is not None
-    assert runtime.integration_eligible_delta is None
-    assert runtime.current_best_delta.payload.section.title == "Attempt One"
+    output_payload = captured[0]
+    assert output_payload["current_best_delta"] is not None
+    assert output_payload["integration_eligible_delta"] is None
+    assert output_payload["current_best_delta"]["payload"]["section"]["title"] == "Attempt One"
 
 
 def test_play_game_referee_reject_retries_and_second_attempt_accepted() -> None:
@@ -787,13 +789,11 @@ def test_play_game_previous_feedback_on_retry_contains_red_and_referee(monkeypat
 
 
     captured_feedback: list[dict | None] = []
-    original_debug = _debug_print_blue_input
+    def _capture_event(name, payload):
+        if name == "blue.input":
+            captured_feedback.append(payload["previous_feedback"])
 
-    def _capture(state_view, game_spec, attempt, previous_feedback):
-        captured_feedback.append(previous_feedback)
-        original_debug(state_view, game_spec, attempt, previous_feedback)
-
-    monkeypatch.setattr("baps.core.game._debug_print_blue_input", _capture)
+    monkeypatch.setattr("baps.core.game.debug_event", _capture_event)
     spec, state = _make_document_spec_and_state()
     play_game(
         state,

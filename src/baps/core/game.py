@@ -16,25 +16,9 @@ from baps.core.clients import (
     _resolve_backend_model,
 )
 from baps.core.debug import (
-    _debug_print_attempt_rejected,
-    _debug_print_blue_failed_tool_call,
-    _debug_print_blue_input,
-    _debug_print_blue_output,
-    _debug_print_create_game_input,
-    _debug_print_create_game_output,
     _debug_print_create_game_prompt,
     _debug_print_create_game_raw_model_output,
-    _debug_print_create_game_red_input,
-    _debug_print_create_game_red_output,
-    _debug_print_create_game_validation_failure,
-    _debug_print_create_game_validation_input,
-    _debug_print_play_game_attempt,
-    _debug_print_play_game_input,
-    _debug_print_play_game_output,
-    _debug_print_red_input,
-    _debug_print_red_output,
-    _debug_print_referee_input,
-    _debug_print_referee_output,
+    debug_event,
 )
 from baps.models.model_output import BlackboardEvent
 from baps.models.models import ModelClient, Role, ToolCallRecord
@@ -350,7 +334,12 @@ def _generate_create_game_with_json_retry(
 
 
 def _validate_game_spec(game_spec: GameSpec) -> None:
-    _debug_print_create_game_validation_input(game_spec)
+    debug_event("create_game.validation_input", {
+        "objective": game_spec.objective,
+        "success_condition": game_spec.success_condition,
+        "target_artifact_id": game_spec.target_artifact_id,
+        "allowed_delta_type": game_spec.allowed_delta_type,
+    })
 
 
 def create_game(
@@ -364,7 +353,7 @@ def create_game(
     create_game_red_client: ModelClient | None = None,
     max_create_game_attempts: int = 2,
 ) -> GameSpec | DecomposeSpec:
-    _debug_print_create_game_input(state)
+    debug_event("create_game.input", {"state": state.model_dump(mode="json")})
     resolved_adapter = (
         adapter
         if adapter is not None
@@ -431,7 +420,7 @@ def create_game(
             )
 
             if isinstance(result, DecomposeSpec):
-                _debug_print_create_game_output(result)
+                debug_event("create_game.output", {"game_spec": result.model_dump(mode="json")})
                 _bb_result_type = "decompose_spec"
                 _bb_result = {
                     "rationale": sanitize_model_string(result.rationale),
@@ -446,7 +435,7 @@ def create_game(
             try:
                 _validate_game_spec(game_spec)
             except ValueError as exc:
-                _debug_print_create_game_validation_failure(str(exc))
+                debug_event("create_game.validation_failure", {"message": str(exc)})
                 raise
             expected_artifact_id = _config_artifact_id(config)
             if game_spec.target_artifact_id != expected_artifact_id:
@@ -465,7 +454,10 @@ def create_game(
             # Red challenge — only when a Red client is wired and this is not the final attempt
             if red_role is not None and attempt < max_create_game_attempts:
                 red_prompt = _render_create_game_red_prompt(state_view, game_spec, config)
-                _debug_print_create_game_red_input(state_view, game_spec)
+                debug_event("create_game_red.input", {
+                    "game_spec": game_spec.model_dump(mode="json"),
+                    "state_view_id": state_view.id,
+                })
                 red_generated = red_role.generate(red_prompt)
                 try:
                     red_finding = _parse_red_finding_json(
@@ -474,13 +466,13 @@ def create_game(
                     )
                 except ValueError:
                     # Unparseable Red output — accept the GameSpec as-is
-                    _debug_print_create_game_output(game_spec)
+                    debug_event("create_game.output", {"game_spec": game_spec.model_dump(mode="json")})
                     _bb_result_type = "game_spec"
                     _bb_result = _sanitize_game_spec_dict(game_spec)
                     return game_spec
-                _debug_print_create_game_red_output(red_finding)
+                debug_event("create_game_red.output", {"red_finding": red_finding.model_dump(mode="json")})
                 if red_finding.disposition == "accept":
-                    _debug_print_create_game_output(game_spec)
+                    debug_event("create_game.output", {"game_spec": game_spec.model_dump(mode="json")})
                     _bb_result_type = "game_spec"
                     _bb_result = _sanitize_game_spec_dict(game_spec)
                     return game_spec
@@ -488,14 +480,14 @@ def create_game(
                 red_feedback = red_finding.model_dump(mode="json")
                 continue
 
-            _debug_print_create_game_output(game_spec)
+            debug_event("create_game.output", {"game_spec": game_spec.model_dump(mode="json")})
             _bb_result_type = "game_spec"
             _bb_result = _sanitize_game_spec_dict(game_spec)
             return game_spec
 
         # All attempts exhausted — return best available spec
         if last_valid_game_spec is not None:
-            _debug_print_create_game_output(last_valid_game_spec)
+            debug_event("create_game.output", {"game_spec": last_valid_game_spec.model_dump(mode="json")})
             _bb_result_type = "game_spec"
             _bb_result = _sanitize_game_spec_dict(last_valid_game_spec)
             return last_valid_game_spec
@@ -639,7 +631,12 @@ def _run_play_game_attempt(
                 research_prompt, blue_research_tools, executor
             )
 
-    _debug_print_blue_input(state_view, game_spec, attempt, previous_feedback)
+    debug_event("blue.input", {
+        "game_spec": game_spec.model_dump(mode="json"),
+        "state_view": state_view.model_dump(mode="json"),
+        "attempt_number": attempt,
+        "previous_feedback": previous_feedback,
+    })
     blue_prompt = resolved_adapter.render_blue_prompt(
         state_view, game_spec, attempt, previous_feedback
     )
@@ -656,9 +653,9 @@ def _run_play_game_attempt(
         try:
             candidate_delta = resolved_adapter.tool_call_to_delta(blue_tool_call)
         except ValueError as exc:
-            _debug_print_blue_failed_tool_call(blue_tool_call)
+            debug_event("blue.failed_tool_call", {"tool_call": str(blue_tool_call)})
             reason = f"blue output failed DeltaState validation: {exc}"
-            _debug_print_attempt_rejected(attempt, reason)
+            debug_event("play_game.attempt_rejected", {"attempt": attempt, "reason": reason})
             updated_feedback = {
                 "attempt_rejection": {
                     "stage": SpecRole.BLUE,
@@ -673,7 +670,7 @@ def _run_play_game_attempt(
             candidate_delta = resolved_adapter.parse_blue_delta(blue_generated)
         except ValueError as exc:
             reason = f"blue output failed DeltaState validation: {exc}"
-            _debug_print_attempt_rejected(attempt, reason)
+            debug_event("play_game.attempt_rejected", {"attempt": attempt, "reason": reason})
             updated_feedback = {
                 "attempt_rejection": {
                     "stage": SpecRole.BLUE,
@@ -682,7 +679,7 @@ def _run_play_game_attempt(
                 }
             }
             return attempt_rec, None, None, None, updated_feedback
-    _debug_print_blue_output(candidate_delta)
+    debug_event("blue.output", {"delta_state": candidate_delta.model_dump(mode="json")})
     attempt_rec["blue_delta"] = _sanitize_feedback_dict(candidate_delta.model_dump(mode="json"))
 
     red_session: list[ToolCallRecord] = []
@@ -697,11 +694,26 @@ def _run_play_game_attempt(
             )
 
     if verification_result is None:
-        _debug_print_red_input(state_view, game_spec, candidate_delta)
+        debug_event("red.input", {
+            "game_spec": game_spec.model_dump(mode="json"),
+            "state_view": state_view.model_dump(mode="json"),
+            "delta_state": candidate_delta.model_dump(mode="json"),
+            "verification_result": None,
+        })
     else:
-        _debug_print_red_input(
-            state_view, game_spec, candidate_delta, verification_result
-        )
+        debug_event("red.input", {
+            "game_spec": game_spec.model_dump(mode="json"),
+            "state_view": state_view.model_dump(mode="json"),
+            "delta_state": candidate_delta.model_dump(mode="json"),
+            "verification_result": {
+                "command": verification_result.command,
+                "cwd": verification_result.cwd,
+                "exit_code": verification_result.exit_code,
+                "stdout": verification_result.stdout,
+                "stderr": verification_result.stderr,
+                "passed": verification_result.passed,
+            },
+        })
     red_supplement = _render_red_prompt_supplement_with_adapter(
         resolved_adapter,
         state_view,
@@ -732,7 +744,7 @@ def _run_play_game_attempt(
         red_generated, workspace=workspace,
         retry_fn=red_role.generate, fallback_fn=red_fallback_fn,
     )
-    _debug_print_red_output(red_finding)
+    debug_event("red.output", {"red_finding": red_finding.model_dump(mode="json")})
     attempt_rec["red_finding"] = _sanitize_feedback_dict(red_finding.model_dump(mode="json"))
 
     referee_session: list[ToolCallRecord] = []
@@ -750,13 +762,28 @@ def _run_play_game_attempt(
             )
 
     if verification_result is None:
-        _debug_print_referee_input(
-            state_view, game_spec, candidate_delta, red_finding
-        )
+        debug_event("referee.input", {
+            "game_spec": game_spec.model_dump(mode="json"),
+            "state_view": state_view.model_dump(mode="json"),
+            "delta_state": candidate_delta.model_dump(mode="json"),
+            "red_finding": red_finding.model_dump(mode="json"),
+            "verification_result": None,
+        })
     else:
-        _debug_print_referee_input(
-            state_view, game_spec, candidate_delta, red_finding, verification_result
-        )
+        debug_event("referee.input", {
+            "game_spec": game_spec.model_dump(mode="json"),
+            "state_view": state_view.model_dump(mode="json"),
+            "delta_state": candidate_delta.model_dump(mode="json"),
+            "red_finding": red_finding.model_dump(mode="json"),
+            "verification_result": {
+                "command": verification_result.command,
+                "cwd": verification_result.cwd,
+                "exit_code": verification_result.exit_code,
+                "stdout": verification_result.stdout,
+                "stderr": verification_result.stderr,
+                "passed": verification_result.passed,
+            },
+        })
     referee_supplement = _render_referee_prompt_supplement_with_adapter(
         resolved_adapter,
         state_view,
@@ -789,7 +816,7 @@ def _run_play_game_attempt(
         referee_generated, workspace=workspace,
         retry_fn=referee_role.generate, fallback_fn=referee_fallback_fn,
     )
-    _debug_print_referee_output(referee_decision)
+    debug_event("referee.output", {"referee_decision": referee_decision.model_dump(mode="json")})
     attempt_rec["referee_decision"] = _sanitize_feedback_dict(referee_decision.model_dump(mode="json"))
     return attempt_rec, candidate_delta, red_finding, referee_decision, previous_feedback
 
@@ -853,7 +880,18 @@ def _record_play_game_telemetry(
     last_candidate_result: VerificationResult | None,
     runtime: PlayGameRuntime,
 ) -> None:
-    _debug_print_play_game_output(runtime)
+    debug_event("play_game.output", {
+        "current_best_delta": (
+            None
+            if runtime.current_best_delta is None
+            else runtime.current_best_delta.model_dump(mode="json")
+        ),
+        "integration_eligible_delta": (
+            None
+            if runtime.integration_eligible_delta is None
+            else runtime.integration_eligible_delta.model_dump(mode="json")
+        ),
+    })
     if workspace is None:
         return
     final_disposition = (
@@ -895,7 +933,10 @@ def play_game(
         if adapter is not None
         else resolve_adapter_for_allowed_delta_type(game_spec.allowed_delta_type)
     )
-    _debug_print_play_game_input(state, game_spec)
+    debug_event("play_game.input", {
+        "state": state.model_dump(mode="json"),
+        "game_spec": game_spec.model_dump(mode="json"),
+    })
     state_view = resolved_adapter.build_state_view(state, game_spec)
     runtime = PlayGameRuntime()
     previous_feedback = _initial_play_game_feedback(verification_result)
@@ -916,7 +957,7 @@ def play_game(
     )
 
     for attempt in range(1, max_attempts + 1):
-        _debug_print_play_game_attempt(attempt)
+        debug_event("play_game.attempt", {"attempt": attempt})
         attempt_rec, candidate_delta, red_finding, referee_decision, updated_feedback = _run_play_game_attempt(
             attempt=attempt,
             resolved_adapter=resolved_adapter,

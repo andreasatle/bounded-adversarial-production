@@ -85,6 +85,10 @@ def _debug_log(key: str, payload: object) -> None:
         logger.debug("%s:\n%s", key, "\n".join(_format_debug_yaml_like(payload, indent=2)))
 
 
+def debug_event(name: str, payload: dict[str, Any]) -> None:
+    _debug_log(name, payload)
+
+
 def _debug_print_read_config(args: argparse.Namespace, spec_data: dict[str, Any], config: dict[str, Any]) -> None:
     _debug_log("read_config.input", {
         "cli_args": {
