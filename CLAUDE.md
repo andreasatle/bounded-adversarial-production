@@ -28,7 +28,13 @@ This is the **only** active product path. Do not propose changes that bypass or 
 
 ```
 src/baps/
-  run.py                  # Generic lifecycle orchestration ONLY — no project-specific logic
+  run.py                  # Lifecycle commands (start, reset), config resolution, main()
+  orchestration.py        # _solve_gap, _run_project_iterations, _RunContext — recursive gap solver
+  game.py                 # create_game, play_game, blackboard helpers
+  prompts.py              # All prompt rendering functions
+  parsers.py              # All model output parsing functions
+  clients.py              # All client-building functions, SpecRole, backend resolution
+  debug.py                # Debug print helpers
   project_adapter.py      # ProjectTypeAdapter protocol, registry, sanitizers, Blue prompt core
   document_adapter.py     # DocumentProjectAdapter — all document mechanics
   coding_adapter.py       # CodingProjectAdapter — all coding mechanics (language-agnostic)
@@ -247,7 +253,7 @@ mutations.
 
 **Tests must verify content.** Assertions like `isinstance(result, State)` or `len(calls) == 2` without content verification are not acceptable. Assert specific field values.
 
-**Do not grow `run.py`.** Before adding a new function to `run.py`, ask whether it belongs in an adapter, `state.py`, `model_output.py`, or another focused module. `run.py` is already large.
+**Do not add logic to `run.py`.** `run.py` contains only lifecycle commands (`start`, `reset`), config resolution, and `main()`. Do not add orchestration logic (→ `orchestration.py`), prompt rendering (→ `prompts.py`), output parsing (→ `parsers.py`), or client-building (→ `clients.py`) to `run.py`. Use the appropriate focused module.
 
 ---
 

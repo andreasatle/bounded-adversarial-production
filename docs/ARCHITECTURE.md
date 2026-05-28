@@ -94,19 +94,21 @@ Current implementation philosophy:
 
 ---
 
-### Runtime (`src/baps/run.py`)
+### Runtime (`src/baps/run.py`, `src/baps/orchestration.py`)
 
-**Lifecycle commands:** `start`, `reset`
+**`run.py` — lifecycle commands:** `start`, `reset`, config resolution, `main()`
 
-**Key functions:**
+**`orchestration.py` — recursive gap solver:**
+
+- `_solve_gap(context_chain, ctx, ..., depth)` — recursive gap solver; accumulates context chain; counts only leaf executions against `max_iterations`; clears `play_game_no_delta` between sibling sub-gaps
+- `_run_project_iterations(...)` — outer loop calling `_solve_gap` at depth 0 until stop
+- `_RunContext` — mutable context threaded through recursion tracking current state, remaining iterations, verification result, and stop reason
+
+**`game.py` — game execution:**
 
 - `create_game(...)` — gap-analysis prompt, parsing (`GameSpec | DecomposeSpec`), validation, adapter normalization
 - `play_game(...)` — Blue/Red/Referee orchestration with optional research phases and bounded retries
-- `_solve_gap(context_chain, ctx, ..., depth)` — recursive gap solver; accumulates context chain; counts only leaf executions against `max_iterations`; clears `play_game_no_delta` between sibling sub-gaps
-- `_run_project_iterations(...)` — outer loop calling `_solve_gap` at depth 0 until stop
 - `_sanitize_feedback_dict(...)` — sanitizes model-generated strings in feedback dicts before re-embedding in subsequent prompts
-
-**`_RunContext`:** Mutable dataclass threaded through recursion tracking current state, remaining iterations, verification result, and stop reason.
 
 **`max_sub_gaps`:** Config key (default 5, spec-overridable) bounding decomposition branching factor. `_parse_create_game_output` truncates any `DecomposeSpec` whose `sub_gaps` length exceeds the limit and prints a notice. Validated >= 1 in `resolve_run_config`.
 
@@ -277,7 +279,13 @@ Reads `<workspace>/blackboard/northstar_proposals.jsonl`, lists proposals intera
 
 ```
 src/baps/
-  run.py                  # Generic lifecycle orchestration, recursive gap solver
+  run.py                  # Lifecycle commands (start, reset), config resolution, main()
+  orchestration.py        # _solve_gap, _run_project_iterations, _RunContext — recursive gap solver
+  game.py                 # create_game, play_game, blackboard helpers
+  prompts.py              # All prompt rendering functions
+  parsers.py              # All model output parsing functions
+  clients.py              # All client-building functions, SpecRole, backend resolution
+  debug.py                # Debug print helpers
   project_adapter.py      # ProjectTypeAdapter protocol, registry, sanitizers, Blue prompt core
   document_adapter.py     # DocumentProjectAdapter — all document mechanics
   coding_adapter.py       # CodingProjectAdapter — all coding mechanics (language-agnostic)
