@@ -70,8 +70,6 @@ from baps.state import (
     DeltaState,
     GameSpec,
     PlayGameRuntime,
-    RedFinding,
-    RefereeDecision,
     State,
     StateUpdateProposal,
     apply_referee_decision_to_runtime,

@@ -6,7 +6,7 @@ import unicodedata
 from enum import StrEnum
 from typing import Annotated, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, model_validator, field_validator
+from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, field_validator
 
 
 class Disposition(StrEnum):

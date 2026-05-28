@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +28,6 @@ from baps.document_adapter import (
     export_document_artifact,
     parse_document_delta_json,
     derive_document_state_update_from_delta,
-    render_document_artifact_markdown,
 )
 
 
@@ -491,7 +489,7 @@ class AuditProjectAdapter:
         ]
 
     def tool_call_to_delta(self, tool_call: ToolCall) -> DeltaState:
-        from baps.state import DeltaDocumentState, DeltaModifyDocumentState, AppendSectionDelta, Section, ModifySectionDelta
+        from baps.state import DeltaDocumentState, DeltaModifyDocumentState
         args = tool_call.arguments
         if tool_call.name == "append_section":
             try:

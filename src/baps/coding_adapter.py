@@ -6,7 +6,6 @@ import json
 import logging
 import re
 import subprocess
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -37,9 +36,7 @@ from baps.state import (
     State,
     StateUpdateProposal,
     StateUpdateTarget,
-    WriteFileDelta,
     WriteFilePayload,
-    WriteFilesDelta,
     WriteFilesPayload,
 )
 

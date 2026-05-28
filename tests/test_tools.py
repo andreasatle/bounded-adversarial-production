@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from typing import Any
 from unittest.mock import patch
 
-import pytest
 
-from baps.models import ToolCall, ToolCallRecord, ToolDefinition
+from baps.models import ToolDefinition
 from baps.tools import (
     FETCH_URL_DEFINITION,
     WEB_SEARCH_DEFINITION,

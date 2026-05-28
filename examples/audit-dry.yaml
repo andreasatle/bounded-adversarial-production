@@ -1,0 +1,61 @@
+project_type: audit
+artifact_id: baps-dry-audit
+workspace: .baps-workspace-dry-audit
+source_path: src/baps
+output: output/dry-audit-report.md
+max_iterations: 5
+roles:
+  blue:
+    backend: ollama
+    model: gemma4:26b
+  red:
+    backend: ollama
+    model: qwen2.5-coder:7b
+  referee:
+    backend: ollama
+    model: qwen2.5-coder:7b
+  create_game:
+    backend: ollama
+    model: gemma4:26b
+  decompose:
+    backend: ollama
+    model: gemma4:26b
+northstar_markdown: |
+  # Goal
+
+  Audit the baps source code for structural quality issues from a DRY
+  (Don't Repeat Yourself) perspective. Produce a structured findings report.
+
+  # What to look for
+
+  - **Duplicated logic** — same or near-same code in multiple places:
+    parsing, validation, sanitization, prompt construction, error handling
+  - **Inconsistent patterns** — same problem solved differently in
+    different parts of the codebase
+  - **Structural violations** — project-specific logic in core
+    orchestration, or adapter logic bleeding into core
+  - **Weakened tests** — tests that assert something weaker than what
+    the NorthStar or code comments require; tests modified to pass
+    rather than to verify correct behavior
+  - **Dead code** — unused functions, imports, or variables
+
+  # What NOT to look for
+
+  - Security vulnerabilities (separate audit)
+  - Performance issues
+  - Feature gaps
+
+  # Report format
+
+  Each finding must include:
+  - The specific files and line ranges involved
+  - A clear description of the duplication or structural issue
+  - A concrete suggestion for how to fix it
+
+  # Quality bar
+
+  Findings must be specific and actionable. Vague observations like
+  "the code could be cleaner" are not acceptable. Every finding must
+  cite exact locations in the source.
+
+goal: "Audit the baps source code for DRY violations and structural quality issues."

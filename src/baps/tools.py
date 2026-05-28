@@ -10,7 +10,7 @@ import urllib.parse
 import urllib.request
 from typing import Any, Callable
 
-from baps.models import ToolCallRecord, ToolDefinition
+from baps.models import ToolDefinition
 
 _FETCH_TIMEOUT = 10
 _MAX_FETCH_BYTES = 50_000

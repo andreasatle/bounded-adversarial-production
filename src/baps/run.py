@@ -13,59 +13,62 @@ import yaml
 from baps.clients import (
     SpecRole,
     _VALID_BACKENDS,
-    _build_client,
-    _build_client_for_role,
-    _build_fallback_chain_for_role,
-    _build_fallback_client_for_role,
-    _build_model_client,
-    _build_planner_model_client,
-    _build_role_client,
+    _build_client,  # noqa: F401 — re-export: tests access via baps.run
+    _build_client_for_role,  # noqa: F401 — re-export: tests patch via baps.run
+    _build_fallback_chain_for_role,  # noqa: F401 — re-export: tests capture/patch via baps.run
+    _build_fallback_client_for_role,  # noqa: F401 — re-export: tests patch via baps.run
+    _build_model_client,  # noqa: F401 — re-export: tests capture/patch via baps.run
+    _build_planner_model_client,  # noqa: F401 — re-export: tests capture/patch via baps.run
+    _build_role_client,  # noqa: F401 — re-export: tests capture/patch via baps.run
     _parse_spec_roles,
     _resolve_backend_model,
 )
 from baps.debug import (
-    _debug_print_blue_input,
+    _debug_print_blue_input,  # noqa: F401 — re-export: tests access via baps.run
     _debug_print_create_state,
     _debug_print_read_config,
 )
 from baps.game import (
-    _VERIFICATION_SUMMARY_CAP,
-    _commit_export_with_adapter,
-    _derive_state_update_from_delta,
-    create_game,
-    play_game,
+    _VERIFICATION_SUMMARY_CAP,  # noqa: F401 — re-export: tests access via baps.run
+    _commit_export_with_adapter,  # noqa: F401 — re-export: tests access via baps.run
+    _derive_state_update_from_delta,  # noqa: F401 — re-export: tests access via baps.run
+    create_game,  # noqa: F401 — re-export: tests import via baps.run
+    play_game,  # noqa: F401 — re-export: tests import via baps.run
 )
 from baps.parsers import (
-    NoNewGameError,
-    NorthStarUpdateNeededError,
-    _parse_create_game_output,
-    _parse_red_finding_json,
-    _parse_referee_decision_json,
+    NoNewGameError,  # noqa: F401 — re-export: tests access via baps.run
+    NorthStarUpdateNeededError,  # noqa: F401 — re-export: tests access via baps.run
+    _parse_create_game_output,  # noqa: F401 — re-export: tests access via baps.run
+    _parse_red_finding_json,  # noqa: F401 — re-export: tests access via baps.run
+    _parse_referee_decision_json,  # noqa: F401 — re-export: tests access via baps.run
 )
 from baps.prompts import (
-    _render_create_game_prompt,
-    _render_red_prompt,
-    _render_referee_prompt,
+    _render_create_game_prompt,  # noqa: F401 — re-export: tests access via baps.run
+    _render_red_prompt,  # noqa: F401 — re-export: tests access via baps.run
+    _render_referee_prompt,  # noqa: F401 — re-export: tests access via baps.run
 )
-from baps.northstar_projection import ProjectionType, StateView
+from baps.northstar_projection import (
+    ProjectionType,  # noqa: F401 — re-export: tests access via baps.run
+    StateView,  # noqa: F401 — re-export: tests access via baps.run
+)
 from baps.project_adapter import (
     ProjectTypeAdapter,
-    VerificationResult,
+    VerificationResult,  # noqa: F401 — re-export: tests access via baps.run
     build_default_project_type_adapters,
     resolve_adapter_for_allowed_delta_type,
     resolve_project_type_adapter,
 )
 from baps.state import (
-    DecomposeSpec,
-    GameSpec,
-    PlayGameRuntime,
-    RedFinding,
-    RefereeDecision,
+    DecomposeSpec,  # noqa: F401 — re-export: tests access via baps.run
+    GameSpec,  # noqa: F401 — re-export: tests access via baps.run
+    PlayGameRuntime,  # noqa: F401 — re-export: tests access via baps.run
+    RedFinding,  # noqa: F401 — re-export: tests access via baps.run
+    RefereeDecision,  # noqa: F401 — re-export: tests access via baps.run
     State,
-    StateUpdateProposal,
+    StateUpdateProposal,  # noqa: F401 — re-export: tests access via baps.run
     StopReason,
-    SubGapSpec,
-    apply_referee_decision_to_runtime,
+    SubGapSpec,  # noqa: F401 — re-export: tests access via baps.run
+    apply_referee_decision_to_runtime,  # noqa: F401 — re-export: tests access via baps.run
     build_default_state_artifact_registry,
 )
 from baps.state_service import StateService

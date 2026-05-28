@@ -5,7 +5,6 @@ from baps.state import (
     apply_state_delta,
     apply_state_update,
     apply_referee_decision_to_runtime,
-    AddArtifactPayload,
     AppendSectionDelta,
     AppendSectionPayload,
     build_default_state_artifact_registry,

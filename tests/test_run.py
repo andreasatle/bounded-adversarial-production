@@ -1054,7 +1054,6 @@ def test_create_game_target_artifact_not_in_state_fails_cleanly() -> None:
 
 
 def test_create_game_uses_adapter_build_create_game_state_view(monkeypatch) -> None:
-    import baps.run as run_module
 
     class _CapturingAdapter(DocumentProjectAdapter):
         def __init__(self):
@@ -2064,7 +2063,6 @@ def test_referee_prompt_includes_success_condition_and_red_rationale(monkeypatch
 
 
 def test_play_game_referee_revise_retries_and_second_attempt_accepted() -> None:
-    import baps.run as run_module
 
     spec, state = _make_document_spec_and_state()
     delta = play_game(
@@ -2092,7 +2090,6 @@ def test_play_game_referee_revise_retries_and_second_attempt_accepted() -> None:
 
 
 def test_play_game_referee_reject_retries_and_second_attempt_accepted() -> None:
-    import baps.run as run_module
 
     spec, state = _make_document_spec_and_state()
     delta = play_game(
@@ -2121,7 +2118,6 @@ def test_play_game_referee_reject_retries_and_second_attempt_accepted() -> None:
 def test_play_game_previous_feedback_on_retry_contains_red_and_referee(monkeypatch) -> None:
     import baps.run as run_module
 
-    import baps.game as game_module
 
     captured_feedback: list[dict | None] = []
     original_debug = run_module._debug_print_blue_input
@@ -5686,7 +5682,6 @@ def test_document_adapter_normalize_game_spec_is_identity() -> None:
 
 
 def test_coding_adapter_maps_file_write_delta_to_state_update() -> None:
-    import baps.run as run_module
 
     adapter = CodingProjectAdapter()
     delta = state_module.DeltaCodingState(
@@ -6123,7 +6118,6 @@ def test_coding_adapter_verify_export_skips_pytest_when_files_missing(
 
 def test_coding_adapter_commit_export_inits_and_commits(monkeypatch, tmp_path: Path) -> None:
     import baps.coding_adapter as coding_module
-    import baps.run as run_module
 
     calls: list[list[str]] = []
 
@@ -6153,7 +6147,6 @@ def test_coding_adapter_commit_export_skips_init_when_git_dir_exists(
     monkeypatch, tmp_path: Path
 ) -> None:
     import baps.coding_adapter as coding_module
-    import baps.run as run_module
 
     calls: list[list[str]] = []
 
@@ -6180,7 +6173,6 @@ def test_coding_adapter_commit_export_returns_false_when_git_unavailable(
     monkeypatch, tmp_path: Path
 ) -> None:
     import baps.coding_adapter as coding_module
-    import baps.run as run_module
 
     def _fake_run(args, **kwargs):
         raise FileNotFoundError("git not found")
@@ -6203,7 +6195,6 @@ def test_coding_adapter_commit_export_returns_false_when_commit_fails(
     monkeypatch, tmp_path: Path
 ) -> None:
     import baps.coding_adapter as coding_module
-    import baps.run as run_module
 
     def _fake_run(args, **kwargs):
         returncode = 1 if args[:2] == ["git", "commit"] else 0
@@ -8193,7 +8184,6 @@ def test_no_fallback_behavior_unchanged_when_primary_succeeds(monkeypatch) -> No
 # --- write_files adapter tests ---
 
 def test_coding_adapter_maps_write_files_batch_delta_to_state_update() -> None:
-    import baps.run as run_module
 
     adapter = CodingProjectAdapter()
     delta = state_module.DeltaCodingBatchState(
@@ -8260,7 +8250,6 @@ def test_parse_coding_delta_json_rejects_write_files_with_empty_files_list() -> 
 
 
 def test_coding_adapter_tool_call_write_files_returns_batch_delta() -> None:
-    import baps.run as run_module
     from baps.models import ToolCall
 
     adapter = CodingProjectAdapter()
@@ -8310,7 +8299,6 @@ def test_parse_document_delta_json_still_accepts_append_section() -> None:
 
 
 def test_document_adapter_maps_modify_section_delta_to_state_update() -> None:
-    import baps.run as run_module
 
     adapter = DocumentProjectAdapter()
     delta = state_module.DeltaModifyDocumentState(
@@ -8328,7 +8316,6 @@ def test_document_adapter_maps_modify_section_delta_to_state_update() -> None:
 
 
 def test_document_adapter_tool_call_modify_section_returns_correct_delta() -> None:
-    import baps.run as run_module
     from baps.models import ToolCall
 
     adapter = DocumentProjectAdapter()
@@ -8402,7 +8389,6 @@ def test_parse_coding_delta_json_handles_delete_file_operation() -> None:
 
 
 def test_coding_adapter_maps_delete_file_delta_to_state_update() -> None:
-    import baps.run as run_module
 
     adapter = CodingProjectAdapter()
     delta = state_module.DeltaDeleteCodingState(
@@ -8416,7 +8402,6 @@ def test_coding_adapter_maps_delete_file_delta_to_state_update() -> None:
 
 
 def test_coding_adapter_tool_call_delete_file_returns_correct_delta() -> None:
-    import baps.run as run_module
     from baps.models import ToolCall
 
     adapter = CodingProjectAdapter()
@@ -8446,7 +8431,6 @@ def test_parse_document_delta_json_handles_delete_section_operation() -> None:
 
 
 def test_document_adapter_maps_delete_section_delta_to_state_update() -> None:
-    import baps.run as run_module
 
     adapter = DocumentProjectAdapter()
     delta = state_module.DeltaDeleteDocumentState(
@@ -8460,7 +8444,6 @@ def test_document_adapter_maps_delete_section_delta_to_state_update() -> None:
 
 
 def test_document_adapter_tool_call_delete_section_returns_correct_delta() -> None:
-    import baps.run as run_module
     from baps.models import ToolCall
 
     adapter = DocumentProjectAdapter()
@@ -9255,7 +9238,6 @@ def test_coding_blue_prompt_includes_prior_export_failures() -> None:
     from baps.language_python import PythonLanguagePlugin
     from baps.northstar_projection import ProjectionType, StateView
     import baps.run as run_module
-    import hashlib
 
     state_view = StateView(
         id="sv:test",

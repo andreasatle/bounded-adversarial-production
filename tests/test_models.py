@@ -3,7 +3,7 @@ from urllib import error
 
 import pytest
 
-from baps.models import AnthropicClient, FakeModelClient, FallbackClient, ModelClient, OllamaClient, OpenAIClient, Role, ToolCall, ToolCallRecord, ToolDefinition
+from baps.models import AnthropicClient, FakeModelClient, FallbackClient, ModelClient, OllamaClient, OpenAIClient, Role, ToolCall, ToolDefinition
 
 
 def test_fake_model_client_returns_responses_in_order() -> None:

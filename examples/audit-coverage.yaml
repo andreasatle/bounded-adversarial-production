@@ -2,7 +2,7 @@
 project_type: audit
 artifact_id: baps-coverage-report
 backend: ollama
-model: gemma4:e4b
+model: gemma4:26b
 workspace: .baps-workspace-coverage
 source_path: /Users/andreasatle/Projects/bounded-adversarial-production
 source_include:

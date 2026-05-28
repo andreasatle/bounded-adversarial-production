@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +16,6 @@ from baps.project_adapter import (
     sanitize_model_title,
 )
 from baps.state import (
-    AppendSectionDelta,
     AppendSectionPayload,
     DeleteSectionPayload,
     DeltaDeleteDocumentState,
@@ -26,7 +24,6 @@ from baps.state import (
     DeltaState,
     DocumentArtifact,
     GameSpec,
-    ModifySectionDelta,
     ModifySectionPayload,
     Section,
     State,

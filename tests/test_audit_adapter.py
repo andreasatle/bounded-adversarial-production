@@ -14,8 +14,6 @@ from baps.audit_adapter import (
     _fence_lang,
     _render_source_listing,
     _render_source_content,
-    build_audit_create_game_state_view,
-    build_audit_play_game_state_view,
 )
 from baps.models import ToolCall
 
