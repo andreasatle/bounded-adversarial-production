@@ -520,44 +520,28 @@ def create_game(
             )
 
 
-def play_game(
-    state: State,
-    game_spec: GameSpec,
-    adapter: ProjectTypeAdapter | None = None,
-    model_client: ModelClient | None = None,
-    red_model_client: ModelClient | None = None,
-    referee_model_client: ModelClient | None = None,
-    verification_result: VerificationResult | None = None,
-    max_attempts: int = _DEFAULT_MAX_PLAY_GAME_ATTEMPTS,
-    executor: ToolExecutor | None = None,
-    sandbox_mode: str = "docker",
-    config: dict[str, Any] | None = None,
-    depth: int = 0,
-) -> DeltaState | None:
-    if max_attempts < 1:
-        raise ValueError("max_attempts must be >= 1")
-    resolved_adapter = (
-        adapter
-        if adapter is not None
-        else resolve_adapter_for_allowed_delta_type(game_spec.allowed_delta_type)
-    )
-    _debug_print_play_game_input(state, game_spec)
-    state_view = resolved_adapter.build_state_view(state, game_spec)
-    runtime = PlayGameRuntime()
-    previous_feedback: dict[str, Any] | None = None
-    if verification_result is not None:
-        previous_feedback = {
-            "prior_export_verification": {
-                "exit_code": verification_result.exit_code,
-                "passed": verification_result.passed,
-                "stdout": verification_result.stdout,
-                "stderr": verification_result.stderr,
-            }
+def _initial_play_game_feedback(
+    verification_result: VerificationResult | None,
+) -> dict[str, Any] | None:
+    if verification_result is None:
+        return None
+    return {
+        "prior_export_verification": {
+            "exit_code": verification_result.exit_code,
+            "passed": verification_result.passed,
+            "stdout": verification_result.stdout,
+            "stderr": verification_result.stderr,
         }
-    attempt_records: list[dict] = []
-    last_candidate_result: VerificationResult | None = None
-    game_id = str(uuid.uuid4())
+    }
 
+
+def _resolve_play_game_roles(
+    resolved_adapter: ProjectTypeAdapter,
+    config: dict[str, Any] | None,
+    model_client: ModelClient | None,
+    red_model_client: ModelClient | None,
+    referee_model_client: ModelClient | None,
+) -> tuple[Role, Role, Role]:
     def _get_client(explicit: ModelClient | None, role: str) -> ModelClient:
         if explicit is not None:
             return explicit
@@ -583,255 +567,401 @@ def play_game(
         _REFEREE_DECISION_SCHEMA,
         constrained=True,
     )
+    return blue_role, red_role, referee_role
 
-    # Build fallback chains once — they don't change across attempts.
-    _workspace = config.get("workspace") if config else None
-    if config is not None:
+
+def _build_play_game_fallbacks(
+    config: dict[str, Any] | None,
+    red_model_client: ModelClient | None,
+    referee_model_client: ModelClient | None,
+) -> tuple[Path | None, Any, Any]:
+    workspace = config.get("workspace") if config else None
+    if config is None:
+        return workspace, None, None
+    try:
+        red_primary = (
+            _resolve_backend_model(SpecRole.RED, config)[1]
+            if red_model_client is None
+            else "(provided)"
+        )
+    except ValueError:
+        red_primary = "(unknown)"
+    try:
+        referee_primary = (
+            _resolve_backend_model(SpecRole.REFEREE, config)[1]
+            if referee_model_client is None
+            else "(provided)"
+        )
+    except ValueError:
+        referee_primary = "(unknown)"
+    red_fallback_fn = _make_fallback_chain_fn(
+        SpecRole.RED, red_primary, _build_fallback_chain_for_role(SpecRole.RED, config)
+    )
+    referee_fallback_fn = _make_fallback_chain_fn(
+        SpecRole.REFEREE,
+        referee_primary,
+        _build_fallback_chain_for_role(SpecRole.REFEREE, config),
+    )
+    return workspace, red_fallback_fn, referee_fallback_fn
+
+
+def _run_play_game_attempt(
+    *,
+    attempt: int,
+    resolved_adapter: ProjectTypeAdapter,
+    state_view: Any,
+    game_spec: GameSpec,
+    verification_result: VerificationResult | None,
+    previous_feedback: dict[str, Any] | None,
+    executor: ToolExecutor | None,
+    blue_role: Role,
+    red_role: Role,
+    referee_role: Role,
+    workspace: Path | None,
+    red_fallback_fn: Any,
+    referee_fallback_fn: Any,
+) -> tuple[dict, DeltaState | None, Any | None, Any | None, dict[str, Any] | None]:
+    attempt_rec: dict = {
+        "attempt_number": attempt,
+        "blue_delta": None,
+        "red_finding": None,
+        "referee_decision": None,
+        "candidate_verification": None,
+    }
+
+    blue_session: list[ToolCallRecord] = []
+    blue_summary = ""
+    if executor is not None:
+        blue_research_tools = _get_research_tools(resolved_adapter, SpecRole.BLUE)
+        if blue_research_tools:
+            research_prompt = _render_research_prompt(SpecRole.BLUE, state_view, game_spec, [])
+            blue_summary, blue_session = blue_role.generate_agentic(
+                research_prompt, blue_research_tools, executor
+            )
+
+    _debug_print_blue_input(state_view, game_spec, attempt, previous_feedback)
+    blue_prompt = resolved_adapter.render_blue_prompt(
+        state_view, game_spec, attempt, previous_feedback
+    )
+    if blue_session or blue_summary:
+        blue_prompt = _render_tool_session_block([(SpecRole.BLUE, blue_session, blue_summary)]) + "\n\n" + blue_prompt
+    blue_tools = resolved_adapter.build_blue_tools()
+    blue_tool_call = None
+    if blue_tools:
         try:
-            _red_primary = _resolve_backend_model(SpecRole.RED, config)[1] if red_model_client is None else "(provided)"
+            blue_tool_call = blue_role.generate_with_tools(blue_prompt, blue_tools)
         except ValueError:
-            _red_primary = "(unknown)"
+            pass
+    if blue_tool_call is not None:
         try:
-            _referee_primary = _resolve_backend_model(SpecRole.REFEREE, config)[1] if referee_model_client is None else "(provided)"
-        except ValueError:
-            _referee_primary = "(unknown)"
-        _red_fallback_fn = _make_fallback_chain_fn(SpecRole.RED, _red_primary, _build_fallback_chain_for_role(SpecRole.RED, config))
-        _referee_fallback_fn = _make_fallback_chain_fn(SpecRole.REFEREE, _referee_primary, _build_fallback_chain_for_role(SpecRole.REFEREE, config))
+            candidate_delta = resolved_adapter.tool_call_to_delta(blue_tool_call)
+        except ValueError as exc:
+            _debug_print_blue_failed_tool_call(blue_tool_call)
+            reason = f"blue output failed DeltaState validation: {exc}"
+            _debug_print_attempt_rejected(attempt, reason)
+            updated_feedback = {
+                "attempt_rejection": {
+                    "stage": SpecRole.BLUE,
+                    "reason": reason,
+                    "validation_error": str(exc),
+                }
+            }
+            return attempt_rec, None, None, None, updated_feedback
     else:
-        _red_fallback_fn = None
-        _referee_fallback_fn = None
+        blue_generated = blue_role.generate(blue_prompt)
+        try:
+            candidate_delta = resolved_adapter.parse_blue_delta(blue_generated)
+        except ValueError as exc:
+            reason = f"blue output failed DeltaState validation: {exc}"
+            _debug_print_attempt_rejected(attempt, reason)
+            updated_feedback = {
+                "attempt_rejection": {
+                    "stage": SpecRole.BLUE,
+                    "reason": reason,
+                    "validation_error": str(exc),
+                }
+            }
+            return attempt_rec, None, None, None, updated_feedback
+    _debug_print_blue_output(candidate_delta)
+    attempt_rec["blue_delta"] = _sanitize_feedback_dict(candidate_delta.model_dump(mode="json"))
+
+    red_session: list[ToolCallRecord] = []
+    red_summary = ""
+    if executor is not None:
+        red_research_tools = _get_research_tools(resolved_adapter, SpecRole.RED)
+        if red_research_tools:
+            prior = [(SpecRole.BLUE, blue_session, blue_summary)] if blue_session or blue_summary else []
+            research_prompt = _render_research_prompt(SpecRole.RED, state_view, game_spec, prior)
+            red_summary, red_session = red_role.generate_agentic(
+                research_prompt, red_research_tools, executor
+            )
+
+    if verification_result is None:
+        _debug_print_red_input(state_view, game_spec, candidate_delta)
+    else:
+        _debug_print_red_input(
+            state_view, game_spec, candidate_delta, verification_result
+        )
+    red_supplement = _render_red_prompt_supplement_with_adapter(
+        resolved_adapter,
+        state_view,
+        game_spec,
+        candidate_delta,
+        verification_result,
+    )
+    tool_context = _render_tool_session_block([
+        s for s in [(SpecRole.BLUE, blue_session, blue_summary), (SpecRole.RED, red_session, red_summary)]
+        if s[1] or s[2]
+    ])
+    red_supplement_with_tools = (
+        (tool_context + "\n\nTool-use enforcement: treat any claim referencing external "
+            "information not supported by the tool call log above as unverified. "
+            "If Blue claims to have verified something externally but has no tool calls to show it, "
+            "flag that as a finding.\n\n")
+        if tool_context else ""
+    ) + red_supplement
+    red_prompt = _render_red_prompt(
+        state_view,
+        game_spec,
+        candidate_delta,
+        verification_result,
+        red_supplement_with_tools,
+    )
+    red_generated = red_role.generate(red_prompt)
+    red_finding = _parse_red_finding_json(
+        red_generated, workspace=workspace,
+        retry_fn=red_role.generate, fallback_fn=red_fallback_fn,
+    )
+    _debug_print_red_output(red_finding)
+    attempt_rec["red_finding"] = _sanitize_feedback_dict(red_finding.model_dump(mode="json"))
+
+    referee_session: list[ToolCallRecord] = []
+    referee_summary = ""
+    if executor is not None:
+        referee_research_tools = _get_research_tools(resolved_adapter, SpecRole.REFEREE)
+        if referee_research_tools:
+            prior = [s for s in [
+                (SpecRole.BLUE, blue_session, blue_summary),
+                (SpecRole.RED, red_session, red_summary),
+            ] if s[1] or s[2]]
+            research_prompt = _render_research_prompt(SpecRole.REFEREE, state_view, game_spec, prior)
+            referee_summary, referee_session = referee_role.generate_agentic(
+                research_prompt, referee_research_tools, executor
+            )
+
+    if verification_result is None:
+        _debug_print_referee_input(
+            state_view, game_spec, candidate_delta, red_finding
+        )
+    else:
+        _debug_print_referee_input(
+            state_view, game_spec, candidate_delta, red_finding, verification_result
+        )
+    referee_supplement = _render_referee_prompt_supplement_with_adapter(
+        resolved_adapter,
+        state_view,
+        game_spec,
+        candidate_delta,
+        verification_result,
+    )
+    all_sessions = [s for s in [
+        (SpecRole.BLUE, blue_session, blue_summary),
+        (SpecRole.RED, red_session, red_summary),
+        (SpecRole.REFEREE, referee_session, referee_summary),
+    ] if s[1] or s[2]]
+    referee_tool_context = _render_tool_session_block(all_sessions)
+    referee_supplement_with_tools = (
+        (referee_tool_context + "\n\nTool-use enforcement: any claim referencing external "
+            "information not supported by the tool call logs above must be treated as unverified "
+            "and rejected.\n\n")
+        if referee_tool_context else ""
+    ) + referee_supplement
+    referee_prompt = _render_referee_prompt(
+        state_view,
+        game_spec,
+        candidate_delta,
+        red_finding,
+        verification_result,
+        referee_supplement_with_tools,
+    )
+    referee_generated = referee_role.generate(referee_prompt)
+    referee_decision = _parse_referee_decision_json(
+        referee_generated, workspace=workspace,
+        retry_fn=referee_role.generate, fallback_fn=referee_fallback_fn,
+    )
+    _debug_print_referee_output(referee_decision)
+    attempt_rec["referee_decision"] = _sanitize_feedback_dict(referee_decision.model_dump(mode="json"))
+    return attempt_rec, candidate_delta, red_finding, referee_decision, previous_feedback
+
+
+def _apply_play_game_attempt_decision(
+    *,
+    runtime: PlayGameRuntime,
+    attempt: int,
+    max_attempts: int,
+    attempt_rec: dict,
+    candidate_delta: DeltaState,
+    red_finding: Any,
+    referee_decision: Any,
+    resolved_adapter: ProjectTypeAdapter,
+    state: State,
+    game_spec: GameSpec,
+    sandbox_mode: str,
+) -> tuple[PlayGameRuntime, dict[str, Any] | None, VerificationResult | None, bool]:
+    runtime = apply_referee_decision_to_runtime(
+        runtime=runtime,
+        candidate_delta=candidate_delta,
+        decision=referee_decision,
+    )
+    if referee_decision.disposition == "accept":
+        candidate_result = _verify_candidate_with_adapter(
+            resolved_adapter, candidate_delta, state, game_spec.target_artifact_id,
+            sandbox_mode=sandbox_mode,
+        )
+        attempt_rec["candidate_verification"] = _summarize_verification_result(candidate_result)
+        if (
+            candidate_result is not None
+            and not candidate_result.passed
+            and attempt < max_attempts
+        ):
+            previous_feedback = {
+                "red_finding": _sanitize_feedback_dict(red_finding.model_dump(mode="json")),
+                "referee_decision": _sanitize_feedback_dict(referee_decision.model_dump(mode="json")),
+                "candidate_verification": {
+                    "exit_code": candidate_result.exit_code,
+                    "passed": False,
+                    "stdout": candidate_result.stdout,
+                    "stderr": candidate_result.stderr,
+                },
+            }
+            return runtime, previous_feedback, candidate_result, False
+        return runtime, None, candidate_result, True
+    previous_feedback = {
+        "red_finding": _sanitize_feedback_dict(red_finding.model_dump(mode="json")),
+        "referee_decision": _sanitize_feedback_dict(referee_decision.model_dump(mode="json")),
+    }
+    return runtime, previous_feedback, None, False
+
+
+def _record_play_game_telemetry(
+    *,
+    workspace: Path | None,
+    game_id: str,
+    depth: int,
+    game_spec: GameSpec,
+    attempt_records: list[dict],
+    last_candidate_result: VerificationResult | None,
+    runtime: PlayGameRuntime,
+) -> None:
+    _debug_print_play_game_output(runtime)
+    if workspace is None:
+        return
+    final_disposition = (
+        "accepted" if runtime.integration_eligible_delta is not None
+        else "rejected" if any(r["blue_delta"] is not None for r in attempt_records)
+        else "no_delta"
+    )
+    _append_game_to_blackboard(
+        workspace=workspace,
+        game_id=game_id,
+        depth=depth,
+        game_spec=game_spec,
+        attempt_records=attempt_records,
+        final_disposition=final_disposition,
+        verification_result=last_candidate_result,
+        current_best_delta=runtime.current_best_delta,
+        integration_eligible_delta=runtime.integration_eligible_delta,
+    )
+
+
+def play_game(
+    state: State,
+    game_spec: GameSpec,
+    adapter: ProjectTypeAdapter | None = None,
+    model_client: ModelClient | None = None,
+    red_model_client: ModelClient | None = None,
+    referee_model_client: ModelClient | None = None,
+    verification_result: VerificationResult | None = None,
+    max_attempts: int = _DEFAULT_MAX_PLAY_GAME_ATTEMPTS,
+    executor: ToolExecutor | None = None,
+    sandbox_mode: str = "docker",
+    config: dict[str, Any] | None = None,
+    depth: int = 0,
+) -> DeltaState | None:
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be >= 1")
+    resolved_adapter = (
+        adapter
+        if adapter is not None
+        else resolve_adapter_for_allowed_delta_type(game_spec.allowed_delta_type)
+    )
+    _debug_print_play_game_input(state, game_spec)
+    state_view = resolved_adapter.build_state_view(state, game_spec)
+    runtime = PlayGameRuntime()
+    previous_feedback = _initial_play_game_feedback(verification_result)
+    attempt_records: list[dict] = []
+    last_candidate_result: VerificationResult | None = None
+    game_id = str(uuid.uuid4())
+    blue_role, red_role, referee_role = _resolve_play_game_roles(
+        resolved_adapter,
+        config,
+        model_client,
+        red_model_client,
+        referee_model_client,
+    )
+    workspace, red_fallback_fn, referee_fallback_fn = _build_play_game_fallbacks(
+        config,
+        red_model_client,
+        referee_model_client,
+    )
 
     for attempt in range(1, max_attempts + 1):
         _debug_print_play_game_attempt(attempt)
-        attempt_rec: dict = {
-            "attempt_number": attempt,
-            "blue_delta": None,
-            "red_finding": None,
-            "referee_decision": None,
-            "candidate_verification": None,
-        }
-
-        # Research phase — each role researches before producing output
-        blue_session: list[ToolCallRecord] = []
-        blue_summary = ""
-        if executor is not None:
-            blue_research_tools = _get_research_tools(resolved_adapter, SpecRole.BLUE)
-            if blue_research_tools:
-                research_prompt = _render_research_prompt(SpecRole.BLUE, state_view, game_spec, [])
-                blue_summary, blue_session = blue_role.generate_agentic(
-                    research_prompt, blue_research_tools, executor
-                )
-
-        _debug_print_blue_input(state_view, game_spec, attempt, previous_feedback)
-        blue_prompt = resolved_adapter.render_blue_prompt(
-            state_view, game_spec, attempt, previous_feedback
-        )
-        if blue_session or blue_summary:
-            blue_prompt = _render_tool_session_block([(SpecRole.BLUE, blue_session, blue_summary)]) + "\n\n" + blue_prompt
-        blue_tools = resolved_adapter.build_blue_tools()
-        blue_tool_call = None
-        if blue_tools:
-            try:
-                blue_tool_call = blue_role.generate_with_tools(blue_prompt, blue_tools)
-            except ValueError:
-                pass
-        if blue_tool_call is not None:
-            try:
-                candidate_delta = resolved_adapter.tool_call_to_delta(blue_tool_call)
-            except ValueError as exc:
-                _debug_print_blue_failed_tool_call(blue_tool_call)
-                reason = f"blue output failed DeltaState validation: {exc}"
-                _debug_print_attempt_rejected(attempt, reason)
-                previous_feedback = {
-                    "attempt_rejection": {
-                        "stage": SpecRole.BLUE,
-                        "reason": reason,
-                        "validation_error": str(exc),
-                    }
-                }
-                attempt_records.append(attempt_rec)
-                continue
-        else:
-            blue_generated = blue_role.generate(blue_prompt)
-            try:
-                candidate_delta = resolved_adapter.parse_blue_delta(blue_generated)
-            except ValueError as exc:
-                reason = f"blue output failed DeltaState validation: {exc}"
-                _debug_print_attempt_rejected(attempt, reason)
-                previous_feedback = {
-                    "attempt_rejection": {
-                        "stage": SpecRole.BLUE,
-                        "reason": reason,
-                        "validation_error": str(exc),
-                    }
-                }
-                attempt_records.append(attempt_rec)
-                continue
-        _debug_print_blue_output(candidate_delta)
-        attempt_rec["blue_delta"] = _sanitize_feedback_dict(candidate_delta.model_dump(mode="json"))
-
-        # Red research — sees Blue's tool session for transparency
-        red_session: list[ToolCallRecord] = []
-        red_summary = ""
-        if executor is not None:
-            red_research_tools = _get_research_tools(resolved_adapter, SpecRole.RED)
-            if red_research_tools:
-                prior = [(SpecRole.BLUE, blue_session, blue_summary)] if blue_session or blue_summary else []
-                research_prompt = _render_research_prompt(SpecRole.RED, state_view, game_spec, prior)
-                red_summary, red_session = red_role.generate_agentic(
-                    research_prompt, red_research_tools, executor
-                )
-
-        if verification_result is None:
-            _debug_print_red_input(state_view, game_spec, candidate_delta)
-        else:
-            _debug_print_red_input(
-                state_view, game_spec, candidate_delta, verification_result
-            )
-        red_supplement = _render_red_prompt_supplement_with_adapter(
-            resolved_adapter,
-            state_view,
-            game_spec,
-            candidate_delta,
-            verification_result,
-        )
-        tool_context = _render_tool_session_block([
-            s for s in [(SpecRole.BLUE, blue_session, blue_summary), (SpecRole.RED, red_session, red_summary)]
-            if s[1] or s[2]
-        ])
-        red_supplement_with_tools = (
-            (tool_context + "\n\nTool-use enforcement: treat any claim referencing external "
-             "information not supported by the tool call log above as unverified. "
-             "If Blue claims to have verified something externally but has no tool calls to show it, "
-             "flag that as a finding.\n\n")
-            if tool_context else ""
-        ) + red_supplement
-        red_prompt = _render_red_prompt(
-            state_view,
-            game_spec,
-            candidate_delta,
-            verification_result,
-            red_supplement_with_tools,
-        )
-        red_generated = red_role.generate(red_prompt)
-        red_finding = _parse_red_finding_json(
-            red_generated, workspace=_workspace,
-            retry_fn=red_role.generate, fallback_fn=_red_fallback_fn,
-        )
-        _debug_print_red_output(red_finding)
-        attempt_rec["red_finding"] = _sanitize_feedback_dict(red_finding.model_dump(mode="json"))
-
-        # Referee research — sees both Blue and Red sessions
-        referee_session: list[ToolCallRecord] = []
-        referee_summary = ""
-        if executor is not None:
-            referee_research_tools = _get_research_tools(resolved_adapter, SpecRole.REFEREE)
-            if referee_research_tools:
-                prior = [s for s in [
-                    (SpecRole.BLUE, blue_session, blue_summary),
-                    (SpecRole.RED, red_session, red_summary),
-                ] if s[1] or s[2]]
-                research_prompt = _render_research_prompt(SpecRole.REFEREE, state_view, game_spec, prior)
-                referee_summary, referee_session = referee_role.generate_agentic(
-                    research_prompt, referee_research_tools, executor
-                )
-
-        if verification_result is None:
-            _debug_print_referee_input(
-                state_view, game_spec, candidate_delta, red_finding
-            )
-        else:
-            _debug_print_referee_input(
-                state_view, game_spec, candidate_delta, red_finding, verification_result
-            )
-        referee_supplement = _render_referee_prompt_supplement_with_adapter(
-            resolved_adapter,
-            state_view,
-            game_spec,
-            candidate_delta,
-            verification_result,
-        )
-        all_sessions = [s for s in [
-            (SpecRole.BLUE, blue_session, blue_summary),
-            (SpecRole.RED, red_session, red_summary),
-            (SpecRole.REFEREE, referee_session, referee_summary),
-        ] if s[1] or s[2]]
-        referee_tool_context = _render_tool_session_block(all_sessions)
-        referee_supplement_with_tools = (
-            (referee_tool_context + "\n\nTool-use enforcement: any claim referencing external "
-             "information not supported by the tool call logs above must be treated as unverified "
-             "and rejected.\n\n")
-            if referee_tool_context else ""
-        ) + referee_supplement
-        referee_prompt = _render_referee_prompt(
-            state_view,
-            game_spec,
-            candidate_delta,
-            red_finding,
-            verification_result,
-            referee_supplement_with_tools,
-        )
-        referee_generated = referee_role.generate(referee_prompt)
-        referee_decision = _parse_referee_decision_json(
-            referee_generated, workspace=_workspace,
-            retry_fn=referee_role.generate, fallback_fn=_referee_fallback_fn,
-        )
-        _debug_print_referee_output(referee_decision)
-        attempt_rec["referee_decision"] = _sanitize_feedback_dict(referee_decision.model_dump(mode="json"))
-
-        runtime = apply_referee_decision_to_runtime(
-            runtime=runtime,
-            candidate_delta=candidate_delta,
-            decision=referee_decision,
-        )
-        if referee_decision.disposition == "accept":
-            candidate_result = _verify_candidate_with_adapter(
-                resolved_adapter, candidate_delta, state, game_spec.target_artifact_id,
-                sandbox_mode=sandbox_mode,
-            )
-            last_candidate_result = candidate_result
-            attempt_rec["candidate_verification"] = _summarize_verification_result(candidate_result)
-            if (
-                candidate_result is not None
-                and not candidate_result.passed
-                and attempt < max_attempts
-            ):
-                previous_feedback = {
-                    "red_finding": _sanitize_feedback_dict(red_finding.model_dump(mode="json")),
-                    "referee_decision": _sanitize_feedback_dict(referee_decision.model_dump(mode="json")),
-                    "candidate_verification": {
-                        "exit_code": candidate_result.exit_code,
-                        "passed": False,
-                        "stdout": candidate_result.stdout,
-                        "stderr": candidate_result.stderr,
-                    },
-                }
-                attempt_records.append(attempt_rec)
-                continue
-            attempt_records.append(attempt_rec)
-            break
-        previous_feedback = {
-            "red_finding": _sanitize_feedback_dict(red_finding.model_dump(mode="json")),
-            "referee_decision": _sanitize_feedback_dict(referee_decision.model_dump(mode="json")),
-        }
-        attempt_records.append(attempt_rec)
-
-    _debug_print_play_game_output(runtime)
-    if _workspace is not None:
-        final_disposition = (
-            "accepted" if runtime.integration_eligible_delta is not None
-            else "rejected" if any(r["blue_delta"] is not None for r in attempt_records)
-            else "no_delta"
-        )
-        _append_game_to_blackboard(
-            workspace=_workspace,
-            game_id=game_id,
-            depth=depth,
+        attempt_rec, candidate_delta, red_finding, referee_decision, updated_feedback = _run_play_game_attempt(
+            attempt=attempt,
+            resolved_adapter=resolved_adapter,
+            state_view=state_view,
             game_spec=game_spec,
-            attempt_records=attempt_records,
-            final_disposition=final_disposition,
-            verification_result=last_candidate_result,
-            current_best_delta=runtime.current_best_delta,
-            integration_eligible_delta=runtime.integration_eligible_delta,
+            verification_result=verification_result,
+            previous_feedback=previous_feedback,
+            executor=executor,
+            blue_role=blue_role,
+            red_role=red_role,
+            referee_role=referee_role,
+            workspace=workspace,
+            red_fallback_fn=red_fallback_fn,
+            referee_fallback_fn=referee_fallback_fn,
         )
+        if candidate_delta is None:
+            previous_feedback = updated_feedback
+            attempt_records.append(attempt_rec)
+            continue
+        runtime, previous_feedback, candidate_result, stop_attempts = _apply_play_game_attempt_decision(
+            runtime=runtime,
+            attempt=attempt,
+            max_attempts=max_attempts,
+            attempt_rec=attempt_rec,
+            candidate_delta=candidate_delta,
+            red_finding=red_finding,
+            referee_decision=referee_decision,
+            resolved_adapter=resolved_adapter,
+            state=state,
+            game_spec=game_spec,
+            sandbox_mode=sandbox_mode,
+        )
+        if candidate_result is not None:
+            last_candidate_result = candidate_result
+        attempt_records.append(attempt_rec)
+        if stop_attempts:
+            break
+
+    _record_play_game_telemetry(
+        workspace=workspace,
+        game_id=game_id,
+        depth=depth,
+        game_spec=game_spec,
+        attempt_records=attempt_records,
+        last_candidate_result=last_candidate_result,
+        runtime=runtime,
+    )
     return runtime.integration_eligible_delta
