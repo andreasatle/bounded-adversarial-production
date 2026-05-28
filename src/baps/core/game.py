@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import datetime
-import json
 import logging
 import uuid
 from pathlib import Path
@@ -20,15 +18,34 @@ from baps.core.debug import (
     _debug_print_create_game_raw_model_output,
     debug_event,
 )
-from baps.models.model_output import BlackboardEvent
-from baps.models.models import ModelClient, Role, ToolCallRecord
+from baps.models.models import ModelClient, Role
+from baps.core.game_attempt import (
+    _apply_play_game_attempt_decision,
+    _run_play_game_attempt,
+)
+from baps.core.game_play import _record_play_game_telemetry
+from baps.core.game_roles import (
+    _build_play_game_fallbacks,
+    _initial_play_game_feedback,
+    _resolve_play_game_roles,
+)
+from baps.core.game_telemetry import (
+    _VERIFICATION_SUMMARY_CAP,
+    _append_create_game_to_blackboard,
+    _append_game_to_blackboard,
+    _append_integration_to_blackboard,
+    _append_northstar_proposal_to_blackboard,
+    _client_model_name,
+    _sanitize_feedback_dict,
+    _sanitize_game_spec_dict,
+    _summarize_verification_result,
+)
 from baps.core.parsers import (
     NoNewGameError,
     NorthStarUpdateNeededError,
     _normalize_game_spec_with_adapter,
     _parse_create_game_output,
     _parse_red_finding_json,
-    _parse_referee_decision_json,
 )
 from baps.adapters.project_adapter import (
     ProjectTypeAdapter,
@@ -39,15 +56,10 @@ from baps.adapters.project_adapter import (
     sanitize_model_string,
 )
 from baps.core.prompts import (
-    _get_research_tools,
     _render_create_game_prompt,
     _render_create_game_red_prompt,
     _render_red_prompt,
-    _render_red_prompt_supplement_with_adapter,
     _render_referee_prompt,
-    _render_referee_prompt_supplement_with_adapter,
-    _render_research_prompt,
-    _render_tool_session_block,
 )
 from baps.state.state import (
     DecomposeSpec,
@@ -56,17 +68,12 @@ from baps.state.state import (
     PlayGameRuntime,
     State,
     StateUpdateProposal,
-    apply_referee_decision_to_runtime,
 )
 from baps.tools.tools import ToolExecutor
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MAX_PLAY_GAME_ATTEMPTS = 3
-_BLACKBOARD_DIR = "blackboard"
-_NORTHSTAR_PROPOSALS_FILE = "northstar_proposals.jsonl"
-_GAMES_FILE = "games.jsonl"
-_VERIFICATION_SUMMARY_CAP = 500
 
 # Role schemas.
 # constrained=True: Ollama constrained decoding enforces the schema at inference time.
@@ -93,7 +100,7 @@ _CREATE_GAME_SCHEMA: dict = {
     },
     "additionalProperties": False,
 }
-_RED_FINDING_SCHEMA: dict = {
+_CREATE_GAME_RED_FINDING_SCHEMA: dict = {
     "type": "object",
     "properties": {
         "disposition": {"type": "string", "enum": ["accept", "revise", "reject"]},
@@ -104,31 +111,6 @@ _RED_FINDING_SCHEMA: dict = {
     "required": ["disposition", "rationale"],
     "additionalProperties": False,
 }
-_REFEREE_DECISION_SCHEMA: dict = {
-    "type": "object",
-    "properties": {
-        "disposition": {"type": "string", "enum": ["accept", "revise", "reject"]},
-        "rationale": {"type": "string", "maxLength": 500},
-        "red_override": {"type": ["boolean", "null"]},
-        "improvement_hints": {"type": "array", "items": {"type": "string", "maxLength": 300}},
-    },
-    "required": ["disposition", "rationale"],
-    "additionalProperties": False,
-}
-
-
-def _sanitize_feedback_dict(d: dict) -> dict:
-    result = {}
-    for k, v in d.items():
-        if isinstance(v, str):
-            result[k] = sanitize_model_string(v)
-        elif isinstance(v, list):
-            result[k] = [sanitize_model_string(i) if isinstance(i, str) else i for i in v]
-        elif isinstance(v, dict):
-            result[k] = _sanitize_feedback_dict(v)
-        else:
-            result[k] = v
-    return result
 
 
 def _derive_state_update_from_delta(
@@ -178,135 +160,6 @@ def _commit_export_with_adapter(
     if committed:
         logger.debug("commit_export: committed export to git at %s", output_path)
     return committed
-
-
-def _append_northstar_proposal_to_blackboard(
-    workspace: Path, rationale: str, proposed_northstar: str
-) -> None:
-    blackboard_dir = workspace / _BLACKBOARD_DIR
-    blackboard_dir.mkdir(parents=True, exist_ok=True)
-    entry = {
-        "event": BlackboardEvent.NORTHSTAR_UPDATE_PROPOSAL,
-        "rationale": sanitize_model_string(rationale),
-        "proposed_northstar": sanitize_model_string(proposed_northstar),
-        "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
-    }
-    proposals_path = blackboard_dir / _NORTHSTAR_PROPOSALS_FILE
-    with proposals_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(entry) + "\n")
-
-
-def _summarize_verification_result(result: VerificationResult | None) -> dict | None:
-    if result is None:
-        return None
-    return {
-        "passed": result.passed,
-        "exit_code": result.exit_code,
-        "stdout_summary": result.stdout[:_VERIFICATION_SUMMARY_CAP] if result.stdout else None,
-        "stderr_summary": result.stderr[:_VERIFICATION_SUMMARY_CAP] if result.stderr else None,
-    }
-
-
-def _sanitize_game_spec_dict(game_spec: GameSpec) -> dict:
-    return {
-        "objective": sanitize_model_string(game_spec.objective),
-        "target_artifact_id": game_spec.target_artifact_id,
-        "allowed_delta_type": game_spec.allowed_delta_type,
-        "success_condition": sanitize_model_string(game_spec.success_condition),
-    }
-
-
-def _append_game_to_blackboard(
-    workspace: Path,
-    game_id: str,
-    depth: int,
-    game_spec: GameSpec,
-    attempt_records: list[dict],
-    final_disposition: str,
-    verification_result: VerificationResult | None,
-    current_best_delta: DeltaState | None,
-    integration_eligible_delta: DeltaState | None,
-) -> None:
-    blackboard_dir = workspace / _BLACKBOARD_DIR
-    blackboard_dir.mkdir(parents=True, exist_ok=True)
-    entry = {
-        "event": BlackboardEvent.PLAY_GAME,
-        "game_id": game_id,
-        "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
-        "depth": depth,
-        "context_chain": list(game_spec.context_chain),
-        "game_spec": _sanitize_game_spec_dict(game_spec),
-        "attempts": attempt_records,
-        "final_disposition": final_disposition,
-        "verification_result": _summarize_verification_result(verification_result),
-        "current_best_delta": (
-            None
-            if current_best_delta is None
-            else _sanitize_feedback_dict(current_best_delta.model_dump(mode="json"))
-        ),
-        "integration_eligible_delta": (
-            None
-            if integration_eligible_delta is None
-            else _sanitize_feedback_dict(integration_eligible_delta.model_dump(mode="json"))
-        ),
-    }
-    games_path = blackboard_dir / _GAMES_FILE
-    with games_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(entry) + "\n")
-
-
-def _client_model_name(client: ModelClient) -> str:
-    return getattr(client, "model", type(client).__name__)
-
-
-def _append_create_game_to_blackboard(
-    workspace: Path,
-    depth: int,
-    context_chain: tuple[str, ...],
-    state_view_fingerprint: str,
-    result_type: str,
-    result: dict | None,
-    model_used: str,
-) -> None:
-    blackboard_dir = workspace / _BLACKBOARD_DIR
-    blackboard_dir.mkdir(parents=True, exist_ok=True)
-    entry = {
-        "event": BlackboardEvent.CREATE_GAME,
-        "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
-        "depth": depth,
-        "context_chain": list(context_chain),
-        "state_view_fingerprint": state_view_fingerprint,
-        "result_type": result_type,
-        "result": result,
-        "model_used": model_used,
-    }
-    games_path = blackboard_dir / _GAMES_FILE
-    with games_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(entry) + "\n")
-
-
-def _append_integration_to_blackboard(
-    workspace: Path,
-    depth: int,
-    proposal_id: str,
-    proposal_summary: str,
-    state_changed: bool,
-    delta_type: str,
-) -> None:
-    blackboard_dir = workspace / _BLACKBOARD_DIR
-    blackboard_dir.mkdir(parents=True, exist_ok=True)
-    entry = {
-        "event": BlackboardEvent.INTEGRATION,
-        "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
-        "depth": depth,
-        "proposal_id": proposal_id,
-        "proposal_summary": sanitize_model_string(proposal_summary),
-        "state_changed": state_changed,
-        "delta_type": delta_type,
-    }
-    games_path = blackboard_dir / _GAMES_FILE
-    with games_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(entry) + "\n")
 
 
 def _ensure_target_artifact_exists(state: State, artifact_id: str) -> None:
@@ -369,7 +222,7 @@ def create_game(
     role_name = SpecRole.DECOMPOSE if depth > 0 else SpecRole.CREATE_GAME
     role = Role(role_name, client, _CREATE_GAME_SCHEMA, constrained=False)
     red_role = (
-        Role(SpecRole.CREATE_GAME_RED, create_game_red_client, _RED_FINDING_SCHEMA, constrained=True)
+        Role(SpecRole.CREATE_GAME_RED, create_game_red_client, _CREATE_GAME_RED_FINDING_SCHEMA, constrained=True)
         if create_game_red_client is not None
         else None
     )
@@ -512,406 +365,6 @@ def create_game(
             )
 
 
-def _initial_play_game_feedback(
-    verification_result: VerificationResult | None,
-) -> dict[str, Any] | None:
-    if verification_result is None:
-        return None
-    return {
-        "prior_export_verification": {
-            "exit_code": verification_result.exit_code,
-            "passed": verification_result.passed,
-            "stdout": verification_result.stdout,
-            "stderr": verification_result.stderr,
-        }
-    }
-
-
-def _resolve_play_game_roles(
-    resolved_adapter: ProjectTypeAdapter,
-    config: dict[str, Any] | None,
-    model_client: ModelClient | None,
-    red_model_client: ModelClient | None,
-    referee_model_client: ModelClient | None,
-) -> tuple[Role, Role, Role]:
-    def _get_client(explicit: ModelClient | None, role: str) -> ModelClient:
-        if explicit is not None:
-            return explicit
-        if config is not None:
-            return _build_client_for_role(role, config)
-        return _build_role_client(role)
-
-    blue_role = Role(
-        SpecRole.BLUE,
-        _get_client(model_client, SpecRole.BLUE),
-        resolved_adapter.build_blue_output_format(),
-        constrained=False,
-    )
-    red_role = Role(
-        SpecRole.RED,
-        _get_client(red_model_client, SpecRole.RED),
-        _RED_FINDING_SCHEMA,
-        constrained=True,
-    )
-    referee_role = Role(
-        SpecRole.REFEREE,
-        _get_client(referee_model_client, SpecRole.REFEREE),
-        _REFEREE_DECISION_SCHEMA,
-        constrained=True,
-    )
-    return blue_role, red_role, referee_role
-
-
-def _build_play_game_fallbacks(
-    config: dict[str, Any] | None,
-    red_model_client: ModelClient | None,
-    referee_model_client: ModelClient | None,
-) -> tuple[Path | None, Any, Any]:
-    workspace = config.get("workspace") if config else None
-    if config is None:
-        return workspace, None, None
-    try:
-        red_primary = (
-            _resolve_backend_model(SpecRole.RED, config)[1]
-            if red_model_client is None
-            else "(provided)"
-        )
-    except ValueError:
-        red_primary = "(unknown)"
-    try:
-        referee_primary = (
-            _resolve_backend_model(SpecRole.REFEREE, config)[1]
-            if referee_model_client is None
-            else "(provided)"
-        )
-    except ValueError:
-        referee_primary = "(unknown)"
-    red_fallback_fn = _make_fallback_chain_fn(
-        SpecRole.RED, red_primary, _build_fallback_chain_for_role(SpecRole.RED, config)
-    )
-    referee_fallback_fn = _make_fallback_chain_fn(
-        SpecRole.REFEREE,
-        referee_primary,
-        _build_fallback_chain_for_role(SpecRole.REFEREE, config),
-    )
-    return workspace, red_fallback_fn, referee_fallback_fn
-
-
-def _run_play_game_attempt(
-    *,
-    attempt: int,
-    resolved_adapter: ProjectTypeAdapter,
-    state_view: Any,
-    game_spec: GameSpec,
-    verification_result: VerificationResult | None,
-    previous_feedback: dict[str, Any] | None,
-    executor: ToolExecutor | None,
-    blue_role: Role,
-    red_role: Role,
-    referee_role: Role,
-    workspace: Path | None,
-    red_fallback_fn: Any,
-    referee_fallback_fn: Any,
-) -> tuple[dict, DeltaState | None, Any | None, Any | None, dict[str, Any] | None]:
-    attempt_rec: dict = {
-        "attempt_number": attempt,
-        "blue_delta": None,
-        "red_finding": None,
-        "referee_decision": None,
-        "candidate_verification": None,
-    }
-
-    blue_session: list[ToolCallRecord] = []
-    blue_summary = ""
-    if executor is not None:
-        blue_research_tools = _get_research_tools(resolved_adapter, SpecRole.BLUE)
-        if blue_research_tools:
-            research_prompt = _render_research_prompt(SpecRole.BLUE, state_view, game_spec, [])
-            blue_summary, blue_session = blue_role.generate_agentic(
-                research_prompt, blue_research_tools, executor
-            )
-
-    debug_event("blue.input", {
-        "game_spec": game_spec.model_dump(mode="json"),
-        "state_view": state_view.model_dump(mode="json"),
-        "attempt_number": attempt,
-        "previous_feedback": previous_feedback,
-    })
-    blue_prompt = resolved_adapter.render_blue_prompt(
-        state_view, game_spec, attempt, previous_feedback
-    )
-    if blue_session or blue_summary:
-        blue_prompt = _render_tool_session_block([(SpecRole.BLUE, blue_session, blue_summary)]) + "\n\n" + blue_prompt
-    blue_tools = resolved_adapter.build_blue_tools()
-    blue_tool_call = None
-    if blue_tools:
-        try:
-            blue_tool_call = blue_role.generate_with_tools(blue_prompt, blue_tools)
-        except ValueError:
-            pass
-    if blue_tool_call is not None:
-        try:
-            candidate_delta = resolved_adapter.tool_call_to_delta(blue_tool_call)
-        except ValueError as exc:
-            debug_event("blue.failed_tool_call", {"tool_call": str(blue_tool_call)})
-            reason = f"blue output failed DeltaState validation: {exc}"
-            debug_event("play_game.attempt_rejected", {"attempt": attempt, "reason": reason})
-            updated_feedback = {
-                "attempt_rejection": {
-                    "stage": SpecRole.BLUE,
-                    "reason": reason,
-                    "validation_error": str(exc),
-                }
-            }
-            return attempt_rec, None, None, None, updated_feedback
-    else:
-        blue_generated = blue_role.generate(blue_prompt)
-        try:
-            candidate_delta = resolved_adapter.parse_blue_delta(blue_generated)
-        except ValueError as exc:
-            reason = f"blue output failed DeltaState validation: {exc}"
-            debug_event("play_game.attempt_rejected", {"attempt": attempt, "reason": reason})
-            updated_feedback = {
-                "attempt_rejection": {
-                    "stage": SpecRole.BLUE,
-                    "reason": reason,
-                    "validation_error": str(exc),
-                }
-            }
-            return attempt_rec, None, None, None, updated_feedback
-    debug_event("blue.output", {"delta_state": candidate_delta.model_dump(mode="json")})
-    attempt_rec["blue_delta"] = _sanitize_feedback_dict(candidate_delta.model_dump(mode="json"))
-
-    red_session: list[ToolCallRecord] = []
-    red_summary = ""
-    if executor is not None:
-        red_research_tools = _get_research_tools(resolved_adapter, SpecRole.RED)
-        if red_research_tools:
-            prior = [(SpecRole.BLUE, blue_session, blue_summary)] if blue_session or blue_summary else []
-            research_prompt = _render_research_prompt(SpecRole.RED, state_view, game_spec, prior)
-            red_summary, red_session = red_role.generate_agentic(
-                research_prompt, red_research_tools, executor
-            )
-
-    if verification_result is None:
-        debug_event("red.input", {
-            "game_spec": game_spec.model_dump(mode="json"),
-            "state_view": state_view.model_dump(mode="json"),
-            "delta_state": candidate_delta.model_dump(mode="json"),
-            "verification_result": None,
-        })
-    else:
-        debug_event("red.input", {
-            "game_spec": game_spec.model_dump(mode="json"),
-            "state_view": state_view.model_dump(mode="json"),
-            "delta_state": candidate_delta.model_dump(mode="json"),
-            "verification_result": {
-                "command": verification_result.command,
-                "cwd": verification_result.cwd,
-                "exit_code": verification_result.exit_code,
-                "stdout": verification_result.stdout,
-                "stderr": verification_result.stderr,
-                "passed": verification_result.passed,
-            },
-        })
-    red_supplement = _render_red_prompt_supplement_with_adapter(
-        resolved_adapter,
-        state_view,
-        game_spec,
-        candidate_delta,
-        verification_result,
-    )
-    tool_context = _render_tool_session_block([
-        s for s in [(SpecRole.BLUE, blue_session, blue_summary), (SpecRole.RED, red_session, red_summary)]
-        if s[1] or s[2]
-    ])
-    red_supplement_with_tools = (
-        (tool_context + "\n\nTool-use enforcement: treat any claim referencing external "
-            "information not supported by the tool call log above as unverified. "
-            "If Blue claims to have verified something externally but has no tool calls to show it, "
-            "flag that as a finding.\n\n")
-        if tool_context else ""
-    ) + red_supplement
-    red_prompt = _render_red_prompt(
-        state_view,
-        game_spec,
-        candidate_delta,
-        verification_result,
-        red_supplement_with_tools,
-    )
-    red_generated = red_role.generate(red_prompt)
-    red_finding = _parse_red_finding_json(
-        red_generated, workspace=workspace,
-        retry_fn=red_role.generate, fallback_fn=red_fallback_fn,
-    )
-    debug_event("red.output", {"red_finding": red_finding.model_dump(mode="json")})
-    attempt_rec["red_finding"] = _sanitize_feedback_dict(red_finding.model_dump(mode="json"))
-
-    referee_session: list[ToolCallRecord] = []
-    referee_summary = ""
-    if executor is not None:
-        referee_research_tools = _get_research_tools(resolved_adapter, SpecRole.REFEREE)
-        if referee_research_tools:
-            prior = [s for s in [
-                (SpecRole.BLUE, blue_session, blue_summary),
-                (SpecRole.RED, red_session, red_summary),
-            ] if s[1] or s[2]]
-            research_prompt = _render_research_prompt(SpecRole.REFEREE, state_view, game_spec, prior)
-            referee_summary, referee_session = referee_role.generate_agentic(
-                research_prompt, referee_research_tools, executor
-            )
-
-    if verification_result is None:
-        debug_event("referee.input", {
-            "game_spec": game_spec.model_dump(mode="json"),
-            "state_view": state_view.model_dump(mode="json"),
-            "delta_state": candidate_delta.model_dump(mode="json"),
-            "red_finding": red_finding.model_dump(mode="json"),
-            "verification_result": None,
-        })
-    else:
-        debug_event("referee.input", {
-            "game_spec": game_spec.model_dump(mode="json"),
-            "state_view": state_view.model_dump(mode="json"),
-            "delta_state": candidate_delta.model_dump(mode="json"),
-            "red_finding": red_finding.model_dump(mode="json"),
-            "verification_result": {
-                "command": verification_result.command,
-                "cwd": verification_result.cwd,
-                "exit_code": verification_result.exit_code,
-                "stdout": verification_result.stdout,
-                "stderr": verification_result.stderr,
-                "passed": verification_result.passed,
-            },
-        })
-    referee_supplement = _render_referee_prompt_supplement_with_adapter(
-        resolved_adapter,
-        state_view,
-        game_spec,
-        candidate_delta,
-        verification_result,
-    )
-    all_sessions = [s for s in [
-        (SpecRole.BLUE, blue_session, blue_summary),
-        (SpecRole.RED, red_session, red_summary),
-        (SpecRole.REFEREE, referee_session, referee_summary),
-    ] if s[1] or s[2]]
-    referee_tool_context = _render_tool_session_block(all_sessions)
-    referee_supplement_with_tools = (
-        (referee_tool_context + "\n\nTool-use enforcement: any claim referencing external "
-            "information not supported by the tool call logs above must be treated as unverified "
-            "and rejected.\n\n")
-        if referee_tool_context else ""
-    ) + referee_supplement
-    referee_prompt = _render_referee_prompt(
-        state_view,
-        game_spec,
-        candidate_delta,
-        red_finding,
-        verification_result,
-        referee_supplement_with_tools,
-    )
-    referee_generated = referee_role.generate(referee_prompt)
-    referee_decision = _parse_referee_decision_json(
-        referee_generated, workspace=workspace,
-        retry_fn=referee_role.generate, fallback_fn=referee_fallback_fn,
-    )
-    debug_event("referee.output", {"referee_decision": referee_decision.model_dump(mode="json")})
-    attempt_rec["referee_decision"] = _sanitize_feedback_dict(referee_decision.model_dump(mode="json"))
-    return attempt_rec, candidate_delta, red_finding, referee_decision, previous_feedback
-
-
-def _apply_play_game_attempt_decision(
-    *,
-    runtime: PlayGameRuntime,
-    attempt: int,
-    max_attempts: int,
-    attempt_rec: dict,
-    candidate_delta: DeltaState,
-    red_finding: Any,
-    referee_decision: Any,
-    resolved_adapter: ProjectTypeAdapter,
-    state: State,
-    game_spec: GameSpec,
-    sandbox_mode: str,
-) -> tuple[PlayGameRuntime, dict[str, Any] | None, VerificationResult | None, bool]:
-    runtime = apply_referee_decision_to_runtime(
-        runtime=runtime,
-        candidate_delta=candidate_delta,
-        decision=referee_decision,
-    )
-    if referee_decision.disposition == "accept":
-        candidate_result = _verify_candidate_with_adapter(
-            resolved_adapter, candidate_delta, state, game_spec.target_artifact_id,
-            sandbox_mode=sandbox_mode,
-        )
-        attempt_rec["candidate_verification"] = _summarize_verification_result(candidate_result)
-        if (
-            candidate_result is not None
-            and not candidate_result.passed
-            and attempt < max_attempts
-        ):
-            previous_feedback = {
-                "red_finding": _sanitize_feedback_dict(red_finding.model_dump(mode="json")),
-                "referee_decision": _sanitize_feedback_dict(referee_decision.model_dump(mode="json")),
-                "candidate_verification": {
-                    "exit_code": candidate_result.exit_code,
-                    "passed": False,
-                    "stdout": candidate_result.stdout,
-                    "stderr": candidate_result.stderr,
-                },
-            }
-            return runtime, previous_feedback, candidate_result, False
-        return runtime, None, candidate_result, True
-    previous_feedback = {
-        "red_finding": _sanitize_feedback_dict(red_finding.model_dump(mode="json")),
-        "referee_decision": _sanitize_feedback_dict(referee_decision.model_dump(mode="json")),
-    }
-    return runtime, previous_feedback, None, False
-
-
-def _record_play_game_telemetry(
-    *,
-    workspace: Path | None,
-    game_id: str,
-    depth: int,
-    game_spec: GameSpec,
-    attempt_records: list[dict],
-    last_candidate_result: VerificationResult | None,
-    runtime: PlayGameRuntime,
-) -> None:
-    debug_event("play_game.output", {
-        "current_best_delta": (
-            None
-            if runtime.current_best_delta is None
-            else runtime.current_best_delta.model_dump(mode="json")
-        ),
-        "integration_eligible_delta": (
-            None
-            if runtime.integration_eligible_delta is None
-            else runtime.integration_eligible_delta.model_dump(mode="json")
-        ),
-    })
-    if workspace is None:
-        return
-    final_disposition = (
-        "accepted" if runtime.integration_eligible_delta is not None
-        else "rejected" if any(r["blue_delta"] is not None for r in attempt_records)
-        else "no_delta"
-    )
-    _append_game_to_blackboard(
-        workspace=workspace,
-        game_id=game_id,
-        depth=depth,
-        game_spec=game_spec,
-        attempt_records=attempt_records,
-        final_disposition=final_disposition,
-        verification_result=last_candidate_result,
-        current_best_delta=runtime.current_best_delta,
-        integration_eligible_delta=runtime.integration_eligible_delta,
-    )
-
-
 def play_game(
     state: State,
     game_spec: GameSpec,
@@ -949,11 +402,14 @@ def play_game(
         model_client,
         red_model_client,
         referee_model_client,
+        build_client_for_role_fn=_build_client_for_role,
+        build_role_client_fn=_build_role_client,
     )
     workspace, red_fallback_fn, referee_fallback_fn = _build_play_game_fallbacks(
         config,
         red_model_client,
         referee_model_client,
+        build_fallback_chain_for_role_fn=_build_fallback_chain_for_role,
     )
 
     for attempt in range(1, max_attempts + 1):
@@ -972,6 +428,9 @@ def play_game(
             workspace=workspace,
             red_fallback_fn=red_fallback_fn,
             referee_fallback_fn=referee_fallback_fn,
+            debug_event_fn=debug_event,
+            render_red_prompt_fn=_render_red_prompt,
+            render_referee_prompt_fn=_render_referee_prompt,
         )
         if candidate_delta is None:
             previous_feedback = updated_feedback
@@ -989,6 +448,7 @@ def play_game(
             state=state,
             game_spec=game_spec,
             sandbox_mode=sandbox_mode,
+            verify_candidate_fn=_verify_candidate_with_adapter,
         )
         if candidate_result is not None:
             last_candidate_result = candidate_result
@@ -1004,5 +464,6 @@ def play_game(
         attempt_records=attempt_records,
         last_candidate_result=last_candidate_result,
         runtime=runtime,
+        debug_event_fn=debug_event,
     )
     return runtime.integration_eligible_delta
