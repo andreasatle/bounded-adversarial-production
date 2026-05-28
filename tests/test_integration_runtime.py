@@ -45,16 +45,17 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
 
 
 def test_main_integration_uses_state_service_apply_delta(monkeypatch, tmp_path: Path) -> None:
+    from baps.state.state_service import StateService
     import baps.core.run as run_module
 
     called = {"value": False}
-    original_apply = run_module.StateService.apply_delta
+    original_apply = StateService.apply_delta
 
     def _capture_apply(self, delta):
         called["value"] = True
         return original_apply(self, delta)
 
-    monkeypatch.setattr(run_module.StateService, "apply_delta", _capture_apply)
+    monkeypatch.setattr(StateService, "apply_delta", _capture_apply)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -72,6 +73,7 @@ def test_main_integration_uses_state_service_apply_delta(monkeypatch, tmp_path: 
 
 def test_main_persists_updated_state_with_appended_section(monkeypatch, tmp_path: Path) -> None:
     import baps.core.run as run_module
+    from baps.state.state_store import JsonStateStore
 
     workspace = tmp_path / "ws-persist"
     monkeypatch.setattr(
@@ -87,7 +89,7 @@ def test_main_persists_updated_state_with_appended_section(monkeypatch, tmp_path
     )
     run_module.main()
 
-    persisted = run_module.JsonStateStore(workspace / "state" / "state.json").load()
+    persisted = JsonStateStore(workspace / "state" / "state.json").load()
     doc = next(a for a in persisted.artifacts if a.id == "main-document")
     assert isinstance(doc, state_module.DocumentArtifact)
     assert len(doc.sections) == 2
@@ -249,7 +251,8 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
             return self._delegate.export_state(state, output_path, artifact_id)
 
     adapter = _RecordingAdapter()
-    monkeypatch.setattr(run_module, "_resolve_project_type_adapter", lambda _ptype: adapter)
+    monkeypatch.setattr("baps.core.runtime._resolve_project_type_adapter", lambda _ptype: adapter)
+    monkeypatch.setattr("baps.core.runtime.create_state", lambda _config: adapter.create_initial_state(_config.to_adapter_config()))
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -279,8 +282,8 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
 
 
 def test_adapter_registry_includes_document_and_coding() -> None:
-    import baps.core.run as run_module
+    import baps.core.runtime as runtime_module
 
-    adapters = run_module._build_project_type_adapters()
+    adapters = runtime_module._build_project_type_adapters()
     assert "document" in adapters
     assert "coding" in adapters

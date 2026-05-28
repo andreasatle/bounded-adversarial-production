@@ -10,7 +10,6 @@ from baps.core.run_config import RunConfig, resolve_reset_targets, resolve_run_c
 from baps.core.runtime import (
     active_model_info,
     build_runtime,
-    create_state,
     run_project,
 )
 from baps.core.workspace import wipe_workspace_state, write_run_result
@@ -42,7 +41,7 @@ class StartRunSummary:
     failed: bool = False
 
 
-def _resolve_start_config(args: argparse.Namespace) -> RunConfig:
+def resolve_start_config(args: argparse.Namespace) -> RunConfig:
     try:
         return resolve_run_config(args)
     except ValueError as exc:
@@ -67,7 +66,7 @@ def _map_iteration_results(summary: StartRunSummary, results: dict[str, object])
     summary.stop_reason = results["stop_reason"]
 
 
-def _execute_start(runtime, command: str) -> StartRunSummary:
+def run_start_lifecycle(runtime, command: str) -> StartRunSummary:
     summary = StartRunSummary(
         workspace=runtime.config.workspace,
         project_type=runtime.config.project_type,
@@ -121,27 +120,30 @@ def _write_start_result(config: RunConfig, summary: StartRunSummary) -> None:
     write_run_result(config.workspace, result_data)
 
 
-def _emit_start_outputs(config: RunConfig, summary: StartRunSummary) -> None:
+def emit_start_result(config: RunConfig, summary: StartRunSummary) -> None:
     _print_start_summary(summary)
     _write_start_result(config, summary)
 
 
-def start_project(
-    args: argparse.Namespace,
-    *,
-    create_state_fn=create_state,
-    build_runtime_fn=build_runtime,
-) -> None:
-    config = _resolve_start_config(args)
+def build_start_runtime(config: RunConfig):
     try:
-        runtime = build_runtime_fn(config, create_state_fn=create_state_fn)
+        return build_runtime(config)
     except ValueError as exc:
         logger.error("%s", exc)
         raise SystemExit(2) from exc
-    summary = _execute_start(runtime, command=str(args.command))
-    _emit_start_outputs(config, summary)
+
+
+def exit_if_failed(summary: StartRunSummary) -> None:
     if summary.failed:
         raise SystemExit(2)
+
+
+def start_project(args: argparse.Namespace) -> None:
+    config = resolve_start_config(args)
+    runtime = build_start_runtime(config)
+    summary = run_start_lifecycle(runtime, command=str(args.command))
+    emit_start_result(config, summary)
+    exit_if_failed(summary)
 
 
 def reset_project(args: argparse.Namespace) -> None:

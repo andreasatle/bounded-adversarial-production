@@ -22,7 +22,7 @@ from baps.state.state_service import StateService
 from baps.state.state_store import JsonStateStore
 from baps.core.orchestration import _run_project_iterations
 import baps.state.state as state_module
-from baps.core.run import _initialize_project
+from baps.core.runtime import _initialize_project
 def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_path: Path) -> None:
 
     captured: dict[str, object] = {}
@@ -212,13 +212,13 @@ def test_main_max_iterations_two_runs_two_iterations_with_state_carry_forward(
 def test_main_create_state_called_once_for_multi_iteration(monkeypatch, tmp_path: Path) -> None:
 
     calls = {"count": 0}
-    original_create_state = create_state
+    original_initialize_project = _initialize_project
 
-    def _capture_create_state(config):
+    def _capture_initialize_project(config, create_state_fn=None):
         calls["count"] += 1
-        return original_create_state(config)
+        return original_initialize_project(config, create_state_fn=create_state_fn)
 
-    monkeypatch.setattr("baps.core.run.create_state", _capture_create_state)
+    monkeypatch.setattr("baps.core.runtime._initialize_project", _capture_initialize_project)
     monkeypatch.setattr(
         "sys.argv",
         [

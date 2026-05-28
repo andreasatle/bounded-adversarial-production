@@ -501,6 +501,7 @@ def test_start_loads_project_type_and_artifact_from_workspace_config(
 
 def test_init_from_spec_persists_northstar_in_workspace_config(monkeypatch, tmp_path: Path) -> None:
     import baps.core.run as run_module
+    from baps.state.state_store import JsonStateStore
 
     workspace = tmp_path / "ws-init-northstar"
     spec = tmp_path / "config.yaml"
@@ -530,7 +531,7 @@ def test_init_from_spec_persists_northstar_in_workspace_config(monkeypatch, tmp_
     assert "# Goal" in workspace_config["northstar_markdown"]
     assert "Write a short report grounded in NorthStar intent." in workspace_config["northstar_markdown"]
 
-    persisted = run_module.JsonStateStore(workspace / "state" / "state.json").load()
+    persisted = JsonStateStore(workspace / "state" / "state.json").load()
     assert len(persisted.artifacts) == 1
     assert persisted.artifacts[0].id == "main-document"
 

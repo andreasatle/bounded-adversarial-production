@@ -5,17 +5,9 @@ import logging
 import os
 
 from baps.core.lifecycle import reset_project, start_project
+# Compatibility re-export used by tests.
 from baps.core.run_config import resolve_run_config
-from baps.core.runtime import (
-    RuntimeContext,
-    _build_project_type_adapters,
-    _initialize_project,
-    _resolve_adapter_for_allowed_delta_type,
-    _resolve_project_type_adapter,
-    prepare_workspace as _prepare_workspace,
-)
-from baps.state.state_service import StateService
-from baps.state.state_store import JsonStateStore
+from baps.core.runtime import create_state
 
 
 def _configure_runtime_logging() -> None:
@@ -111,27 +103,7 @@ def main() -> None:
     if args.command == "reset":
         reset_project(args)
         return
-    start_project(args, create_state_fn=create_state, build_runtime_fn=_build_runtime)
-
-
-def create_state(config):
-    from baps.core.debug import _debug_print_create_state
-
-    adapter = _resolve_project_type_adapter(config.project_type)
-    state = adapter.create_initial_state(config.to_adapter_config())
-    _debug_print_create_state(config=config, state=state)
-    return state
-
-
-def _build_runtime(config, create_state_fn=create_state) -> RuntimeContext:
-    adapter = _resolve_project_type_adapter(config.project_type)
-    state_service, current_state = _prepare_workspace(config, create_state_fn=create_state_fn)
-    return RuntimeContext(
-        config=config,
-        adapter=adapter,
-        state_service=state_service,
-        initial_state=current_state,
-    )
+    start_project(args)
 
 
 if __name__ == "__main__":

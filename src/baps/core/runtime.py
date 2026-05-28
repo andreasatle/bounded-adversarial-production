@@ -52,8 +52,10 @@ def _resolve_adapter_for_allowed_delta_type(allowed_delta_type: str) -> ProjectT
 
 def _initialize_project(
     config: RunConfig,
-    create_state_fn=create_state,
+    create_state_fn=None,
 ) -> tuple[StateService, State]:
+    if create_state_fn is None:
+        create_state_fn = create_state
     workspace = config.workspace
     initial_state = create_state_fn(config)
     state_store = JsonStateStore(state_path_for_workspace(workspace))
@@ -75,8 +77,10 @@ def _load_project_service(workspace: Path) -> StateService:
 
 def prepare_workspace(
     config: RunConfig,
-    create_state_fn=create_state,
+    create_state_fn=None,
 ) -> tuple[StateService, State]:
+    if create_state_fn is None:
+        create_state_fn = create_state
     state_path = state_path_for_workspace(config.workspace)
     if state_path.exists():
         state_service = _load_project_service(config.workspace)
@@ -86,8 +90,10 @@ def prepare_workspace(
 
 def build_runtime(
     config: RunConfig,
-    create_state_fn=create_state,
+    create_state_fn=None,
 ) -> RuntimeContext:
+    if create_state_fn is None:
+        create_state_fn = create_state
     adapter = _resolve_project_type_adapter(config.project_type)
     state_service, current_state = prepare_workspace(config, create_state_fn=create_state_fn)
     return RuntimeContext(
