@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,8 @@ from baps.core.clients import (
 )
 from baps.models.models import ModelClient, Role
 from baps.adapters.project_adapter import ProjectTypeAdapter, VerificationResult
+from baps.state.state import GameSpec, State
+from baps.tools.tools import ToolExecutor
 
 
 # Keep schemas colocated with role wiring to avoid duplicating literals.
@@ -39,6 +42,30 @@ _REFEREE_DECISION_SCHEMA: dict = {
     "required": ["disposition", "rationale"],
     "additionalProperties": False,
 }
+
+
+@dataclass
+class _PlayGameContext:
+    """Immutable per-game setup resolved once before the attempt loop."""
+    resolved_adapter: ProjectTypeAdapter
+    state: State
+    game_spec: GameSpec
+    state_view: Any
+    game_id: str
+    workspace: Path | None
+    sandbox_mode: str
+    executor: ToolExecutor | None
+    blue_role: Role
+    red_role: Role
+    referee_role: Role
+    red_fallback_fn: Any
+    referee_fallback_fn: Any
+    depth: int
+    max_attempts: int
+    debug_event_fn: Any
+    render_red_prompt_fn: Any
+    render_referee_prompt_fn: Any
+    verify_candidate_fn: Any
 
 
 def _initial_play_game_feedback(

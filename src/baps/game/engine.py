@@ -25,6 +25,7 @@ from baps.game.attempt import (
 )
 from baps.game.play import _record_play_game_telemetry
 from baps.game.roles import (
+    _PlayGameContext,
     _build_play_game_fallbacks,
     _initial_play_game_feedback,
     _resolve_play_game_roles,
@@ -360,36 +361,33 @@ def create_game(
             )
 
 
-def play_game(
+def _build_play_game_context(
     state: State,
     game_spec: GameSpec,
-    adapter: ProjectTypeAdapter | None = None,
-    model_client: ModelClient | None = None,
-    red_model_client: ModelClient | None = None,
-    referee_model_client: ModelClient | None = None,
-    verification_result: VerificationResult | None = None,
-    max_attempts: int = _DEFAULT_MAX_PLAY_GAME_ATTEMPTS,
-    executor: ToolExecutor | None = None,
-    sandbox_mode: str = "docker",
-    config: dict[str, Any] | None = None,
-    depth: int = 0,
-) -> DeltaState | None:
-    if max_attempts < 1:
-        raise ValueError("max_attempts must be >= 1")
+    adapter: ProjectTypeAdapter | None,
+    model_client: ModelClient | None,
+    red_model_client: ModelClient | None,
+    referee_model_client: ModelClient | None,
+    executor: ToolExecutor | None,
+    sandbox_mode: str,
+    config: dict[str, Any] | None,
+    depth: int,
+    max_attempts: int,
+    debug_event_fn: Any,
+    render_red_prompt_fn: Any,
+    render_referee_prompt_fn: Any,
+    verify_candidate_fn: Any,
+) -> _PlayGameContext:
     resolved_adapter = (
         adapter
         if adapter is not None
         else resolve_adapter_for_allowed_delta_type(game_spec.allowed_delta_type)
     )
-    debug_event("play_game.input", {
+    debug_event_fn("play_game.input", {
         "state": state.model_dump(mode="json"),
         "game_spec": game_spec.model_dump(mode="json"),
     })
     state_view = resolved_adapter.build_state_view(state, game_spec)
-    runtime = PlayGameRuntime()
-    previous_feedback = _initial_play_game_feedback(verification_result)
-    attempt_records: list[dict] = []
-    last_candidate_result: VerificationResult | None = None
     game_id = str(uuid.uuid4())
     blue_role, red_role, referee_role = _resolve_play_game_roles(
         resolved_adapter,
@@ -406,44 +404,87 @@ def play_game(
         referee_model_client,
         build_fallback_chain_for_role_fn=_build_fallback_chain_for_role,
     )
+    return _PlayGameContext(
+        resolved_adapter=resolved_adapter,
+        state=state,
+        game_spec=game_spec,
+        state_view=state_view,
+        game_id=game_id,
+        workspace=workspace,
+        sandbox_mode=sandbox_mode,
+        executor=executor,
+        blue_role=blue_role,
+        red_role=red_role,
+        referee_role=referee_role,
+        red_fallback_fn=red_fallback_fn,
+        referee_fallback_fn=referee_fallback_fn,
+        depth=depth,
+        max_attempts=max_attempts,
+        debug_event_fn=debug_event_fn,
+        render_red_prompt_fn=render_red_prompt_fn,
+        render_referee_prompt_fn=render_referee_prompt_fn,
+        verify_candidate_fn=verify_candidate_fn,
+    )
+
+
+def play_game(
+    state: State,
+    game_spec: GameSpec,
+    adapter: ProjectTypeAdapter | None = None,
+    model_client: ModelClient | None = None,
+    red_model_client: ModelClient | None = None,
+    referee_model_client: ModelClient | None = None,
+    verification_result: VerificationResult | None = None,
+    max_attempts: int = _DEFAULT_MAX_PLAY_GAME_ATTEMPTS,
+    executor: ToolExecutor | None = None,
+    sandbox_mode: str = "docker",
+    config: dict[str, Any] | None = None,
+    depth: int = 0,
+) -> DeltaState | None:
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be >= 1")
+    ctx = _build_play_game_context(
+        state=state,
+        game_spec=game_spec,
+        adapter=adapter,
+        model_client=model_client,
+        red_model_client=red_model_client,
+        referee_model_client=referee_model_client,
+        executor=executor,
+        sandbox_mode=sandbox_mode,
+        config=config,
+        depth=depth,
+        max_attempts=max_attempts,
+        debug_event_fn=debug_event,
+        render_red_prompt_fn=_render_red_prompt,
+        render_referee_prompt_fn=_render_referee_prompt,
+        verify_candidate_fn=_verify_candidate_with_adapter,
+    )
+    runtime = PlayGameRuntime()
+    previous_feedback = _initial_play_game_feedback(verification_result)
+    attempt_records: list[dict] = []
+    last_candidate_result: VerificationResult | None = None
 
     for attempt in range(1, max_attempts + 1):
         debug_event("play_game.attempt", {"attempt": attempt})
         attempt_rec, candidate_delta, red_finding, referee_decision, updated_feedback = _run_play_game_attempt(
+            ctx=ctx,
             attempt=attempt,
-            resolved_adapter=resolved_adapter,
-            state_view=state_view,
-            game_spec=game_spec,
-            verification_result=verification_result,
             previous_feedback=previous_feedback,
-            executor=executor,
-            blue_role=blue_role,
-            red_role=red_role,
-            referee_role=referee_role,
-            workspace=workspace,
-            red_fallback_fn=red_fallback_fn,
-            referee_fallback_fn=referee_fallback_fn,
-            debug_event_fn=debug_event,
-            render_red_prompt_fn=_render_red_prompt,
-            render_referee_prompt_fn=_render_referee_prompt,
+            verification_result=verification_result,
         )
         if candidate_delta is None:
             previous_feedback = updated_feedback
             attempt_records.append(attempt_rec)
             continue
         runtime, previous_feedback, candidate_result, stop_attempts = _apply_play_game_attempt_decision(
+            ctx=ctx,
             runtime=runtime,
             attempt=attempt,
-            max_attempts=max_attempts,
             attempt_rec=attempt_rec,
             candidate_delta=candidate_delta,
             red_finding=red_finding,
             referee_decision=referee_decision,
-            resolved_adapter=resolved_adapter,
-            state=state,
-            game_spec=game_spec,
-            sandbox_mode=sandbox_mode,
-            verify_candidate_fn=_verify_candidate_with_adapter,
         )
         if candidate_result is not None:
             last_candidate_result = candidate_result
@@ -452,13 +493,9 @@ def play_game(
             break
 
     _record_play_game_telemetry(
-        workspace=workspace,
-        game_id=game_id,
-        depth=depth,
-        game_spec=game_spec,
+        ctx=ctx,
+        runtime=runtime,
         attempt_records=attempt_records,
         last_candidate_result=last_candidate_result,
-        runtime=runtime,
-        debug_event_fn=debug_event,
     )
     return runtime.integration_eligible_delta

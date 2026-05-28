@@ -1,25 +1,20 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from baps.adapters.project_adapter import VerificationResult
-from baps.state.state import GameSpec, PlayGameRuntime
+from baps.state.state import PlayGameRuntime
 
+from baps.game.roles import _PlayGameContext
 from baps.game.telemetry import _append_game_to_blackboard
 
 
 def _record_play_game_telemetry(
     *,
-    workspace: Path | None,
-    game_id: str,
-    depth: int,
-    game_spec: GameSpec,
+    ctx: _PlayGameContext,
     attempt_records: list[dict],
     last_candidate_result: VerificationResult | None,
     runtime: PlayGameRuntime,
-    debug_event_fn,
 ) -> None:
-    debug_event_fn("play_game.output", {
+    ctx.debug_event_fn("play_game.output", {
         "current_best_delta": (
             None
             if runtime.current_best_delta is None
@@ -31,7 +26,7 @@ def _record_play_game_telemetry(
             else runtime.integration_eligible_delta.model_dump(mode="json")
         ),
     })
-    if workspace is None:
+    if ctx.workspace is None:
         return
     final_disposition = (
         "accepted" if runtime.integration_eligible_delta is not None
@@ -39,10 +34,10 @@ def _record_play_game_telemetry(
         else "no_delta"
     )
     _append_game_to_blackboard(
-        workspace=workspace,
-        game_id=game_id,
-        depth=depth,
-        game_spec=game_spec,
+        workspace=ctx.workspace,
+        game_id=ctx.game_id,
+        depth=ctx.depth,
+        game_spec=ctx.game_spec,
         attempt_records=attempt_records,
         final_disposition=final_disposition,
         verification_result=last_candidate_result,
