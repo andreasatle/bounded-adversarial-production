@@ -1,7 +1,0 @@
-{
-  "artifact_id": "baps-security-report",
-  "goal": "Produce a structured security audit report for the baps framework.",
-  "northstar_markdown": "# baps Security Audit\n\nFind vulnerabilities in the baps framework. Focus on:\n- Prompt injection paths (model output trusted without validation)\n- State mutation bypasses (changes reaching State without going through StateService)\n- StateView/State boundary violations (raw State internals leaking into prompts)\n- Delta parsing weaknesses (malformed model output accepted as valid)\n- Export path traversal (file paths in deltas escaping the output directory)\n",
-  "output": "/Users/andreasatle/Projects/bounded-adversarial-production/.baps-workspace-security/reports/baps-security-report.md",
-  "project_type": "audit"
-}
