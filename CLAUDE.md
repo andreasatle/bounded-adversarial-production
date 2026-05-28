@@ -64,20 +64,34 @@ src/baps/
   __init__.py
 
 tests/
-  test_state.py
-  test_state_service.py
-  test_state_store.py
-  test_northstar_projection.py
+  conftest.py
+  test_audit_adapter.py
+  test_blackboard_game.py
+  test_clients.py
+  test_config.py
+  test_create_game.py
+  test_integration.py
+  test_language_plugin.py
+  test_lifecycle.py
   test_model_output.py
   test_models.py
-  test_run.py
-  test_audit_adapter.py
-  test_language_plugin.py
   test_northstar_apply.py
+  test_northstar_projection.py
+  test_orchestration.py
+  test_parsers.py
+  test_play_game.py
+  test_prompts.py
+  test_run.py
   test_sandbox.py
-  test_tools.py
   test_scheduler.py
   test_scheduler_policy.py
+  test_state_delta.py
+  test_state_mutation.py
+  test_state_schema.py
+  test_state_service.py
+  test_state_store.py
+  test_state_view.py
+  test_tools.py
 
 docs/
   SYSTEM.md       # Normative system contract
@@ -168,7 +182,7 @@ uv run pytest
 - Use `FakeModelClient` for deterministic sequences — never couple tests to live model output.
 - Assert exact prompts, validation failures, stop reasons, and summary fields.
 - Test adapter boundaries explicitly: core orchestration must not receive project-specific output.
-- Schema mutation tests live in `test_state.py`; orchestration contracts in `test_run.py`.
+- State schema tests in `test_state_schema.py`, mutation tests in `test_state_mutation.py`, delta tests in `test_state_delta.py`; orchestration contracts in `test_orchestration.py`; game phase tests in `test_create_game.py` and `test_play_game.py`.
 
 ---
 
@@ -197,7 +211,7 @@ returns a third response shape instead of a `GameSpec` or `no_new_game`:
 {"northstar_update_needed": true, "rationale": "...", "proposed_northstar": "..."}
 ```
 
-`run.py` catches the resulting `NorthStarUpdateNeededError`, appends a JSONL event to
+`orchestration.py` catches the resulting `NorthStarUpdateNeededError`, appends a JSONL event to
 `<workspace>/blackboard/northstar_proposals.jsonl`, sets `stop_reason=northstar_update_proposed`,
 and stops the iteration loop without touching `State`.
 
