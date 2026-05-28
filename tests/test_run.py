@@ -55,15 +55,18 @@ def _patch_create_game_model_client(monkeypatch):
         return _fake_model_client_builder()
 
     monkeypatch.setattr("baps.run._build_client_for_role", _fake_build_client_for_role)
+    monkeypatch.setattr("baps.game._build_client_for_role", _fake_build_client_for_role)
     # Keep legacy patches so tests that call the old builders directly still work.
     monkeypatch.setattr("baps.run._build_planner_model_client", _fake_create_game_builder)
     monkeypatch.setattr("baps.run._build_model_client", _fake_model_client_builder)
     # _build_role_client must delegate to the live _build_model_client so per-test
     # overrides of _build_model_client (e.g. fallback tests) continue to work.
     monkeypatch.setattr("baps.run._build_role_client", lambda _role: _real_run._build_model_client())
+    monkeypatch.setattr("baps.game._build_role_client", lambda _role: _fake_model_client_builder())
     # Fallback resolution returns no chain by default (no fallback configured in tests).
     monkeypatch.setattr("baps.run._build_fallback_chain_for_role", lambda role, config: [])
     monkeypatch.setattr("baps.run._build_fallback_client_for_role", lambda role, config: None)
+    monkeypatch.setattr("baps.game._build_fallback_chain_for_role", lambda role, config: [])
 
 
 def test_main_prints_required_fields_and_no_legacy_iteration_output(
@@ -1733,14 +1736,12 @@ def test_improvement_hints_appear_in_previous_feedback_for_blue() -> None:
         captured_feedback.append(previous_feedback)
         original_debug(state_view, game_spec, attempt, previous_feedback)
 
-    import baps.run as run_module
-    import importlib
-    run_module_fresh = run_module  # same module, just alias for clarity
+    import baps.game as game_module
 
     spec, state = _make_document_spec_and_state()
 
     from unittest.mock import patch
-    with patch.object(run_module_fresh, "_debug_print_blue_input", _capture):
+    with patch.object(game_module, "_debug_print_blue_input", _capture):
         play_game(
             state,
             spec,
@@ -1772,6 +1773,7 @@ def test_improvement_hints_appear_in_previous_feedback_for_blue() -> None:
 
 def test_red_prompt_includes_success_condition_met_and_findings_fields() -> None:
     import baps.run as run_module
+    import baps.game as game_module
 
     captured: dict[str, object] = {}
     original = run_module._render_red_prompt
@@ -1781,10 +1783,9 @@ def test_red_prompt_includes_success_condition_met_and_findings_fields() -> None
         captured["prompt"] = result
         return result
 
-    import importlib
     from unittest.mock import patch
     spec, state = _make_document_spec_and_state()
-    with patch.object(run_module, "_render_red_prompt", _capture):
+    with patch.object(game_module, "_render_red_prompt", _capture):
         play_game(state, spec, model_client=_make_blue_client("Introduction"))
     prompt = str(captured["prompt"])
     assert "success_condition_met" in prompt
@@ -1793,6 +1794,7 @@ def test_red_prompt_includes_success_condition_met_and_findings_fields() -> None
 
 def test_referee_prompt_includes_red_override_and_improvement_hints_fields() -> None:
     import baps.run as run_module
+    import baps.game as game_module
 
     captured: dict[str, object] = {}
     original = run_module._render_referee_prompt
@@ -1804,7 +1806,7 @@ def test_referee_prompt_includes_red_override_and_improvement_hints_fields() -> 
 
     from unittest.mock import patch
     spec, state = _make_document_spec_and_state()
-    with patch.object(run_module, "_render_referee_prompt", _capture):
+    with patch.object(game_module, "_render_referee_prompt", _capture):
         play_game(state, spec, model_client=_make_blue_client("Introduction"))
     prompt = str(captured["prompt"])
     assert "red_override" in prompt
@@ -1822,7 +1824,7 @@ def test_play_game_referee_receives_gamespec_state_view_delta_and_red(monkeypatc
         captured["delta_state"] = delta_state
         captured["red_finding"] = red_finding
 
-    monkeypatch.setattr(run_module, "_debug_print_referee_input", _capture_referee_input)
+    monkeypatch.setattr("baps.game._debug_print_referee_input", _capture_referee_input)
     spec = run_module.GameSpec(
         objective="Any objective",
         target_artifact_id="main-document",
@@ -1953,7 +1955,7 @@ def test_play_game_red_receives_gamespec_state_view_and_delta_state(monkeypatch)
         captured["game_spec"] = game_spec
         captured["delta_state"] = delta_state
 
-    monkeypatch.setattr(run_module, "_debug_print_red_input", _capture_red_input)
+    monkeypatch.setattr("baps.game._debug_print_red_input", _capture_red_input)
     spec = run_module.GameSpec(
         objective="Any objective",
         target_artifact_id="main-document",
@@ -2025,7 +2027,7 @@ def test_red_prompt_includes_success_condition(monkeypatch) -> None:
         captured["prompt"] = result
         return result
 
-    monkeypatch.setattr(run_module, "_render_red_prompt", _capture)
+    monkeypatch.setattr("baps.game._render_red_prompt", _capture)
     success_condition = "Unique success_condition string for red prompt contract test."
     spec, state = _make_document_spec_and_state(success_condition)
     play_game(state, spec, model_client=_make_blue_client("Introduction"))
@@ -2044,7 +2046,7 @@ def test_referee_prompt_includes_success_condition_and_red_rationale(monkeypatch
         captured["prompt"] = result
         return result
 
-    monkeypatch.setattr(run_module, "_render_referee_prompt", _capture)
+    monkeypatch.setattr("baps.game._render_referee_prompt", _capture)
     success_condition = "Unique success_condition string for referee prompt contract test."
     spec, state = _make_document_spec_and_state(success_condition)
     red_rationale = "Unique red rationale for referee prompt test."
@@ -2119,6 +2121,8 @@ def test_play_game_referee_reject_retries_and_second_attempt_accepted() -> None:
 def test_play_game_previous_feedback_on_retry_contains_red_and_referee(monkeypatch) -> None:
     import baps.run as run_module
 
+    import baps.game as game_module
+
     captured_feedback: list[dict | None] = []
     original_debug = run_module._debug_print_blue_input
 
@@ -2126,7 +2130,7 @@ def test_play_game_previous_feedback_on_retry_contains_red_and_referee(monkeypat
         captured_feedback.append(previous_feedback)
         original_debug(state_view, game_spec, attempt, previous_feedback)
 
-    monkeypatch.setattr(run_module, "_debug_print_blue_input", _capture)
+    monkeypatch.setattr("baps.game._debug_print_blue_input", _capture)
     spec, state = _make_document_spec_and_state()
     play_game(
         state,
@@ -7820,10 +7824,9 @@ def test_create_game_fallback_called_when_primary_exhausts_retries(monkeypatch) 
         '"success_condition":"section exists"}'
     )
     fallback_client = FakeModelClient(responses=[valid_response])
-    monkeypatch.setattr(
-        "baps.run._build_fallback_chain_for_role",
-        lambda role, cfg: [("gemma4:26b", fallback_client)] if role == "create_game" else [],
-    )
+    _chain = lambda role, cfg: [("gemma4:26b", fallback_client)] if role == "create_game" else []
+    monkeypatch.setattr("baps.run._build_fallback_chain_for_role", _chain)
+    monkeypatch.setattr("baps.game._build_fallback_chain_for_role", _chain)
 
     config = {
         "workspace": Path(".baps-workspace"),
@@ -7853,10 +7856,9 @@ def test_create_game_fallback_not_called_when_primary_succeeds(monkeypatch) -> N
         '"success_condition":"section exists"}'
     )
     fallback_client = FakeModelClient(responses=[valid_response])
-    monkeypatch.setattr(
-        "baps.run._build_fallback_chain_for_role",
-        lambda role, cfg: [("gemma4:26b", fallback_client)] if role == "create_game" else [],
-    )
+    _chain = lambda role, cfg: [("gemma4:26b", fallback_client)] if role == "create_game" else []
+    monkeypatch.setattr("baps.run._build_fallback_chain_for_role", _chain)
+    monkeypatch.setattr("baps.game._build_fallback_chain_for_role", _chain)
 
     config = {
         "workspace": Path(".baps-workspace"),
@@ -7883,10 +7885,9 @@ def test_play_game_red_fallback_called_when_primary_exhausts_retries(monkeypatch
 
     valid_accept = '{"disposition":"accept","rationale":"looks good"}'
     fallback_red_client = FakeModelClient(responses=[valid_accept])
-    monkeypatch.setattr(
-        "baps.run._build_fallback_chain_for_role",
-        lambda role, cfg: [("gemma4:26b", fallback_red_client)] if role == "red" else [],
-    )
+    _chain = lambda role, cfg: [("gemma4:26b", fallback_red_client)] if role == "red" else []
+    monkeypatch.setattr("baps.run._build_fallback_chain_for_role", _chain)
+    monkeypatch.setattr("baps.game._build_fallback_chain_for_role", _chain)
 
     spec = run_module.GameSpec(
         objective="Any objective",
@@ -7931,10 +7932,9 @@ def test_play_game_referee_fallback_called_when_primary_exhausts_retries(monkeyp
 
     valid_accept = '{"disposition":"accept","rationale":"looks good"}'
     fallback_referee_client = FakeModelClient(responses=[valid_accept])
-    monkeypatch.setattr(
-        "baps.run._build_fallback_chain_for_role",
-        lambda role, cfg: [("gemma4:26b", fallback_referee_client)] if role == "referee" else [],
-    )
+    _chain = lambda role, cfg: [("gemma4:26b", fallback_referee_client)] if role == "referee" else []
+    monkeypatch.setattr("baps.run._build_fallback_chain_for_role", _chain)
+    monkeypatch.setattr("baps.game._build_fallback_chain_for_role", _chain)
 
     spec = run_module.GameSpec(
         objective="Any objective",
@@ -8115,11 +8115,12 @@ def test_create_game_fallback_chain_escalates_through_all_links(monkeypatch) -> 
     )
     fail_client = FakeModelClient(responses=[])  # raises RuntimeError immediately
     success_client = FakeModelClient(responses=[valid_response])
-    monkeypatch.setattr(
-        "baps.run._build_fallback_chain_for_role",
+    _chain = (
         lambda role, cfg: [("gemma4:26b", fail_client), ("gemma4:72b", success_client)]
-        if role == "create_game" else [],
+        if role == "create_game" else []
     )
+    monkeypatch.setattr("baps.run._build_fallback_chain_for_role", _chain)
+    monkeypatch.setattr("baps.game._build_fallback_chain_for_role", _chain)
 
     config = {
         "workspace": Path(".baps-workspace"),
@@ -8145,11 +8146,12 @@ def test_create_game_fallback_chain_escalates_through_all_links(monkeypatch) -> 
 def test_create_game_chain_exhaustion_raises_runtime_error(monkeypatch) -> None:
     fail_client1 = FakeModelClient(responses=[])
     fail_client2 = FakeModelClient(responses=[])
-    monkeypatch.setattr(
-        "baps.run._build_fallback_chain_for_role",
+    _chain = (
         lambda role, cfg: [("gemma4:26b", fail_client1), ("gemma4:72b", fail_client2)]
-        if role == "create_game" else [],
+        if role == "create_game" else []
     )
+    monkeypatch.setattr("baps.run._build_fallback_chain_for_role", _chain)
+    monkeypatch.setattr("baps.game._build_fallback_chain_for_role", _chain)
 
     config = {
         "workspace": Path(".baps-workspace"),
@@ -9920,9 +9922,7 @@ def test_blackboard_verification_summary_truncated_to_cap(
         command="pytest", cwd="/tmp", exit_code=0,
         stdout=long_stdout, stderr=long_stderr, passed=True,
     )
-    monkeypatch.setattr(
-        run_module, "_verify_candidate_with_adapter", lambda *a, **kw: mock_vr
-    )
+    monkeypatch.setattr("baps.game._verify_candidate_with_adapter", lambda *a, **kw: mock_vr)
 
     workspace = tmp_path / "ws-trunc"
     config = _make_play_game_config(workspace)
@@ -9970,7 +9970,7 @@ def test_blackboard_verification_feedback_loop_uses_full_text(
         call_count["n"] += 1
         return failing_vr if call_count["n"] == 1 else passing_vr
 
-    monkeypatch.setattr(run_module, "_verify_candidate_with_adapter", _mock_verify)
+    monkeypatch.setattr("baps.game._verify_candidate_with_adapter", _mock_verify)
 
     workspace = tmp_path / "ws-feedbackloop"
     config = _make_play_game_config(workspace)
