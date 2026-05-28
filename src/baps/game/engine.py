@@ -21,6 +21,7 @@ from baps.core.debug import (
 from baps.core.run_config import RunConfig
 from baps.models.models import ModelClient, Role
 from baps.game.attempt import (
+    PlayAttemptRecord,
     _apply_play_game_attempt_decision,
     _run_play_game_attempt,
 )
@@ -463,7 +464,7 @@ def play_game(
     )
     runtime = PlayGameRuntime()
     previous_feedback = _initial_play_game_feedback(verification_result)
-    attempt_records: list[dict] = []
+    attempt_records: list[PlayAttemptRecord] = []
     last_candidate_result: VerificationResult | None = None
 
     for attempt in range(1, max_attempts + 1):

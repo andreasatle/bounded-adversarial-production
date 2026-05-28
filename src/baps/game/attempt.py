@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from baps.core.clients import SpecRole
@@ -13,10 +14,34 @@ from baps.core.prompts import (
 )
 from baps.adapters.project_adapter import VerificationResult
 from baps.models.models import ToolCallRecord
-from baps.state.state import DeltaState, PlayGameRuntime, apply_referee_decision_to_runtime
+from baps.state.state import (
+    DeltaState,
+    PlayGameRuntime,
+    RedFinding,
+    RefereeDecision,
+    apply_referee_decision_to_runtime,
+)
 
 from baps.game.roles import _PlayGameContext
 from baps.game.telemetry import _sanitize_feedback_dict, _summarize_verification_result
+
+
+@dataclass
+class PlayAttemptRecord:
+    attempt_number: int
+    blue_delta: dict[str, Any] | None = None
+    red_finding: dict[str, Any] | None = None
+    referee_decision: dict[str, Any] | None = None
+    candidate_verification: dict[str, Any] | None = None
+
+    def to_telemetry_dict(self) -> dict[str, Any]:
+        return {
+            "attempt_number": self.attempt_number,
+            "blue_delta": self.blue_delta,
+            "red_finding": self.red_finding,
+            "referee_decision": self.referee_decision,
+            "candidate_verification": self.candidate_verification,
+        }
 
 
 def _run_play_game_attempt(
@@ -25,14 +50,14 @@ def _run_play_game_attempt(
     attempt: int,
     previous_feedback: dict[str, Any] | None,
     verification_result: VerificationResult | None,
-) -> tuple[dict, DeltaState | None, Any | None, Any | None, dict[str, Any] | None]:
-    attempt_rec: dict = {
-        "attempt_number": attempt,
-        "blue_delta": None,
-        "red_finding": None,
-        "referee_decision": None,
-        "candidate_verification": None,
-    }
+) -> tuple[
+    PlayAttemptRecord,
+    DeltaState | None,
+    RedFinding | None,
+    RefereeDecision | None,
+    dict[str, Any] | None,
+]:
+    attempt_rec = PlayAttemptRecord(attempt_number=attempt)
 
     blue_session: list[ToolCallRecord] = []
     blue_summary = ""
@@ -93,7 +118,7 @@ def _run_play_game_attempt(
             }
             return attempt_rec, None, None, None, updated_feedback
     ctx.debug_event_fn("blue.output", {"delta_state": candidate_delta.model_dump(mode="json")})
-    attempt_rec["blue_delta"] = _sanitize_feedback_dict(candidate_delta.model_dump(mode="json"))
+    attempt_rec.blue_delta = _sanitize_feedback_dict(candidate_delta.model_dump(mode="json"))
 
     red_session: list[ToolCallRecord] = []
     red_summary = ""
@@ -158,7 +183,7 @@ def _run_play_game_attempt(
         retry_fn=ctx.red_role.generate, fallback_fn=ctx.red_fallback_fn,
     )
     ctx.debug_event_fn("red.output", {"red_finding": red_finding.model_dump(mode="json")})
-    attempt_rec["red_finding"] = _sanitize_feedback_dict(red_finding.model_dump(mode="json"))
+    attempt_rec.red_finding = _sanitize_feedback_dict(red_finding.model_dump(mode="json"))
 
     referee_session: list[ToolCallRecord] = []
     referee_summary = ""
@@ -230,7 +255,7 @@ def _run_play_game_attempt(
         retry_fn=ctx.referee_role.generate, fallback_fn=ctx.referee_fallback_fn,
     )
     ctx.debug_event_fn("referee.output", {"referee_decision": referee_decision.model_dump(mode="json")})
-    attempt_rec["referee_decision"] = _sanitize_feedback_dict(referee_decision.model_dump(mode="json"))
+    attempt_rec.referee_decision = _sanitize_feedback_dict(referee_decision.model_dump(mode="json"))
     return attempt_rec, candidate_delta, red_finding, referee_decision, previous_feedback
 
 
@@ -239,10 +264,10 @@ def _apply_play_game_attempt_decision(
     ctx: _PlayGameContext,
     runtime: PlayGameRuntime,
     attempt: int,
-    attempt_rec: dict,
+    attempt_rec: PlayAttemptRecord,
     candidate_delta: DeltaState,
-    red_finding: Any,
-    referee_decision: Any,
+    red_finding: RedFinding,
+    referee_decision: RefereeDecision,
 ) -> tuple[PlayGameRuntime, dict[str, Any] | None, VerificationResult | None, bool]:
     runtime = apply_referee_decision_to_runtime(
         runtime=runtime,
@@ -254,7 +279,7 @@ def _apply_play_game_attempt_decision(
             ctx.resolved_adapter, candidate_delta, ctx.state, ctx.game_spec.target_artifact_id,
             sandbox_mode=ctx.sandbox_mode,
         )
-        attempt_rec["candidate_verification"] = _summarize_verification_result(candidate_result)
+        attempt_rec.candidate_verification = _summarize_verification_result(candidate_result)
         if (
             candidate_result is not None
             and not candidate_result.passed

@@ -47,16 +47,24 @@ _KNOWN_MODELS: dict[str, ModelConfig] = {
     "gemma4-26b":  ModelConfig("gemma4-26b",  Backend.OLLAMA,    "gemma4:26b"),
 }
 
+_ANTHROPIC_LADDER = ("haiku", "sonnet", "opus")
+_OPENAI_LADDER = ("gpt-4o-mini", "gpt-4o")
+_FALLBACK_MODEL = "sonnet"
+
+
+def _known_model(name: str) -> ModelConfig:
+    return _KNOWN_MODELS[name]
+
 
 def _auto_ladder() -> list[ModelConfig]:
     """Build a ladder from all backends where credentials are present."""
     ladder: list[ModelConfig] = []
     if os.getenv("ANTHROPIC_API_KEY"):
-        ladder += [_KNOWN_MODELS["haiku"], _KNOWN_MODELS["sonnet"], _KNOWN_MODELS["opus"]]
+        ladder += [_known_model(name) for name in _ANTHROPIC_LADDER]
     if os.getenv("OPENAI_API_KEY"):
-        ladder += [_KNOWN_MODELS["gpt-4o-mini"], _KNOWN_MODELS["gpt-4o"]]
+        ladder += [_known_model(name) for name in _OPENAI_LADDER]
     if not ladder:
-        ladder.append(_KNOWN_MODELS["sonnet"])
+        ladder.append(_known_model(_FALLBACK_MODEL))
     return ladder
 
 
@@ -68,7 +76,7 @@ def _default_model_ladder() -> list[ModelConfig]:
     ladder: list[ModelConfig] = []
     for name in (n.strip() for n in ladder_env.split(",") if n.strip()):
         if name in _KNOWN_MODELS:
-            ladder.append(_KNOWN_MODELS[name])
+            ladder.append(_known_model(name))
         else:
             print(f"[scheduler] warning: unknown model name {name!r} in BAPS_MODEL_LADDER, skipping")
     if not ladder:

@@ -66,6 +66,15 @@ class StateView(BaseModel):
     _validate_input_fingerprint = field_validator("input_fingerprint")(_require_non_empty)
 
 
+def require_state_view_metadata(state_view: StateView, key: str) -> str:
+    if key not in state_view.metadata:
+        raise ValueError(f"state_view.metadata missing required key: {key}")
+    value = state_view.metadata[key]
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"state_view.metadata[{key!r}] must be a non-empty string")
+    return value
+
+
 class ProjectionRenderer(Protocol):
     def render(self, input_data: NorthStarProjectionInput) -> StateView:
         ...

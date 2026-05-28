@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from baps.adapters.project_adapter import VerificationResult
 from baps.core.run_config import RunConfig
 from baps.state.state import GameSpec
@@ -253,3 +255,30 @@ def test_coding_blue_prompt_includes_candidate_verification_failures() -> None:
     assert "tests/test_calc.py::test_add" in prompt
     assert "Candidate verification failed" in prompt
     assert "Repair these test failures" in prompt
+
+
+def test_coding_adapter_render_blue_prompt_requires_language_metadata() -> None:
+    from baps.northstar.northstar_projection import ProjectionType, StateView
+
+    adapter = CodingProjectAdapter()
+    state_view = StateView(
+        id="sv:test",
+        projection_type=ProjectionType.NORTH_STAR,
+        content="=== StateView Start ===\n=== StateView End ===",
+        input_fingerprint="abc",
+        metadata={},
+    )
+    game_spec = GameSpec(
+        objective="Write code",
+        target_artifact_id="main-codebase",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="code written",
+    )
+
+    with pytest.raises(ValueError, match="state_view.metadata missing required key: language"):
+        adapter.render_blue_prompt(
+            state_view=state_view,
+            game_spec=game_spec,
+            attempt_number=1,
+            previous_feedback=None,
+        )

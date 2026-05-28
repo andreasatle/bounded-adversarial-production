@@ -28,7 +28,7 @@ from baps.adapters.coding.prompting import (
 )
 from baps.adapters.coding.views import build_coding_create_game_state_view, build_coding_state_view
 from baps.models.models import ToolCall, ToolDefinition
-from baps.northstar.northstar_projection import StateView
+from baps.northstar.northstar_projection import StateView, require_state_view_metadata
 from baps.state.state import (
     CodingArtifact,
     DeltaCodingBatchState,
@@ -128,7 +128,7 @@ class CodingProjectAdapter:
         attempt_number: int,
         previous_feedback: dict[str, object] | None,
     ) -> str:
-        language = str(state_view.metadata["language"])
+        language = require_state_view_metadata(state_view, "language")
         plugin = _plugin_for(language)
         return render_coding_blue_prompt(
             state_view=state_view,
