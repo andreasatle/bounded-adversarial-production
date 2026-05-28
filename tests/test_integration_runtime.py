@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from baps.core.game import _derive_state_update_from_delta, create_game
+from baps.game.engine import _derive_state_update_from_delta, create_game
 from baps.adapters.document_adapter import DocumentProjectAdapter
 import baps.state.state as state_module
 def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path) -> None:

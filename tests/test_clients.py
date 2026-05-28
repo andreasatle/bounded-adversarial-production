@@ -9,7 +9,7 @@ import yaml
 
 from baps.models.models import AnthropicClient, FakeModelClient, OllamaClient, OpenAIClient, ToolCall
 from baps.core.run import create_state
-from baps.core.game import create_game, play_game
+from baps.game.engine import create_game, play_game
 import baps.core.clients as _clients_module
 
 # Captured before autouse fixtures patch them — used by backend dispatch tests.
@@ -473,8 +473,8 @@ def test_create_game_fallback_called_when_primary_exhausts_retries(monkeypatch) 
     def _chain(role, cfg):
         del cfg
         return [("gemma4:26b", fallback_client)] if role == "create_game" else []
-    monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
-    monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
+    monkeypatch.setattr("baps.game.engine._build_fallback_chain_for_role", _chain)
+    monkeypatch.setattr("baps.game.engine._build_fallback_chain_for_role", _chain)
 
     config = {
         "workspace": Path(".baps-workspace"),
@@ -507,8 +507,8 @@ def test_create_game_fallback_not_called_when_primary_succeeds(monkeypatch) -> N
     def _chain(role, cfg):
         del cfg
         return [("gemma4:26b", fallback_client)] if role == "create_game" else []
-    monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
-    monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
+    monkeypatch.setattr("baps.game.engine._build_fallback_chain_for_role", _chain)
+    monkeypatch.setattr("baps.game.engine._build_fallback_chain_for_role", _chain)
 
     config = {
         "workspace": Path(".baps-workspace"),
@@ -538,8 +538,8 @@ def test_play_game_red_fallback_called_when_primary_exhausts_retries(monkeypatch
     def _chain(role, cfg):
         del cfg
         return [("gemma4:26b", fallback_red_client)] if role == "red" else []
-    monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
-    monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
+    monkeypatch.setattr("baps.game.engine._build_fallback_chain_for_role", _chain)
+    monkeypatch.setattr("baps.game.engine._build_fallback_chain_for_role", _chain)
 
     spec = GameSpec(
         objective="Any objective",
@@ -587,8 +587,8 @@ def test_play_game_referee_fallback_called_when_primary_exhausts_retries(monkeyp
     def _chain(role, cfg):
         del cfg
         return [("gemma4:26b", fallback_referee_client)] if role == "referee" else []
-    monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
-    monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
+    monkeypatch.setattr("baps.game.engine._build_fallback_chain_for_role", _chain)
+    monkeypatch.setattr("baps.game.engine._build_fallback_chain_for_role", _chain)
 
     spec = GameSpec(
         objective="Any objective",
@@ -766,8 +766,8 @@ def test_create_game_fallback_chain_escalates_through_all_links(monkeypatch) -> 
     def _chain(role, cfg):
         del cfg
         return [("gemma4:26b", fail_client), ("gemma4:72b", success_client)] if role == "create_game" else []
-    monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
-    monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
+    monkeypatch.setattr("baps.game.engine._build_fallback_chain_for_role", _chain)
+    monkeypatch.setattr("baps.game.engine._build_fallback_chain_for_role", _chain)
 
     config = {
         "workspace": Path(".baps-workspace"),
@@ -796,8 +796,8 @@ def test_create_game_chain_exhaustion_raises_runtime_error(monkeypatch) -> None:
     def _chain(role, cfg):
         del cfg
         return [("gemma4:26b", fail_client1), ("gemma4:72b", fail_client2)] if role == "create_game" else []
-    monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
-    monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
+    monkeypatch.setattr("baps.game.engine._build_fallback_chain_for_role", _chain)
+    monkeypatch.setattr("baps.game.engine._build_fallback_chain_for_role", _chain)
 
     config = {
         "workspace": Path(".baps-workspace"),

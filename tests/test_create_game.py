@@ -9,7 +9,7 @@ import pytest
 
 from baps.models.models import FakeModelClient
 from baps.core.run import create_state
-from baps.core.game import create_game
+from baps.game.engine import create_game
 from baps.adapters.document_adapter import DocumentProjectAdapter
 from baps.core.prompts import _render_create_game_prompt
 

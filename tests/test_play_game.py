@@ -7,7 +7,7 @@ import pytest
 
 from baps.models.models import FakeModelClient, ToolCall
 from baps.core.run import create_state
-from baps.core.game import play_game
+from baps.game.engine import play_game
 from baps.core.parsers import (
     _parse_red_finding_json,
     _parse_referee_decision_json,
@@ -409,7 +409,7 @@ def test_improvement_hints_appear_in_previous_feedback_for_blue() -> None:
         if name == "blue.input":
             captured_feedback.append(payload["previous_feedback"])
 
-    import baps.core.game as game_module
+    import baps.game.engine as game_module
 
     spec, state = _make_document_spec_and_state()
 
@@ -445,7 +445,7 @@ def test_improvement_hints_appear_in_previous_feedback_for_blue() -> None:
 
 
 def test_red_prompt_includes_success_condition_met_and_findings_fields() -> None:
-    import baps.core.game as game_module
+    import baps.game.engine as game_module
 
     captured: dict[str, object] = {}
     original = _render_red_prompt
@@ -465,7 +465,7 @@ def test_red_prompt_includes_success_condition_met_and_findings_fields() -> None
 
 
 def test_referee_prompt_includes_red_override_and_improvement_hints_fields() -> None:
-    import baps.core.game as game_module
+    import baps.game.engine as game_module
 
     captured: dict[str, object] = {}
     original = _render_referee_prompt

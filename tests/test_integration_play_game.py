@@ -1,5 +1,5 @@
 from baps.adapters.project_adapter import VerificationResult
-from baps.core.game import _derive_state_update_from_delta, play_game
+from baps.game.engine import _derive_state_update_from_delta, play_game
 from baps.models.models import FakeModelClient, ToolCall
 from baps.northstar.northstar_projection import ProjectionType, StateView
 from baps.state.state import GameSpec, StateUpdateProposal

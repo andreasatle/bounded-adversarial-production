@@ -5,7 +5,7 @@ from pathlib import Path
 from baps.adapters.project_adapter import VerificationResult
 from baps.state.state import GameSpec, PlayGameRuntime
 
-from baps.core.game_telemetry import _append_game_to_blackboard
+from baps.game.telemetry import _append_game_to_blackboard
 
 
 def _record_play_game_telemetry(

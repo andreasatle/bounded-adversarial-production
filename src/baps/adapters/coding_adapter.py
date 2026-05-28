@@ -41,6 +41,18 @@ from baps.state.state import (
     StateUpdateProposal,
 )
 
+__all__ = [
+    "CodingProjectAdapter",
+    "_apply_delta_to_files",
+    "_truncate_lines",
+    "build_coding_create_game_state_view",
+    "build_coding_state_view",
+    "coding_artifact_from_state",
+    "derive_coding_state_update_from_delta",
+    "parse_coding_delta_json",
+    "render_coding_blue_prompt",
+]
+
 
 class CodingProjectAdapter:
     project_type = "coding"

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from baps.models.models import FakeModelClient, ToolCall
 from baps.core.run import create_state
-from baps.core.game import play_game
+from baps.game.engine import play_game
 from baps.core.prompts import _render_red_prompt, _render_referee_prompt
 from baps.state.state import GameSpec
 import baps.state.state as state_module
@@ -56,7 +56,7 @@ def test_play_game_referee_receives_gamespec_state_view_delta_and_red(monkeypatc
         captured["delta_state"] = payload["delta_state"]
         captured["red_finding"] = payload["red_finding"]
 
-    monkeypatch.setattr("baps.core.game.debug_event", _capture_event)
+    monkeypatch.setattr("baps.game.engine.debug_event", _capture_event)
     spec = GameSpec(
         objective="Any objective",
         target_artifact_id="main-document",
@@ -185,7 +185,7 @@ def test_play_game_red_receives_gamespec_state_view_and_delta_state(monkeypatch)
         captured["game_spec"] = payload["game_spec"]
         captured["delta_state"] = payload["delta_state"]
 
-    monkeypatch.setattr("baps.core.game.debug_event", _capture_event)
+    monkeypatch.setattr("baps.game.engine.debug_event", _capture_event)
     spec = GameSpec(
         objective="Any objective",
         target_artifact_id="main-document",
@@ -221,7 +221,7 @@ def test_red_prompt_includes_success_condition(monkeypatch) -> None:
         captured["prompt"] = result
         return result
 
-    monkeypatch.setattr("baps.core.game._render_red_prompt", _capture)
+    monkeypatch.setattr("baps.game.engine._render_red_prompt", _capture)
     success_condition = "Unique success_condition string for red prompt contract test."
     spec, state = _make_document_spec_and_state(success_condition)
     play_game(state, spec, model_client=_make_blue_client("Introduction"))
@@ -239,7 +239,7 @@ def test_referee_prompt_includes_success_condition_and_red_rationale(monkeypatch
         captured["prompt"] = result
         return result
 
-    monkeypatch.setattr("baps.core.game._render_referee_prompt", _capture)
+    monkeypatch.setattr("baps.game.engine._render_referee_prompt", _capture)
     success_condition = "Unique success_condition string for referee prompt contract test."
     spec, state = _make_document_spec_and_state(success_condition)
     red_rationale = "Unique red rationale for referee prompt test."
@@ -290,7 +290,7 @@ def test_play_game_debug_output_distinguishes_current_best_from_integration_elig
         if name == "play_game.output":
             captured.append(payload)
 
-    monkeypatch.setattr("baps.core.game.debug_event", _capture_event)
+    monkeypatch.setattr("baps.game.engine.debug_event", _capture_event)
     spec, state = _make_document_spec_and_state()
     delta = play_game(
         state,
@@ -352,7 +352,7 @@ def test_play_game_previous_feedback_on_retry_contains_red_and_referee(monkeypat
         if name == "blue.input":
             captured_feedback.append(payload["previous_feedback"])
 
-    monkeypatch.setattr("baps.core.game.debug_event", _capture_event)
+    monkeypatch.setattr("baps.game.engine.debug_event", _capture_event)
     spec, state = _make_document_spec_and_state()
     play_game(
         state,

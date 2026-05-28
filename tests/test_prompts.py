@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from baps.models.models import FakeModelClient, ToolCall
 from baps.core.run import create_state
-from baps.core.game import play_game
+from baps.game.engine import play_game
 from baps.adapters.document_adapter import DocumentProjectAdapter
 from baps.adapters.coding_adapter import CodingProjectAdapter
 from baps.core.prompts import _render_create_game_prompt, _render_red_prompt, _render_referee_prompt
@@ -503,7 +503,7 @@ def test_coding_blue_prompt_supplement_prefers_src_and_pytest_layout() -> None:
 # ---------------------------------------------------------------------------
 
 def test_red_prompt_includes_success_condition_met_and_findings_fields() -> None:
-    import baps.core.game as game_module
+    import baps.game.engine as game_module
 
     captured: dict[str, object] = {}
     original = _render_red_prompt
@@ -530,7 +530,7 @@ def test_red_prompt_includes_success_condition(monkeypatch) -> None:
         captured["prompt"] = result
         return result
 
-    monkeypatch.setattr("baps.core.game._render_red_prompt", _capture)
+    monkeypatch.setattr("baps.game.engine._render_red_prompt", _capture)
     success_condition = "Unique success_condition string for red prompt contract test."
     spec, state = _make_document_spec_and_state(success_condition)
     play_game(state, spec, model_client=_make_blue_client("Introduction"))
@@ -773,7 +773,7 @@ def test_run_core_prompt_source_has_no_coding_specific_red_referee_guidance() ->
 # ---------------------------------------------------------------------------
 
 def test_referee_prompt_includes_red_override_and_improvement_hints_fields() -> None:
-    import baps.core.game as game_module
+    import baps.game.engine as game_module
 
     captured: dict[str, object] = {}
     original = _render_referee_prompt
@@ -800,7 +800,7 @@ def test_referee_prompt_includes_success_condition_and_red_rationale(monkeypatch
         captured["prompt"] = result
         return result
 
-    monkeypatch.setattr("baps.core.game._render_referee_prompt", _capture)
+    monkeypatch.setattr("baps.game.engine._render_referee_prompt", _capture)
     success_condition = "Unique success_condition string for referee prompt contract test."
     spec, state = _make_document_spec_and_state(success_condition)
     red_rationale = "Unique red rationale for referee prompt test."

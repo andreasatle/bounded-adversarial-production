@@ -16,7 +16,7 @@ from baps.models.models import Role, ToolCallRecord
 from baps.state.state import DeltaState, GameSpec, PlayGameRuntime, State, apply_referee_decision_to_runtime
 from baps.tools.tools import ToolExecutor
 
-from baps.core.game_telemetry import _sanitize_feedback_dict, _summarize_verification_result
+from baps.game.telemetry import _sanitize_feedback_dict, _summarize_verification_result
 
 
 def _run_play_game_attempt(

@@ -8,7 +8,7 @@ import pytest
 
 from baps.models.models import FakeModelClient, ToolCall
 from baps.core.run import create_state
-from baps.core.game import create_game, play_game, _VERIFICATION_SUMMARY_CAP
+from baps.game.engine import create_game, play_game, _VERIFICATION_SUMMARY_CAP
 from baps.core.parsers import NoNewGameError
 from baps.state.state import GameSpec
 from baps.adapters.project_adapter import VerificationResult
@@ -357,7 +357,7 @@ def test_blackboard_verification_summary_truncated_to_cap(
         command="pytest", cwd="/tmp", exit_code=0,
         stdout=long_stdout, stderr=long_stderr, passed=True,
     )
-    monkeypatch.setattr("baps.core.game._verify_candidate_with_adapter", lambda *a, **kw: mock_vr)
+    monkeypatch.setattr("baps.game.engine._verify_candidate_with_adapter", lambda *a, **kw: mock_vr)
 
     workspace = tmp_path / "ws-trunc"
     config = _make_play_game_config(workspace)
@@ -404,7 +404,7 @@ def test_blackboard_verification_feedback_loop_uses_full_text(
         call_count["n"] += 1
         return failing_vr if call_count["n"] == 1 else passing_vr
 
-    monkeypatch.setattr("baps.core.game._verify_candidate_with_adapter", _mock_verify)
+    monkeypatch.setattr("baps.game.engine._verify_candidate_with_adapter", _mock_verify)
 
     workspace = tmp_path / "ws-feedbackloop"
     config = _make_play_game_config(workspace)

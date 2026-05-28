@@ -19,17 +19,17 @@ from baps.core.debug import (
     debug_event,
 )
 from baps.models.models import ModelClient, Role
-from baps.core.game_attempt import (
+from baps.game.attempt import (
     _apply_play_game_attempt_decision,
     _run_play_game_attempt,
 )
-from baps.core.game_play import _record_play_game_telemetry
-from baps.core.game_roles import (
+from baps.game.play import _record_play_game_telemetry
+from baps.game.roles import (
     _build_play_game_fallbacks,
     _initial_play_game_feedback,
     _resolve_play_game_roles,
 )
-from baps.core.game_telemetry import (
+from baps.game.telemetry import (
     _VERIFICATION_SUMMARY_CAP,
     _append_create_game_to_blackboard,
     _append_integration_to_blackboard,

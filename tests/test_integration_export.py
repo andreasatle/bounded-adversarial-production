@@ -2,7 +2,7 @@ import ast
 import subprocess
 from pathlib import Path
 
-from baps.core.game import _commit_export_with_adapter
+from baps.game.engine import _commit_export_with_adapter
 from baps.adapters.coding_adapter import CodingProjectAdapter
 from baps.adapters.document_adapter import DocumentProjectAdapter
 import baps.state.state as state_module

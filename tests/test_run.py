@@ -6,7 +6,7 @@ import pytest
 
 from baps.models.models import FakeModelClient, ToolCall
 from baps.core.run import create_state
-from baps.core.game import create_game, play_game
+from baps.game.engine import create_game, play_game
 from baps.state.state import (
     DecomposeSpec,
     GameSpec,

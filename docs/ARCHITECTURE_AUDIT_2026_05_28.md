@@ -15,7 +15,7 @@ The system defines Referee as game-local adjudication and Integrator as final st
 **Evidence from current code structure**
 
 - `apply_referee_decision_to_runtime` promotes both `accept` and `revise` to `current_best_delta` ([state.py](/Users/andreasatle/Projects/bounded-adversarial-production/src/baps/state/state.py#L409)).
-- `play_game` returns `runtime.current_best_delta` regardless of whether final disposition was `accept` or only `revise` fallback ([game.py](/Users/andreasatle/Projects/bounded-adversarial-production/src/baps/core/game.py#L802), [game.py](/Users/andreasatle/Projects/bounded-adversarial-production/src/baps/core/game.py#L818)).
+- `play_game` returns `runtime.current_best_delta` regardless of whether final disposition was `accept` or only `revise` fallback ([game.py](/Users/andreasatle/Projects/bounded-adversarial-production/src/baps/game/engine.py#L802), [game.py](/Users/andreasatle/Projects/bounded-adversarial-production/src/baps/game/engine.py#L818)).
 - `_solve_gap` applies any non-`None` delta directly to state (`state_service.apply_delta`) ([orchestration.py](/Users/andreasatle/Projects/bounded-adversarial-production/src/baps/core/orchestration.py#L166), [orchestration.py](/Users/andreasatle/Projects/bounded-adversarial-production/src/baps/core/orchestration.py#L171)).
 - Prompt text explicitly says Referee does not decide final integration ([prompts.py](/Users/andreasatle/Projects/bounded-adversarial-production/src/baps/core/prompts.py#L312)).
 
@@ -36,7 +36,7 @@ The codebase carries both `DeltaState -> apply_delta` and `DeltaState -> StateUp
 **Evidence from current code structure**
 
 - Runtime path applies delta directly (`StateService.apply_delta`) in orchestration ([orchestration.py](/Users/andreasatle/Projects/bounded-adversarial-production/src/baps/core/orchestration.py#L171)).
-- Adapter `delta_to_state_update` mapping exists across adapters and shared helper `_derive_state_update_from_delta` still exists ([game.py](/Users/andreasatle/Projects/bounded-adversarial-production/src/baps/core/game.py#L150), [document_adapter.py](/Users/andreasatle/Projects/bounded-adversarial-production/src/baps/adapters/document_adapter.py#L249), [coding_adapter.py](/Users/andreasatle/Projects/bounded-adversarial-production/src/baps/adapters/coding_adapter.py#L541)).
+- Adapter `delta_to_state_update` mapping exists across adapters and shared helper `_derive_state_update_from_delta` still exists ([game.py](/Users/andreasatle/Projects/bounded-adversarial-production/src/baps/game/engine.py#L150), [document_adapter.py](/Users/andreasatle/Projects/bounded-adversarial-production/src/baps/adapters/document_adapter.py#L249), [coding_adapter.py](/Users/andreasatle/Projects/bounded-adversarial-production/src/baps/adapters/coding_adapter.py#L541)).
 - Test corpus still has strong coverage for proposal-based mutation semantics (`tests/test_state_delta.py`, `tests/test_state_service.py`, sections of `tests/test_integration.py`).
 - Architecture doc spine still describes `DeltaState -> StateUpdateProposal -> StateService` as canonical ([ARCHITECTURE.md](/Users/andreasatle/Projects/bounded-adversarial-production/docs/ARCHITECTURE.md#L17)).
 
@@ -56,9 +56,9 @@ Declare one integration contract as authoritative in runtime semantics and demot
 
 **Evidence from current code structure**
 
-- Single function spans Blue/Red/Referee lifecycle, research sessions, tool context enforcement, fallback orchestration, candidate verification, and event recording ([game.py](/Users/andreasatle/Projects/bounded-adversarial-production/src/baps/core/game.py#L506)).
+- Single function spans Blue/Red/Referee lifecycle, research sessions, tool context enforcement, fallback orchestration, candidate verification, and event recording ([game.py](/Users/andreasatle/Projects/bounded-adversarial-production/src/baps/game/engine.py#L506)).
 - Role-specific behavior is partly adapter-owned and partly core-owned (e.g., supplements in adapters, but enforcement text and session wiring in core prompts flow).
-- Attempt record schema and blackboard write logic are also embedded in the same function ([game.py](/Users/andreasatle/Projects/bounded-adversarial-production/src/baps/core/game.py#L587), [game.py](/Users/andreasatle/Projects/bounded-adversarial-production/src/baps/core/game.py#L809)).
+- Attempt record schema and blackboard write logic are also embedded in the same function ([game.py](/Users/andreasatle/Projects/bounded-adversarial-production/src/baps/game/engine.py#L587), [game.py](/Users/andreasatle/Projects/bounded-adversarial-production/src/baps/game/engine.py#L809)).
 
 **Risk if ignored**
 
@@ -127,7 +127,7 @@ Define one explicit projection contract level (schema + semantics) that adapters
 ---
 
 Files inspected (representative set):
-- `src/baps/core/game.py`
+- `src/baps/game/engine.py`
 - `src/baps/core/orchestration.py`
 - `src/baps/core/run.py`
 - `src/baps/core/prompts.py`
