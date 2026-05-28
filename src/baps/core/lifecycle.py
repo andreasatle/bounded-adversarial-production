@@ -41,6 +41,18 @@ class StartRunSummary:
     failed: bool = False
 
 
+@dataclass(frozen=True)
+class IterationRunResult:
+    update_applied: bool
+    state_changed: bool
+    output_exported: bool
+    output_changed: bool
+    northstar_proposal_written: bool
+    verification_result: object | None
+    iterations_completed: int
+    stop_reason: StopReason
+
+
 def resolve_start_config(args: argparse.Namespace) -> RunConfig:
     try:
         return resolve_run_config(args)
@@ -49,21 +61,34 @@ def resolve_start_config(args: argparse.Namespace) -> RunConfig:
         raise SystemExit(2) from exc
 
 
-def _map_iteration_results(summary: StartRunSummary, results: dict[str, object]) -> None:
-    summary.update_applied = bool(results["update_applied"])
-    summary.state_changed = bool(results["state_changed"])
-    summary.output_exported = bool(results["output_exported"])
-    summary.output_changed = bool(results["output_changed"])
-    summary.northstar_proposal_written = bool(results["northstar_proposal_written"])
-    verification_result = results["verification_result"]
+def _to_iteration_run_result(raw: dict[str, object]) -> IterationRunResult:
+    return IterationRunResult(
+        update_applied=bool(raw["update_applied"]),
+        state_changed=bool(raw["state_changed"]),
+        output_exported=bool(raw["output_exported"]),
+        output_changed=bool(raw["output_changed"]),
+        northstar_proposal_written=bool(raw["northstar_proposal_written"]),
+        verification_result=raw["verification_result"],
+        iterations_completed=int(raw["iterations_completed"]),
+        stop_reason=raw["stop_reason"],
+    )
+
+
+def _map_iteration_results(summary: StartRunSummary, result: IterationRunResult) -> None:
+    summary.update_applied = result.update_applied
+    summary.state_changed = result.state_changed
+    summary.output_exported = result.output_exported
+    summary.output_changed = result.output_changed
+    summary.northstar_proposal_written = result.northstar_proposal_written
+    verification_result = result.verification_result
     summary.verification_run = verification_result is not None
     if verification_result is not None:
         summary.verification_passed = verification_result.passed
         summary.verification_exit_code = verification_result.exit_code
         summary.verification_command = verification_result.command
         summary.verification_cwd = verification_result.cwd
-    summary.iterations_completed = int(results["iterations_completed"])
-    summary.stop_reason = results["stop_reason"]
+    summary.iterations_completed = result.iterations_completed
+    summary.stop_reason = result.stop_reason
 
 
 def run_start_lifecycle(runtime, command: str) -> StartRunSummary:
@@ -76,8 +101,9 @@ def run_start_lifecycle(runtime, command: str) -> StartRunSummary:
         max_iterations=runtime.config.max_iterations,
     )
     try:
-        results = run_project(runtime)
-        _map_iteration_results(summary, results)
+        raw_result = run_project(runtime)
+        iteration_result = _to_iteration_run_result(raw_result)
+        _map_iteration_results(summary, iteration_result)
     except (ValueError, RuntimeError) as exc:
         logger.error("%s", exc)
         summary.stop_reason = StopReason.ERROR
