@@ -3,9 +3,9 @@ from __future__ import annotations
 import logging
 import uuid
 from pathlib import Path
-from typing import Any
 
 from baps.core.clients import SpecRole, _build_client_for_role
+from baps.core.run_config import RunConfig
 from baps.core.debug import _debug_print_northstar_update_proposal, _debug_print_verification_result
 from baps.game.engine import (
     _append_integration_to_blackboard,
@@ -53,7 +53,7 @@ class _RunContext:
 def _solve_gap(
     context_chain: tuple[str, ...],
     ctx: _RunContext,
-    config: dict[str, Any],
+    config: RunConfig,
     adapter: ProjectTypeAdapter,
     state_service: StateService,
     output_path: Path,
@@ -96,7 +96,7 @@ def _solve_gap(
                     "failing verification; escalating to northstar_update_proposed."
                 )
                 _append_northstar_proposal_to_blackboard(
-                    workspace=config["workspace"],
+                    workspace=config.workspace,
                     rationale=(
                         "create_game returned no_new_game despite failing verification "
                         "(tests still failing). The model could not identify a gap to "
@@ -113,7 +113,7 @@ def _solve_gap(
     except NorthStarUpdateNeededError as exc:
         _debug_print_northstar_update_proposal(exc.rationale, exc.proposed_northstar)
         _append_northstar_proposal_to_blackboard(
-            workspace=config["workspace"],
+            workspace=config.workspace,
             rationale=exc.rationale,
             proposed_northstar=exc.proposed_northstar,
         )
@@ -152,7 +152,7 @@ def _solve_gap(
     game_spec = result.model_copy(update={"context_chain": context_chain})
     logger.info("[solve_gap] depth=%d playing leaf game: %s", depth, game_spec.objective)
 
-    sandbox_mode = config.get("sandbox", "docker")
+    sandbox_mode = config.sandbox
     delta_state = play_game(
         ctx.current_state,
         game_spec,
@@ -171,7 +171,7 @@ def _solve_gap(
     updated_state = state_service.apply_delta(delta_state)
     changed = state_service.states_differ(before_state, updated_state)
 
-    _integration_workspace = config.get("workspace")
+    _integration_workspace = config.workspace
     if _integration_workspace is not None:
         _append_integration_to_blackboard(
             workspace=_integration_workspace,
@@ -204,17 +204,17 @@ def _solve_gap(
 
 
 def _run_project_iterations(
-    config: dict[str, Any],
+    config: RunConfig,
     adapter: ProjectTypeAdapter,
     state_service: StateService,
     initial_state: State,
 ) -> dict[str, object]:
-    output_path = config["output_path"]
-    max_iterations = config["max_iterations"]
+    output_path = config.output_path
+    max_iterations = config.max_iterations
     artifact_id = _config_artifact_id(config)
-    max_depth = int(config.get("max_depth", _DEFAULT_MAX_DEPTH))
+    max_depth = config.max_depth
 
-    if config.get("project_type") == "coding" and config.get("sandbox") == "none":
+    if config.project_type == "coding" and config.sandbox == "none":
         from baps.tools.sandbox import SANDBOX_NONE_WARNING
         logger.warning("%s", SANDBOX_NONE_WARNING)
 
@@ -252,7 +252,7 @@ def _run_project_iterations(
                     "need revision."
                 )
             _append_northstar_proposal_to_blackboard(
-                workspace=config["workspace"],
+                workspace=config.workspace,
                 rationale=rationale,
                 proposed_northstar=_config_northstar_markdown(config),
             )

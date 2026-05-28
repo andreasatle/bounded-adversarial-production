@@ -6,6 +6,7 @@ import pytest
 
 from baps.models.models import FakeModelClient, ToolCall
 from baps.core.run import create_state
+from baps.core.run_config import RunConfig
 from baps.game.engine import create_game, play_game
 from baps.state.state import (
     DecomposeSpec,
@@ -20,17 +21,17 @@ import baps.state.state as state_module
 def _make_doc_config(
     artifact_id: str = "main-document",
     goal: str = "Write a short report.",
-) -> dict:
-    return {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": artifact_id,
-        "goal": goal,
-        "northstar_markdown": f"# Goal\n\n{goal}",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+) -> RunConfig:
+    return RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id=artifact_id,
+        goal=goal,
+        northstar_markdown=f"# Goal\n\n{goal}",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+        spec_path=None,
+    )
 
 
 def _make_document_spec_and_state(success_condition: str = "A section exists."):
@@ -40,18 +41,7 @@ def _make_document_spec_and_state(success_condition: str = "A section exists."):
         allowed_delta_type="DeltaDocumentState",
         success_condition=success_condition,
     )
-    state = create_state(
-        {
-            "workspace": Path(".baps-workspace"),
-            "project_type": "document",
-            "artifact_id": "main-document",
-            "goal": "Write a short report.",
-            "northstar_markdown": "# Goal\n\nWrite a short report.",
-            "output_path": Path(".baps-workspace/output/report.md"),
-            "max_iterations": 2,
-            "spec_path": None,
-        }
-    )
+    state = create_state(_make_doc_config())
     return spec, state
 
 
@@ -70,22 +60,15 @@ def _make_blue_client(*titles: str):
 def test_create_game_accepts_atomic_introduction_gamespec() -> None:
     import baps.core.run as run_module
 
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "northstar_markdown": (
-            "# Goal\n\nWrite a short report.\n\n"
-            "# Required structure\n\n"
-            "The report must include these sections, in order:\n\n"
-            "1. Introduction\n"
-            "2. Conclusion\n"
-        ),
-        "goal": "Write a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        northstar_markdown=( "# Goal\n\nWrite a short report.\n\n" "# Required structure\n\n" "The report must include these sections, in order:\n\n" "1. Introduction\n" "2. Conclusion\n" ),
+        goal="Write a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = run_module.create_state(config)
     game_spec = create_game(
         config,
@@ -105,22 +88,15 @@ def test_create_game_accepts_atomic_introduction_gamespec() -> None:
 def test_create_game_accepts_atomic_conclusion_gamespec() -> None:
     import baps.core.run as run_module
 
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "northstar_markdown": (
-            "# Goal\n\nWrite a short report.\n\n"
-            "# Required structure\n\n"
-            "The report must include these sections, in order:\n\n"
-            "1. Introduction\n"
-            "2. Conclusion\n"
-        ),
-        "goal": "Write a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        northstar_markdown=( "# Goal\n\nWrite a short report.\n\n" "# Required structure\n\n" "The report must include these sections, in order:\n\n" "1. Introduction\n" "2. Conclusion\n" ),
+        goal="Write a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = run_module.create_state(config)
     game_spec = create_game(
         config,
@@ -139,22 +115,15 @@ def test_create_game_accepts_atomic_conclusion_gamespec() -> None:
 
 def test_create_game_engine_does_not_compute_next_missing_section() -> None:
 
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "northstar_markdown": (
-            "# Goal\n\nWrite a short report.\n\n"
-            "# Required structure\n\n"
-            "The report must include these sections, in order:\n\n"
-            "1. Introduction\n"
-            "2. Conclusion\n"
-        ),
-        "goal": "Write a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        northstar_markdown=( "# Goal\n\nWrite a short report.\n\n" "# Required structure\n\n" "The report must include these sections, in order:\n\n" "1. Introduction\n" "2. Conclusion\n" ),
+        goal="Write a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
@@ -185,16 +154,15 @@ def test_create_game_engine_does_not_compute_next_missing_section() -> None:
 def test_create_game_explicit_no_new_game_signal() -> None:
     import baps.core.run as run_module
 
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "goal": "Write a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        goal="Write a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = run_module.create_state(config)
     with pytest.raises(NoNewGameError):
         create_game(
@@ -209,16 +177,15 @@ def test_create_game_explicit_no_new_game_signal() -> None:
 def test_create_game_extra_key_on_no_new_game_response_is_stripped() -> None:
     import baps.core.run as run_module
 
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "goal": "Write a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        goal="Write a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = run_module.create_state(config)
     with pytest.raises(NoNewGameError, match="all required sections already present"):
         create_game(
@@ -233,16 +200,15 @@ def test_create_game_extra_key_on_no_new_game_response_is_stripped() -> None:
 def test_create_game_extra_key_on_northstar_response_is_stripped() -> None:
     import baps.core.run as run_module
 
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "goal": "Write a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        goal="Write a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = run_module.create_state(config)
     with pytest.raises(NorthStarUpdateNeededError):
         create_game(
@@ -264,16 +230,15 @@ def test_create_game_extra_key_on_decompose_response_is_stripped() -> None:
         '{"objective":"Advance goal","target_artifact_id":"main-document",'
         '"allowed_delta_type":"DeltaDocumentState","success_condition":"section exists"}'
     )
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "goal": "Write a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        goal="Write a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = run_module.create_state(config)
     decompose_response = (
         '{"decompose": true, "rationale": "split into parts",'
@@ -288,16 +253,15 @@ def test_create_game_extra_key_on_decompose_response_is_stripped() -> None:
 
 
 def test_create_game_extra_key_on_gamespec_response_is_stripped() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "goal": "Write a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        goal="Write a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     response = (
         '{"objective":"Advance goal","target_artifact_id":"main-document",'
@@ -347,21 +311,16 @@ def test_run_core_source_has_no_coding_file_policy_literals() -> None:
 def test_coding_create_game_accepts_src_file_task_first_iteration() -> None:
     import baps.core.run as run_module
 
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "coding",
-        "artifact_id": "main-codebase",
-        "language": "python",
-        "goal": "Implement Fibonacci with tests",
-        "northstar_markdown": (
-            "# Goal\n\nImplement Fibonacci with tests.\n"
-            "- Production code in `src/fibonacci.py`\n"
-            "- Pytest tests in `tests/test_fibonacci.py`\n"
-        ),
-        "output_path": Path(".baps-workspace/output/project"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="coding",
+        artifact_id="main-codebase",
+        language="python",
+        goal="Implement Fibonacci with tests",
+        northstar_markdown=( "# Goal\n\nImplement Fibonacci with tests.\n" "- Production code in `src/fibonacci.py`\n" "- Pytest tests in `tests/test_fibonacci.py`\n" ),
+        output_path=Path(".baps-workspace/output/project"),
+        max_iterations=2,
+    )
     state = run_module.create_state(config)
     game_spec = create_game(
         config,
@@ -381,20 +340,15 @@ def test_coding_create_game_accepts_src_file_task_first_iteration() -> None:
 
 def test_coding_create_game_accepts_test_file_task_second_iteration() -> None:
 
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "coding",
-        "artifact_id": "main-codebase",
-        "goal": "Implement Fibonacci with tests",
-        "northstar_markdown": (
-            "# Goal\n\nImplement Fibonacci with tests.\n"
-            "- Production code in `src/fibonacci.py`\n"
-            "- Pytest tests in `tests/test_fibonacci.py`\n"
-        ),
-        "output_path": Path(".baps-workspace/output/project"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="coding",
+        artifact_id="main-codebase",
+        goal="Implement Fibonacci with tests",
+        northstar_markdown=( "# Goal\n\nImplement Fibonacci with tests.\n" "- Production code in `src/fibonacci.py`\n" "- Pytest tests in `tests/test_fibonacci.py`\n" ),
+        output_path=Path(".baps-workspace/output/project"),
+        max_iterations=2,
+    )
     state = state_module.State(
         artifacts=(
             state_module.CodingArtifact(
@@ -427,21 +381,16 @@ def test_coding_create_game_accepts_test_file_task_second_iteration() -> None:
 def test_coding_normalize_passes_through_model_objective_and_success_condition() -> None:
     import baps.core.run as run_module
 
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "coding",
-        "artifact_id": "main-codebase",
-        "language": "python",
-        "goal": "Implement a text similarity utility",
-        "northstar_markdown": (
-            "# Goal\n\nImplement a text similarity utility.\n"
-            "- src/similarity.py\n"
-            "- tests/test_similarity.py\n"
-        ),
-        "output_path": Path(".baps-workspace/output/project"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="coding",
+        artifact_id="main-codebase",
+        language="python",
+        goal="Implement a text similarity utility",
+        northstar_markdown=( "# Goal\n\nImplement a text similarity utility.\n" "- src/similarity.py\n" "- tests/test_similarity.py\n" ),
+        output_path=Path(".baps-workspace/output/project"),
+        max_iterations=2,
+    )
     state = run_module.create_state(config)
     game_spec = create_game(
         config,
@@ -463,17 +412,16 @@ def test_coding_normalize_passes_through_model_objective_and_success_condition()
 def test_coding_normalize_does_not_inject_hardcoded_file_paths() -> None:
     import baps.core.run as run_module
 
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "coding",
-        "artifact_id": "main-codebase",
-        "language": "python",
-        "goal": "Implement a text similarity utility",
-        "northstar_markdown": "# Goal\n\nImplement a text similarity utility.",
-        "output_path": Path(".baps-workspace/output/project"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="coding",
+        artifact_id="main-codebase",
+        language="python",
+        goal="Implement a text similarity utility",
+        northstar_markdown="# Goal\n\nImplement a text similarity utility.",
+        output_path=Path(".baps-workspace/output/project"),
+        max_iterations=2,
+    )
     state = run_module.create_state(config)
     game_spec = create_game(
         config,
@@ -495,17 +443,16 @@ def test_coding_normalize_does_not_inject_hardcoded_file_paths() -> None:
 def test_coding_normalization_overrides_file_path_target_artifact_id() -> None:
     import baps.core.run as run_module
 
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "coding",
-        "artifact_id": "main-codebase",
-        "language": "python",
-        "goal": "Implement Fibonacci with tests",
-        "northstar_markdown": "# Goal\n\nImplement Fibonacci with tests.",
-        "output_path": Path(".baps-workspace/output/project"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="coding",
+        artifact_id="main-codebase",
+        language="python",
+        goal="Implement Fibonacci with tests",
+        northstar_markdown="# Goal\n\nImplement Fibonacci with tests.",
+        output_path=Path(".baps-workspace/output/project"),
+        max_iterations=2,
+    )
     state = run_module.create_state(config)
     game_spec = create_game(
         config,
@@ -527,16 +474,15 @@ def test_document_adapter_normalize_game_spec_is_identity() -> None:
     import baps.core.run as run_module
 
     adapter = DocumentProjectAdapter()
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = run_module.create_state(config)
     original = GameSpec(
         objective="Any document objective",
@@ -590,16 +536,15 @@ def test_run_py_adapter_boundary_regression_guards() -> None:
 def test_create_game_northstar_update_needed_signal_raises_error() -> None:
     import baps.core.run as run_module
 
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "goal": "Write a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        goal="Write a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = run_module.create_state(config)
     response = json.dumps({
         "northstar_update_needed": True,

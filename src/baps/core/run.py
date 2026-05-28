@@ -20,6 +20,7 @@ from baps.core.debug import (
     _debug_print_create_state,
     _debug_print_read_config,
 )
+from baps.core.run_config import RunConfig
 from baps.adapters.project_adapter import (
     ProjectTypeAdapter,
     build_default_project_type_adapters,
@@ -34,6 +35,7 @@ from baps.state.state import (
 from baps.state.state_service import StateService
 from baps.state.state_store import JsonStateStore
 from baps.core.orchestration import _run_project_iterations
+from baps.models.models import Backend
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +91,7 @@ def _resolve_output_path(workspace: Path, output_value: str) -> Path:
     return (workspace / output_candidate).resolve()
 
 
-def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
+def resolve_run_config(args: argparse.Namespace) -> RunConfig:
     spec_data: dict[str, Any] = {}
     if args.spec:
         spec_path = Path(args.spec)
@@ -190,19 +192,20 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError(f"sandbox must be 'docker' or 'none', got: {sandbox!r}")
 
     spec_backend_raw = spec_data.get("backend")
-    spec_backend: str | None = None
+    spec_backend: Backend | None = None
     if spec_backend_raw is not None:
-        spec_backend = str(spec_backend_raw).strip().lower()
-        if spec_backend not in _VALID_BACKENDS:
+        spec_backend_value = str(spec_backend_raw).strip().lower()
+        if spec_backend_value not in _VALID_BACKENDS:
             raise ValueError(
-                f"spec 'backend' must be one of {sorted(_VALID_BACKENDS)}, got {spec_backend!r}"
+                f"spec 'backend' must be one of {sorted(_VALID_BACKENDS)}, got {spec_backend_value!r}"
             )
+        spec_backend = Backend(spec_backend_value)
 
     spec_model_raw = spec_data.get("model")
     spec_model: str | None = str(spec_model_raw).strip() if spec_model_raw is not None else None
 
     roles_raw = spec_data.get("roles")
-    spec_roles: dict[str, dict[str, str]] = (
+    spec_roles = (
         _parse_spec_roles(roles_raw) if roles_raw is not None else {}
     )
 
@@ -214,30 +217,30 @@ def resolve_run_config(args: argparse.Namespace) -> dict[str, Any]:
     if max_sub_gaps < 1:
         raise ValueError("max_sub_gaps must be >= 1")
 
-    config = {
-        "workspace": workspace,
-        "project_type": project_type,
-        "artifact_id": artifact_id,
-        "language": language,
-        "northstar_markdown": northstar_markdown,
-        "goal": goal,
-        "output_path": output_path,
-        "max_iterations": max_iterations,
-        "max_sub_gaps": max_sub_gaps,
-        "spec_path": spec_path,
-        "source_path": source_path,
-        "source_include": source_include,
-        "sandbox": sandbox,
-        "spec_backend": spec_backend,
-        "spec_model": spec_model,
-        "spec_roles": spec_roles,
-    }
+    config = RunConfig(
+        workspace=workspace,
+        project_type=project_type,
+        artifact_id=artifact_id,
+        language=language,
+        northstar_markdown=northstar_markdown,
+        goal=goal,
+        output_path=output_path,
+        max_iterations=max_iterations,
+        max_sub_gaps=max_sub_gaps,
+        spec_path=spec_path,
+        source_path=source_path,
+        source_include=source_include,
+        sandbox=sandbox,
+        spec_backend=spec_backend,
+        spec_model=spec_model,
+        spec_roles=spec_roles,
+    )
     _debug_print_read_config(args=args, spec_data=spec_data, config=config)
     return config
 
 
-def create_state(config: dict[str, Any]) -> State:
-    adapter = _resolve_project_type_adapter(config["project_type"])
+def create_state(config: RunConfig) -> State:
+    adapter = _resolve_project_type_adapter(config.project_type)
     state = adapter.create_initial_state(config)
     _debug_print_create_state(config=config, state=state)
     return state
@@ -266,18 +269,18 @@ def _workspace_config_path(workspace: Path) -> Path:
 _WORKSPACE_CONFIG_FIELDS = ("project_type", "artifact_id", "northstar_markdown", "goal", "output")
 
 
-def _save_workspace_config(config: dict[str, Any], workspace: Path) -> None:
+def _save_workspace_config(config: RunConfig, workspace: Path) -> None:
     workspace.mkdir(parents=True, exist_ok=True)
-    output_path: Path = config["output_path"]
+    output_path: Path = config.output_path
     try:
         output_str = str(output_path.relative_to(workspace))
     except ValueError:
         output_str = str(output_path)
     saved = {
-        "project_type": config["project_type"],
-        "artifact_id": config["artifact_id"],
-        "northstar_markdown": config["northstar_markdown"],
-        "goal": config["goal"],
+        "project_type": config.project_type,
+        "artifact_id": config.artifact_id,
+        "northstar_markdown": config.northstar_markdown,
+        "goal": config.goal,
         "output": output_str,
     }
     _workspace_config_path(workspace).write_text(
@@ -343,9 +346,9 @@ def _resolve_reset_config(args: argparse.Namespace) -> tuple[Path, Path | None]:
 
 
 def _initialize_project(
-    config: dict[str, Any],
+    config: RunConfig,
 ) -> tuple[StateService, State]:
-    workspace = config["workspace"]
+    workspace = config.workspace
     initial_state = create_state(config)
     state_store = JsonStateStore(_state_path_for_workspace(workspace))
     state_store.save(initial_state)
@@ -364,10 +367,11 @@ def _load_project_service(workspace: Path) -> StateService:
     )
 
 
-def _active_model_info(config: dict[str, Any] | None = None) -> dict[str, str]:
+def _active_model_info(config: RunConfig | None = None) -> dict[str, str]:
+    if config is None:
+        return {"backend": "unknown", "model": "unknown"}
     try:
-        cfg = config or {}
-        backend, model = _resolve_backend_model(SpecRole.BLUE, cfg)
+        backend, model = _resolve_backend_model(SpecRole.BLUE, config)
         return {"backend": backend, "model": model}
     except ValueError:
         return {"backend": "unknown", "model": "unknown"}
@@ -470,11 +474,11 @@ def main() -> None:
         raise SystemExit(2) from exc
 
     command = args.command
-    workspace = config["workspace"]
-    project_type = config["project_type"]
-    goal = config["goal"]
-    output_path = config["output_path"]
-    max_iterations = config["max_iterations"]
+    workspace = config.workspace
+    project_type = config.project_type
+    goal = config.goal
+    output_path = config.output_path
+    max_iterations = config.max_iterations
     try:
         adapter = _resolve_project_type_adapter(project_type)
     except ValueError as exc:

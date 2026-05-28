@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from baps.adapters.project_adapter import VerificationResult
+from baps.core.run_config import RunConfig
 from baps.state.state import GameSpec
 from baps.adapters.coding_adapter import CodingProjectAdapter
 from baps.adapters.document_adapter import DocumentProjectAdapter
@@ -11,17 +12,17 @@ def test_coding_create_state_creates_coding_artifact() -> None:
     import baps.core.run as run_module
 
     state = run_module.create_state(
-        {
-            "workspace": Path(".baps-workspace"),
-            "project_type": "coding",
-            "artifact_id": "main-codebase",
-            "language": "python",
-            "goal": "Implement Fibonacci",
-            "northstar_markdown": "# Goal\n\nImplement Fibonacci",
-            "output_path": Path(".baps-workspace/output/project"),
-            "max_iterations": 2,
-            "spec_path": None,
-        }
+        RunConfig(
+            workspace=Path(".baps-workspace"),
+            project_type="coding",
+            artifact_id="main-codebase",
+            language="python",
+            goal="Implement Fibonacci",
+            northstar_markdown="# Goal\n\nImplement Fibonacci",
+            output_path=Path(".baps-workspace/output/project"),
+            max_iterations=2,
+            spec_path=None,
+        )
     )
     assert len(state.artifacts) == 1
     artifact = state.artifacts[0]

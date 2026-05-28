@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from baps.core.run_config import RunConfig
 from baps.state.state import (
     GameSpec,
 )
@@ -143,7 +144,7 @@ def test_coding_create_game_state_view_is_textual_with_delimiters() -> None:
         "max_iterations": 2,
         "spec_path": None,
     }
-    state = run_module.create_state(config)
+    state = run_module.create_state(RunConfig(**config))
     adapter = CodingProjectAdapter()
     view = adapter.build_create_game_state_view(state, config)
     assert view.content.startswith("=== StateView Start ===")

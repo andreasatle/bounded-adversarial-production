@@ -9,6 +9,7 @@ import pytest
 
 from baps.models.models import FakeModelClient
 from baps.core.run import create_state
+from baps.core.run_config import RunConfig
 from baps.game.engine import create_game
 from baps.adapters.document_adapter import DocumentProjectAdapter
 from baps.core.prompts import _render_create_game_prompt
@@ -17,30 +18,29 @@ from baps.core.prompts import _render_create_game_prompt
 def _make_doc_config(
     artifact_id: str = "main-document",
     goal: str = "Write a short report.",
-) -> dict:
-    return {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": artifact_id,
-        "goal": goal,
-        "northstar_markdown": f"# Goal\n\n{goal}",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+) -> RunConfig:
+    return RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id=artifact_id,
+        goal=goal,
+        northstar_markdown=f"# Goal\n\n{goal}",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+        spec_path=None,
+    )
 
 
 def test_create_game_receives_input_and_state_and_outputs_game_spec() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     game_spec = create_game(
         config,
@@ -60,16 +60,15 @@ def test_create_game_receives_input_and_state_and_outputs_game_spec() -> None:
 
 
 def test_create_game_target_artifact_exists_in_state() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     game_spec = create_game(
         config,
@@ -86,16 +85,15 @@ def test_create_game_target_artifact_exists_in_state() -> None:
 
 
 def test_create_game_invalid_json_fails_cleanly() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     # Provide one response per attempt (initial + 2 retries) so FakeModelClient doesn't run dry.
     with pytest.raises(ValueError, match="must be valid JSON"):
@@ -105,16 +103,15 @@ def test_create_game_invalid_json_fails_cleanly() -> None:
 def test_create_game_invalid_json_with_debug_prints_raw_model_output(
     monkeypatch, caplog
 ) -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
 
     with caplog.at_level(logging.DEBUG), pytest.raises(ValueError, match="must be valid JSON"):
@@ -126,16 +123,15 @@ def test_create_game_invalid_json_with_debug_prints_raw_model_output(
 
 
 def test_create_game_invalid_json_without_debug_does_not_print_raw_model_output(caplog) -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
 
     with caplog.at_level(logging.INFO), pytest.raises(ValueError, match="must be valid JSON"):
@@ -150,16 +146,15 @@ def test_create_game_json_retry_with_correction_prompt_succeeds() -> None:
         '"allowed_delta_type":"DeltaDocumentState",'
         '"success_condition":"section exists"}'
     )
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
 
     # First response is invalid JSON; the retry with the correction prompt returns valid JSON.
@@ -169,16 +164,15 @@ def test_create_game_json_retry_with_correction_prompt_succeeds() -> None:
 
 
 def test_create_game_explicit_model_client_retries_on_invalid_json() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
 
     # Explicit model_client — correction-prompt retries still apply (same model, not a fallback).
@@ -189,16 +183,15 @@ def test_create_game_explicit_model_client_retries_on_invalid_json() -> None:
 def test_create_game_structural_validation_failure_debug_prints_raw_output(
     monkeypatch, caplog
 ) -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     payload = (
         '{"objective":" ","target_artifact_id":"main-document",'
@@ -215,16 +208,15 @@ def test_create_game_structural_validation_failure_debug_prints_raw_output(
 
 
 def test_create_game_validation_input_debug_enabled(caplog) -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
 
     with caplog.at_level(logging.DEBUG):
@@ -247,16 +239,15 @@ def test_create_game_validation_input_debug_enabled(caplog) -> None:
 
 
 def test_create_game_semantic_refinement_objective_is_accepted(caplog) -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
 
     with caplog.at_level(logging.DEBUG):
@@ -277,16 +268,15 @@ def test_create_game_semantic_refinement_objective_is_accepted(caplog) -> None:
 
 
 def test_create_game_objective_with_multiple_tasks_is_accepted_by_structural_validation() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     game_spec = create_game(
         config,
@@ -304,16 +294,15 @@ def test_create_game_objective_with_multiple_tasks_is_accepted_by_structural_val
 
 
 def test_create_game_validation_debug_disabled_prints_nothing(caplog) -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
 
     with caplog.at_level(logging.INFO):
@@ -333,16 +322,15 @@ def test_create_game_validation_debug_disabled_prints_nothing(caplog) -> None:
 
 
 def test_create_game_raw_json_still_accepted() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     game_spec = create_game(
         config,
@@ -359,16 +347,15 @@ def test_create_game_raw_json_still_accepted() -> None:
 
 
 def test_create_game_exact_json_fence_accepted() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     game_spec = create_game(
         config,
@@ -387,16 +374,15 @@ def test_create_game_exact_json_fence_accepted() -> None:
 
 
 def test_create_game_exact_plain_fence_accepted() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     game_spec = create_game(
         config,
@@ -416,16 +402,15 @@ def test_create_game_exact_plain_fence_accepted() -> None:
 
 def test_create_game_prose_before_fence_extracted_and_parsed() -> None:
     # Pipeline extracts JSON from prose — prose wrapper is now handled correctly.
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     response = (
         "Here is the result:\n```json\n"
@@ -440,16 +425,15 @@ def test_create_game_prose_before_fence_extracted_and_parsed() -> None:
 
 def test_create_game_prose_after_fence_extracted_and_parsed() -> None:
     # Pipeline extracts JSON via brace search when fence anchoring fails — handled correctly.
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     response = (
         "```json\n"
@@ -463,16 +447,15 @@ def test_create_game_prose_after_fence_extracted_and_parsed() -> None:
 
 
 def test_create_game_multiple_fenced_blocks_rejected() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     bad = (
         "```json\n"
@@ -486,16 +469,15 @@ def test_create_game_multiple_fenced_blocks_rejected() -> None:
 
 
 def test_create_game_invalid_json_inside_fence_rejected() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     bad = "```json\n{not valid json}\n```"
     with pytest.raises(ValueError, match="must be valid JSON"):
@@ -503,16 +485,15 @@ def test_create_game_invalid_json_inside_fence_rejected() -> None:
 
 
 def test_create_game_missing_gamespec_fields_fails_cleanly() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     with pytest.raises(ValueError, match="must contain exactly keys"):
         create_game(
@@ -523,16 +504,15 @@ def test_create_game_missing_gamespec_fields_fails_cleanly() -> None:
 
 
 def test_create_game_target_artifact_not_in_state_fails_cleanly() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     with pytest.raises(ValueError, match="target artifact must match configured artifact_id"):
         create_game(
@@ -559,16 +539,15 @@ def test_create_game_uses_adapter_build_create_game_state_view(monkeypatch) -> N
             self.called = True
             return super().build_create_game_state_view(state, config)
 
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     adapter = _CapturingAdapter()
     _ = create_game(
@@ -596,16 +575,15 @@ def test_create_game_core_source_has_no_document_specific_refs() -> None:
 
 def test_create_game_prompt_forbids_markdown_fences_and_lists_required_shape() -> None:
 
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     adapter = DocumentProjectAdapter()
     prompt = _render_create_game_prompt(
@@ -628,16 +606,15 @@ def test_create_game_prompt_forbids_markdown_fences_and_lists_required_shape() -
 
 
 def test_create_game_broad_goal_accepts_decomposed_atomic_gamespec() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "add introduction and conclusion",
-        "northstar_markdown": "# Goal\n\nadd introduction and conclusion",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="add introduction and conclusion",
+        northstar_markdown="# Goal\n\nadd introduction and conclusion",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     game_spec = create_game(
         config,
@@ -656,16 +633,15 @@ def test_create_game_broad_goal_accepts_decomposed_atomic_gamespec() -> None:
 
 
 def test_create_game_bundled_objective_and_success_condition_are_structurally_valid() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "add introduction and conclusion",
-        "northstar_markdown": "# Goal\n\nadd introduction and conclusion",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="add introduction and conclusion",
+        northstar_markdown="# Goal\n\nadd introduction and conclusion",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     game_spec = create_game(
         config,
@@ -683,16 +659,15 @@ def test_create_game_bundled_objective_and_success_condition_are_structurally_va
 
 
 def test_create_game_multi_feature_wording_is_structurally_valid() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "implement parser and tests",
-        "northstar_markdown": "# Goal\n\nimplement parser and tests",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="implement parser and tests",
+        northstar_markdown="# Goal\n\nimplement parser and tests",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     game_spec = create_game(
         config,

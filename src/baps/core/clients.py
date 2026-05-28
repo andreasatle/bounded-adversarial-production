@@ -5,6 +5,7 @@ import os
 from enum import StrEnum
 from typing import Any
 
+from baps.core.run_config import RoleConfig, RunConfig
 from baps.models.models import (
     AnthropicClient,
     Backend,
@@ -38,7 +39,7 @@ class SpecRole(StrEnum):
 _VALID_SPEC_ROLES = frozenset(SpecRole)
 
 
-def _build_client(backend: str, model: str) -> ModelClient:
+def _build_client(backend: str | Backend, model: str) -> ModelClient:
     """Construct a model client for the given backend and model id."""
     if backend == Backend.ANTHROPIC:
         api_key = os.getenv("ANTHROPIC_API_KEY", "")
@@ -64,7 +65,7 @@ def _build_client(backend: str, model: str) -> ModelClient:
     )
 
 
-def _build_client_for_backend(backend: str) -> ModelClient:
+def _build_client_for_backend(backend: str | Backend) -> ModelClient:
     if backend == Backend.ANTHROPIC:
         return _build_client(backend, os.getenv("BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL))
     if backend == Backend.OPENAI:
@@ -161,21 +162,21 @@ def _parse_role_backend_model(cfg: dict, path: str) -> dict[str, str]:
     return parsed
 
 
-def _parse_role_config(cfg: dict, path: str) -> dict[str, Any]:
+def _parse_role_config(cfg: dict, path: str) -> RoleConfig:
     """Parse a role config dict, recursively including arbitrarily deep fallback chains."""
-    parsed: dict[str, Any] = _parse_role_backend_model(cfg, path)
+    parsed: dict[str, str | RoleConfig] = _parse_role_backend_model(cfg, path)
     if "fallback" in cfg:
         fallback_raw = cfg["fallback"]
         if not isinstance(fallback_raw, dict):
             raise ValueError(f"spec '{path}.fallback' must be a mapping")
         parsed["fallback"] = _parse_role_config(fallback_raw, f"{path}.fallback")
-    return parsed
+    return RoleConfig(**parsed)
 
 
-def _parse_spec_roles(roles_raw: object) -> dict[str, dict[str, Any]]:
+def _parse_spec_roles(roles_raw: object) -> dict[str, RoleConfig]:
     if not isinstance(roles_raw, dict):
         raise ValueError("spec 'roles' must be a mapping")
-    result: dict[str, dict[str, Any]] = {}
+    result: dict[str, RoleConfig] = {}
     for role, role_cfg in roles_raw.items():
         if role not in _VALID_SPEC_ROLES:
             raise ValueError(
@@ -187,19 +188,19 @@ def _parse_spec_roles(roles_raw: object) -> dict[str, dict[str, Any]]:
     return result
 
 
-def _resolve_backend_model(role: str, config: dict[str, Any]) -> tuple[str, str]:
+def _resolve_backend_model(role: str, config: RunConfig) -> tuple[str, str]:
     """Resolve backend and model for a role.
 
     Precedence: role-spec > global-spec > role-env > global-env > error.
     Raises ValueError if nothing is configured.
     """
-    spec_roles: dict = config.get("spec_roles") or {}
-    role_cfg: dict = spec_roles.get(role) or {}
+    spec_roles = config.spec_roles or {}
+    role_cfg = spec_roles.get(role)
     role_upper = role.upper()
 
     backend = (
-        (role_cfg.get("backend") or "").strip().lower()
-        or (config.get("spec_backend") or "").strip().lower()
+        ((role_cfg.backend.value if role_cfg and role_cfg.backend else "")).strip().lower()
+        or ((config.spec_backend.value if config.spec_backend else "")).strip().lower()
         or os.getenv(f"BAPS_{role_upper}_BACKEND", "").strip().lower()
         or os.getenv("BAPS_BACKEND", "").strip().lower()
     )
@@ -213,8 +214,8 @@ def _resolve_backend_model(role: str, config: dict[str, Any]) -> tuple[str, str]
         env_model = os.getenv("BAPS_OLLAMA_MODEL", "").strip()
 
     model = (
-        (role_cfg.get("model") or "").strip()
-        or (config.get("spec_model") or "").strip()
+        ((role_cfg.model if role_cfg and role_cfg.model else "")).strip()
+        or (config.spec_model or "").strip()
         or os.getenv(f"BAPS_{role_upper}_MODEL", "").strip()
         or env_model
     )
@@ -232,34 +233,34 @@ def _resolve_backend_model(role: str, config: dict[str, Any]) -> tuple[str, str]
     return backend, model
 
 
-def _build_client_for_role(role: str, config: dict[str, Any]) -> ModelClient:
+def _build_client_for_role(role: str, config: RunConfig) -> ModelClient:
     """Build a model client for a role, applying spec > env precedence."""
     backend, model = _resolve_backend_model(role, config)
     return _build_client(backend, model)
 
 
-def _build_fallback_chain_for_role(role: str, config: dict[str, Any]) -> list[tuple[str, ModelClient]]:
+def _build_fallback_chain_for_role(role: str, config: RunConfig) -> list[tuple[str, ModelClient]]:
     """Build the ordered fallback chain for a role.
 
     Returns a list of (model_label, client) pairs from the spec's fallback chain,
     following arbitrarily deep fallback.fallback nesting. Returns [] when no fallback
     is configured.
     """
-    spec_roles: dict = config.get("spec_roles") or {}
-    role_cfg: dict = spec_roles.get(role) or {}
+    spec_roles = config.spec_roles or {}
+    role_cfg = spec_roles.get(role)
     chain: list[tuple[str, ModelClient]] = []
-    current: dict = role_cfg.get("fallback") or {}
-    while current:
-        backend = str(current.get("backend", "")).strip().lower()
-        model = str(current.get("model", "")).strip()
+    current = role_cfg.fallback if role_cfg is not None else None
+    while current is not None:
+        backend = current.backend.value if current.backend else ""
+        model = (current.model or "").strip()
         if not backend or not model:
             break
         chain.append((model, _build_client(backend, model)))
-        current = current.get("fallback") or {}
+        current = current.fallback
     return chain
 
 
-def _build_fallback_client_for_role(role: str, config: dict[str, Any]) -> ModelClient | None:
+def _build_fallback_client_for_role(role: str, config: RunConfig) -> ModelClient | None:
     """Return the first fallback client for a role, or None if no fallback is configured.
 
     Kept for backward compatibility. Use _build_fallback_chain_for_role for full chain support.

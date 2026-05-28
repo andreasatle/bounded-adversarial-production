@@ -18,6 +18,7 @@ from baps.core.debug import (
     _debug_print_create_game_raw_model_output,
     debug_event,
 )
+from baps.core.run_config import RunConfig
 from baps.models.models import ModelClient, Role
 from baps.game.attempt import (
     _apply_play_game_attempt_decision,
@@ -192,7 +193,7 @@ def _validate_game_spec(game_spec: GameSpec) -> None:
 
 
 def create_game(
-    config: dict[str, Any],
+    config: RunConfig,
     state: State,
     model_client: ModelClient | None = None,
     adapter: ProjectTypeAdapter | None = None,
@@ -206,7 +207,7 @@ def create_game(
     resolved_adapter = (
         adapter
         if adapter is not None
-        else resolve_project_type_adapter(config["project_type"])
+        else resolve_project_type_adapter(config.project_type)
     )
     state_view = resolved_adapter.build_create_game_state_view(state, config)
     use_planner = model_client is None
@@ -225,7 +226,7 @@ def create_game(
 
     red_feedback: dict[str, Any] | None = None
     last_valid_game_spec: GameSpec | None = None
-    max_sub_gaps = int(config.get("max_sub_gaps", 5))
+    max_sub_gaps = config.max_sub_gaps
 
     # Build fallback chains once — they don't change across attempts.
     try:
@@ -246,7 +247,7 @@ def create_game(
     else:
         _red_cg_fallback_fn = None
 
-    _cg_workspace = config.get("workspace")
+    _cg_workspace = config.workspace
     _bb_result_type: str | None = None
     _bb_result: dict | None = None
     _bb_model_used = _client_model_name(role.client)
@@ -264,7 +265,7 @@ def create_game(
             )
             _debug_print_create_game_prompt(prompt)
             result = _generate_create_game_with_json_retry(
-                role, prompt, max_sub_gaps=max_sub_gaps, workspace=config["workspace"],
+                role, prompt, max_sub_gaps=max_sub_gaps, workspace=config.workspace,
                 fallback_fn=_create_game_fallback_fn,
             )
 
@@ -310,7 +311,7 @@ def create_game(
                 red_generated = red_role.generate(red_prompt)
                 try:
                     red_finding = _parse_red_finding_json(
-                        red_generated, workspace=config.get("workspace"),
+                        red_generated, workspace=config.workspace,
                         retry_fn=red_role.generate, fallback_fn=_red_cg_fallback_fn,
                     )
                 except ValueError:
@@ -370,7 +371,7 @@ def _build_play_game_context(
     referee_model_client: ModelClient | None,
     executor: ToolExecutor | None,
     sandbox_mode: str,
-    config: dict[str, Any] | None,
+    config: RunConfig | None,
     depth: int,
     max_attempts: int,
     debug_event_fn: Any,
@@ -438,7 +439,7 @@ def play_game(
     max_attempts: int = _DEFAULT_MAX_PLAY_GAME_ATTEMPTS,
     executor: ToolExecutor | None = None,
     sandbox_mode: str = "docker",
-    config: dict[str, Any] | None = None,
+    config: RunConfig | None = None,
     depth: int = 0,
 ) -> DeltaState | None:
     if max_attempts < 1:

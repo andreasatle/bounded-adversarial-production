@@ -4,11 +4,16 @@ from __future__ import annotations
 from pathlib import Path
 
 from baps.models.models import FakeModelClient, ToolCall
-from baps.core.run import create_state
+from baps.core.run import create_state as _create_state
+from baps.core.run_config import RunConfig
 from baps.game.engine import play_game
 from baps.core.prompts import _render_red_prompt, _render_referee_prompt
 from baps.state.state import GameSpec
 import baps.state.state as state_module
+
+
+def create_state(config: RunConfig | dict) -> state_module.State:
+    return _create_state(config if isinstance(config, RunConfig) else RunConfig(**config))
 
 
 def _make_document_spec_and_state(success_condition: str = "A section exists."):

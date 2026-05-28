@@ -8,23 +8,24 @@ import pytest
 
 from baps.models.models import FakeModelClient, ToolCall
 from baps.core.run import create_state
+from baps.core.run_config import RunConfig
 from baps.game.engine import create_game, play_game, _VERIFICATION_SUMMARY_CAP
 from baps.core.parsers import NoNewGameError
 from baps.state.state import GameSpec
 from baps.adapters.project_adapter import VerificationResult
 
 
-def _make_play_game_config(workspace: Path) -> dict:
-    return {
-        "workspace": workspace,
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": workspace / "output" / "report.md",
-        "max_iterations": 1,
-        "spec_path": None,
-    }
+def _make_play_game_config(workspace: Path) -> RunConfig:
+    return RunConfig(
+        workspace=workspace,
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=workspace / "output" / "report.md",
+        max_iterations=1,
+        spec_path=None,
+    )
 
 
 def _make_document_game_spec(**kwargs) -> GameSpec:
@@ -38,16 +39,15 @@ def _make_document_game_spec(**kwargs) -> GameSpec:
 
 
 def test_create_game_writes_create_game_blackboard_event(tmp_path: Path) -> None:
-    config = {
-        "workspace": tmp_path / "ws-cg-bb",
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": tmp_path / "ws-cg-bb" / "output" / "report.md",
-        "max_iterations": 1,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=tmp_path / "ws-cg-bb",
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=tmp_path / "ws-cg-bb" / "output" / "report.md",
+        max_iterations=1,
+    )
     state = create_state(config)
     create_game(
         config,
@@ -76,16 +76,15 @@ def test_create_game_writes_create_game_blackboard_event(tmp_path: Path) -> None
 
 
 def test_create_game_writes_no_new_game_event(tmp_path: Path) -> None:
-    config = {
-        "workspace": tmp_path / "ws-nng-bb",
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": tmp_path / "ws-nng-bb" / "output" / "report.md",
-        "max_iterations": 1,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=tmp_path / "ws-nng-bb",
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=tmp_path / "ws-nng-bb" / "output" / "report.md",
+        max_iterations=1,
+    )
     state = create_state(config)
     with pytest.raises(NoNewGameError):
         create_game(
@@ -104,16 +103,15 @@ def test_create_game_writes_no_new_game_event(tmp_path: Path) -> None:
 
 
 def test_create_game_writes_decompose_spec_event(tmp_path: Path) -> None:
-    config = {
-        "workspace": tmp_path / "ws-dc-bb",
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a long report.",
-        "northstar_markdown": "# Goal\n\nWrite a long report.",
-        "output_path": tmp_path / "ws-dc-bb" / "output" / "report.md",
-        "max_iterations": 1,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=tmp_path / "ws-dc-bb",
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a long report.",
+        northstar_markdown="# Goal\n\nWrite a long report.",
+        output_path=tmp_path / "ws-dc-bb" / "output" / "report.md",
+        max_iterations=1,
+    )
     state = create_state(config)
     create_game(
         config,
@@ -136,16 +134,15 @@ def test_create_game_writes_decompose_spec_event(tmp_path: Path) -> None:
 
 def test_play_game_writes_play_game_blackboard_event(tmp_path: Path) -> None:
     workspace = tmp_path / "ws-pg-bb"
-    config = {
-        "workspace": workspace,
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": workspace / "output" / "report.md",
-        "max_iterations": 1,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=workspace,
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=workspace / "output" / "report.md",
+        max_iterations=1,
+    )
     state = create_state(config)
     game_spec = GameSpec(
         objective="Add introduction section",
@@ -301,16 +298,15 @@ def test_play_game_blackboard_final_disposition_no_delta(tmp_path: Path) -> None
 
 
 def test_create_game_blackboard_captures_depth_and_context_chain(tmp_path: Path) -> None:
-    config = {
-        "workspace": tmp_path / "ws-cg-depth",
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a report.",
-        "northstar_markdown": "# Goal\n\nWrite a report.",
-        "output_path": tmp_path / "ws-cg-depth" / "output" / "report.md",
-        "max_iterations": 1,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=tmp_path / "ws-cg-depth",
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a report.",
+        northstar_markdown="# Goal\n\nWrite a report.",
+        output_path=tmp_path / "ws-cg-depth" / "output" / "report.md",
+        max_iterations=1,
+    )
     state = create_state(config)
     chain = ("Top-level gap", "Sub-level concern")
     create_game(
@@ -479,16 +475,15 @@ def test_create_game_blackboard_no_new_game_with_failing_verification(
     _solve_gap, not inside create_game; the blackboard must faithfully record
     what the model actually returned."""
 
-    config = {
-        "workspace": tmp_path / "ws-nng-vr",
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": tmp_path / "ws-nng-vr" / "output" / "report.md",
-        "max_iterations": 1,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=tmp_path / "ws-nng-vr",
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=tmp_path / "ws-nng-vr" / "output" / "report.md",
+        max_iterations=1,
+    )
     state = create_state(config)
     failing_vr = VerificationResult(
         command="pytest", cwd="/tmp", exit_code=1,

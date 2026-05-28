@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from baps.core.run import create_state, main
+from baps.core.run_config import RunConfig
 from baps.adapters.document_adapter import DocumentProjectAdapter
 from baps.core.parsers import NoNewGameError, NorthStarUpdateNeededError
 from baps.state.state import (
@@ -873,17 +874,16 @@ def test_solve_gap_decompose_then_play(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr("baps.core.orchestration.create_game", _fake_create_game)
     monkeypatch.setattr("baps.core.orchestration.play_game", _fake_play_game)
 
-    config = {
-        "workspace": tmp_path / "ws",
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "northstar_markdown": "# Goal",
-        "goal": "Write something",
-        "output_path": tmp_path / "ws" / "output" / "report.md",
-        "max_iterations": 10,
-        "max_depth": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=tmp_path / "ws",
+        project_type="document",
+        artifact_id="main-document",
+        northstar_markdown="# Goal",
+        goal="Write something",
+        output_path=tmp_path / "ws" / "output" / "report.md",
+        max_iterations=10,
+        max_depth=2,
+    )
     service, state = _initialize_project(config)
     adapter = DocumentProjectAdapter()
 
@@ -931,17 +931,16 @@ def test_solve_gap_context_chain_injected_into_game_spec(monkeypatch, tmp_path: 
     monkeypatch.setattr("baps.core.orchestration.create_game", _fake_create_game)
     monkeypatch.setattr("baps.core.orchestration.play_game", _fake_play_game)
 
-    config = {
-        "workspace": tmp_path / "ws",
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "northstar_markdown": "# Goal",
-        "goal": "Write something",
-        "output_path": tmp_path / "ws" / "output" / "report.md",
-        "max_iterations": 5,
-        "max_depth": 3,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=tmp_path / "ws",
+        project_type="document",
+        artifact_id="main-document",
+        northstar_markdown="# Goal",
+        goal="Write something",
+        output_path=tmp_path / "ws" / "output" / "report.md",
+        max_iterations=5,
+        max_depth=3,
+    )
     service, state = _initialize_project(config)
     adapter = DocumentProjectAdapter()
     _run_project_iterations(config, adapter, service, state)
@@ -961,17 +960,16 @@ def test_solve_gap_max_depth_stops_recursion(monkeypatch, tmp_path: Path) -> Non
 
     monkeypatch.setattr("baps.core.orchestration.create_game", _always_decompose)
 
-    config = {
-        "workspace": tmp_path / "ws",
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "northstar_markdown": "# Goal",
-        "goal": "Write something",
-        "output_path": tmp_path / "ws" / "output" / "report.md",
-        "max_iterations": 5,
-        "max_depth": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=tmp_path / "ws",
+        project_type="document",
+        artifact_id="main-document",
+        northstar_markdown="# Goal",
+        goal="Write something",
+        output_path=tmp_path / "ws" / "output" / "report.md",
+        max_iterations=5,
+        max_depth=2,
+    )
     service, state = _initialize_project(config)
     adapter = DocumentProjectAdapter()
     result = _run_project_iterations(config, adapter, service, state)

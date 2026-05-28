@@ -8,7 +8,9 @@ import pytest
 import yaml
 
 from baps.models.models import AnthropicClient, FakeModelClient, OllamaClient, OpenAIClient, ToolCall
-from baps.core.run import create_state
+from baps.models.models import Backend
+from baps.core.run import create_state as _create_state
+from baps.core.run_config import RunConfig
 from baps.game.engine import create_game, play_game
 import baps.core.clients as _clients_module
 
@@ -18,6 +20,28 @@ _real_build_planner_model_client = _clients_module._build_planner_model_client
 _real_build_role_client = _clients_module._build_role_client
 _real_build_fallback_chain_for_role = _clients_module._build_fallback_chain_for_role
 _real_build_fallback_client_for_role = _clients_module._build_fallback_client_for_role
+
+
+def _make_run_config(**overrides) -> RunConfig:
+    base = dict(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+        spec_path=None,
+        spec_backend=None,
+        spec_model=None,
+        spec_roles={},
+    )
+    base.update(overrides)
+    return RunConfig(**base)
+
+
+def create_state(config: RunConfig | dict):
+    return _create_state(config if isinstance(config, RunConfig) else RunConfig(**config))
 
 
 # ---------------------------------------------------------------------------
@@ -174,7 +198,7 @@ def test_build_role_client_uses_global_anthropic_model_when_only_backend_set(mon
 def test_resolve_backend_model_spec_global_overrides_env(monkeypatch) -> None:
     monkeypatch.setenv("BAPS_BACKEND", "ollama")
     monkeypatch.setenv("BAPS_OLLAMA_MODEL", "env-model")
-    config = {"spec_backend": "ollama", "spec_model": "spec-model", "spec_roles": {}}
+    config = _make_run_config(spec_backend="ollama", spec_model="spec-model", spec_roles={})
     backend, model = _clients_module._resolve_backend_model("blue", config)
     assert backend == "ollama"
     assert model == "spec-model"
@@ -182,11 +206,11 @@ def test_resolve_backend_model_spec_global_overrides_env(monkeypatch) -> None:
 
 def test_resolve_backend_model_role_spec_overrides_global_spec(monkeypatch) -> None:
     monkeypatch.delenv("BAPS_BACKEND", raising=False)
-    config = {
-        "spec_backend": "ollama",
-        "spec_model": "global-model",
-        "spec_roles": {"blue": {"backend": "ollama", "model": "role-model"}},
-    }
+    config = _make_run_config(
+        spec_backend="ollama",
+        spec_model="global-model",
+        spec_roles={"blue": {"backend": "ollama", "model": "role-model"}},
+    )
     backend, model = _clients_module._resolve_backend_model("blue", config)
     assert model == "role-model"
 
@@ -194,7 +218,7 @@ def test_resolve_backend_model_role_spec_overrides_global_spec(monkeypatch) -> N
 def test_resolve_backend_model_env_fallback_when_no_spec(monkeypatch) -> None:
     monkeypatch.setenv("BAPS_BACKEND", "ollama")
     monkeypatch.setenv("BAPS_OLLAMA_MODEL", "env-model")
-    config: dict = {"spec_backend": None, "spec_model": None, "spec_roles": {}}
+    config = _make_run_config(spec_backend=None, spec_model=None, spec_roles={})
     backend, model = _clients_module._resolve_backend_model("blue", config)
     assert backend == "ollama"
     assert model == "env-model"
@@ -205,7 +229,7 @@ def test_resolve_backend_model_role_env_overrides_global_env(monkeypatch) -> Non
     monkeypatch.setenv("BAPS_OLLAMA_MODEL", "global-env")
     monkeypatch.setenv("BAPS_BLUE_BACKEND", "ollama")
     monkeypatch.setenv("BAPS_BLUE_MODEL", "role-env")
-    config: dict = {"spec_backend": None, "spec_model": None, "spec_roles": {}}
+    config = _make_run_config(spec_backend=None, spec_model=None, spec_roles={})
     backend, model = _clients_module._resolve_backend_model("blue", config)
     assert model == "role-env"
 
@@ -214,31 +238,35 @@ def test_resolve_backend_model_raises_when_nothing_configured(monkeypatch) -> No
     for var in ("BAPS_BACKEND", "BAPS_OLLAMA_MODEL", "BAPS_ANTHROPIC_MODEL",
                 "BAPS_OPENAI_MODEL", "BAPS_BLUE_BACKEND", "BAPS_BLUE_MODEL"):
         monkeypatch.delenv(var, raising=False)
-    config: dict = {"spec_backend": None, "spec_model": None, "spec_roles": {}}
+    config = _make_run_config(spec_backend=None, spec_model=None, spec_roles={})
     with pytest.raises(ValueError, match="No model configured"):
         _clients_module._resolve_backend_model("blue", config)
 
 
 def test_resolve_backend_model_raises_on_unknown_backend(monkeypatch) -> None:
-    config: dict = {"spec_backend": "bogus", "spec_model": "some-model", "spec_roles": {}}
-    with pytest.raises(ValueError, match="Unknown backend"):
-        _clients_module._resolve_backend_model("blue", config)
+    del monkeypatch
+    with pytest.raises(ValueError, match="Input should be 'anthropic', 'openai' or 'ollama'"):
+        _make_run_config(spec_backend="bogus", spec_model="some-model", spec_roles={})
 
 
 def test_resolve_backend_model_role_spec_backend_only_falls_back_to_spec_model(monkeypatch) -> None:
     monkeypatch.delenv("BAPS_RED_MODEL", raising=False)
-    config = {
-        "spec_backend": "ollama",
-        "spec_model": "global-model",
-        "spec_roles": {"red": {"backend": "ollama"}},
-    }
+    config = _make_run_config(
+        spec_backend="ollama",
+        spec_model="global-model",
+        spec_roles={"red": {"backend": "ollama"}},
+    )
     backend, model = _clients_module._resolve_backend_model("red", config)
     assert backend == "ollama"
     assert model == "global-model"
 
 
 def test_build_client_for_role_constructs_ollama_client(monkeypatch) -> None:
-    config = {"spec_backend": "ollama", "spec_model": "gemma4:e4b", "spec_roles": {}}
+    config = _make_run_config(
+        spec_backend="ollama",
+        spec_model="gemma4:e4b",
+        spec_roles={},
+    )
     client = _clients_module._build_client(  # bypass env
         *_clients_module._resolve_backend_model("blue", config)
     )
@@ -279,7 +307,7 @@ def test_spec_backend_and_model_parsed_into_config(tmp_path: Path) -> None:
     )
     import baps.core.run as run_module
     config = run_module.resolve_run_config(args)
-    assert config["spec_backend"] == "ollama"
+    assert config["spec_backend"] == Backend.OLLAMA
     assert config["spec_model"] == "gemma4:e4b"
     assert config["spec_roles"] == {}
 
@@ -337,21 +365,21 @@ def test_spec_backend_invalid_raises(tmp_path: Path) -> None:
 def test_spec_role_override_is_used_in_resolve(monkeypatch) -> None:
     monkeypatch.setenv("BAPS_BACKEND", "ollama")
     monkeypatch.setenv("BAPS_OLLAMA_MODEL", "global-env")
-    config = {
-        "spec_backend": "ollama",
-        "spec_model": "global-spec",
-        "spec_roles": {"referee": {"backend": "ollama", "model": "referee-override"}},
-    }
+    config = _make_run_config(
+        spec_backend="ollama",
+        spec_model="global-spec",
+        spec_roles={"referee": {"backend": "ollama", "model": "referee-override"}},
+    )
     backend, model = _clients_module._resolve_backend_model("referee", config)
     assert model == "referee-override"
 
 
 def test_role_spec_backend_only_uses_spec_model_for_model(monkeypatch) -> None:
-    config = {
-        "spec_backend": "ollama",
-        "spec_model": "fallback-model",
-        "spec_roles": {"red": {"backend": "ollama"}},
-    }
+    config = _make_run_config(
+        spec_backend="ollama",
+        spec_model="fallback-model",
+        spec_roles={"red": {"backend": "ollama"}},
+    )
     _, model = _clients_module._resolve_backend_model("red", config)
     assert model == "fallback-model"
 
@@ -450,15 +478,13 @@ def test_spec_role_fallback_non_mapping_raises(tmp_path: Path) -> None:
 
 
 def test_build_fallback_client_for_role_returns_none_when_no_fallback() -> None:
-    config: dict = {
-        "spec_roles": {"create_game": {"backend": "ollama", "model": "gemma4:e4b"}},
-    }
+    config = _make_run_config(spec_roles={"create_game": {"backend": "ollama", "model": "gemma4:e4b"}})
     result = _real_build_fallback_client_for_role("create_game", config)
     assert result is None
 
 
 def test_build_fallback_client_for_role_returns_none_for_unconfigured_role() -> None:
-    config: dict = {"spec_roles": {}}
+    config = _make_run_config(spec_roles={})
     result = _real_build_fallback_client_for_role("create_game", config)
     assert result is None
 
@@ -476,17 +502,16 @@ def test_create_game_fallback_called_when_primary_exhausts_retries(monkeypatch) 
     monkeypatch.setattr("baps.game.engine._build_fallback_chain_for_role", _chain)
     monkeypatch.setattr("baps.game.engine._build_fallback_chain_for_role", _chain)
 
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-        "spec_roles": {},
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+        spec_roles={},
+    )
     state = create_state(config)
 
     # Primary exhausts initial call + two retries before escalating to fallback.
@@ -510,17 +535,16 @@ def test_create_game_fallback_not_called_when_primary_succeeds(monkeypatch) -> N
     monkeypatch.setattr("baps.game.engine._build_fallback_chain_for_role", _chain)
     monkeypatch.setattr("baps.game.engine._build_fallback_chain_for_role", _chain)
 
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-        "spec_roles": {},
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+        spec_roles={},
+    )
     state = create_state(config)
 
     primary_client = FakeModelClient(responses=[valid_response])
@@ -547,16 +571,7 @@ def test_play_game_red_fallback_called_when_primary_exhausts_retries(monkeypatch
         allowed_delta_type="DeltaDocumentState",
         success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
     )
-    state = create_state({
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    })
+    state = create_state(_make_run_config())
 
     blue_client = FakeModelClient(tool_responses=[ToolCall(
         name="append_section",
@@ -572,7 +587,7 @@ def test_play_game_red_fallback_called_when_primary_exhausts_retries(monkeypatch
         model_client=blue_client,
         red_model_client=primary_red_client,
         referee_model_client=referee_client,
-        config={"workspace": Path(".baps-workspace"), "spec_roles": {}},
+        config=_make_run_config(spec_roles={}),
     )
 
     assert result is not None
@@ -596,16 +611,7 @@ def test_play_game_referee_fallback_called_when_primary_exhausts_retries(monkeyp
         allowed_delta_type="DeltaDocumentState",
         success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
     )
-    state = create_state({
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    })
+    state = create_state(_make_run_config())
 
     blue_client = FakeModelClient(tool_responses=[ToolCall(
         name="append_section",
@@ -621,7 +627,7 @@ def test_play_game_referee_fallback_called_when_primary_exhausts_retries(monkeyp
         model_client=blue_client,
         red_model_client=red_client,
         referee_model_client=primary_referee_client,
-        config={"workspace": Path(".baps-workspace"), "spec_roles": {}},
+        config=_make_run_config(spec_roles={}),
     )
 
     assert result is not None
@@ -704,29 +710,25 @@ def test_spec_role_deep_fallback_invalid_backend_raises(tmp_path: Path) -> None:
 
 
 def test_build_fallback_chain_for_role_returns_empty_when_no_fallback() -> None:
-    config: dict = {
-        "spec_roles": {"create_game": {"backend": "ollama", "model": "gemma4:e4b"}},
-    }
+    config = _make_run_config(spec_roles={"create_game": {"backend": "ollama", "model": "gemma4:e4b"}})
     chain = _real_build_fallback_chain_for_role("create_game", config)
     assert chain == []
 
 
 def test_build_fallback_chain_for_role_returns_empty_for_unconfigured_role() -> None:
-    config: dict = {"spec_roles": {}}
+    config = _make_run_config(spec_roles={})
     chain = _real_build_fallback_chain_for_role("create_game", config)
     assert chain == []
 
 
 def test_build_fallback_chain_for_role_returns_single_entry_chain() -> None:
-    config: dict = {
-        "spec_roles": {
-            "create_game": {
-                "backend": "ollama",
-                "model": "gemma4:e4b",
-                "fallback": {"backend": "ollama", "model": "gemma4:26b"},
-            }
+    config = _make_run_config(spec_roles={
+        "create_game": {
+            "backend": "ollama",
+            "model": "gemma4:e4b",
+            "fallback": {"backend": "ollama", "model": "gemma4:26b"},
         }
-    }
+    })
     chain = _real_build_fallback_chain_for_role("create_game", config)
     assert len(chain) == 1
     assert chain[0][0] == "gemma4:26b"
@@ -734,19 +736,17 @@ def test_build_fallback_chain_for_role_returns_single_entry_chain() -> None:
 
 
 def test_build_fallback_chain_for_role_returns_two_entry_chain() -> None:
-    config: dict = {
-        "spec_roles": {
-            "create_game": {
+    config = _make_run_config(spec_roles={
+        "create_game": {
+            "backend": "ollama",
+            "model": "gemma4:e4b",
+            "fallback": {
                 "backend": "ollama",
-                "model": "gemma4:e4b",
-                "fallback": {
-                    "backend": "ollama",
-                    "model": "gemma4:26b",
-                    "fallback": {"backend": "ollama", "model": "gemma4:72b"},
-                },
-            }
+                "model": "gemma4:26b",
+                "fallback": {"backend": "ollama", "model": "gemma4:72b"},
+            },
         }
-    }
+    })
     chain = _real_build_fallback_chain_for_role("create_game", config)
     assert len(chain) == 2
     assert chain[0][0] == "gemma4:26b"
@@ -769,17 +769,16 @@ def test_create_game_fallback_chain_escalates_through_all_links(monkeypatch) -> 
     monkeypatch.setattr("baps.game.engine._build_fallback_chain_for_role", _chain)
     monkeypatch.setattr("baps.game.engine._build_fallback_chain_for_role", _chain)
 
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-        "spec_roles": {},
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+        spec_roles={},
+    )
     state = create_state(config)
 
     primary_client = FakeModelClient(responses=["not-json"] * 3)
@@ -799,17 +798,16 @@ def test_create_game_chain_exhaustion_raises_runtime_error(monkeypatch) -> None:
     monkeypatch.setattr("baps.game.engine._build_fallback_chain_for_role", _chain)
     monkeypatch.setattr("baps.game.engine._build_fallback_chain_for_role", _chain)
 
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-        "spec_roles": {},
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+        spec_roles={},
+    )
     state = create_state(config)
 
     primary_client = FakeModelClient(responses=["not-json"] * 3)
@@ -823,17 +821,16 @@ def test_no_fallback_behavior_unchanged_when_primary_succeeds(monkeypatch) -> No
         '"allowed_delta_type":"DeltaDocumentState",'
         '"success_condition":"section exists"}'
     )
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-        "spec_roles": {},
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write a short report.",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+        spec_roles={},
+    )
     state = create_state(config)
 
     primary_client = FakeModelClient(responses=[valid_response])

@@ -7,7 +7,8 @@ from unittest.mock import patch
 
 
 from baps.models.models import FakeModelClient, ToolCall
-from baps.core.run import create_state
+from baps.core.run import create_state as _create_state
+from baps.core.run_config import RunConfig
 from baps.game.engine import play_game
 from baps.adapters.document_adapter import DocumentProjectAdapter
 from baps.adapters.coding_adapter import CodingProjectAdapter
@@ -16,20 +17,24 @@ from baps.state.state import GameSpec, RedFinding
 import baps.state.state as state_module
 
 
+def create_state(config: RunConfig | dict) -> state_module.State:
+    return _create_state(config if isinstance(config, RunConfig) else RunConfig(**config))
+
+
 def _make_doc_config(
     artifact_id: str = "main-document",
     goal: str = "Write a short report.",
-) -> dict:
-    return {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": artifact_id,
-        "goal": goal,
-        "northstar_markdown": f"# Goal\n\n{goal}",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+) -> RunConfig:
+    return RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id=artifact_id,
+        goal=goal,
+        northstar_markdown=f"# Goal\n\n{goal}",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+        spec_path=None,
+    )
 
 
 def _make_document_spec_and_state(success_condition: str = "A section exists."):
@@ -39,16 +44,7 @@ def _make_document_spec_and_state(success_condition: str = "A section exists."):
         allowed_delta_type="DeltaDocumentState",
         success_condition=success_condition,
     )
-    state = create_state({
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    })
+    state = create_state(_make_doc_config())
     return spec, state
 
 
@@ -92,22 +88,15 @@ def test_create_game_prompt_forbids_markdown_fences_and_lists_required_shape() -
 
 
 def test_create_game_prompt_includes_northstar_context() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "northstar_markdown": (
-            "# Goal\n\nWrite a short report.\n\n"
-            "# Required structure\n\n"
-            "The report must include these sections, in order:\n\n"
-            "1. Introduction\n"
-            "2. Conclusion\n"
-        ),
-        "goal": "Write a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        northstar_markdown=( "# Goal\n\nWrite a short report.\n\n" "# Required structure\n\n" "The report must include these sections, in order:\n\n" "1. Introduction\n" "2. Conclusion\n" ),
+        goal="Write a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     adapter = DocumentProjectAdapter()
     state_view = adapter.build_create_game_state_view(state, config)
@@ -142,16 +131,15 @@ def test_create_game_prompt_includes_northstar_context() -> None:
 
 
 def test_create_game_prompt_includes_northstar_update_needed_instruction() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "goal": "Write a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        northstar_markdown="# Goal\n\nWrite a short report.",
+        goal="Write a short report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     adapter = DocumentProjectAdapter()
     prompt = _render_create_game_prompt(
@@ -166,16 +154,15 @@ def test_create_game_prompt_includes_northstar_update_needed_instruction() -> No
 
 
 def test_create_game_prompt_includes_context_chain_when_provided() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "northstar_markdown": "# Goal\n\nWrite a report.",
-        "goal": "Write a report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        northstar_markdown="# Goal\n\nWrite a report.",
+        goal="Write a report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     adapter = DocumentProjectAdapter()
     state_view = adapter.build_create_game_state_view(state, config)
@@ -190,16 +177,15 @@ def test_create_game_prompt_includes_context_chain_when_provided() -> None:
 
 
 def test_create_game_prompt_no_context_block_when_chain_empty() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "northstar_markdown": "# Goal\n\nWrite a report.",
-        "goal": "Write a report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        northstar_markdown="# Goal\n\nWrite a report.",
+        goal="Write a report.",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     adapter = DocumentProjectAdapter()
     state_view = adapter.build_create_game_state_view(state, config)
@@ -211,17 +197,16 @@ def test_create_game_prompt_no_context_block_when_chain_empty() -> None:
 
 
 def test_coding_create_game_prompt_includes_multi_file_guidance() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "coding",
-        "artifact_id": "main-codebase",
-        "language": "python",
-        "goal": "Implement Fibonacci with tests",
-        "northstar_markdown": "# Goal\n\nImplement Fibonacci with tests",
-        "output_path": Path(".baps-workspace/output/project"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="coding",
+        artifact_id="main-codebase",
+        language="python",
+        goal="Implement Fibonacci with tests",
+        northstar_markdown="# Goal\n\nImplement Fibonacci with tests",
+        output_path=Path(".baps-workspace/output/project"),
+        max_iterations=2,
+    )
     state = create_state(config)
     adapter = CodingProjectAdapter()
     state_view = adapter.build_create_game_state_view(state, config)
@@ -239,17 +224,16 @@ def test_coding_create_game_prompt_includes_multi_file_guidance() -> None:
 def test_coding_create_game_prompt_includes_previous_verification_evidence() -> None:
     from baps.adapters.project_adapter import VerificationResult
 
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "coding",
-        "artifact_id": "main-codebase",
-        "language": "python",
-        "goal": "Implement Fibonacci with tests",
-        "northstar_markdown": "# Goal\n\nImplement Fibonacci with tests",
-        "output_path": Path(".baps-workspace/output/project"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="coding",
+        artifact_id="main-codebase",
+        language="python",
+        goal="Implement Fibonacci with tests",
+        northstar_markdown="# Goal\n\nImplement Fibonacci with tests",
+        output_path=Path(".baps-workspace/output/project"),
+        max_iterations=2,
+    )
     state = create_state(config)
     adapter = CodingProjectAdapter()
     state_view = adapter.build_create_game_state_view(state, config)
@@ -274,16 +258,15 @@ def test_coding_create_game_prompt_includes_previous_verification_evidence() -> 
 
 
 def test_document_create_game_prompt_has_no_verification_block_by_default() -> None:
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write report",
-        "northstar_markdown": "# Goal\n\nWrite report",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    }
+    config = RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="document",
+        artifact_id="main-document",
+        goal="Write report",
+        northstar_markdown="# Goal\n\nWrite report",
+        output_path=Path(".baps-workspace/output/report.md"),
+        max_iterations=2,
+    )
     state = create_state(config)
     adapter = DocumentProjectAdapter()
     state_view = adapter.build_create_game_state_view(state, config)
@@ -309,16 +292,7 @@ def test_blue_prompt_includes_state_view_and_gamespec() -> None:
         allowed_delta_type="DeltaDocumentState",
         success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
     )
-    state = create_state({
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    })
+    state = create_state(_make_doc_config())
     state_view = DocumentProjectAdapter().build_state_view(state, spec)
     prompt = project_adapter_module.render_blue_prompt_core(
         state_view=state_view,
@@ -545,16 +519,7 @@ def test_red_prompt_intro_only_guides_revise_for_intro_and_conclusion_success_co
         allowed_delta_type="DeltaDocumentState",
         success_condition="Document must include both an Introduction section and a Conclusion section.",
     )
-    state = create_state({
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    })
+    state = create_state(_make_doc_config())
     state_view = DocumentProjectAdapter().build_state_view(state, spec)
     delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
@@ -728,16 +693,7 @@ def test_red_and_referee_prompts_do_not_treat_state_mutation_alone_as_failure() 
         allowed_delta_type="DeltaDocumentState",
         success_condition="Any success condition.",
     )
-    state = create_state({
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    })
+    state = create_state(_make_doc_config())
     state_view = DocumentProjectAdapter().build_state_view(state, spec)
     delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
@@ -824,16 +780,7 @@ def test_referee_prompt_intro_and_conclusion_guides_accept_policy() -> None:
         allowed_delta_type="DeltaDocumentState",
         success_condition="Document must include both an Introduction section and a Conclusion section.",
     )
-    state = create_state({
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    })
+    state = create_state(_make_doc_config())
     state_view = DocumentProjectAdapter().build_state_view(state, spec)
     delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
@@ -866,16 +813,7 @@ def test_referee_prompt_declares_game_local_authority_and_not_final_integration(
         allowed_delta_type="DeltaDocumentState",
         success_condition="Any success condition.",
     )
-    state = create_state({
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    })
+    state = create_state(_make_doc_config())
     state_view = DocumentProjectAdapter().build_state_view(state, spec)
     delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
@@ -897,16 +835,7 @@ def test_referee_prompt_uses_red_material_findings_in_decision_policy() -> None:
         allowed_delta_type="DeltaDocumentState",
         success_condition="Any success condition.",
     )
-    state = create_state({
-        "workspace": Path(".baps-workspace"),
-        "project_type": "document",
-        "artifact_id": "main-document",
-        "goal": "Write a short report.",
-        "northstar_markdown": "# Goal\n\nWrite a short report.",
-        "output_path": Path(".baps-workspace/output/report.md"),
-        "max_iterations": 2,
-        "spec_path": None,
-    })
+    state = create_state(_make_doc_config())
     state_view = DocumentProjectAdapter().build_state_view(state, spec)
     delta = state_module.DeltaDocumentState(
         artifact_id="main-document",

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from baps.core.run_config import RunConfig
 from baps.models.models import ToolCallRecord
 from baps.northstar.northstar_projection import StateView
 from baps.adapters.project_adapter import (
@@ -27,7 +28,7 @@ def _render_verification_block(result: VerificationResult | None, *, guidance: s
 
 
 def _render_create_game_prompt(
-    config: dict[str, Any],
+    config: RunConfig,
     state: State,
     state_view: StateView,
     verification_result: VerificationResult | None = None,
@@ -38,7 +39,7 @@ def _render_create_game_prompt(
     resolved_adapter = (
         adapter
         if adapter is not None
-        else resolve_project_type_adapter(config["project_type"])
+        else resolve_project_type_adapter(config.project_type)
     )
     supplement = resolved_adapter.render_create_game_prompt_supplement(
         state=state,
@@ -88,7 +89,7 @@ def _render_create_game_prompt(
         "Create a GameSpec JSON object that closes the highest-priority gap between current state and NorthStar.\n\n"
         f"{context_block}"
         "Input:\n"
-        f"- goal: {config['goal']}\n"
+        f"- goal: {config.goal}\n"
         "- state_view:\n"
         "\n"
         f"{state_view.content}\n"
@@ -148,13 +149,13 @@ def _render_create_game_prompt(
 def _render_create_game_red_prompt(
     state_view: StateView,
     game_spec: GameSpec,
-    config: dict[str, Any],
+    config: RunConfig,
 ) -> str:
     game_spec_json = json.dumps(game_spec.model_dump(mode="json"), sort_keys=True)
     return (
         "Review the proposed GameSpec and determine whether it represents the right game to play.\n\n"
         "Input:\n"
-        f"- goal: {config['goal']}\n"
+        f"- goal: {config.goal}\n"
         "- state_view:\n"
         "\n"
         f"{state_view.content}\n"

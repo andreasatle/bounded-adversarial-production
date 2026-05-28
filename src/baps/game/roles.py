@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from baps.core.run_config import RunConfig
 from baps.core.clients import (
     SpecRole,
     _build_client_for_role,
@@ -85,7 +86,7 @@ def _initial_play_game_feedback(
 
 def _resolve_play_game_roles(
     resolved_adapter: ProjectTypeAdapter,
-    config: dict[str, Any] | None,
+    config: RunConfig | None,
     model_client: ModelClient | None,
     red_model_client: ModelClient | None,
     referee_model_client: ModelClient | None,
@@ -121,12 +122,12 @@ def _resolve_play_game_roles(
 
 
 def _build_play_game_fallbacks(
-    config: dict[str, Any] | None,
+    config: RunConfig | None,
     red_model_client: ModelClient | None,
     referee_model_client: ModelClient | None,
     build_fallback_chain_for_role_fn: Any = _build_fallback_chain_for_role,
 ) -> tuple[Path | None, Any, Any]:
-    workspace = config.get("workspace") if config else None
+    workspace = config.workspace if config else None
     if config is None:
         return workspace, None, None
     try:

@@ -4,6 +4,7 @@ import argparse
 import logging
 from typing import Any
 
+from baps.core.run_config import RunConfig
 from baps.northstar.northstar_projection import StateView
 from baps.adapters.project_adapter import (
     VerificationResult,
@@ -89,7 +90,7 @@ def debug_event(name: str, payload: dict[str, Any]) -> None:
     _debug_log(name, payload)
 
 
-def _debug_print_read_config(args: argparse.Namespace, spec_data: dict[str, Any], config: dict[str, Any]) -> None:
+def _debug_print_read_config(args: argparse.Namespace, spec_data: dict[str, Any], config: RunConfig) -> None:
     _debug_log("read_config.input", {
         "cli_args": {
             "workspace": args.workspace,
@@ -102,24 +103,24 @@ def _debug_print_read_config(args: argparse.Namespace, spec_data: dict[str, Any]
         "yaml_values": spec_data,
     })
     _debug_log("read_config.output", {
-        "workspace": str(config["workspace"]),
-        "artifact_id": config["artifact_id"],
-        "northstar_markdown": config["northstar_markdown"],
-        "goal": config["goal"],
-        "output_path": str(config["output_path"]),
-        "max_iterations": config["max_iterations"],
+        "workspace": str(config.workspace),
+        "artifact_id": config.artifact_id,
+        "northstar_markdown": config.northstar_markdown,
+        "goal": config.goal,
+        "output_path": str(config.output_path),
+        "max_iterations": config.max_iterations,
     })
 
 
-def _debug_print_create_state(config: dict[str, Any], state: State) -> None:
+def _debug_print_create_state(config: RunConfig, state: State) -> None:
     _debug_log("create_state.input", {
-        "project_type": config["project_type"],
+        "project_type": config.project_type,
         "artifact_id": _config_artifact_id(config),
         "northstar_markdown": _config_northstar_markdown(config),
-        "workspace": str(config["workspace"]),
-        "goal": config["goal"],
-        "output_path": str(config["output_path"]),
-        "max_iterations": config["max_iterations"],
+        "workspace": str(config.workspace),
+        "goal": config.goal,
+        "output_path": str(config.output_path),
+        "max_iterations": config.max_iterations,
     })
     _debug_log("create_state.output", {"state": state.model_dump(mode="json")})
 
