@@ -127,11 +127,10 @@ docs/
 1. **`State` is authoritative.** Persisted JSON via `JsonStateStore`. Never bypass `StateService`.
 2. **`StateView` is a prompt-only projection.** It is not authority. It is never the same as `State`.
 3. **JSON is storage/transport format.** Do not pass raw `State` JSON to model prompts as `StateView`.
-4. **`NorthStar` is stored in config, not `State`.** It lives as `northstar_markdown` in `baps-config.json`, separate from `state.json`. The automated pipeline never writes to it — protection is by isolation, not by a runtime guard.
+4. **`NorthStar` is never mutated by the automated pipeline.** For document/coding adapters it lives as `northstar_markdown` in `baps-config.json`, outside `State` entirely. For the audit adapter it is stored inside `State` as a read-only meta artifact (`audit:meta:*`), but the pipeline is constrained to only target the configured findings artifact and never touches the meta artifact.
 5. **`run.py` is generic.** All project-type mechanics belong in adapters.
-6. **`ProjectTypeAdapter` owns:** initial state creation, StateView rendering (CreateGame + PlayGame),
-   Blue prompt supplement, delta parsing, delta→StateUpdateProposal mapping, export.
-7. **`StateService` is the only mutation boundary.** Call `StateService.apply_update(...)`.
+6. **`ProjectTypeAdapter` owns:** initial state creation, CreateGame and PlayGame `StateView` rendering, full Blue prompt rendering (including delta-shape instructions), Red/Referee prompt supplements, Blue tool interface, delta parsing, export.
+7. **`StateService` is the only mutation boundary.** The runtime integration path calls `StateService.apply_delta(delta_state)` directly. `apply_update(proposal)` exists for non-runtime proposal workflows only.
 8. **Export is one-way.** Exported files are derived materialization; they do not feed back as authority.
 9. **Model prompts consume `StateView` only** — never raw `State` internals.
 10. **Runtime loops are bounded** — `max_iterations` (outer), `max_attempts` (PlayGame, default 3).
@@ -268,10 +267,15 @@ proposal to `baps-config.json`.
 
 ### Why NorthStar cannot be mutated by the pipeline
 
-NorthStar lives in `baps-config.json` as a plain string field (`northstar_markdown`), completely
-separate from `state.json`. `StateService` only mutates `State` artifacts — it structurally cannot
-reach NorthStar. The automated pipeline has no write path to `baps-config.json` at all.
-`baps-apply-northstar` is the only tool that writes to it, after human review.
+For document/coding adapters, NorthStar is `northstar_markdown` in `baps-config.json` — completely
+outside `State`. `StateService` only mutates `State`, so it structurally cannot reach it.
+
+For the audit adapter, NorthStar is stored inside `State` as a `DocumentArtifact` with ID prefix
+`audit:meta:`. The pipeline cannot mutate it in practice because `create_game` is constrained to
+produce deltas that target only the configured findings artifact, not the meta artifact.
+
+In both cases `baps-apply-northstar` is the only tool that updates NorthStar content, after human
+review of a proposal.
 
 ---
 

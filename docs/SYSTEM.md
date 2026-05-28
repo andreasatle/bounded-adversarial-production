@@ -33,7 +33,7 @@ CreateGame is a **gap-analysis operation**, not a step-forward operation. It com
 2. `State` persists as JSON via the state store/service path.
 3. `StateView` is model-facing text projection, not authority.
 4. JSON is storage/transport format; it is not `StateView.content`.
-5. `NorthStar` is a string field (`northstar_markdown`) stored in `baps-config.json`, separate from `state.json`. It is the target all gap analysis measures against.
+5. `NorthStar` content is immutable through the automated pipeline and is the target all gap analysis measures against. For document/coding adapters it is `northstar_markdown` in `baps-config.json`, separate from `state.json`. The audit adapter is an exception: it stores NorthStar inside `State` as a read-only meta artifact (`DocumentArtifact` with ID prefix `audit:meta:`) so the source path can be recovered at PlayGame time.
 6. `NorthStar` is immutable through the automated pipeline; updates require human approval via `baps-apply-northstar`.
 7. Project behavior is adapter-owned behind `ProjectTypeAdapter`.
 8. Core orchestration remains project-type generic.
@@ -41,7 +41,7 @@ CreateGame is a **gap-analysis operation**, not a step-forward operation. It com
 10. PlayGame is `GameSpec`-bound. It has no access to `NorthStar` directly.
 11. `GameSpec.context_chain` carries all ancestor gap descriptions from the coarsest decomposition to the immediate task. Blue sees the full chain.
 12. `StateService` is the mutation boundary for durable state changes. The canonical runtime path uses `StateService.apply_delta(delta_state)` directly; `StateService.apply_update(proposal)` is for non-runtime proposal workflows only.
-13. NorthStar is protected by isolation, not by a runtime guard: it lives in `baps-config.json`, not in `State`. `StateService` can only mutate `State` artifacts, so it structurally cannot touch NorthStar.
+13. NorthStar is protected by isolation, not by a runtime guard. For document/coding adapters it lives in `baps-config.json` — `StateService` only mutates `State` and structurally cannot reach it. For the audit adapter, NorthStar is stored inside `State` as a meta artifact, but the pipeline is constrained to only target the configured findings artifact, so the meta artifact is never mutated in practice.
 14. Export is one-way materialization from `State` to output files.
 15. Prompts consume `StateView` context, not raw authoritative `State` internals.
 16. Model-generated content is sanitized (NFKC-normalized, injection patterns removed) before embedding in any subsequent prompt.
@@ -78,7 +78,7 @@ Active registered project types in canonical runtime:
 
 - `document` — section-based document evolution (`append_section`, `modify_section`, `delete_section`)
 - `coding` — file-based codebase evolution (`write_file`, `write_files`, `delete_file`); language-agnostic via plugin registry
-- `audit` — adversarial source code audit producing a structured findings report (`append_section`, `no_finding`)
+- `audit` — adversarial source code audit producing a structured findings report (`append_section`, `modify_section`, `no_finding`)
 
 All three participate through the same adapter contract and orchestration path.
 
@@ -230,7 +230,7 @@ Every game execution writes its full reasoning trail to `<workspace>/blackboard/
 6. Introducing competing runtime spines.
 7. Exposing authoritative state internals directly to prompts outside `StateView` contract.
 8. Framing CreateGame as "what should I do next?" rather than "what gap to NorthStar must I close?".
-9. Mutating NorthStar through the automated pipeline. NorthStar lives in `baps-config.json` and can only be updated by `baps-apply-northstar`; the automated pipeline never writes to it.
+9. Mutating NorthStar through the automated pipeline. The pipeline never writes to NorthStar: for document/coding adapters it lives in `baps-config.json` (outside State entirely); for audit it is a meta artifact inside State that the pipeline is constrained never to target. Updates require `baps-apply-northstar`.
 10. Allowing decomposition to continue past `max_depth`.
 11. Allowing a single `DecomposeSpec` to contain more than `max_sub_gaps` sub-gaps (default 5); excess entries are silently truncated before execution.
 12. Embedding model-generated content in prompts without sanitization.

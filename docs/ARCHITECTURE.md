@@ -168,9 +168,11 @@ Client construction is handled by `_resolve_backend_model(role, config)` → `_b
 
 - Section-based document state
 - CreateGame StateView: renders NorthStar + current sections (sanitized)
-- PlayGame StateView: renders NorthStar + full section bodies (sanitized)
+- PlayGame StateView: renders current section bodies in full (sanitized); **no NorthStar**
 - Delta operations: `append_section`, `modify_section`, `delete_section`
+- Tool-call interface: `append_section`, `modify_section`, `delete_section` tools via `build_blue_tools()`
 - Export: markdown file
+- Verification: `verify_export()` checks file exists, is non-empty, and all section titles/bodies are present
 
 #### Coding (`src/baps/adapters/coding_adapter.py` + `src/baps/adapters/coding/`)
 
@@ -185,8 +187,8 @@ Client construction is handled by `_resolve_backend_model(role, config)` → `_b
 
 Adapter capabilities:
 - File-based codebase state; language-agnostic via plugin registry
-- CreateGame StateView: renders NorthStar + existing file contents (first 30 lines, sanitized)
-- PlayGame StateView: renders NorthStar + full file contents (sanitized)
+- CreateGame StateView: renders NorthStar + existing file contents (first 30 lines per file, sanitized)
+- PlayGame StateView: renders current file contents in full (sanitized); **no NorthStar**
 - Delta operations: `write_file`, `write_files` (preferred), `delete_file`
 - Tool-call interface: `write_files`, `write_file`, `delete_file` tools exposed via `build_blue_tools()`; `tool_call_to_delta()` converts tool call to `DeltaState`
 - Export: file tree + language-plugin boilerplate; `commit_export()` optionally git-commits to the output path
@@ -214,10 +216,12 @@ The language is stored on `CodingArtifact.language` at creation time and persist
 #### Audit (`src/baps/adapters/audit_adapter.py`)
 
 - Document-based findings report over an external source tree
-- CreateGame StateView: renders NorthStar + source file listing + current findings; stale findings marked `[STALE — source changed]`
-- PlayGame StateView: renders NorthStar + full source file contents
+- NorthStar is stored **inside State** as a read-only `DocumentArtifact` with ID prefix `audit:meta:`, containing a section titled `"northstar"` — this is the only adapter that embeds NorthStar in State rather than reading it from config at runtime
+- CreateGame StateView: renders NorthStar + source file listing + current findings (300-char previews); stale findings marked `[STALE — source changed]`
+- PlayGame StateView: renders full source file contents (up to 150 lines/file, 3000 lines total) + current findings; **no NorthStar block**
 - Delta operations: `append_section` (finding), `modify_section` (revise finding), `no_finding` (confirmed clean)
-- Each accepted section stores `source_hash` (SHA-256 of source files at write time) for staleness detection
+- Tool-call interface: `append_section`, `no_finding` tools via `build_blue_tools()`; `modify_section` supported via JSON path only
+- Each accepted section stores `source_hash` (SHA-256 of all source files at write time) for staleness detection
 - Export: markdown findings report
 - Separate workspace per spec required (each spec has its own `artifact_id`)
 
@@ -423,7 +427,6 @@ docker/
 3. **Integration**
    - `play_game` returns an integration-eligible `DeltaState` (or `None`)
    - `_solve_gap` applies that `DeltaState` via `StateService.apply_delta` as the runtime mutation boundary
-   - NorthStar artifact IDs are protected — proposals targeting them are rejected
 
 4. **Export**
    - Adapter exports state-derived artifacts to output path
@@ -475,8 +478,9 @@ Only leaf PlayGame executions count against `max_iterations`. Decomposition is f
 
 ### `GameSpec`
 
-- Fields: `objective`, `target_artifact_id`, `allowed_delta_type`, `success_condition`, `context_chain`
+- Fields: `objective`, `target_artifact_id`, `allowed_delta_type`, `success_condition`, `context_chain`, `max_words`
 - `context_chain`: tuple of gap descriptions from coarsest ancestor to immediate parent
+- `max_words`: optional integer cap on Blue output word count; rendered in the Blue prompt when set
 - Invariants: objective, target, delta type, success condition all non-empty
 - Purpose: binding contract for one PlayGame cycle, with full planning context
 
@@ -515,7 +519,8 @@ All payload models use `model_config = ConfigDict(extra="forbid")`:
 
 ### `StateUpdateProposal`
 
-- Fields: `id`, `target`, `summary`, `payload`
+- Fields: `id`, `target`, `summary`, `payload`, `base_state_fingerprint` (optional)
+- `base_state_fingerprint`: SHA-256 of state at proposal time; if set, `apply_update` rejects on fingerprint mismatch
 - Purpose: non-runtime mutation envelope consumed by `StateService.apply_update` for proposal/workflow use cases
 
 ---
@@ -583,11 +588,11 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 
 1. `State` is authoritative and persisted JSON.
 2. `StateView` is a text projection — never authority.
-3. `NorthStar` is inside `State` and immutable through automated pipeline.
+3. NorthStar content is immutable through the automated pipeline. For document/coding adapters it lives in `baps-config.json` (`northstar_markdown`); for the audit adapter it is stored inside `State` as a read-only meta artifact. Either way, the automated pipeline never writes to it.
 4. CreateGame performs gap analysis, not step derivation.
 5. `context_chain` carries full ancestor context to every leaf game.
 6. Adapter owns all project-specific mechanics.
-7. `StateService` is the runtime mutation boundary; NorthStar artifacts are protected.
+7. `StateService` is the runtime mutation boundary. The canonical runtime integration path uses `StateService.apply_delta(delta_state)` directly.
 8. Core orchestration remains project-type generic.
 9. Export is one-way from `State`.
 10. Schema validation enforced via typed models and runtime checks.
@@ -626,7 +631,7 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 ## 11. Glossary
 
 - **State**: Authoritative project condition persisted as JSON.
-- **NorthStar**: Intent artifact(s) embedded inside authoritative state; the target all gap analysis measures against.
+- **NorthStar**: The target specification all gap analysis measures against. For document/coding projects it is `northstar_markdown` in `baps-config.json`; for audit projects it is stored inside `State` as a read-only meta artifact. Never mutated by the automated pipeline.
 - **StateView**: Bounded, sanitized text projection for model-facing prompts.
 - **GameSpec**: Bounded task contract for one PlayGame cycle; carries `context_chain`.
 - **DecomposeSpec**: CreateGame response signalling the gap is too large; carries ordered sub-gaps.
