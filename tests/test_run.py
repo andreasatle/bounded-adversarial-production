@@ -9,7 +9,8 @@ import subprocess
 import pytest
 
 from baps.models import FakeModelClient, ToolCall
-from baps.run import create_game, create_state, main, play_game
+from baps.run import create_state, main
+from baps.game import create_game, play_game
 from baps.state import (
     DecomposeSpec,
     GameSpec,
@@ -22,8 +23,6 @@ from baps.game import _derive_state_update_from_delta, _commit_export_with_adapt
 from baps.orchestration import _run_project_iterations
 from baps.document_adapter import DocumentProjectAdapter
 from baps.coding_adapter import CodingProjectAdapter
-import baps.run as _real_run
-import baps.run as run_module
 import baps.state as state_module
 
 
@@ -345,7 +344,7 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
     import baps.run as run_module
 
     captured: dict[str, object] = {}
-    original_create_game = run_module.create_game
+    original_create_game = create_game
 
     def _capturing_create_game(config, state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
         captured.setdefault("state", state)
@@ -379,7 +378,6 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
 
 
 def test_derive_state_update_from_delta_converts_append_section() -> None:
-    import baps.run as run_module
 
     delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
@@ -495,7 +493,6 @@ def _make_doc_config(
 
 
 def _make_document_spec_and_state(success_condition: str = "A section exists."):
-    import baps.run as run_module
     spec = GameSpec(
         objective="Any objective",
         target_artifact_id="main-document",
@@ -586,7 +583,7 @@ def test_create_game_accepts_atomic_introduction_gamespec() -> None:
         "spec_path": None,
     }
     state = run_module.create_state(config)
-    game_spec = run_module.create_game(
+    game_spec = create_game(
         config,
         state,
         model_client=FakeModelClient(
@@ -621,7 +618,7 @@ def test_create_game_accepts_atomic_conclusion_gamespec() -> None:
         "spec_path": None,
     }
     state = run_module.create_state(config)
-    game_spec = run_module.create_game(
+    game_spec = create_game(
         config,
         state,
         model_client=FakeModelClient(
@@ -637,7 +634,6 @@ def test_create_game_accepts_atomic_conclusion_gamespec() -> None:
 
 
 def test_create_game_engine_does_not_compute_next_missing_section() -> None:
-    import baps.run as run_module
 
     config = {
         "workspace": Path(".baps-workspace"),
@@ -667,7 +663,7 @@ def test_create_game_engine_does_not_compute_next_missing_section() -> None:
             ),
         ),
     )
-    game_spec = run_module.create_game(
+    game_spec = create_game(
         config,
         state,
         model_client=FakeModelClient(
@@ -697,7 +693,7 @@ def test_create_game_explicit_no_new_game_signal() -> None:
     }
     state = run_module.create_state(config)
     with pytest.raises(NoNewGameError):
-        run_module.create_game(
+        create_game(
             config,
             state,
             model_client=FakeModelClient(
@@ -721,7 +717,7 @@ def test_create_game_extra_key_on_no_new_game_response_is_stripped() -> None:
     }
     state = run_module.create_state(config)
     with pytest.raises(NoNewGameError, match="all required sections already present"):
-        run_module.create_game(
+        create_game(
             config,
             state,
             model_client=FakeModelClient(
@@ -745,7 +741,7 @@ def test_create_game_extra_key_on_northstar_response_is_stripped() -> None:
     }
     state = run_module.create_state(config)
     with pytest.raises(NorthStarUpdateNeededError):
-        run_module.create_game(
+        create_game(
             config,
             state,
             model_client=FakeModelClient(
@@ -779,7 +775,7 @@ def test_create_game_extra_key_on_decompose_response_is_stripped() -> None:
         '{"decompose": true, "rationale": "split into parts",'
         ' "sub_gaps": [{"description": "part one"}], "confidence": 0.7}'
     )
-    result = run_module.create_game(
+    result = create_game(
         config,
         state,
         model_client=FakeModelClient([decompose_response, valid_sub_game]),
@@ -904,7 +900,6 @@ def test_spec_file_required_sections_still_gets_specific_error(
 
 
 def test_state_view_is_derived_from_state_and_gamespec_with_existing_sections() -> None:
-    import baps.run as run_module
 
     spec = GameSpec(
         objective="Any objective",
@@ -939,7 +934,6 @@ def test_state_view_is_derived_from_state_and_gamespec_with_existing_sections() 
 
 
 def test_document_state_view_content_for_empty_document() -> None:
-    import baps.run as run_module
 
     spec = GameSpec(
         objective="Any objective",
@@ -968,7 +962,6 @@ def test_document_state_view_content_for_empty_document() -> None:
 
 
 def test_create_game_state_view_content_is_markdown_for_empty_document() -> None:
-    import baps.run as run_module
 
     state = state_module.State(
         artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
@@ -1001,7 +994,6 @@ def test_create_game_state_view_content_is_markdown_for_empty_document() -> None
 
 
 def test_create_game_state_view_content_includes_sections_as_markdown() -> None:
-    import baps.run as run_module
 
     state = state_module.State(
         artifacts=(
@@ -1102,7 +1094,6 @@ def test_active_main_writes_output_path_from_state(tmp_path: Path, monkeypatch, 
 
 
 def test_document_export_markdown_contains_sections_in_order(tmp_path: Path) -> None:
-    import baps.run as run_module
 
     adapter = DocumentProjectAdapter()
     state = state_module.State(
@@ -1127,7 +1118,6 @@ def test_document_export_markdown_contains_sections_in_order(tmp_path: Path) -> 
 
 
 def test_document_export_creates_parent_directories(tmp_path: Path) -> None:
-    import baps.run as run_module
 
     adapter = DocumentProjectAdapter()
     state = state_module.State(
@@ -1140,7 +1130,6 @@ def test_document_export_creates_parent_directories(tmp_path: Path) -> None:
 
 
 def test_document_export_output_changed_false_when_unchanged(tmp_path: Path) -> None:
-    import baps.run as run_module
 
     adapter = DocumentProjectAdapter()
     state = state_module.State(
@@ -1374,7 +1363,6 @@ def test_baps_reset_without_existing_state_exits_cleanly(monkeypatch, tmp_path: 
 
 
 def test_second_run_sees_previous_state(monkeypatch, tmp_path: Path) -> None:
-    import baps.run as run_module
 
     workspace = tmp_path / "ws-second-run-state"
     seen_titles: list[list[str]] = []
@@ -1796,10 +1784,9 @@ def test_adapter_registry_includes_document_and_coding() -> None:
 
 
 def test_core_orchestration_does_not_reference_concrete_project_adapters() -> None:
-    import baps.run as run_module
 
     for fn in (
-        run_module.create_game,
+        create_game,
         _run_project_iterations,
     ):
         src = inspect.getsource(fn)
@@ -1881,7 +1868,7 @@ def test_coding_create_game_accepts_src_file_task_first_iteration() -> None:
         "spec_path": None,
     }
     state = run_module.create_state(config)
-    game_spec = run_module.create_game(
+    game_spec = create_game(
         config,
         state,
         model_client=FakeModelClient(
@@ -1898,7 +1885,6 @@ def test_coding_create_game_accepts_src_file_task_first_iteration() -> None:
 
 
 def test_coding_create_game_accepts_test_file_task_second_iteration() -> None:
-    import baps.run as run_module
 
     config = {
         "workspace": Path(".baps-workspace"),
@@ -1927,7 +1913,7 @@ def test_coding_create_game_accepts_test_file_task_second_iteration() -> None:
             ),
         ),
     )
-    game_spec = run_module.create_game(
+    game_spec = create_game(
         config,
         state,
         model_client=FakeModelClient(
@@ -1962,7 +1948,7 @@ def test_coding_normalize_passes_through_model_objective_and_success_condition()
         "spec_path": None,
     }
     state = run_module.create_state(config)
-    game_spec = run_module.create_game(
+    game_spec = create_game(
         config,
         state,
         model_client=FakeModelClient(
@@ -1994,7 +1980,7 @@ def test_coding_normalize_does_not_inject_hardcoded_file_paths() -> None:
         "spec_path": None,
     }
     state = run_module.create_state(config)
-    game_spec = run_module.create_game(
+    game_spec = create_game(
         config,
         state,
         model_client=FakeModelClient(
@@ -2026,7 +2012,7 @@ def test_coding_normalization_overrides_file_path_target_artifact_id() -> None:
         "spec_path": None,
     }
     state = run_module.create_state(config)
-    game_spec = run_module.create_game(
+    game_spec = create_game(
         config,
         state,
         model_client=FakeModelClient(
@@ -2086,7 +2072,6 @@ def test_coding_adapter_maps_file_write_delta_to_state_update() -> None:
 
 
 def test_coding_adapter_export_writes_files(tmp_path: Path) -> None:
-    import baps.run as run_module
 
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
@@ -2118,7 +2103,6 @@ def test_coding_adapter_export_writes_files(tmp_path: Path) -> None:
 
 
 def test_coding_adapter_export_writes_src_and_tests_layout(tmp_path: Path) -> None:
-    import baps.run as run_module
 
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
@@ -2154,7 +2138,6 @@ def test_coding_adapter_export_writes_src_and_tests_layout(tmp_path: Path) -> No
 
 
 def test_coding_export_normalizes_escaped_newline_content(tmp_path: Path) -> None:
-    import baps.run as run_module
 
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
@@ -2180,7 +2163,6 @@ def test_coding_export_normalizes_escaped_newline_content(tmp_path: Path) -> Non
 
 
 def test_coding_export_normalizes_escaped_quotes_content(tmp_path: Path) -> None:
-    import baps.run as run_module
 
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
@@ -2206,7 +2188,6 @@ def test_coding_export_normalizes_escaped_quotes_content(tmp_path: Path) -> None
 
 
 def test_coding_export_normalizes_multiline_pytest_and_parses(tmp_path: Path) -> None:
-    import baps.run as run_module
 
     escaped_pytest = (
         "import pytest\\n"
@@ -2240,7 +2221,6 @@ def test_coding_export_normalizes_multiline_pytest_and_parses(tmp_path: Path) ->
 def test_coding_adapter_verify_export_discovers_and_runs_pytest_tests(
     tmp_path: Path,
 ) -> None:
-    import baps.run as run_module
 
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
@@ -2290,7 +2270,6 @@ def test_coding_adapter_verify_export_discovers_and_runs_pytest_tests(
 
 
 def test_coding_export_creates_nested_parent_directories(tmp_path: Path) -> None:
-    import baps.run as run_module
 
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
@@ -2316,7 +2295,6 @@ def test_coding_export_creates_nested_parent_directories(tmp_path: Path) -> None
 
 
 def test_coding_export_output_changed_false_when_unchanged(tmp_path: Path) -> None:
-    import baps.run as run_module
 
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
@@ -2341,7 +2319,6 @@ def test_coding_export_output_changed_false_when_unchanged(tmp_path: Path) -> No
 
 
 def test_document_adapter_verify_export_passes_for_matching_export(tmp_path: Path) -> None:
-    import baps.run as run_module
 
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
@@ -2367,7 +2344,6 @@ def test_document_adapter_verify_export_passes_for_matching_export(tmp_path: Pat
 def test_document_adapter_verify_export_fails_when_section_content_missing(
     tmp_path: Path,
 ) -> None:
-    import baps.run as run_module
 
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
@@ -2392,7 +2368,6 @@ def test_coding_adapter_verify_export_runs_pytest_and_captures_success(
     monkeypatch, tmp_path: Path
 ) -> None:
     import baps.sandbox as sandbox_module
-    import baps.run as run_module
 
     captured: dict[str, object] = {}
 
@@ -2424,7 +2399,6 @@ def test_coding_adapter_verify_export_captures_failure(
     monkeypatch, tmp_path: Path
 ) -> None:
     import baps.sandbox as sandbox_module
-    import baps.run as run_module
 
     def _fake_run(args, cwd, capture_output, text, check):
         return subprocess.CompletedProcess(args=args, returncode=1, stdout="1 failed\n", stderr="traceback\n")
@@ -2444,7 +2418,6 @@ def test_coding_adapter_verify_export_captures_failure(
 
 
 def test_coding_adapter_verify_export_fails_for_missing_state_file(tmp_path: Path) -> None:
-    import baps.run as run_module
 
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
@@ -2473,7 +2446,6 @@ def test_coding_adapter_verify_export_skips_pytest_when_files_missing(
     monkeypatch, tmp_path: Path
 ) -> None:
     import baps.coding_adapter as coding_module
-    import baps.run as run_module
 
     pytest_called = {"n": 0}
 
@@ -2602,7 +2574,6 @@ def test_coding_adapter_commit_export_returns_false_when_commit_fails(
 
 
 def test_commit_export_with_adapter_calls_adapter_method(monkeypatch, tmp_path: Path) -> None:
-    import baps.run as run_module
 
     committed_args: list = []
 
@@ -2627,7 +2598,6 @@ def test_commit_export_with_adapter_calls_adapter_method(monkeypatch, tmp_path: 
 
 
 def test_commit_export_with_adapter_skips_adapter_without_method(tmp_path: Path) -> None:
-    import baps.run as run_module
 
     class _NoCommitAdapter:
         project_type = "coding"
@@ -2645,7 +2615,6 @@ def test_commit_export_with_adapter_skips_adapter_without_method(tmp_path: Path)
 
 
 def test_document_adapter_render_create_game_prompt_supplement_includes_delta_guidance() -> None:
-    import baps.run as run_module
 
     adapter = DocumentProjectAdapter()
     state = state_module.State(
@@ -2671,7 +2640,6 @@ def test_document_adapter_render_create_game_prompt_supplement_includes_delta_gu
 
 
 def test_document_adapter_render_create_game_prompt_supplement_includes_guidance_on_failure() -> None:
-    import baps.run as run_module
 
     adapter = DocumentProjectAdapter()
     state = state_module.State(
@@ -2944,7 +2912,6 @@ def test_coding_example_output_path_resolves_under_workspace() -> None:
     assert config["output_path"] == Path(".baps-workspace/coding-project/output/project").resolve()
 
 def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
-    import baps.run as run_module
     from baps.models import ToolDefinition
 
     class _PlayAdapter:
@@ -3004,7 +2971,7 @@ def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
         northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
     )
-    delta = run_module.play_game(
+    delta = play_game(
         state,
         spec,
         adapter=adapter,
@@ -3019,7 +2986,6 @@ def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
 
 
 def test_integration_uses_adapter_delta_to_update_mapper() -> None:
-    import baps.run as run_module
 
     class _MapperAdapter:
         project_type = "document"
@@ -3288,7 +3254,7 @@ def test_active_main_and_play_game_orchestration_have_no_direct_document_mechani
     import baps.run as run_module
 
     main_src = inspect.getsource(run_module.main)
-    play_src = inspect.getsource(run_module.play_game)
+    play_src = inspect.getsource(play_game)
     for token in ("DocumentArtifact", "DeltaDocumentState", "append_section", "sections"):
         assert token not in main_src
         assert token not in play_src
@@ -3343,7 +3309,7 @@ def test_create_game_northstar_update_needed_signal_raises_error() -> None:
         "proposed_northstar": "# Revised Goal\n\nNew direction.",
     })
     with pytest.raises(NorthStarUpdateNeededError) as exc_info:
-        run_module.create_game(
+        create_game(
             config, state, model_client=FakeModelClient([response])
         )
 
@@ -3482,7 +3448,6 @@ def test_document_adapter_tool_call_delete_section_returns_correct_delta() -> No
 # --- CreateGame coding state view shows file contents ---
 
 def test_coding_create_game_state_view_includes_file_contents() -> None:
-    import baps.run as run_module
 
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
@@ -3510,7 +3475,6 @@ def test_coding_create_game_state_view_includes_file_contents() -> None:
 
 
 def test_coding_create_game_state_view_truncates_long_files() -> None:
-    import baps.run as run_module
 
     long_content = "\n".join(f"line_{i} = {i}" for i in range(100))
     state = state_module.State(
@@ -3729,7 +3693,6 @@ def test_coding_blue_prompt_includes_prior_export_failures() -> None:
     from baps.coding_adapter import render_coding_blue_prompt
     from baps.language_python import PythonLanguagePlugin
     from baps.northstar_projection import ProjectionType, StateView
-    import baps.run as run_module
 
     state_view = StateView(
         id="sv:test",
@@ -3768,7 +3731,6 @@ def test_coding_blue_prompt_no_verification_section_when_feedback_is_none() -> N
     from baps.coding_adapter import render_coding_blue_prompt
     from baps.language_python import PythonLanguagePlugin
     from baps.northstar_projection import ProjectionType, StateView
-    import baps.run as run_module
 
     state_view = StateView(
         id="sv:test",
@@ -3795,7 +3757,6 @@ def test_coding_blue_prompt_no_verification_section_when_feedback_is_none() -> N
 
 
 def test_play_game_pre_seeds_verification_result_as_previous_feedback(monkeypatch) -> None:
-    import baps.run as run_module
 
     captured_feedback: list[object] = []
 
@@ -3850,7 +3811,7 @@ def test_play_game_pre_seeds_verification_result_as_previous_feedback(monkeypatc
 
     # tool_responses=[None] makes generate_with_tools return None → falls through to generate().
     # parse_blue_delta raises ValueError → attempt exhausted → returns None.
-    result = run_module.play_game(
+    result = play_game(
         state, game_spec,
         adapter=_CapturingAdapter(),
         model_client=FakeModelClient(tool_responses=[None], responses=["not valid json"]),
@@ -4018,7 +3979,6 @@ def test_coding_blue_prompt_includes_candidate_verification_failures() -> None:
     from baps.coding_adapter import render_coding_blue_prompt
     from baps.language_python import PythonLanguagePlugin
     from baps.northstar_projection import ProjectionType, StateView
-    import baps.run as run_module
 
     state_view = StateView(
         id="sv:test",

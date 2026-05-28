@@ -5,17 +5,15 @@ import inspect
 import json
 import logging
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 from baps.models import FakeModelClient, ToolCall
-from baps.run import create_game, create_state, play_game
+from baps.run import create_state
+from baps.game import create_game, play_game
 from baps.document_adapter import DocumentProjectAdapter
-from baps.coding_adapter import CodingProjectAdapter
 from baps.parsers import (
     NoNewGameError,
-    NorthStarUpdateNeededError,
     _parse_red_finding_json,
     _parse_referee_decision_json,
 )
@@ -23,20 +21,10 @@ from baps.prompts import _render_create_game_prompt, _render_red_prompt, _render
 from baps.debug import _debug_print_blue_input
 from baps.state import (
     GameSpec,
-    RedFinding,
-    RefereeDecision,
-    PlayGameRuntime,
-    apply_referee_decision_to_runtime,
-    DecomposeSpec,
-    SubGapSpec,
-    State,
-    StateUpdateProposal,
 )
-from baps.northstar_projection import StateView, ProjectionType
 from baps.game import _VERIFICATION_SUMMARY_CAP
 from baps.project_adapter import VerificationResult
 import baps.state as state_module
-import baps.run as _real_run
 
 
 def _make_doc_config(

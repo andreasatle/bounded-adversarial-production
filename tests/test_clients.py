@@ -8,8 +8,8 @@ import pytest
 import yaml
 
 from baps.models import AnthropicClient, FakeModelClient, OllamaClient, OpenAIClient, ToolCall
-from baps.run import create_game, create_state, play_game
-import baps.run as _real_run
+from baps.run import create_state
+from baps.game import create_game, play_game
 import baps.clients as _clients_module
 
 # Captured before autouse fixtures patch them — used by backend dispatch tests.

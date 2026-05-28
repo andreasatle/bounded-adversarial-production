@@ -3,13 +3,10 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
 
 import pytest
 
-from baps.models import FakeModelClient
 from baps.parsers import (
-    NoNewGameError,
     NorthStarUpdateNeededError,
     _parse_create_game_output,
     _parse_red_finding_json,

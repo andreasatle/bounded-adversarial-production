@@ -7,8 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from baps.models import FakeModelClient, ToolCall
-from baps.run import create_game, create_state, main, play_game
+from baps.run import create_state, main
 from baps.document_adapter import DocumentProjectAdapter
 from baps.parsers import NoNewGameError, NorthStarUpdateNeededError
 from baps.state import (
@@ -18,11 +17,9 @@ from baps.state import (
     State,
 )
 from baps.project_adapter import VerificationResult
-from baps.state_service import StateService
 from baps.state_store import JsonStateStore
 from baps.orchestration import _run_project_iterations
 import baps.state as state_module
-import baps.run as run_module
 from baps.run import _initialize_project
 def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_path: Path) -> None:
 

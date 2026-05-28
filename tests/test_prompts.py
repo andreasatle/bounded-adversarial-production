@@ -2,21 +2,18 @@
 from __future__ import annotations
 
 import inspect
-import logging
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 
 from baps.models import FakeModelClient, ToolCall
-from baps.run import create_game, create_state, play_game
+from baps.run import create_state
+from baps.game import play_game
 from baps.document_adapter import DocumentProjectAdapter
 from baps.coding_adapter import CodingProjectAdapter
 from baps.prompts import _render_create_game_prompt, _render_red_prompt, _render_referee_prompt
-from baps.parsers import NoNewGameError
 from baps.state import GameSpec, RedFinding
 import baps.state as state_module
-import baps.run as run_module
 
 
 def _make_doc_config(
