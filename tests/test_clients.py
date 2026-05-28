@@ -470,7 +470,9 @@ def test_create_game_fallback_called_when_primary_exhausts_retries(monkeypatch) 
         '"success_condition":"section exists"}'
     )
     fallback_client = FakeModelClient(responses=[valid_response])
-    _chain = lambda role, cfg: [("gemma4:26b", fallback_client)] if role == "create_game" else []
+    def _chain(role, cfg):
+        del cfg
+        return [("gemma4:26b", fallback_client)] if role == "create_game" else []
     monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
     monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
 
@@ -502,7 +504,9 @@ def test_create_game_fallback_not_called_when_primary_succeeds(monkeypatch) -> N
         '"success_condition":"section exists"}'
     )
     fallback_client = FakeModelClient(responses=[valid_response])
-    _chain = lambda role, cfg: [("gemma4:26b", fallback_client)] if role == "create_game" else []
+    def _chain(role, cfg):
+        del cfg
+        return [("gemma4:26b", fallback_client)] if role == "create_game" else []
     monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
     monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
 
@@ -531,7 +535,9 @@ def test_play_game_red_fallback_called_when_primary_exhausts_retries(monkeypatch
 
     valid_accept = '{"disposition":"accept","rationale":"looks good"}'
     fallback_red_client = FakeModelClient(responses=[valid_accept])
-    _chain = lambda role, cfg: [("gemma4:26b", fallback_red_client)] if role == "red" else []
+    def _chain(role, cfg):
+        del cfg
+        return [("gemma4:26b", fallback_red_client)] if role == "red" else []
     monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
     monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
 
@@ -578,7 +584,9 @@ def test_play_game_referee_fallback_called_when_primary_exhausts_retries(monkeyp
 
     valid_accept = '{"disposition":"accept","rationale":"looks good"}'
     fallback_referee_client = FakeModelClient(responses=[valid_accept])
-    _chain = lambda role, cfg: [("gemma4:26b", fallback_referee_client)] if role == "referee" else []
+    def _chain(role, cfg):
+        del cfg
+        return [("gemma4:26b", fallback_referee_client)] if role == "referee" else []
     monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
     monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
 
@@ -755,10 +763,9 @@ def test_create_game_fallback_chain_escalates_through_all_links(monkeypatch) -> 
     )
     fail_client = FakeModelClient(responses=[])  # raises RuntimeError immediately
     success_client = FakeModelClient(responses=[valid_response])
-    _chain = (
-        lambda role, cfg: [("gemma4:26b", fail_client), ("gemma4:72b", success_client)]
-        if role == "create_game" else []
-    )
+    def _chain(role, cfg):
+        del cfg
+        return [("gemma4:26b", fail_client), ("gemma4:72b", success_client)] if role == "create_game" else []
     monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
     monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
 
@@ -786,10 +793,9 @@ def test_create_game_fallback_chain_escalates_through_all_links(monkeypatch) -> 
 def test_create_game_chain_exhaustion_raises_runtime_error(monkeypatch) -> None:
     fail_client1 = FakeModelClient(responses=[])
     fail_client2 = FakeModelClient(responses=[])
-    _chain = (
-        lambda role, cfg: [("gemma4:26b", fail_client1), ("gemma4:72b", fail_client2)]
-        if role == "create_game" else []
-    )
+    def _chain(role, cfg):
+        del cfg
+        return [("gemma4:26b", fail_client1), ("gemma4:72b", fail_client2)] if role == "create_game" else []
     monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
     monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", _chain)
 

@@ -1,6 +1,4 @@
-from pathlib import Path
 
-from baps.state.state import GameSpec
 from baps.adapters.coding_adapter import CodingProjectAdapter
 import baps.state.state as state_module
 def test_apply_delta_to_files_write_file() -> None:
@@ -60,7 +58,6 @@ def test_apply_delta_to_files_delete_file() -> None:
 
 
 def test_verify_candidate_returns_none_when_no_test_files() -> None:
-    from baps.adapters.coding_adapter import CodingProjectAdapter
 
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
@@ -81,7 +78,6 @@ def test_verify_candidate_returns_none_when_no_test_files() -> None:
 
 
 def test_verify_candidate_passes_when_tests_pass(tmp_path) -> None:
-    from baps.adapters.coding_adapter import CodingProjectAdapter
 
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
@@ -113,7 +109,6 @@ def test_verify_candidate_passes_when_tests_pass(tmp_path) -> None:
 
 
 def test_verify_candidate_fails_when_tests_fail() -> None:
-    from baps.adapters.coding_adapter import CodingProjectAdapter
 
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),

@@ -12,7 +12,6 @@ from baps.state.state import (
     find_state_artifact,
     fingerprint_state,
     GitRepositoryArtifactAdapter,
-    NorthStar,
     Section,
     State,
     StateArtifact,

@@ -10,8 +10,6 @@ from baps.adapters.project_adapter import (
     _verification_result_to_dict,
 )
 from baps.adapters.coding.common import (
-    _BLUE_CONTENT_FORBIDDEN_MARKERS,
-    _build_language_registry,
     _config_language,
     _plugin_for,
     _validate_file_path,
@@ -25,7 +23,6 @@ from baps.adapters.coding.parsing import (
 )
 from baps.adapters.coding.prompting import (
     _render_coding_evaluation_supplement,
-    _render_verification_feedback_section,
     _truncate_lines,
     render_coding_blue_prompt,
 )

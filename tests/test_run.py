@@ -5,18 +5,15 @@ from pathlib import Path
 import pytest
 
 from baps.models.models import FakeModelClient, ToolCall
-from baps.core.run import create_state, main
+from baps.core.run import create_state
 from baps.core.game import create_game, play_game
 from baps.state.state import (
     DecomposeSpec,
     GameSpec,
 )
-from baps.northstar.northstar_projection import ProjectionType, StateView
 from baps.core.parsers import NoNewGameError, NorthStarUpdateNeededError
-from baps.core.game import _derive_state_update_from_delta
 from baps.core.orchestration import _run_project_iterations
 from baps.adapters.document_adapter import DocumentProjectAdapter
-from baps.adapters.coding_adapter import CodingProjectAdapter
 import baps.state.state as state_module
 
 

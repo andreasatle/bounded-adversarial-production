@@ -6,7 +6,6 @@ from baps.state.state import (
     apply_referee_decision_to_runtime,
     AppendSectionDelta,
     CodeFile,
-    CodingArtifact,
     DeltaDocumentState,
     DeltaState,
     DocumentArtifact,

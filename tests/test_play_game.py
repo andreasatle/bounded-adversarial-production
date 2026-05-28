@@ -14,7 +14,6 @@ from baps.core.parsers import (
 )
 from baps.core.prompts import _render_red_prompt, _render_referee_prompt
 from baps.state.state import GameSpec
-import baps.state.state as state_module
 
 
 def _make_document_spec_and_state(success_condition: str = "A section exists."):
@@ -483,8 +482,3 @@ def test_referee_prompt_includes_red_override_and_improvement_hints_fields() -> 
     prompt = str(captured["prompt"])
     assert "red_override" in prompt
     assert "improvement_hints" in prompt
-
-
-def test_play_game_referee_receives_gamespec_state_view_delta_and_red(monkeypatch) -> None:
-
-    captured: dict[str, object] = {}

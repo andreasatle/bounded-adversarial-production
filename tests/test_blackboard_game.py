@@ -201,7 +201,7 @@ def test_integration_writes_integration_blackboard_event(
     games_path = workspace / "blackboard" / "games.jsonl"
     assert games_path.exists(), "games.jsonl must exist after a successful run"
 
-    lines = [json.loads(l) for l in games_path.read_text(encoding="utf-8").strip().splitlines()]
+    lines = [json.loads(line) for line in games_path.read_text(encoding="utf-8").strip().splitlines()]
     integration_events = [e for e in lines if e["event"] == "integration"]
     assert len(integration_events) >= 1, "at least one integration event must be written"
 

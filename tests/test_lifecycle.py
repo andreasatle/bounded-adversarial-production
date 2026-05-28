@@ -2,7 +2,6 @@ import json
 import logging
 from pathlib import Path
 
-import pytest
 
 from baps.core.run import main
 import baps.state.state as state_module

@@ -832,7 +832,7 @@ def test_run_iterations_northstar_proposal_appends_on_multiple_signals(
 
     main()
 
-    lines = [l for l in proposals_path.read_text(encoding="utf-8").splitlines() if l.strip()]
+    lines = [line for line in proposals_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert len(lines) == 2
     first = json.loads(lines[0])
     second = json.loads(lines[1])

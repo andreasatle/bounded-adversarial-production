@@ -79,7 +79,7 @@ class ModelPolicy:
         scores = [self._stats[m.name].score for m in self.models]
         logits = [s / T for s in scores]
         max_l = max(logits)
-        exps = [math.exp(l - max_l) for l in logits]
+        exps = [math.exp(logit - max_l) for logit in logits]
         total = sum(exps)
         probs = [e / total for e in exps]
         r = random.random()

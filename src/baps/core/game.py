@@ -32,13 +32,10 @@ from baps.core.game_roles import (
 from baps.core.game_telemetry import (
     _VERIFICATION_SUMMARY_CAP,
     _append_create_game_to_blackboard,
-    _append_game_to_blackboard,
     _append_integration_to_blackboard,
     _append_northstar_proposal_to_blackboard,
     _client_model_name,
-    _sanitize_feedback_dict,
     _sanitize_game_spec_dict,
-    _summarize_verification_result,
 )
 from baps.core.parsers import (
     NoNewGameError,
@@ -74,6 +71,17 @@ from baps.tools.tools import ToolExecutor
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MAX_PLAY_GAME_ATTEMPTS = 3
+
+__all__ = [
+    "_VERIFICATION_SUMMARY_CAP",
+    "_append_integration_to_blackboard",
+    "_append_northstar_proposal_to_blackboard",
+    "_commit_export_with_adapter",
+    "_derive_state_update_from_delta",
+    "_verify_export_with_adapter",
+    "create_game",
+    "play_game",
+]
 
 # Role schemas.
 # constrained=True: Ollama constrained decoding enforces the schema at inference time.

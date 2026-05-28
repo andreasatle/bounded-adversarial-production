@@ -45,6 +45,9 @@ def _make_blue_client(*titles: str):
     )
 
 
+def test_play_game_referee_receives_gamespec_state_view_delta_and_red(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
     def _capture_event(name, payload):
         if name != "referee.input":
             return

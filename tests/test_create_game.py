@@ -12,7 +12,6 @@ from baps.core.run import create_state
 from baps.core.game import create_game
 from baps.adapters.document_adapter import DocumentProjectAdapter
 from baps.core.prompts import _render_create_game_prompt
-from baps.state.state import GameSpec
 
 
 def _make_doc_config(

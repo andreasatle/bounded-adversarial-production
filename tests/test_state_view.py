@@ -2,12 +2,6 @@ from pathlib import Path
 
 from baps.state.state import (
     GameSpec,
-    State,
-    NorthStar,
-    DocumentArtifact,
-    Section,
-    CodingArtifact,
-    CodeFile,
 )
 from baps.adapters.document_adapter import DocumentProjectAdapter
 from baps.adapters.coding_adapter import CodingProjectAdapter

@@ -514,7 +514,7 @@ def test_zig_plugin_run_tests_docker_uses_plugin_values(tmp_path: Path) -> None:
     plugin = ZigLanguagePlugin()
     completed = _make_completed(returncode=0)
     with patch("baps.tools.sandbox.subprocess.run", return_value=completed) as mock_run:
-        result = plugin.run_tests(tmp_path, "docker")
+        plugin.run_tests(tmp_path, "docker")
 
     docker_args = mock_run.call_args[0][0]
     assert plugin.docker_image in docker_args
