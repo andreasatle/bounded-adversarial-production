@@ -283,7 +283,7 @@ def test_play_game_referee_revise_retries_and_second_attempt_accepted() -> None:
     assert delta.payload.section.title == "Attempt Two"
 
 
-def test_play_game_debug_output_distinguishes_current_best_from_integration_eligible(monkeypatch) -> None:
+def test_play_game_revise_and_reject_produce_no_accepted_delta(monkeypatch) -> None:
     captured: list[dict] = []
 
     def _capture_event(name, payload):
@@ -313,9 +313,8 @@ def test_play_game_debug_output_distinguishes_current_best_from_integration_elig
     assert delta is None
     assert len(captured) == 1
     output_payload = captured[0]
-    assert output_payload["current_best_delta"] is not None
+    assert output_payload["current_best_delta"] is None
     assert output_payload["integration_eligible_delta"] is None
-    assert output_payload["current_best_delta"]["payload"]["section"]["title"] == "Attempt One"
 
 
 def test_play_game_referee_reject_retries_and_second_attempt_accepted() -> None:

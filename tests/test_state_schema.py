@@ -298,7 +298,7 @@ def test_play_game_runtime_preserves_earlier_accepted_delta_when_later_candidate
     )
 
 
-def test_apply_referee_decision_revise_promotes_candidate_as_best_delta() -> None:
+def test_apply_referee_decision_revise_does_not_set_current_best_delta() -> None:
     candidate = DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
@@ -310,8 +310,7 @@ def test_apply_referee_decision_revise_promotes_candidate_as_best_delta() -> Non
         decision=RefereeDecision(disposition="revise", rationale="Promising but needs work."),
     )
 
-    assert runtime.current_best_delta is not None
-    assert runtime.current_best_delta.model_dump(mode="json") == candidate.model_dump(mode="json")
+    assert runtime.current_best_delta is None
     assert runtime.integration_eligible_delta is None
 
 
@@ -331,7 +330,7 @@ def test_apply_referee_decision_reject_discards_candidate_and_keeps_none() -> No
     assert runtime.integration_eligible_delta is None
 
 
-def test_apply_referee_decision_revise_then_reject_keeps_revised_candidate() -> None:
+def test_apply_referee_decision_revise_then_reject_produces_no_accepted_candidate() -> None:
     first_candidate = DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
@@ -353,12 +352,11 @@ def test_apply_referee_decision_revise_then_reject_keeps_revised_candidate() -> 
         decision=RefereeDecision(disposition="reject", rationale="Regression."),
     )
 
-    assert runtime.current_best_delta is not None
-    assert runtime.current_best_delta.model_dump(mode="json") == first_candidate.model_dump(mode="json")
+    assert runtime.current_best_delta is None
     assert runtime.integration_eligible_delta is None
 
 
-def test_apply_referee_decision_accept_then_revise_keeps_accepted_integration_candidate() -> None:
+def test_apply_referee_decision_accept_then_revise_keeps_accepted_candidate_unchanged() -> None:
     accepted_candidate = DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
@@ -380,7 +378,7 @@ def test_apply_referee_decision_accept_then_revise_keeps_accepted_integration_ca
         decision=RefereeDecision(disposition="revise", rationale="Promising but not ready."),
     )
     assert runtime.current_best_delta is not None
-    assert runtime.current_best_delta.model_dump(mode="json") == revised_candidate.model_dump(mode="json")
+    assert runtime.current_best_delta.model_dump(mode="json") == accepted_candidate.model_dump(mode="json")
     assert runtime.integration_eligible_delta is not None
     assert runtime.integration_eligible_delta.model_dump(mode="json") == accepted_candidate.model_dump(
         mode="json"

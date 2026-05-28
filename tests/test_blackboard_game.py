@@ -274,7 +274,7 @@ def test_play_game_blackboard_revise_only_is_not_integration_eligible(tmp_path: 
         (workspace / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip()
     )
     assert entry["final_disposition"] == "rejected"
-    assert entry["current_best_delta"] is not None
+    assert entry["current_best_delta"] is None
     assert entry["integration_eligible_delta"] is None
 
 

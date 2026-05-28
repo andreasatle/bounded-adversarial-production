@@ -419,9 +419,15 @@ def apply_referee_decision_to_runtime(
             integration_eligible_delta=accepted.model_copy(deep=True),
         )
     if decision.disposition == Disposition.revise:
-        # Revise can retain internal progress but is not integration-eligible.
+        # Revise updates search guidance via feedback but is not integration-eligible
+        # and must not promote the candidate to current_best_delta. Keep both fields
+        # unchanged so current_best_delta only ever holds an accepted candidate.
         return PlayGameRuntime(
-            current_best_delta=candidate_delta.model_copy(deep=True),
+            current_best_delta=(
+                runtime.current_best_delta.model_copy(deep=True)
+                if runtime.current_best_delta is not None
+                else None
+            ),
             integration_eligible_delta=(
                 runtime.integration_eligible_delta.model_copy(deep=True)
                 if runtime.integration_eligible_delta is not None
