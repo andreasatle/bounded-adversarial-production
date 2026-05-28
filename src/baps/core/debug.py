@@ -4,14 +4,14 @@ import argparse
 import logging
 from typing import Any
 
-from baps.northstar_projection import StateView
-from baps.project_adapter import (
+from baps.northstar.northstar_projection import StateView
+from baps.adapters.project_adapter import (
     VerificationResult,
     _config_artifact_id,
     _config_northstar_markdown,
     _verification_result_to_dict,
 )
-from baps.state import DeltaState, GameSpec, RedFinding, RefereeDecision, State
+from baps.state.state import DeltaState, GameSpec, RedFinding, RefereeDecision, State
 
 logger = logging.getLogger(__name__)
 

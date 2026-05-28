@@ -5,9 +5,9 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from baps.clients import SpecRole, _build_client_for_role
-from baps.debug import _debug_print_northstar_update_proposal, _debug_print_verification_result
-from baps.game import (
+from baps.core.clients import SpecRole, _build_client_for_role
+from baps.core.debug import _debug_print_northstar_update_proposal, _debug_print_verification_result
+from baps.core.game import (
     _append_integration_to_blackboard,
     _append_northstar_proposal_to_blackboard,
     _commit_export_with_adapter,
@@ -15,16 +15,16 @@ from baps.game import (
     create_game,
     play_game,
 )
-from baps.parsers import NoNewGameError, NorthStarUpdateNeededError
-from baps.project_adapter import (
+from baps.core.parsers import NoNewGameError, NorthStarUpdateNeededError
+from baps.adapters.project_adapter import (
     ProjectTypeAdapter,
     VerificationResult,
     _config_artifact_id,
     _config_northstar_markdown,
 )
-from baps.state import DecomposeSpec, State, StopReason
-from baps.state_service import StateService
-from baps.tools import build_default_tool_executor
+from baps.state.state import DecomposeSpec, State, StopReason
+from baps.state.state_service import StateService
+from baps.tools.tools import build_default_tool_executor
 
 logger = logging.getLogger(__name__)
 
@@ -215,7 +215,7 @@ def _run_project_iterations(
     max_depth = int(config.get("max_depth", _DEFAULT_MAX_DEPTH))
 
     if config.get("project_type") == "coding" and config.get("sandbox") == "none":
-        from baps.sandbox import SANDBOX_NONE_WARNING
+        from baps.tools.sandbox import SANDBOX_NONE_WARNING
         logger.warning("%s", SANDBOX_NONE_WARNING)
 
     ctx = _RunContext(initial_state=initial_state, max_iterations=max_iterations)

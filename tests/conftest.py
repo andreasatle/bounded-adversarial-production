@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from baps.models import FakeModelClient, ToolCall
+from baps.models.models import FakeModelClient, ToolCall
 
 
 @pytest.fixture(autouse=True)
@@ -41,8 +41,8 @@ def _patch_create_game_model_client(monkeypatch):
             return _fake_create_game_builder()
         return _fake_model_client_builder()
 
-    monkeypatch.setattr("baps.game._build_client_for_role", _fake_build_client_for_role)
-    monkeypatch.setattr("baps.orchestration._build_client_for_role", _fake_build_client_for_role)
-    monkeypatch.setattr("baps.game._build_role_client", lambda _role: _fake_model_client_builder())
+    monkeypatch.setattr("baps.core.game._build_client_for_role", _fake_build_client_for_role)
+    monkeypatch.setattr("baps.core.orchestration._build_client_for_role", _fake_build_client_for_role)
+    monkeypatch.setattr("baps.core.game._build_role_client", lambda _role: _fake_model_client_builder())
     # Fallback resolution returns no chain by default (no fallback configured in tests).
-    monkeypatch.setattr("baps.game._build_fallback_chain_for_role", lambda role, config: [])
+    monkeypatch.setattr("baps.core.game._build_fallback_chain_for_role", lambda role, config: [])

@@ -14,9 +14,9 @@ dependencies = [
 ]
 
 [project.scripts]
-baps-run = "baps.run:main"
-baps-schedule = "baps.scheduler:main"
-baps-apply-northstar = "baps.northstar_apply:main"
+baps-run = "baps.core.run:main"
+baps-schedule = "baps.scheduler.scheduler:main"
+baps-apply-northstar = "baps.northstar.northstar_apply:main"
 
 [build-system]
 requires = ["uv_build>=0.8.5,<0.9.0"]

@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from baps.models import ToolCallRecord
-from baps.northstar_projection import StateView
-from baps.project_adapter import (
+from baps.models.models import ToolCallRecord
+from baps.northstar.northstar_projection import StateView
+from baps.adapters.project_adapter import (
     ProjectTypeAdapter,
     VerificationResult,
     _config_artifact_id,
@@ -13,7 +13,7 @@ from baps.project_adapter import (
     resolve_project_type_adapter,
     sanitize_model_string,
 )
-from baps.state import DeltaState, GameSpec, RedFinding, State
+from baps.state.state import DeltaState, GameSpec, RedFinding, State
 
 
 def _render_verification_block(result: VerificationResult | None, *, guidance: str) -> str:

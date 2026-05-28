@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-from baps.project_adapter import VerificationResult
+from baps.adapters.project_adapter import VerificationResult
 
 
 _CONFTEST_CONTENT = (
@@ -70,7 +70,7 @@ class PythonLanguagePlugin:
         if sandbox_mode == "none":
             command, completed = self._run_bare(project_path)
         else:
-            from baps.sandbox import run_sandboxed
+            from baps.tools.sandbox import run_sandboxed
             command, completed = run_sandboxed(
                 project_path, sandbox_mode, self.test_command, self.docker_image
             )

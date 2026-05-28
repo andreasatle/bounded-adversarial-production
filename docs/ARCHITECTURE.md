@@ -55,7 +55,7 @@ Current implementation philosophy:
 
 ## 2. System Capabilities
 
-### Schemas (`src/baps/state.py`)
+### Schemas (`src/baps/state/state.py`)
 
 **Core state:**
 
@@ -94,7 +94,7 @@ Current implementation philosophy:
 
 ---
 
-### Runtime (`src/baps/run.py`, `src/baps/orchestration.py`)
+### Runtime (`src/baps/core/run.py`, `src/baps/core/orchestration.py`)
 
 **`run.py` — lifecycle commands:** `start`, `reset`, config resolution, `main()`
 
@@ -162,7 +162,7 @@ Client construction is handled by `_resolve_backend_model(role, config)` → `_b
 
 ### Adapters
 
-#### Document (`src/baps/document_adapter.py`)
+#### Document (`src/baps/adapters/document_adapter.py`)
 
 - Section-based document state
 - CreateGame StateView: renders NorthStar + current sections (sanitized)
@@ -170,7 +170,7 @@ Client construction is handled by `_resolve_backend_model(role, config)` → `_b
 - Delta operations: `append_section`, `modify_section`, `delete_section`
 - Export: markdown file
 
-#### Coding (`src/baps/coding_adapter.py`)
+#### Coding (`src/baps/adapters/coding_adapter.py`)
 
 - File-based codebase state; language-agnostic via plugin registry
 - CreateGame StateView: renders NorthStar + existing file contents (first 30 lines, sanitized)
@@ -181,7 +181,7 @@ Client construction is handled by `_resolve_backend_model(role, config)` → `_b
 - Sandbox: `sandbox_mode` propagated from config/CLI through `run.py` → `play_game` → adapter → plugin → `sandbox.run_sandboxed`
 - Language resolved from `CodingArtifact.language` (set at `create_initial_state` from the spec's `language` key; **required** — omitting it raises `ValueError` listing available languages); unknown names also raise `ValueError`
 
-#### Language Plugins (`src/baps/language_plugin.py`, `src/baps/language_python.py`, `src/baps/language_zig.py`)
+#### Language Plugins (`src/baps/plugins/language_plugin.py`, `src/baps/plugins/language_python.py`, `src/baps/plugins/language_zig.py`)
 
 `LanguagePlugin` protocol: `name`, `test_command`, `docker_image`, `initialize`, `run_tests`, `build`, `parse_test_failures`, `has_tests`
 
@@ -198,7 +198,7 @@ Active implementations:
 
 The language is stored on `CodingArtifact.language` at creation time and persists in authoritative state. All subsequent operations (export, verify_export, verify_candidate) read it from the artifact — not from config. Adding a new language requires implementing `LanguagePlugin`, registering it in `language_plugin.py` and `coding_adapter.py`, and adding a spec example. `sandbox.py` requires no changes.
 
-#### Audit (`src/baps/audit_adapter.py`)
+#### Audit (`src/baps/adapters/audit_adapter.py`)
 
 - Document-based findings report over an external source tree
 - CreateGame StateView: renders NorthStar + source file listing + current findings; stale findings marked `[STALE — source changed]`
@@ -212,7 +212,7 @@ All adapters expose tools for Blue's tool-call interface in addition to JSON out
 
 ---
 
-### StateView (`src/baps/northstar_projection.py`)
+### StateView (`src/baps/northstar/northstar_projection.py`)
 
 - `StateView`: `id`, `projection_type`, `content`, `input_fingerprint`, `metadata`
 - Content uses explicit delimiters (`=== StateView Start/End ===`)
@@ -222,7 +222,7 @@ All adapters expose tools for Blue's tool-call interface in addition to JSON out
 
 ---
 
-### Model Layer (`src/baps/models.py`)
+### Model Layer (`src/baps/models/models.py`)
 
 Active backends:
 
@@ -235,7 +235,7 @@ Active backends:
 
 ---
 
-### Adaptive Scheduler (`src/baps/scheduler.py`)
+### Adaptive Scheduler (`src/baps/scheduler/scheduler.py`)
 
 Runs specs repeatedly across a model ladder with policy-guided selection:
 
@@ -249,7 +249,7 @@ Runs specs repeatedly across a model ladder with policy-guided selection:
 
 ---
 
-### NorthStar Apply CLI (`src/baps/northstar_apply.py`)
+### NorthStar Apply CLI (`src/baps/northstar/northstar_apply.py`)
 
 Reviews and applies approved NorthStar proposals from the blackboard:
 
@@ -261,7 +261,7 @@ Reads `<workspace>/blackboard/northstar_proposals.jsonl`, lists proposals intera
 
 ---
 
-### Security Boundaries (`src/baps/project_adapter.py`, `src/baps/tools.py`)
+### Security Boundaries (`src/baps/adapters/project_adapter.py`, `src/baps/tools/tools.py`)
 
 - `sanitize_model_string`: NFKC-normalizes and applies injection-pattern regex before embedding model-generated strings in prompts
 - `sanitize_model_title`: additionally collapses to a single line and strips leading `#` characters
@@ -279,30 +279,39 @@ Reads `<workspace>/blackboard/northstar_proposals.jsonl`, lists proposals intera
 
 ```
 src/baps/
-  run.py                  # Lifecycle commands (start, reset), config resolution, main()
-  orchestration.py        # _solve_gap, _run_project_iterations, _RunContext — recursive gap solver
-  game.py                 # create_game, play_game, blackboard helpers
-  prompts.py              # All prompt rendering functions
-  parsers.py              # All model output parsing functions
-  clients.py              # All client-building functions, SpecRole, backend resolution
-  debug.py                # Debug print helpers
-  project_adapter.py      # ProjectTypeAdapter protocol, registry, sanitizers, Blue prompt core
-  document_adapter.py     # DocumentProjectAdapter — all document mechanics
-  coding_adapter.py       # CodingProjectAdapter — all coding mechanics (language-agnostic)
-  audit_adapter.py        # AuditProjectAdapter — all audit mechanics, source fingerprinting
-  language_plugin.py      # LanguagePlugin protocol + get_language_plugin registry lookup
-  language_python.py      # PythonLanguagePlugin — Python/pytest specifics
-  language_zig.py         # ZigLanguagePlugin — Zig/build.zig specifics
-  state.py                # Authoritative schemas, mutation, delta application
-  state_service.py        # StateService — the only mutation boundary
-  state_store.py          # JsonStateStore — JSON persistence
-  models.py               # ModelClient, backends, FakeModelClient, Role
-  northstar_projection.py # StateView, ProjectionType, projection utilities
-  scheduler.py            # Adaptive multi-model scheduler with policy learning
-  scheduler_policy.py     # ModelPolicy, EMA scoring, softmax selection
-  northstar_apply.py      # baps-apply-northstar CLI
-  sandbox.py              # run_sandboxed — generic Docker/bare execution, SANDBOX_NONE_WARNING
-  tools.py                # fetch_url, web_search, ToolExecutor — research phase tools
+  core/
+    run.py                  # Lifecycle commands (start, reset), config resolution, main()
+    orchestration.py        # _solve_gap, _run_project_iterations, _RunContext — recursive gap solver
+    game.py                 # create_game, play_game, blackboard helpers
+    prompts.py              # All prompt rendering functions
+    parsers.py              # All model output parsing functions
+    clients.py              # All client-building functions, SpecRole, backend resolution
+    debug.py                # Debug print helpers
+  adapters/
+    project_adapter.py      # ProjectTypeAdapter protocol, registry, sanitizers, Blue prompt core
+    document_adapter.py     # DocumentProjectAdapter — all document mechanics
+    coding_adapter.py       # CodingProjectAdapter — all coding mechanics (language-agnostic)
+    audit_adapter.py        # AuditProjectAdapter — all audit mechanics, source fingerprinting
+  state/
+    state.py                # Authoritative schemas, mutation, delta application
+    state_service.py        # StateService — the only mutation boundary
+    state_store.py          # JsonStateStore — JSON persistence
+  models/
+    models.py               # ModelClient, backends, FakeModelClient, Role
+    model_output.py         # Single model output parsing pipeline
+  plugins/
+    language_plugin.py      # LanguagePlugin protocol + get_language_plugin registry lookup
+    language_python.py      # PythonLanguagePlugin — Python/pytest specifics
+    language_zig.py         # ZigLanguagePlugin — Zig/build.zig specifics
+  scheduler/
+    scheduler.py            # Adaptive multi-model scheduler with policy learning
+    scheduler_policy.py     # ModelPolicy, EMA scoring, softmax selection
+  tools/
+    tools.py                # fetch_url, web_search, ToolExecutor — research phase tools
+    sandbox.py              # run_sandboxed — generic Docker/bare execution, SANDBOX_NONE_WARNING
+  northstar/
+    northstar_projection.py # StateView, ProjectionType, projection utilities
+    northstar_apply.py      # baps-apply-northstar CLI
 
 tests/
   test_state.py

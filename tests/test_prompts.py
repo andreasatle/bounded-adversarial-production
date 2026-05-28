@@ -6,14 +6,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 
-from baps.models import FakeModelClient, ToolCall
-from baps.run import create_state
-from baps.game import play_game
-from baps.document_adapter import DocumentProjectAdapter
-from baps.coding_adapter import CodingProjectAdapter
-from baps.prompts import _render_create_game_prompt, _render_red_prompt, _render_referee_prompt
-from baps.state import GameSpec, RedFinding
-import baps.state as state_module
+from baps.models.models import FakeModelClient, ToolCall
+from baps.core.run import create_state
+from baps.core.game import play_game
+from baps.adapters.document_adapter import DocumentProjectAdapter
+from baps.adapters.coding_adapter import CodingProjectAdapter
+from baps.core.prompts import _render_create_game_prompt, _render_red_prompt, _render_referee_prompt
+from baps.state.state import GameSpec, RedFinding
+import baps.state.state as state_module
 
 
 def _make_doc_config(
@@ -237,7 +237,7 @@ def test_coding_create_game_prompt_includes_multi_file_guidance() -> None:
 
 
 def test_coding_create_game_prompt_includes_previous_verification_evidence() -> None:
-    from baps.project_adapter import VerificationResult
+    from baps.adapters.project_adapter import VerificationResult
 
     config = {
         "workspace": Path(".baps-workspace"),
@@ -301,7 +301,7 @@ def test_document_create_game_prompt_has_no_verification_block_by_default() -> N
 # ---------------------------------------------------------------------------
 
 def test_blue_prompt_includes_state_view_and_gamespec() -> None:
-    import baps.project_adapter as project_adapter_module
+    import baps.adapters.project_adapter as project_adapter_module
 
     spec = GameSpec(
         objective="Any objective",
@@ -358,7 +358,7 @@ def test_blue_prompt_includes_state_view_and_gamespec() -> None:
 
 
 def test_blue_prompt_and_source_do_not_hardcode_project_policy_literals() -> None:
-    import baps.project_adapter as project_adapter_module
+    import baps.adapters.project_adapter as project_adapter_module
 
     spec = GameSpec(
         objective="Add Overview section",
@@ -433,8 +433,8 @@ def test_document_blue_prompt_includes_modify_section_shape() -> None:
 
 
 def test_blue_prompt_includes_context_chain_from_game_spec() -> None:
-    from baps.project_adapter import render_blue_prompt_core
-    from baps.northstar_projection import StateView, ProjectionType
+    from baps.adapters.project_adapter import render_blue_prompt_core
+    from baps.northstar.northstar_projection import StateView, ProjectionType
 
     game_spec = GameSpec(
         objective="Write jwt_utils.py",
@@ -456,8 +456,8 @@ def test_blue_prompt_includes_context_chain_from_game_spec() -> None:
 
 
 def test_blue_prompt_no_context_block_when_chain_empty() -> None:
-    from baps.project_adapter import render_blue_prompt_core
-    from baps.northstar_projection import StateView, ProjectionType
+    from baps.adapters.project_adapter import render_blue_prompt_core
+    from baps.northstar.northstar_projection import StateView, ProjectionType
 
     game_spec = GameSpec(
         objective="Write something",
@@ -503,7 +503,7 @@ def test_coding_blue_prompt_supplement_prefers_src_and_pytest_layout() -> None:
 # ---------------------------------------------------------------------------
 
 def test_red_prompt_includes_success_condition_met_and_findings_fields() -> None:
-    import baps.game as game_module
+    import baps.core.game as game_module
 
     captured: dict[str, object] = {}
     original = _render_red_prompt
@@ -530,7 +530,7 @@ def test_red_prompt_includes_success_condition(monkeypatch) -> None:
         captured["prompt"] = result
         return result
 
-    monkeypatch.setattr("baps.game._render_red_prompt", _capture)
+    monkeypatch.setattr("baps.core.game._render_red_prompt", _capture)
     success_condition = "Unique success_condition string for red prompt contract test."
     spec, state = _make_document_spec_and_state(success_condition)
     play_game(state, spec, model_client=_make_blue_client("Introduction"))
@@ -571,7 +571,7 @@ def test_red_prompt_intro_only_guides_revise_for_intro_and_conclusion_success_co
 
 
 def test_coding_red_prompt_includes_verification_evidence_when_provided() -> None:
-    from baps.project_adapter import VerificationResult
+    from baps.adapters.project_adapter import VerificationResult
 
     spec = GameSpec(
         objective="Write tests/test_fibonacci.py",
@@ -762,7 +762,7 @@ def test_red_and_referee_prompts_do_not_treat_state_mutation_alone_as_failure() 
 
 
 def test_run_core_prompt_source_has_no_coding_specific_red_referee_guidance() -> None:
-    run_source = Path("src/baps/run.py").read_text(encoding="utf-8")
+    run_source = Path("src/baps/core/run.py").read_text(encoding="utf-8")
     assert "target_artifact_id is the artifact id, not a file path." not in run_source
     assert "Pytest tests containing assert statements are not empty." not in run_source
     assert "Do not reject tests as empty if assertions are present." not in run_source
@@ -773,7 +773,7 @@ def test_run_core_prompt_source_has_no_coding_specific_red_referee_guidance() ->
 # ---------------------------------------------------------------------------
 
 def test_referee_prompt_includes_red_override_and_improvement_hints_fields() -> None:
-    import baps.game as game_module
+    import baps.core.game as game_module
 
     captured: dict[str, object] = {}
     original = _render_referee_prompt
@@ -800,7 +800,7 @@ def test_referee_prompt_includes_success_condition_and_red_rationale(monkeypatch
         captured["prompt"] = result
         return result
 
-    monkeypatch.setattr("baps.game._render_referee_prompt", _capture)
+    monkeypatch.setattr("baps.core.game._render_referee_prompt", _capture)
     success_condition = "Unique success_condition string for referee prompt contract test."
     spec, state = _make_document_spec_and_state(success_condition)
     red_rationale = "Unique red rationale for referee prompt test."
@@ -922,7 +922,7 @@ def test_referee_prompt_uses_red_material_findings_in_decision_policy() -> None:
 
 
 def test_coding_referee_prompt_includes_failing_verification_evidence() -> None:
-    from baps.project_adapter import VerificationResult
+    from baps.adapters.project_adapter import VerificationResult
 
     spec = GameSpec(
         objective="Write tests/test_fibonacci.py",

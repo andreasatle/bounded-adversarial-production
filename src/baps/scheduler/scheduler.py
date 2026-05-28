@@ -8,8 +8,8 @@ import os
 import shutil
 from pathlib import Path
 
-from baps.models import Backend
-from baps.scheduler_policy import ModelConfig, ModelPolicy, compute_reward
+from baps.models.models import Backend
+from baps.scheduler.scheduler_policy import ModelConfig, ModelPolicy, compute_reward
 
 logger = logging.getLogger(__name__)
 

@@ -6,13 +6,13 @@ import logging
 
 import pytest
 
-from baps.parsers import (
+from baps.core.parsers import (
     NorthStarUpdateNeededError,
     _parse_create_game_output,
     _parse_red_finding_json,
     _parse_referee_decision_json,
 )
-import baps.state as state_module
+import baps.state.state as state_module
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +68,7 @@ def test_parse_create_game_output_northstar_update_needed_empty_proposed_northst
 # ---------------------------------------------------------------------------
 
 def test_parse_create_game_output_returns_decompose_spec() -> None:
-    from baps.state import DecomposeSpec
+    from baps.state.state import DecomposeSpec
 
     text = json.dumps({
         "decompose": True,
@@ -107,7 +107,7 @@ def test_parse_create_game_output_decompose_requires_rationale() -> None:
 
 
 def test_parse_create_game_output_truncates_sub_gaps_when_over_max() -> None:
-    from baps.state import DecomposeSpec
+    from baps.state.state import DecomposeSpec
 
     sub_gaps = [{"description": f"Gap {i}"} for i in range(7)]
     text = json.dumps({"decompose": True, "rationale": "Too large", "sub_gaps": sub_gaps})
@@ -119,7 +119,7 @@ def test_parse_create_game_output_truncates_sub_gaps_when_over_max() -> None:
 
 
 def test_parse_create_game_output_does_not_truncate_at_exactly_max() -> None:
-    from baps.state import DecomposeSpec
+    from baps.state.state import DecomposeSpec
 
     sub_gaps = [{"description": f"Gap {i}"} for i in range(5)]
     text = json.dumps({"decompose": True, "rationale": "Decomposing", "sub_gaps": sub_gaps})
@@ -129,7 +129,7 @@ def test_parse_create_game_output_does_not_truncate_at_exactly_max() -> None:
 
 
 def test_parse_create_game_output_max_sub_gaps_1_allows_only_one() -> None:
-    from baps.state import DecomposeSpec
+    from baps.state.state import DecomposeSpec
 
     sub_gaps = [{"description": "First"}, {"description": "Second"}]
     text = json.dumps({"decompose": True, "rationale": "Big gap", "sub_gaps": sub_gaps})
@@ -142,7 +142,7 @@ def test_parse_create_game_output_max_sub_gaps_1_allows_only_one() -> None:
 def test_parse_create_game_output_strips_empty_sub_gaps_and_logs_warning(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    from baps.state import DecomposeSpec
+    from baps.state.state import DecomposeSpec
 
     sub_gaps = [
         {"description": "write the API"},
@@ -169,7 +169,7 @@ def test_parse_create_game_output_all_empty_sub_gaps_no_fallback_raises() -> Non
 
 
 def test_parse_create_game_output_all_empty_sub_gaps_with_fallback_escalates() -> None:
-    from baps.state import DecomposeSpec
+    from baps.state.state import DecomposeSpec
 
     valid_decompose = json.dumps({
         "decompose": True,
@@ -201,7 +201,7 @@ def test_parse_create_game_output_unrecognizable_shape_no_fallback_raises() -> N
 
 
 def test_parse_create_game_output_unrecognizable_shape_with_fallback_escalates() -> None:
-    from baps.state import GameSpec
+    from baps.state.state import GameSpec
 
     valid_game_spec = json.dumps({
         "objective": "Close the gap",
@@ -242,7 +242,7 @@ def test_parse_create_game_output_unrecognizable_shape_fallback_logs_warning(
 
 
 def test_parse_create_game_output_empty_dict_with_fallback_escalates() -> None:
-    from baps.state import GameSpec
+    from baps.state.state import GameSpec
 
     valid_game_spec = json.dumps({
         "objective": "Close the gap",
@@ -264,7 +264,7 @@ def test_parse_create_game_output_empty_dict_with_fallback_escalates() -> None:
 
 
 def test_parse_create_game_output_game_spec_with_false_marker_keys_and_extra_keys() -> None:
-    from baps.state import GameSpec
+    from baps.state.state import GameSpec
 
     # Local models (e.g. qwen2.5-coder) often include false-valued marker keys and
     # extra metadata like confidence in what is intended to be a GameSpec response.
@@ -359,7 +359,7 @@ def test_referee_decision_missing_required_key_rejected() -> None:
 # ---------------------------------------------------------------------------
 
 def test_parse_coding_delta_json_handles_write_files_operation() -> None:
-    from baps.coding_adapter import parse_coding_delta_json
+    from baps.adapters.coding_adapter import parse_coding_delta_json
 
     text = json.dumps({
         "artifact_id": "main-codebase",
@@ -378,7 +378,7 @@ def test_parse_coding_delta_json_handles_write_files_operation() -> None:
 
 
 def test_parse_coding_delta_json_still_accepts_write_file_operation() -> None:
-    from baps.coding_adapter import parse_coding_delta_json
+    from baps.adapters.coding_adapter import parse_coding_delta_json
 
     text = json.dumps({
         "artifact_id": "main-codebase",
@@ -391,7 +391,7 @@ def test_parse_coding_delta_json_still_accepts_write_file_operation() -> None:
 
 
 def test_parse_coding_delta_json_rejects_write_files_with_empty_files_list() -> None:
-    from baps.coding_adapter import parse_coding_delta_json
+    from baps.adapters.coding_adapter import parse_coding_delta_json
 
     text = json.dumps({
         "artifact_id": "main-codebase",
@@ -403,7 +403,7 @@ def test_parse_coding_delta_json_rejects_write_files_with_empty_files_list() -> 
 
 
 def test_parse_coding_delta_json_handles_delete_file_operation() -> None:
-    from baps.coding_adapter import parse_coding_delta_json
+    from baps.adapters.coding_adapter import parse_coding_delta_json
 
     text = json.dumps({
         "artifact_id": "main-codebase",
@@ -420,7 +420,7 @@ def test_parse_coding_delta_json_handles_delete_file_operation() -> None:
 # ---------------------------------------------------------------------------
 
 def test_parse_document_delta_json_handles_modify_section_operation() -> None:
-    from baps.document_adapter import parse_document_delta_json
+    from baps.adapters.document_adapter import parse_document_delta_json
 
     text = json.dumps({
         "artifact_id": "main-document",
@@ -434,7 +434,7 @@ def test_parse_document_delta_json_handles_modify_section_operation() -> None:
 
 
 def test_parse_document_delta_json_still_accepts_append_section() -> None:
-    from baps.document_adapter import parse_document_delta_json
+    from baps.adapters.document_adapter import parse_document_delta_json
 
     text = json.dumps({
         "artifact_id": "main-document",
@@ -446,7 +446,7 @@ def test_parse_document_delta_json_still_accepts_append_section() -> None:
 
 
 def test_parse_document_delta_json_handles_delete_section_operation() -> None:
-    from baps.document_adapter import parse_document_delta_json
+    from baps.adapters.document_adapter import parse_document_delta_json
 
     text = json.dumps({
         "artifact_id": "main-document",
@@ -463,7 +463,7 @@ def test_parse_document_delta_json_handles_delete_section_operation() -> None:
 # ---------------------------------------------------------------------------
 
 def test_coding_parse_recovers_unescaped_quotes_in_content() -> None:
-    import baps.coding_adapter as coding_module
+    import baps.adapters.coding_adapter as coding_module
 
     raw = (
         '{"artifact_id":"main-codebase","operation":"write_file","payload":{"file":{'
@@ -477,7 +477,7 @@ def test_coding_parse_recovers_unescaped_quotes_in_content() -> None:
 
 
 def test_coding_parse_recovers_multiline_pytest_content() -> None:
-    import baps.coding_adapter as coding_module
+    import baps.adapters.coding_adapter as coding_module
 
     raw = (
         '{"artifact_id":"main-codebase","operation":"write_file","payload":{"file":{'
@@ -494,7 +494,7 @@ def test_coding_parse_recovers_multiline_pytest_content() -> None:
 
 
 def test_coding_parse_recovers_long_content_payload() -> None:
-    import baps.coding_adapter as coding_module
+    import baps.adapters.coding_adapter as coding_module
 
     long_lines = ["def test_many():"] + [f"    assert {i} == {i}" for i in range(300)]
     long_content = "\n".join(long_lines)
@@ -510,7 +510,7 @@ def test_coding_parse_recovers_long_content_payload() -> None:
 
 
 def test_coding_parse_rejects_reasoning_note_marker() -> None:
-    import baps.coding_adapter as coding_module
+    import baps.adapters.coding_adapter as coding_module
 
     raw = (
         '{"artifact_id":"main-codebase","operation":"write_file","payload":{"file":{'
@@ -523,7 +523,7 @@ def test_coding_parse_rejects_reasoning_note_marker() -> None:
 
 
 def test_coding_parse_rejects_self_correction_marker() -> None:
-    import baps.coding_adapter as coding_module
+    import baps.adapters.coding_adapter as coding_module
 
     raw = (
         '{"artifact_id":"main-codebase","operation":"write_file","payload":{"file":{'
@@ -536,7 +536,7 @@ def test_coding_parse_rejects_self_correction_marker() -> None:
 
 
 def test_coding_parse_rejects_rewriting_commentary_marker() -> None:
-    import baps.coding_adapter as coding_module
+    import baps.adapters.coding_adapter as coding_module
 
     raw = (
         '{"artifact_id":"main-codebase","operation":"write_file","payload":{"file":{'
@@ -549,7 +549,7 @@ def test_coding_parse_rejects_rewriting_commentary_marker() -> None:
 
 
 def test_coding_parse_fixes_double_escaped_quotes_in_single_line_content() -> None:
-    import baps.coding_adapter as coding_module
+    import baps.adapters.coding_adapter as coding_module
 
     # Model double-escaped quotes: after json.loads, content contains \" (backslash + quote)
     # instead of the intended ". Use json.dumps to build valid JSON with that content.
@@ -564,7 +564,7 @@ def test_coding_parse_fixes_double_escaped_quotes_in_single_line_content() -> No
 
 
 def test_coding_parse_fixes_double_escaped_quotes_in_multiline_python() -> None:
-    import baps.coding_adapter as coding_module
+    import baps.adapters.coding_adapter as coding_module
 
     # Multiline .py content with \" where " was intended (syntax error without fix)
     content_with_escape = 'def test_empty():\n    assert normalize(\\"") == \\"\\"\n'
@@ -579,7 +579,7 @@ def test_coding_parse_fixes_double_escaped_quotes_in_multiline_python() -> None:
 
 
 def test_coding_parse_leaves_valid_multiline_python_unchanged() -> None:
-    import baps.coding_adapter as coding_module
+    import baps.adapters.coding_adapter as coding_module
 
     # Valid multiline Python with no backslash-quote issues
     content = 'def test_ok():\n    assert 1 == 1\n'
@@ -593,7 +593,7 @@ def test_coding_parse_leaves_valid_multiline_python_unchanged() -> None:
 
 
 def test_coding_parse_does_not_fix_backslash_quotes_in_multiline_non_python_files() -> None:
-    import baps.coding_adapter as coding_module
+    import baps.adapters.coding_adapter as coding_module
 
     # Multi-line non-.py file: the fix only applies to .py files for multi-line content.
     content = 'key: \\"value\\"\nother: \\"field\\"'  # literal: key: \"value\"\nother: \"field\"
@@ -611,25 +611,25 @@ def test_coding_parse_does_not_fix_backslash_quotes_in_multiline_non_python_file
 # ---------------------------------------------------------------------------
 
 def test_parse_pytest_failures_empty_stdout() -> None:
-    from baps.language_python import _parse_pytest_failures
+    from baps.plugins.language_python import _parse_pytest_failures
     assert _parse_pytest_failures("") == []
 
 
 def test_parse_pytest_failures_no_failures() -> None:
-    from baps.language_python import _parse_pytest_failures
+    from baps.plugins.language_python import _parse_pytest_failures
     stdout = "collected 3 items\n\n3 passed in 0.1s\n"
     assert _parse_pytest_failures(stdout) == []
 
 
 def test_parse_pytest_failures_single_failure_with_reason() -> None:
-    from baps.language_python import _parse_pytest_failures
+    from baps.plugins.language_python import _parse_pytest_failures
     stdout = "FAILED tests/test_foo.py::test_bar - AssertionError: expected 1 got 2\n"
     result = _parse_pytest_failures(stdout)
     assert result == [{"test_id": "tests/test_foo.py::test_bar", "reason": "AssertionError: expected 1 got 2"}]
 
 
 def test_parse_pytest_failures_multiple_failures() -> None:
-    from baps.language_python import _parse_pytest_failures
+    from baps.plugins.language_python import _parse_pytest_failures
     stdout = (
         "FAILED tests/test_a.py::test_one - AssertionError: wrong\n"
         "FAILED tests/test_b.py::test_two - TypeError: bad type\n"
@@ -641,20 +641,20 @@ def test_parse_pytest_failures_multiple_failures() -> None:
 
 
 def test_parse_pytest_failures_no_reason_separator() -> None:
-    from baps.language_python import _parse_pytest_failures
+    from baps.plugins.language_python import _parse_pytest_failures
     stdout = "FAILED tests/test_foo.py::test_bar\n"
     result = _parse_pytest_failures(stdout)
     assert result == [{"test_id": "tests/test_foo.py::test_bar", "reason": ""}]
 
 
 def test_truncate_lines_short_text_unchanged() -> None:
-    from baps.coding_adapter import _truncate_lines
+    from baps.adapters.coding_adapter import _truncate_lines
     text = "line1\nline2\nline3"
     assert _truncate_lines(text, max_lines=5) == text
 
 
 def test_truncate_lines_truncates_at_limit() -> None:
-    from baps.coding_adapter import _truncate_lines
+    from baps.adapters.coding_adapter import _truncate_lines
     text = "\n".join(f"line{i}" for i in range(10))
     result = _truncate_lines(text, max_lines=5)
     lines = result.splitlines()

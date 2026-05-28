@@ -6,10 +6,10 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from baps.clients import SpecRole
-from baps.model_output import parse_model_output
-from baps.project_adapter import ProjectTypeAdapter
-from baps.state import (
+from baps.core.clients import SpecRole
+from baps.models.model_output import parse_model_output
+from baps.adapters.project_adapter import ProjectTypeAdapter
+from baps.state.state import (
     DecomposeSpec,
     GameSpec,
     RedFinding,

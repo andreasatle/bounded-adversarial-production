@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
-from baps.models import ToolCall, ToolDefinition
-from baps.northstar_projection import StateView
-from baps.state import DeltaState, GameSpec, State, StateUpdateProposal
+from baps.models.models import ToolCall, ToolDefinition
+from baps.northstar.northstar_projection import StateView
+from baps.state.state import DeltaState, GameSpec, State, StateUpdateProposal
 
 
 _MODEL_INJECTION_RE = re.compile(
@@ -160,9 +160,9 @@ class ProjectTypeAdapter(Protocol):
 
 
 def build_default_project_type_adapters() -> dict[str, ProjectTypeAdapter]:
-    from baps.coding_adapter import CodingProjectAdapter
-    from baps.document_adapter import DocumentProjectAdapter
-    from baps.audit_adapter import AuditProjectAdapter
+    from baps.adapters.coding_adapter import CodingProjectAdapter
+    from baps.adapters.document_adapter import DocumentProjectAdapter
+    from baps.adapters.audit_adapter import AuditProjectAdapter
 
     return {
         DocumentProjectAdapter.project_type: DocumentProjectAdapter(),

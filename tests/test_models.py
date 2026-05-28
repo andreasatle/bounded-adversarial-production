@@ -3,7 +3,7 @@ from urllib import error
 
 import pytest
 
-from baps.models import AnthropicClient, FakeModelClient, FallbackClient, ModelClient, OllamaClient, OpenAIClient, Role, ToolCall, ToolDefinition
+from baps.models.models import AnthropicClient, FakeModelClient, FallbackClient, ModelClient, OllamaClient, OpenAIClient, Role, ToolCall, ToolDefinition
 
 
 def test_fake_model_client_returns_responses_in_order() -> None:
@@ -80,7 +80,7 @@ def test_ollama_client_generate_sends_expected_request_body(monkeypatch) -> None
         captured["body"] = req.data
         return FakeResponse()
 
-    monkeypatch.setattr("baps.models.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("baps.models.models.request.urlopen", fake_urlopen)
 
     result = client.generate("hello")
 
@@ -107,7 +107,7 @@ def test_ollama_client_generate_returns_response_field(monkeypatch) -> None:
         def read(self):
             return b'{"response":"generated text"}'
 
-    monkeypatch.setattr("baps.models.request.urlopen", lambda req: FakeResponse())
+    monkeypatch.setattr("baps.models.models.request.urlopen", lambda req: FakeResponse())
     assert client.generate("prompt") == "generated text"
 
 
@@ -124,7 +124,7 @@ def test_ollama_client_generate_raises_when_response_missing(monkeypatch) -> Non
         def read(self):
             return b'{"done": true}'
 
-    monkeypatch.setattr("baps.models.request.urlopen", lambda req: FakeResponse())
+    monkeypatch.setattr("baps.models.models.request.urlopen", lambda req: FakeResponse())
     with pytest.raises(RuntimeError):
         client.generate("prompt")
 
@@ -141,7 +141,7 @@ def test_ollama_client_generate_raises_runtime_error_on_http_error(monkeypatch) 
             fp=None,
         )
 
-    monkeypatch.setattr("baps.models.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("baps.models.models.request.urlopen", fake_urlopen)
     with pytest.raises(RuntimeError):
         client.generate("prompt")
 
@@ -152,13 +152,13 @@ def test_ollama_client_generate_raises_runtime_error_on_url_error(monkeypatch) -
     def fake_urlopen(req):
         raise error.URLError("connection refused")
 
-    monkeypatch.setattr("baps.models.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("baps.models.models.request.urlopen", fake_urlopen)
     with pytest.raises(RuntimeError):
         client.generate("prompt")
 
 
 def test_role_generate_without_constrained_passes_no_format() -> None:
-    from baps.model_output import _JSON_ONLY_INSTRUCTION
+    from baps.models.model_output import _JSON_ONLY_INSTRUCTION
     client = FakeModelClient(responses=["result"])
     role = Role("blue", client, schema={"type": "object"}, constrained=False)
 
@@ -173,7 +173,7 @@ def test_role_generate_without_constrained_passes_no_format() -> None:
 
 
 def test_role_generate_wraps_prompt_for_every_call() -> None:
-    from baps.model_output import _JSON_ONLY_INSTRUCTION
+    from baps.models.model_output import _JSON_ONLY_INSTRUCTION
     client = FakeModelClient(responses=["r1", "r2"])
     role = Role("create_game", client)
 
@@ -209,7 +209,7 @@ def test_role_generate_with_constrained_passes_schema_as_format(monkeypatch) -> 
         captured["body"] = json.loads(req.data.decode())
         return FakeResponse()
 
-    monkeypatch.setattr("baps.models.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("baps.models.models.request.urlopen", fake_urlopen)
     client = OllamaClient(model="llama3")
     role = Role("red", client, schema=schema, constrained=True)
 
@@ -230,7 +230,7 @@ def test_role_generate_with_constrained_false_omits_format(monkeypatch) -> None:
         captured["body"] = json.loads(req.data.decode())
         return FakeResponse()
 
-    monkeypatch.setattr("baps.models.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("baps.models.models.request.urlopen", fake_urlopen)
     client = OllamaClient(model="llama3")
     role = Role("create_game", client, schema={"type": "object"}, constrained=False)
 
@@ -251,7 +251,7 @@ def test_role_generate_with_no_schema_omits_format(monkeypatch) -> None:
         captured["body"] = json.loads(req.data.decode())
         return FakeResponse()
 
-    monkeypatch.setattr("baps.models.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("baps.models.models.request.urlopen", fake_urlopen)
     client = OllamaClient(model="llama3")
     role = Role("blue", client, schema=None, constrained=True)
 
@@ -302,7 +302,7 @@ def test_anthropic_client_rejects_empty_api_key() -> None:
 
 def test_anthropic_client_generate_plain_text(monkeypatch) -> None:
     body = json.dumps({"content": [{"type": "text", "text": "hello world"}]}).encode()
-    monkeypatch.setattr("baps.models.request.urlopen", _make_fake_urlopen(body))
+    monkeypatch.setattr("baps.models.models.request.urlopen", _make_fake_urlopen(body))
     client = AnthropicClient(model="claude-sonnet-4-6", api_key="test-key")
     result = client.generate("say hello")
     assert result == "hello world"
@@ -311,7 +311,7 @@ def test_anthropic_client_generate_plain_text(monkeypatch) -> None:
 def test_anthropic_client_generate_sends_correct_headers(monkeypatch) -> None:
     body = json.dumps({"content": [{"type": "text", "text": "ok"}]}).encode()
     captured: dict = {}
-    monkeypatch.setattr("baps.models.request.urlopen", _make_capturing_urlopen(body, captured))
+    monkeypatch.setattr("baps.models.models.request.urlopen", _make_capturing_urlopen(body, captured))
     client = AnthropicClient(model="claude-sonnet-4-6", api_key="sk-ant-123", base_url="https://api.anthropic.com")
     client.generate("prompt")
     assert captured["url"] == "https://api.anthropic.com/v1/messages"
@@ -326,7 +326,7 @@ def test_anthropic_client_generate_with_schema_uses_tool_use(monkeypatch) -> Non
         "stop_reason": "tool_use",
     }).encode()
     captured: dict = {}
-    monkeypatch.setattr("baps.models.request.urlopen", _make_capturing_urlopen(body, captured))
+    monkeypatch.setattr("baps.models.models.request.urlopen", _make_capturing_urlopen(body, captured))
     client = AnthropicClient(model="claude-sonnet-4-6", api_key="key")
     schema = {"type": "object", "properties": {"disposition": {"type": "string"}}}
     result = client.generate("evaluate", format=schema)
@@ -340,19 +340,19 @@ def test_anthropic_client_generate_raises_on_http_error(monkeypatch) -> None:
     def fake_urlopen(req):
         fp = __import__("io").BytesIO(b'{"error": "unauthorized"}')
         raise error.HTTPError(req.full_url, 401, "Unauthorized", {}, fp)
-    monkeypatch.setattr("baps.models.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("baps.models.models.request.urlopen", fake_urlopen)
     client = AnthropicClient(model="claude-sonnet-4-6", api_key="bad-key")
     with pytest.raises(RuntimeError, match="401"):
         client.generate("prompt")
 
 
 def test_anthropic_client_generate_with_tools(monkeypatch) -> None:
-    from baps.models import ToolDefinition
+    from baps.models.models import ToolDefinition
     body = json.dumps({
         "content": [{"type": "tool_use", "name": "write_file", "input": {"path": "src/x.py", "content": "pass"}}],
     }).encode()
     captured: dict = {}
-    monkeypatch.setattr("baps.models.request.urlopen", _make_capturing_urlopen(body, captured))
+    monkeypatch.setattr("baps.models.models.request.urlopen", _make_capturing_urlopen(body, captured))
     client = AnthropicClient(model="claude-sonnet-4-6", api_key="key")
     tools = [ToolDefinition(name="write_file", description="Write a file", parameters={"type": "object"})]
     result = client.generate_with_tools("write something", tools)
@@ -363,9 +363,9 @@ def test_anthropic_client_generate_with_tools(monkeypatch) -> None:
 
 
 def test_anthropic_client_generate_with_tools_raises_when_no_tool_called(monkeypatch) -> None:
-    from baps.models import ToolDefinition
+    from baps.models.models import ToolDefinition
     body = json.dumps({"content": [{"type": "text", "text": "I cannot help."}]}).encode()
-    monkeypatch.setattr("baps.models.request.urlopen", _make_fake_urlopen(body))
+    monkeypatch.setattr("baps.models.models.request.urlopen", _make_fake_urlopen(body))
     client = AnthropicClient(model="claude-sonnet-4-6", api_key="key")
     tools = [ToolDefinition(name="write_file", description="Write", parameters={})]
     with pytest.raises(ValueError, match="tool"):
@@ -388,7 +388,7 @@ def test_openai_client_rejects_empty_api_key() -> None:
 
 def test_openai_client_generate_plain_text(monkeypatch) -> None:
     body = json.dumps({"choices": [{"message": {"content": "hello world"}}]}).encode()
-    monkeypatch.setattr("baps.models.request.urlopen", _make_fake_urlopen(body))
+    monkeypatch.setattr("baps.models.models.request.urlopen", _make_fake_urlopen(body))
     client = OpenAIClient(model="gpt-4o", api_key="key")
     result = client.generate("say hello")
     assert result == "hello world"
@@ -397,7 +397,7 @@ def test_openai_client_generate_plain_text(monkeypatch) -> None:
 def test_openai_client_generate_sends_correct_headers(monkeypatch) -> None:
     body = json.dumps({"choices": [{"message": {"content": "ok"}}]}).encode()
     captured: dict = {}
-    monkeypatch.setattr("baps.models.request.urlopen", _make_capturing_urlopen(body, captured))
+    monkeypatch.setattr("baps.models.models.request.urlopen", _make_capturing_urlopen(body, captured))
     client = OpenAIClient(model="gpt-4o", api_key="sk-openai-123", base_url="https://api.openai.com/v1")
     client.generate("prompt")
     assert captured["url"] == "https://api.openai.com/v1/chat/completions"
@@ -408,7 +408,7 @@ def test_openai_client_generate_with_schema_sends_json_schema_format(monkeypatch
     output = '{"disposition": "accept", "rationale": "good"}'
     body = json.dumps({"choices": [{"message": {"content": output}}]}).encode()
     captured: dict = {}
-    monkeypatch.setattr("baps.models.request.urlopen", _make_capturing_urlopen(body, captured))
+    monkeypatch.setattr("baps.models.models.request.urlopen", _make_capturing_urlopen(body, captured))
     client = OpenAIClient(model="gpt-4o", api_key="key")
     schema = {"type": "object", "properties": {"disposition": {"type": "string"}}}
     result = client.generate("evaluate", format=schema)
@@ -422,20 +422,20 @@ def test_openai_client_generate_raises_on_http_error(monkeypatch) -> None:
     def fake_urlopen(req):
         fp = __import__("io").BytesIO(b'{"error": {"message": "invalid key"}}')
         raise error.HTTPError(req.full_url, 401, "Unauthorized", {}, fp)
-    monkeypatch.setattr("baps.models.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("baps.models.models.request.urlopen", fake_urlopen)
     client = OpenAIClient(model="gpt-4o", api_key="bad-key")
     with pytest.raises(RuntimeError, match="401"):
         client.generate("prompt")
 
 
 def test_openai_client_generate_with_tools(monkeypatch) -> None:
-    from baps.models import ToolDefinition
+    from baps.models.models import ToolDefinition
     args_json = json.dumps({"path": "src/x.py", "content": "pass"})
     body = json.dumps({
         "choices": [{"message": {"tool_calls": [{"function": {"name": "write_file", "arguments": args_json}}]}}]
     }).encode()
     captured: dict = {}
-    monkeypatch.setattr("baps.models.request.urlopen", _make_capturing_urlopen(body, captured))
+    monkeypatch.setattr("baps.models.models.request.urlopen", _make_capturing_urlopen(body, captured))
     client = OpenAIClient(model="gpt-4o", api_key="key")
     tools = [ToolDefinition(name="write_file", description="Write a file", parameters={"type": "object"})]
     result = client.generate_with_tools("write something", tools)
@@ -525,9 +525,9 @@ def test_fallback_client_generate_with_tools_does_not_fallback_on_value_error() 
 
 
 def test_openai_client_generate_with_tools_raises_when_no_tool_called(monkeypatch) -> None:
-    from baps.models import ToolDefinition
+    from baps.models.models import ToolDefinition
     body = json.dumps({"choices": [{"message": {"content": "I cannot help.", "tool_calls": []}}]}).encode()
-    monkeypatch.setattr("baps.models.request.urlopen", _make_fake_urlopen(body))
+    monkeypatch.setattr("baps.models.models.request.urlopen", _make_fake_urlopen(body))
     client = OpenAIClient(model="gpt-4o", api_key="key")
     tools = [ToolDefinition(name="write_file", description="Write", parameters={})]
     with pytest.raises(ValueError, match="tool"):

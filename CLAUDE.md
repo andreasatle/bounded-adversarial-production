@@ -28,31 +28,40 @@ This is the **only** active product path. Do not propose changes that bypass or 
 
 ```
 src/baps/
-  run.py                  # Lifecycle commands (start, reset), config resolution, main()
-  orchestration.py        # _solve_gap, _run_project_iterations, _RunContext — recursive gap solver
-  game.py                 # create_game, play_game, blackboard helpers
-  prompts.py              # All prompt rendering functions
-  parsers.py              # All model output parsing functions
-  clients.py              # All client-building functions, SpecRole, backend resolution
-  debug.py                # Debug print helpers
-  project_adapter.py      # ProjectTypeAdapter protocol, registry, sanitizers, Blue prompt core
-  document_adapter.py     # DocumentProjectAdapter — all document mechanics
-  coding_adapter.py       # CodingProjectAdapter — all coding mechanics (language-agnostic)
-  audit_adapter.py        # AuditProjectAdapter — all audit mechanics, source fingerprinting
-  language_plugin.py      # LanguagePlugin protocol + get_language_plugin registry lookup
-  language_python.py      # PythonLanguagePlugin — Python/pytest specifics
-  language_zig.py         # ZigLanguagePlugin — Zig/build.zig specifics
-  state.py                # Authoritative schemas, mutation, artifact registry
-  state_service.py        # StateService — the only mutation boundary
-  state_store.py          # JsonStateStore — JSON persistence
-  model_output.py         # Single model output parsing pipeline: fence-strip, JSON parse, key-strip, retry/fallback
-  models.py               # AnthropicClient, OpenAIClient, OllamaClient, FakeModelClient, Role
-  northstar_projection.py # StateView, ProjectionType, projection utilities
-  northstar_apply.py      # baps-apply-northstar CLI — review and apply approved NorthStar proposals
-  sandbox.py              # run_sandboxed — Docker/bare execution, SANDBOX_NONE_WARNING
-  tools.py                # fetch_url, web_search, ToolExecutor — research phase tools
-  scheduler.py            # Adaptive multi-model scheduler with policy learning
-  scheduler_policy.py     # ModelPolicy, EMA scoring, softmax selection
+  core/
+    run.py                  # Lifecycle commands (start, reset), config resolution, main()
+    orchestration.py        # _solve_gap, _run_project_iterations, _RunContext — recursive gap solver
+    game.py                 # create_game, play_game, blackboard helpers
+    prompts.py              # All prompt rendering functions
+    parsers.py              # All model output parsing functions
+    clients.py              # All client-building functions, SpecRole, backend resolution
+    debug.py                # Debug print helpers
+  adapters/
+    project_adapter.py      # ProjectTypeAdapter protocol, registry, sanitizers, Blue prompt core
+    document_adapter.py     # DocumentProjectAdapter — all document mechanics
+    coding_adapter.py       # CodingProjectAdapter — all coding mechanics (language-agnostic)
+    audit_adapter.py        # AuditProjectAdapter — all audit mechanics, source fingerprinting
+  state/
+    state.py                # Authoritative schemas, mutation, artifact registry
+    state_service.py        # StateService — the only mutation boundary
+    state_store.py          # JsonStateStore — JSON persistence
+  models/
+    models.py               # AnthropicClient, OpenAIClient, OllamaClient, FakeModelClient, Role
+    model_output.py         # Single model output parsing pipeline: fence-strip, JSON parse, key-strip, retry/fallback
+  plugins/
+    language_plugin.py      # LanguagePlugin protocol + get_language_plugin registry lookup
+    language_python.py      # PythonLanguagePlugin — Python/pytest specifics
+    language_zig.py         # ZigLanguagePlugin — Zig/build.zig specifics
+  scheduler/
+    scheduler.py            # Adaptive multi-model scheduler with policy learning
+    scheduler_policy.py     # ModelPolicy, EMA scoring, softmax selection
+  tools/
+    tools.py                # fetch_url, web_search, ToolExecutor — research phase tools
+    sandbox.py              # run_sandboxed — Docker/bare execution, SANDBOX_NONE_WARNING
+  northstar/
+    northstar_projection.py # StateView, ProjectionType, projection utilities
+    northstar_apply.py      # baps-apply-northstar CLI — review and apply approved NorthStar proposals
+  __init__.py
 
 tests/
   test_state.py

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Protocol
 
-from baps.state import State
+from baps.state.state import State
 
 
 class StateStore(Protocol):

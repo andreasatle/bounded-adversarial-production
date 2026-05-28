@@ -4,10 +4,10 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from baps.model_output import parse_model_output
-from baps.models import ToolCall, ToolDefinition
-from baps.northstar_projection import ProjectionType, STATE_VIEW_END, STATE_VIEW_START, StateView
-from baps.project_adapter import (
+from baps.models.model_output import parse_model_output
+from baps.models.models import ToolCall, ToolDefinition
+from baps.northstar.northstar_projection import ProjectionType, STATE_VIEW_END, STATE_VIEW_START, StateView
+from baps.adapters.project_adapter import (
     VerificationResult,
     _config_artifact_id,
     _config_northstar_markdown,
@@ -15,7 +15,7 @@ from baps.project_adapter import (
     sanitize_model_string,
     sanitize_model_title,
 )
-from baps.state import (
+from baps.state.state import (
     AppendSectionPayload,
     DeleteSectionPayload,
     DeltaDeleteDocumentState,

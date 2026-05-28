@@ -10,30 +10,30 @@ from typing import Any
 
 import yaml
 
-from baps.clients import (
+from baps.core.clients import (
     SpecRole,
     _VALID_BACKENDS,
     _parse_spec_roles,
     _resolve_backend_model,
 )
-from baps.debug import (
+from baps.core.debug import (
     _debug_print_create_state,
     _debug_print_read_config,
 )
-from baps.project_adapter import (
+from baps.adapters.project_adapter import (
     ProjectTypeAdapter,
     build_default_project_type_adapters,
     resolve_adapter_for_allowed_delta_type,
     resolve_project_type_adapter,
 )
-from baps.state import (
+from baps.state.state import (
     State,
     StopReason,
     build_default_state_artifact_registry,
 )
-from baps.state_service import StateService
-from baps.state_store import JsonStateStore
-from baps.orchestration import _run_project_iterations
+from baps.state.state_service import StateService
+from baps.state.state_store import JsonStateStore
+from baps.core.orchestration import _run_project_iterations
 
 logger = logging.getLogger(__name__)
 

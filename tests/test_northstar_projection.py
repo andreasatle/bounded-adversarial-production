@@ -1,8 +1,8 @@
 import pytest
 from pydantic import ValidationError
 
-from baps.state import State, StateArtifact
-from baps.northstar_projection import (
+from baps.state.state import State, StateArtifact
+from baps.northstar.northstar_projection import (
     NorthStarView,
     NorthStarProjectionRenderer,
     NorthStarProjectionInput,

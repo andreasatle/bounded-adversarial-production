@@ -8,23 +8,23 @@ from pathlib import Path
 
 import pytest
 
-from baps.models import FakeModelClient, ToolCall
-from baps.run import create_state
-from baps.game import create_game, play_game
-from baps.document_adapter import DocumentProjectAdapter
-from baps.parsers import (
+from baps.models.models import FakeModelClient, ToolCall
+from baps.core.run import create_state
+from baps.core.game import create_game, play_game
+from baps.adapters.document_adapter import DocumentProjectAdapter
+from baps.core.parsers import (
     NoNewGameError,
     _parse_red_finding_json,
     _parse_referee_decision_json,
 )
-from baps.prompts import _render_create_game_prompt, _render_red_prompt, _render_referee_prompt
-from baps.debug import _debug_print_blue_input
-from baps.state import (
+from baps.core.prompts import _render_create_game_prompt, _render_red_prompt, _render_referee_prompt
+from baps.core.debug import _debug_print_blue_input
+from baps.state.state import (
     GameSpec,
 )
-from baps.game import _VERIFICATION_SUMMARY_CAP
-from baps.project_adapter import VerificationResult
-import baps.state as state_module
+from baps.core.game import _VERIFICATION_SUMMARY_CAP
+from baps.adapters.project_adapter import VerificationResult
+import baps.state.state as state_module
 
 
 def _make_doc_config(
@@ -1276,7 +1276,7 @@ def test_improvement_hints_appear_in_previous_feedback_for_blue() -> None:
         captured_feedback.append(previous_feedback)
         original_debug(state_view, game_spec, attempt, previous_feedback)
 
-    import baps.game as game_module
+    import baps.core.game as game_module
 
     spec, state = _make_document_spec_and_state()
 
@@ -1312,7 +1312,7 @@ def test_improvement_hints_appear_in_previous_feedback_for_blue() -> None:
 
 
 def test_red_prompt_includes_success_condition_met_and_findings_fields() -> None:
-    import baps.game as game_module
+    import baps.core.game as game_module
 
     captured: dict[str, object] = {}
     original = _render_red_prompt
@@ -1332,7 +1332,7 @@ def test_red_prompt_includes_success_condition_met_and_findings_fields() -> None
 
 
 def test_referee_prompt_includes_red_override_and_improvement_hints_fields() -> None:
-    import baps.game as game_module
+    import baps.core.game as game_module
 
     captured: dict[str, object] = {}
     original = _render_referee_prompt
@@ -1361,7 +1361,7 @@ def test_play_game_referee_receives_gamespec_state_view_delta_and_red(monkeypatc
         captured["delta_state"] = delta_state
         captured["red_finding"] = red_finding
 
-    monkeypatch.setattr("baps.game._debug_print_referee_input", _capture_referee_input)
+    monkeypatch.setattr("baps.core.game._debug_print_referee_input", _capture_referee_input)
     spec = GameSpec(
         objective="Any objective",
         target_artifact_id="main-document",
@@ -1489,7 +1489,7 @@ def test_play_game_red_receives_gamespec_state_view_and_delta_state(monkeypatch)
         captured["game_spec"] = game_spec
         captured["delta_state"] = delta_state
 
-    monkeypatch.setattr("baps.game._debug_print_red_input", _capture_red_input)
+    monkeypatch.setattr("baps.core.game._debug_print_red_input", _capture_red_input)
     spec = GameSpec(
         objective="Any objective",
         target_artifact_id="main-document",
@@ -1559,7 +1559,7 @@ def test_red_prompt_includes_success_condition(monkeypatch) -> None:
         captured["prompt"] = result
         return result
 
-    monkeypatch.setattr("baps.game._render_red_prompt", _capture)
+    monkeypatch.setattr("baps.core.game._render_red_prompt", _capture)
     success_condition = "Unique success_condition string for red prompt contract test."
     spec, state = _make_document_spec_and_state(success_condition)
     play_game(state, spec, model_client=_make_blue_client("Introduction"))
@@ -1577,7 +1577,7 @@ def test_referee_prompt_includes_success_condition_and_red_rationale(monkeypatch
         captured["prompt"] = result
         return result
 
-    monkeypatch.setattr("baps.game._render_referee_prompt", _capture)
+    monkeypatch.setattr("baps.core.game._render_referee_prompt", _capture)
     success_condition = "Unique success_condition string for referee prompt contract test."
     spec, state = _make_document_spec_and_state(success_condition)
     red_rationale = "Unique red rationale for referee prompt test."
@@ -1657,7 +1657,7 @@ def test_play_game_previous_feedback_on_retry_contains_red_and_referee(monkeypat
         captured_feedback.append(previous_feedback)
         original_debug(state_view, game_spec, attempt, previous_feedback)
 
-    monkeypatch.setattr("baps.game._debug_print_blue_input", _capture)
+    monkeypatch.setattr("baps.core.game._debug_print_blue_input", _capture)
     spec, state = _make_document_spec_and_state()
     play_game(
         state,
@@ -1884,7 +1884,7 @@ def test_integration_writes_integration_blackboard_event(
             "--max-iterations", "1",
         ],
     )
-    from baps.run import main as run_main
+    from baps.core.run import main as run_main
     run_main()
 
     games_path = workspace / "blackboard" / "games.jsonl"
@@ -2058,7 +2058,7 @@ def test_blackboard_verification_summary_truncated_to_cap(
         command="pytest", cwd="/tmp", exit_code=0,
         stdout=long_stdout, stderr=long_stderr, passed=True,
     )
-    monkeypatch.setattr("baps.game._verify_candidate_with_adapter", lambda *a, **kw: mock_vr)
+    monkeypatch.setattr("baps.core.game._verify_candidate_with_adapter", lambda *a, **kw: mock_vr)
 
     workspace = tmp_path / "ws-trunc"
     config = _make_play_game_config(workspace)
@@ -2105,7 +2105,7 @@ def test_blackboard_verification_feedback_loop_uses_full_text(
         call_count["n"] += 1
         return failing_vr if call_count["n"] == 1 else passing_vr
 
-    monkeypatch.setattr("baps.game._verify_candidate_with_adapter", _mock_verify)
+    monkeypatch.setattr("baps.core.game._verify_candidate_with_adapter", _mock_verify)
 
     workspace = tmp_path / "ws-feedbackloop"
     config = _make_play_game_config(workspace)
@@ -2153,7 +2153,7 @@ def test_integration_event_all_required_fields_with_correct_types(
             "--max-iterations", "1",
         ],
     )
-    from baps.run import main as run_main
+    from baps.core.run import main as run_main
     run_main()
 
     lines = [

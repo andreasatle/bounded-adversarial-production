@@ -7,7 +7,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from baps.clients import (
+from baps.core.clients import (
     SpecRole,
     _build_client_for_role,
     _build_fallback_chain_for_role,
@@ -15,7 +15,7 @@ from baps.clients import (
     _make_fallback_chain_fn,
     _resolve_backend_model,
 )
-from baps.debug import (
+from baps.core.debug import (
     _debug_print_attempt_rejected,
     _debug_print_blue_failed_tool_call,
     _debug_print_blue_input,
@@ -36,9 +36,9 @@ from baps.debug import (
     _debug_print_referee_input,
     _debug_print_referee_output,
 )
-from baps.model_output import BlackboardEvent
-from baps.models import ModelClient, Role, ToolCallRecord
-from baps.parsers import (
+from baps.models.model_output import BlackboardEvent
+from baps.models.models import ModelClient, Role, ToolCallRecord
+from baps.core.parsers import (
     NoNewGameError,
     NorthStarUpdateNeededError,
     _normalize_game_spec_with_adapter,
@@ -46,7 +46,7 @@ from baps.parsers import (
     _parse_red_finding_json,
     _parse_referee_decision_json,
 )
-from baps.project_adapter import (
+from baps.adapters.project_adapter import (
     ProjectTypeAdapter,
     VerificationResult,
     _config_artifact_id,
@@ -54,7 +54,7 @@ from baps.project_adapter import (
     resolve_project_type_adapter,
     sanitize_model_string,
 )
-from baps.prompts import (
+from baps.core.prompts import (
     _get_research_tools,
     _render_create_game_prompt,
     _render_create_game_red_prompt,
@@ -65,7 +65,7 @@ from baps.prompts import (
     _render_research_prompt,
     _render_tool_session_block,
 )
-from baps.state import (
+from baps.state.state import (
     DecomposeSpec,
     DeltaState,
     GameSpec,
@@ -74,7 +74,7 @@ from baps.state import (
     StateUpdateProposal,
     apply_referee_decision_to_runtime,
 )
-from baps.tools import ToolExecutor
+from baps.tools.tools import ToolExecutor
 
 logger = logging.getLogger(__name__)
 

@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
-from baps.models import Backend
-from baps.scheduler import (
+from baps.models.models import Backend
+from baps.scheduler.scheduler import (
     _FLOOR_MIN_RUNS,
     _KNOWN_MODELS,
     _SCORE_FLOOR,
@@ -16,7 +16,7 @@ from baps.scheduler import (
     _drop_underperformers,
     _env_for_model,
 )
-from baps.scheduler_policy import ModelConfig, ModelPolicy
+from baps.scheduler.scheduler_policy import ModelConfig, ModelPolicy
 
 
 # ---------------------------------------------------------------------------
@@ -115,7 +115,7 @@ def test_default_model_ladder_falls_back_when_all_unknown() -> None:
 
 def test_default_model_ladder_falls_back_when_env_empty() -> None:
     with patch.dict(os.environ, {"BAPS_MODEL_LADDER": ""}, clear=True):
-        with patch("baps.scheduler._auto_ladder", return_value=[_KNOWN_MODELS["sonnet"]]):
+        with patch("baps.scheduler.scheduler._auto_ladder", return_value=[_KNOWN_MODELS["sonnet"]]):
             ladder = _default_model_ladder()
     assert ladder[0].name == "sonnet"
 
@@ -188,7 +188,7 @@ def test_main_rejects_policy_path_outside_cwd(tmp_path: Path, monkeypatch) -> No
     outside = tmp_path / "policy.json"
     monkeypatch.setattr(sys, "argv", ["scheduler", "--policy", str(outside), "--rounds", "0"])
     with pytest.raises(SystemExit) as exc_info:
-        from baps.scheduler import main
+        from baps.scheduler.scheduler import main
         main()
     assert exc_info.value.code == 1
 
@@ -198,7 +198,7 @@ def test_main_accepts_policy_path_within_cwd(monkeypatch, tmp_path: Path) -> Non
     policy_file = Path(".baps-test-scheduler-policy-tmp.json")
     monkeypatch.setattr(sys, "argv", ["scheduler", "--policy", str(policy_file), "--rounds", "0"])
     try:
-        from baps.scheduler import main
+        from baps.scheduler.scheduler import main
         main()  # should not exit(1)
     except SystemExit as e:
         pytest.fail(f"main() exited with code {e.code} for a valid policy path")

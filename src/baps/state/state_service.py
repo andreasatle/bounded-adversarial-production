@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from baps.state import (
+from baps.state.state import (
     DeltaState,
     State,
     StateArtifactRegistry,
@@ -11,7 +11,7 @@ from baps.state import (
     validate_state_artifacts,
     validate_update_base_state,
 )
-from baps.state_store import StateStore
+from baps.state.state_store import StateStore
 
 
 class StateService:

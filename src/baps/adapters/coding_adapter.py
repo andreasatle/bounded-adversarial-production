@@ -11,11 +11,11 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-from baps.language_plugin import LanguagePlugin
-from baps.model_output import _extract_json_candidate, parse_model_output
-from baps.models import ToolCall, ToolDefinition
-from baps.northstar_projection import ProjectionType, STATE_VIEW_END, STATE_VIEW_START, StateView
-from baps.project_adapter import (
+from baps.plugins.language_plugin import LanguagePlugin
+from baps.models.model_output import _extract_json_candidate, parse_model_output
+from baps.models.models import ToolCall, ToolDefinition
+from baps.northstar.northstar_projection import ProjectionType, STATE_VIEW_END, STATE_VIEW_START, StateView
+from baps.adapters.project_adapter import (
     VerificationResult,
     _config_artifact_id,
     _config_northstar_markdown,
@@ -24,7 +24,7 @@ from baps.project_adapter import (
     sanitize_model_string,
     sanitize_model_title,
 )
-from baps.state import (
+from baps.state.state import (
     CodingArtifact,
     CodeFile,
     DeleteFilePayload,
@@ -69,8 +69,8 @@ _BLUE_CONTENT_FORBIDDEN_MARKERS: tuple[str, ...] = (
 
 
 def _build_language_registry() -> dict[str, LanguagePlugin]:
-    from baps.language_python import PythonLanguagePlugin
-    from baps.language_zig import ZigLanguagePlugin
+    from baps.plugins.language_python import PythonLanguagePlugin
+    from baps.plugins.language_zig import ZigLanguagePlugin
 
     return {
         "python": PythonLanguagePlugin(),

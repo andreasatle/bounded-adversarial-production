@@ -5,7 +5,7 @@ import os
 from enum import StrEnum
 from typing import Any
 
-from baps.models import (
+from baps.models.models import (
     AnthropicClient,
     Backend,
     FallbackClient,
@@ -280,7 +280,7 @@ def _make_fallback_chain_fn(
     """
     if not chain:
         return None
-    from baps.model_output import wrap_json_prompt
+    from baps.models.model_output import wrap_json_prompt
 
     def fn(prompt: str) -> str:
         prev = primary_model
@@ -301,7 +301,7 @@ def _make_fallback_chain_fn(
 
 def _make_fallback_fn(client: ModelClient) -> Any:
     """Build a fallback generate callable that wraps the correction prompt with JSON-only instruction."""
-    from baps.model_output import wrap_json_prompt
+    from baps.models.model_output import wrap_json_prompt
     def fn(prompt: str) -> str:
         return client.generate(wrap_json_prompt(prompt))
     return fn

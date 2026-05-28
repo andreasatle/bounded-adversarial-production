@@ -4,10 +4,10 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from baps.model_output import parse_model_output
-from baps.models import ToolCall, ToolDefinition
-from baps.northstar_projection import ProjectionType, STATE_VIEW_END, STATE_VIEW_START, StateView
-from baps.project_adapter import (
+from baps.models.model_output import parse_model_output
+from baps.models.models import ToolCall, ToolDefinition
+from baps.northstar.northstar_projection import ProjectionType, STATE_VIEW_END, STATE_VIEW_START, StateView
+from baps.adapters.project_adapter import (
     VerificationResult,
     _config_artifact_id,
     _config_northstar_markdown,
@@ -15,7 +15,7 @@ from baps.project_adapter import (
     sanitize_model_string,
     sanitize_model_title,
 )
-from baps.state import (
+from baps.state.state import (
     DeltaState,
     DocumentArtifact,
     GameSpec,
@@ -23,7 +23,7 @@ from baps.state import (
     State,
     StateUpdateProposal,
 )
-from baps.document_adapter import (
+from baps.adapters.document_adapter import (
     document_artifact_from_state,
     export_document_artifact,
     parse_document_delta_json,
@@ -489,7 +489,7 @@ class AuditProjectAdapter:
         ]
 
     def tool_call_to_delta(self, tool_call: ToolCall) -> DeltaState:
-        from baps.state import DeltaDocumentState, DeltaModifyDocumentState
+        from baps.state.state import DeltaDocumentState, DeltaModifyDocumentState
         args = tool_call.arguments
         if tool_call.name == "append_section":
             try:
@@ -539,7 +539,7 @@ class AuditProjectAdapter:
         raise ValueError(f"unexpected tool: {tool_call.name!r}")
 
     def parse_blue_delta(self, text: str) -> DeltaState:
-        from baps.state import DeltaDocumentState
+        from baps.state.state import DeltaDocumentState
         _AUDIT_KEYS = frozenset({"artifact_id", "operation", "file", "rationale", "payload"})
         try:
             raw = parse_model_output(text, _AUDIT_KEYS, context="blue:audit")

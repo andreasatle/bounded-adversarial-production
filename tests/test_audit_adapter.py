@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-import baps.state as state_module
-from baps.audit_adapter import (
+import baps.state.state as state_module
+from baps.adapters.audit_adapter import (
     AuditProjectAdapter,
     _embed_source_path,
     _extract_source_path,
@@ -15,7 +15,7 @@ from baps.audit_adapter import (
     _render_source_listing,
     _render_source_content,
 )
-from baps.models import ToolCall
+from baps.models.models import ToolCall
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +133,7 @@ def test_audit_adapter_create_initial_state_requires_source_path() -> None:
 
 
 def test_audit_adapter_create_initial_state_embeds_source_path() -> None:
-    from baps.audit_adapter import _get_northstar_from_state
+    from baps.adapters.audit_adapter import _get_northstar_from_state
     adapter = AuditProjectAdapter()
     state = adapter.create_initial_state({
         "artifact_id": "report",
@@ -428,13 +428,13 @@ def test_audit_parse_blue_delta_no_finding_json() -> None:
     text = json.dumps({
         "artifact_id": "report",
         "operation": "no_finding",
-        "file": "src/baps/run.py",
+        "file": "src/baps/core/run.py",
         "rationale": "Checked orchestration loop — all mutation goes through StateService.",
     })
     delta = adapter.parse_blue_delta(text)
     assert isinstance(delta, state_module.DeltaDocumentState)
     assert delta.operation == "append_section"
-    assert delta.payload.section.title == "Audited: src/baps/run.py"
+    assert delta.payload.section.title == "Audited: src/baps/core/run.py"
     assert "StateService" in delta.payload.section.body
 
 
@@ -507,7 +507,7 @@ def test_audit_export_unchanged_returns_false(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def test_audit_adapter_registered_in_default_adapters() -> None:
-    from baps.project_adapter import resolve_project_type_adapter
+    from baps.adapters.project_adapter import resolve_project_type_adapter
     adapter = resolve_project_type_adapter("audit")
     assert isinstance(adapter, AuditProjectAdapter)
 
@@ -519,14 +519,14 @@ def test_audit_adapter_registered_in_default_adapters() -> None:
 def _append_finding(
     state: state_module.State, artifact_id: str, title: str, body: str
 ) -> state_module.State:
-    from baps.state_service import StateService
-    from baps.state_store import JsonStateStore
+    from baps.state.state_service import StateService
+    from baps.state.state_store import JsonStateStore
     import tempfile
 
     with tempfile.TemporaryDirectory() as tmpdir:
         store = JsonStateStore(Path(tmpdir) / "state.json")
         store.save(state)
-        from baps.state import build_default_state_artifact_registry
+        from baps.state.state import build_default_state_artifact_registry
         service = StateService(store, build_default_state_artifact_registry())
         delta = state_module.DeltaDocumentState(
             artifact_id=artifact_id,
@@ -535,7 +535,7 @@ def _append_finding(
                 section=state_module.Section(title=title, body=body)
             ),
         )
-        from baps.document_adapter import derive_document_state_update_from_delta
+        from baps.adapters.document_adapter import derive_document_state_update_from_delta
         proposal = derive_document_state_update_from_delta(delta)
         return service.apply_update(proposal)
 
@@ -587,7 +587,7 @@ def test_render_source_content_unknown_extension_uses_empty_fence(tmp_path: Path
 # ---------------------------------------------------------------------------
 
 def test_default_source_patterns_cover_common_types(tmp_path: Path) -> None:
-    from baps.audit_adapter import _DEFAULT_SOURCE_PATTERNS
+    from baps.adapters.audit_adapter import _DEFAULT_SOURCE_PATTERNS
     for name in ["mod.py", "main.go", "lib.rs", "app.js", "infra.tf", "config.yaml"]:
         (tmp_path / name).write_text("content")
     files = _collect_source_files(tmp_path, _DEFAULT_SOURCE_PATTERNS)

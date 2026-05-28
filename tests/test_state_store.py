@@ -3,8 +3,8 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from baps.state import DocumentArtifact, State, StateArtifact
-from baps.state_store import JsonStateStore
+from baps.state.state import DocumentArtifact, State, StateArtifact
+from baps.state.state_store import JsonStateStore
 
 
 def _sample_state() -> State:

@@ -6,8 +6,8 @@ import random
 from dataclasses import dataclass
 from pathlib import Path
 
-from baps.models import Backend
-from baps.state import StopReason
+from baps.models.models import Backend
+from baps.state.state import StopReason
 
 
 @dataclass

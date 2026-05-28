@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from baps.state import (
+from baps.state.state import (
     fingerprint_state,
     State,
     StateArtifact,
@@ -12,7 +12,7 @@ from baps.state import (
     StateUpdateProposal,
     StateUpdateTarget,
 )
-from baps.state_service import StateService
+from baps.state.state_service import StateService
 
 
 @dataclass

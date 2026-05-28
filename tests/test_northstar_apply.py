@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from baps.northstar_apply import (
+from baps.northstar.northstar_apply import (
     _apply_proposal,
     _load_proposals,
     _save_workspace_config,

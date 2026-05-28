@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from baps.model_output import (
+from baps.models.model_output import (
     _BLACKBOARD_DIR,
     _CORRECTION_PROMPT,
     _FALLBACK_CORRECTION_PROMPT,
@@ -197,7 +197,7 @@ class TestExtraKeysStripped:
 
     def test_extra_keys_logged_as_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         text = json.dumps({"a": 1, "thoughts": "hmm"})
-        with caplog.at_level(logging.WARNING, logger="baps.model_output"):
+        with caplog.at_level(logging.WARNING, logger="baps.models.model_output"):
             parse_model_output(text, _KEYS, context="myctx")
         assert "myctx" in caplog.text
         assert "thoughts" in caplog.text
@@ -336,7 +336,7 @@ class TestInvalidJsonRetry:
         def retry_fn(prompt: str) -> str:
             return valid
 
-        with caplog.at_level(logging.DEBUG, logger="baps.model_output"):
+        with caplog.at_level(logging.DEBUG, logger="baps.models.model_output"):
             parse_model_output("not-json", _KEYS, context="retryctx", retry_fn=retry_fn)
         assert "retryctx" in caplog.text
         assert "retrying with correction prompt" in caplog.text
@@ -538,7 +538,7 @@ class TestFallbackEscalation:
         def fallback_fn(prompt: str) -> str:
             return json.dumps({"a": 1})
 
-        with caplog.at_level(logging.WARNING, logger="baps.model_output"):
+        with caplog.at_level(logging.WARNING, logger="baps.models.model_output"):
             parse_model_output(
                 "bad", _KEYS, context="myctx", retry_fn=retry_fn, fallback_fn=fallback_fn
             )

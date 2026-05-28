@@ -7,20 +7,20 @@ from pathlib import Path
 
 import pytest
 
-from baps.run import create_state, main
-from baps.document_adapter import DocumentProjectAdapter
-from baps.parsers import NoNewGameError, NorthStarUpdateNeededError
-from baps.state import (
+from baps.core.run import create_state, main
+from baps.adapters.document_adapter import DocumentProjectAdapter
+from baps.core.parsers import NoNewGameError, NorthStarUpdateNeededError
+from baps.state.state import (
     GameSpec,
     DecomposeSpec,
     SubGapSpec,
     State,
 )
-from baps.project_adapter import VerificationResult
-from baps.state_store import JsonStateStore
-from baps.orchestration import _run_project_iterations
-import baps.state as state_module
-from baps.run import _initialize_project
+from baps.adapters.project_adapter import VerificationResult
+from baps.state.state_store import JsonStateStore
+from baps.core.orchestration import _run_project_iterations
+import baps.state.state as state_module
+from baps.core.run import _initialize_project
 def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_path: Path) -> None:
 
     captured: dict[str, object] = {}
@@ -32,7 +32,7 @@ def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_pa
     )
 
     monkeypatch.setattr(
-        "baps.orchestration.create_game",
+        "baps.core.orchestration.create_game",
         lambda config, state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs: expected,
     )
 
@@ -47,7 +47,7 @@ def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_pa
             ),
         )
 
-    monkeypatch.setattr("baps.orchestration.play_game", _capture_play_game)
+    monkeypatch.setattr("baps.core.orchestration.play_game", _capture_play_game)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -68,7 +68,7 @@ def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_pa
 
 def test_main_exits_cleanly_if_play_game_returns_none(monkeypatch, capsys, tmp_path: Path) -> None:
 
-    monkeypatch.setattr("baps.orchestration.play_game", lambda _state, _spec, adapter=None, verification_result=None, **_kwargs: None)
+    monkeypatch.setattr("baps.core.orchestration.play_game", lambda _state, _spec, adapter=None, verification_result=None, **_kwargs: None)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -121,8 +121,8 @@ def test_main_max_iterations_two_runs_two_iterations_with_state_carry_forward(
             ),
         )
 
-    monkeypatch.setattr("baps.orchestration.create_game", _create_game)
-    monkeypatch.setattr("baps.orchestration.play_game", _play_game)
+    monkeypatch.setattr("baps.core.orchestration.create_game", _create_game)
+    monkeypatch.setattr("baps.core.orchestration.play_game", _play_game)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -160,7 +160,7 @@ def test_main_create_state_called_once_for_multi_iteration(monkeypatch, tmp_path
         calls["count"] += 1
         return original_create_state(config)
 
-    monkeypatch.setattr("baps.run.create_state", _capture_create_state)
+    monkeypatch.setattr("baps.core.run.create_state", _capture_create_state)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -197,7 +197,7 @@ def test_main_stops_when_create_game_cannot_produce_new_game(
             )
         raise NoNewGameError("no further game")
 
-    monkeypatch.setattr("baps.orchestration.create_game", _create_game)
+    monkeypatch.setattr("baps.core.orchestration.create_game", _create_game)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -223,7 +223,7 @@ def test_no_new_game_accepted_when_no_verification_has_run(
     """no_new_game is a valid stop when verification has never run (non-coding)."""
 
     monkeypatch.setattr(
-        "baps.orchestration.create_game",
+        "baps.core.orchestration.create_game",
         lambda _c, _s, adapter=None, verification_result=None, context_chain=(), depth=0, **_kw: (
             (_ for _ in ()).throw(NoNewGameError("done"))
         ),
@@ -261,7 +261,7 @@ def test_no_new_game_accepted_when_verification_passed(
             )
         raise NoNewGameError("done — tests pass")
 
-    import baps.state as state_module
+    import baps.state.state as state_module
 
     def _play_game(_state, _spec, adapter=None, verification_result=None, **_kwargs):
         return state_module.DeltaCodingState(
@@ -272,10 +272,10 @@ def test_no_new_game_accepted_when_verification_passed(
             ),
         )
 
-    monkeypatch.setattr("baps.orchestration.create_game", _create_game)
-    monkeypatch.setattr("baps.orchestration.play_game", _play_game)
+    monkeypatch.setattr("baps.core.orchestration.create_game", _create_game)
+    monkeypatch.setattr("baps.core.orchestration.play_game", _play_game)
     monkeypatch.setattr(
-        "baps.orchestration._verify_export_with_adapter",
+        "baps.core.orchestration._verify_export_with_adapter",
         lambda _a, _o, _s, _id, **_kw: VerificationResult(
             command="pytest", cwd="/tmp", exit_code=0, stdout="1 passed", stderr="", passed=True
         ),
@@ -322,7 +322,7 @@ def test_no_new_game_rejected_when_verification_failed(
             )
         raise NoNewGameError("no gap seen")  # on call 2 and 3 — model wrong
 
-    import baps.state as state_module
+    import baps.state.state as state_module
 
     def _play_game(_state, _spec, adapter=None, verification_result=None, **_kwargs):
         return state_module.DeltaCodingState(
@@ -333,10 +333,10 @@ def test_no_new_game_rejected_when_verification_failed(
             ),
         )
 
-    monkeypatch.setattr("baps.orchestration.create_game", _create_game)
-    monkeypatch.setattr("baps.orchestration.play_game", _play_game)
+    monkeypatch.setattr("baps.core.orchestration.create_game", _create_game)
+    monkeypatch.setattr("baps.core.orchestration.play_game", _play_game)
     monkeypatch.setattr(
-        "baps.orchestration._verify_export_with_adapter",
+        "baps.core.orchestration._verify_export_with_adapter",
         lambda _a, _o, _s, _id, **_kw: failing_vr,
     )
     monkeypatch.setattr(
@@ -393,7 +393,7 @@ def test_no_new_game_override_resets_after_leaf_game(
             )
         raise NoNewGameError("no gap")
 
-    import baps.state as state_module
+    import baps.state.state as state_module
 
     play_calls = {"n": 0}
 
@@ -407,10 +407,10 @@ def test_no_new_game_override_resets_after_leaf_game(
             ),
         )
 
-    monkeypatch.setattr("baps.orchestration.create_game", _create_game)
-    monkeypatch.setattr("baps.orchestration.play_game", _play_game)
+    monkeypatch.setattr("baps.core.orchestration.create_game", _create_game)
+    monkeypatch.setattr("baps.core.orchestration.play_game", _play_game)
     monkeypatch.setattr(
-        "baps.orchestration._verify_export_with_adapter",
+        "baps.core.orchestration._verify_export_with_adapter",
         lambda _a, _o, _s, _id, **_kw: failing_vr,
     )
     monkeypatch.setattr(
@@ -448,7 +448,7 @@ def test_main_stop_reason_iteration_limit_reached_after_all_iterations_used(
             success_condition="Section exists.",
         )
 
-    monkeypatch.setattr("baps.orchestration.create_game", _create_game)
+    monkeypatch.setattr("baps.core.orchestration.create_game", _create_game)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -471,7 +471,7 @@ def test_main_stop_reason_no_state_change_when_applied_delta_has_no_effect(
     monkeypatch, capsys, tmp_path: Path
 ) -> None:
 
-    import baps.state_service as ss_module
+    import baps.state.state_service as ss_module
     monkeypatch.setattr(ss_module.StateService, "states_differ", lambda self, _b, _a: False)
     monkeypatch.setattr(
         "sys.argv",
@@ -508,8 +508,8 @@ def test_main_no_state_change_stops_loop_before_max_iterations(
             success_condition="Section exists.",
         )
 
-    import baps.state_service as ss_module
-    monkeypatch.setattr("baps.orchestration.create_game", _create_game)
+    import baps.state.state_service as ss_module
+    monkeypatch.setattr("baps.core.orchestration.create_game", _create_game)
     monkeypatch.setattr(ss_module.StateService, "states_differ", lambda self, _b, _a: False)
     monkeypatch.setattr(
         "sys.argv",
@@ -542,7 +542,7 @@ def test_main_no_state_change_after_prior_state_change_reports_state_changed_tru
         # Call 2: iteration 2 — no state change
         return call_count["n"] <= 1
 
-    import baps.state_service as ss_module
+    import baps.state.state_service as ss_module
     monkeypatch.setattr(ss_module.StateService, "states_differ", _states_differ)
     monkeypatch.setattr(
         "sys.argv",
@@ -567,7 +567,7 @@ def test_play_game_no_delta_escalates_to_northstar_proposal(
 ) -> None:
 
     workspace = tmp_path / "ws-no-delta-proposal"
-    monkeypatch.setattr("baps.orchestration.play_game", lambda _s, _g, adapter=None, verification_result=None, **_kw: None)
+    monkeypatch.setattr("baps.core.orchestration.play_game", lambda _s, _g, adapter=None, verification_result=None, **_kw: None)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -594,7 +594,7 @@ def test_play_game_no_delta_escalates_to_northstar_proposal(
 def test_no_state_change_escalates_to_northstar_proposal(
     monkeypatch, tmp_path: Path, capsys
 ) -> None:
-    import baps.state_service as ss_module
+    import baps.state.state_service as ss_module
 
     workspace = tmp_path / "ws-no-change-proposal"
     monkeypatch.setattr(ss_module.StateService, "states_differ", lambda self, _b, _a: False)
@@ -630,7 +630,7 @@ def test_main_create_game_parse_error_is_not_swallowed_as_no_game(
         del verification_result
         raise ValueError("create_game model output must be valid JSON")
 
-    monkeypatch.setattr("baps.orchestration.create_game", _broken_create_game)
+    monkeypatch.setattr("baps.core.orchestration.create_game", _broken_create_game)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -663,7 +663,7 @@ def test_run_iterations_northstar_update_proposed_writes_blackboard_and_stops(
             proposed_northstar="# Revised NorthStar\n\nNew direction.",
         )
 
-    monkeypatch.setattr("baps.orchestration.create_game", _create_game_raises)
+    monkeypatch.setattr("baps.core.orchestration.create_game", _create_game_raises)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -704,7 +704,7 @@ def test_run_iterations_northstar_update_proposed_does_not_apply_state_update(
             proposed_northstar="# New NorthStar",
         )
 
-    monkeypatch.setattr("baps.orchestration.create_game", _create_game_raises)
+    monkeypatch.setattr("baps.core.orchestration.create_game", _create_game_raises)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -753,7 +753,7 @@ def test_run_iterations_northstar_proposal_appends_on_multiple_signals(
             proposed_northstar="# Newer NorthStar",
         )
 
-    monkeypatch.setattr("baps.orchestration.create_game", _create_game_raises)
+    monkeypatch.setattr("baps.core.orchestration.create_game", _create_game_raises)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -778,7 +778,7 @@ def test_run_iterations_northstar_proposal_appends_on_multiple_signals(
 
 def test_solve_gap_decompose_then_play(monkeypatch, tmp_path: Path) -> None:
     """Decompose at depth 0 → two sub-games played at depth 1, then no_new_game."""
-    import baps.state as state_module
+    import baps.state.state as state_module
 
     played: list[str] = []
     top_calls = [0]
@@ -813,8 +813,8 @@ def test_solve_gap_decompose_then_play(monkeypatch, tmp_path: Path) -> None:
             ),
         )
 
-    monkeypatch.setattr("baps.orchestration.create_game", _fake_create_game)
-    monkeypatch.setattr("baps.orchestration.play_game", _fake_play_game)
+    monkeypatch.setattr("baps.core.orchestration.create_game", _fake_create_game)
+    monkeypatch.setattr("baps.core.orchestration.play_game", _fake_play_game)
 
     config = {
         "workspace": tmp_path / "ws",
@@ -840,7 +840,7 @@ def test_solve_gap_decompose_then_play(monkeypatch, tmp_path: Path) -> None:
 
 def test_solve_gap_context_chain_injected_into_game_spec(monkeypatch, tmp_path: Path) -> None:
     """The context chain accumulated through decomposition reaches Blue's GameSpec."""
-    import baps.state as state_module
+    import baps.state.state as state_module
 
     captured_chain: list[tuple[str, ...]] = []
     top_calls = [0]
@@ -871,8 +871,8 @@ def test_solve_gap_context_chain_injected_into_game_spec(monkeypatch, tmp_path: 
             ),
         )
 
-    monkeypatch.setattr("baps.orchestration.create_game", _fake_create_game)
-    monkeypatch.setattr("baps.orchestration.play_game", _fake_play_game)
+    monkeypatch.setattr("baps.core.orchestration.create_game", _fake_create_game)
+    monkeypatch.setattr("baps.core.orchestration.play_game", _fake_play_game)
 
     config = {
         "workspace": tmp_path / "ws",
@@ -902,7 +902,7 @@ def test_solve_gap_max_depth_stops_recursion(monkeypatch, tmp_path: Path) -> Non
             sub_gaps=(SubGapSpec(description="inner"),),
         )
 
-    monkeypatch.setattr("baps.orchestration.create_game", _always_decompose)
+    monkeypatch.setattr("baps.core.orchestration.create_game", _always_decompose)
 
     config = {
         "workspace": tmp_path / "ws",

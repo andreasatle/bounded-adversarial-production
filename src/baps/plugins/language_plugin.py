@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol, Sequence, runtime_checkable
 
-from baps.project_adapter import VerificationResult
+from baps.adapters.project_adapter import VerificationResult
 
 
 @runtime_checkable
@@ -37,8 +37,8 @@ class LanguagePlugin(Protocol):
 
 def get_language_plugin(name: str) -> LanguagePlugin:
     """Return the plugin for *name*, raising ValueError if not registered."""
-    from baps.language_python import PythonLanguagePlugin
-    from baps.language_zig import ZigLanguagePlugin
+    from baps.plugins.language_python import PythonLanguagePlugin
+    from baps.plugins.language_zig import ZigLanguagePlugin
 
     _registry: dict[str, LanguagePlugin] = {
         "python": PythonLanguagePlugin(),

@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from baps.state import (
+from baps.state.state import (
     apply_state_delta,
     apply_state_update,
     apply_referee_decision_to_runtime,
@@ -165,7 +165,7 @@ def test_section_rejects_extra_fields() -> None:
 
 
 def test_section_rejects_oversized_body() -> None:
-    from baps.state import _MAX_SECTION_BODY_BYTES
+    from baps.state.state import _MAX_SECTION_BODY_BYTES
     with pytest.raises(ValidationError):
         Section(title="Intro", body="x" * (_MAX_SECTION_BODY_BYTES + 1))
 
@@ -181,13 +181,13 @@ def test_code_file_rejects_non_string_content() -> None:
 
 
 def test_code_file_rejects_oversized_path() -> None:
-    from baps.state import _MAX_CODEFILE_PATH_BYTES
+    from baps.state.state import _MAX_CODEFILE_PATH_BYTES
     with pytest.raises(ValidationError):
         CodeFile(path="a" * (_MAX_CODEFILE_PATH_BYTES + 1), content="")
 
 
 def test_code_file_rejects_oversized_content() -> None:
-    from baps.state import _MAX_CODEFILE_CONTENT_BYTES
+    from baps.state.state import _MAX_CODEFILE_CONTENT_BYTES
     with pytest.raises(ValidationError):
         CodeFile(path="src/main.py", content="x" * (_MAX_CODEFILE_CONTENT_BYTES + 1))
 
