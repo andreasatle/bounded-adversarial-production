@@ -77,7 +77,7 @@ def test_derive_state_update_from_delta_converts_append_section() -> None:
     assert proposal.payload.section.body == "Body text"
 
 
-def test_main_integration_uses_state_service_apply_update(monkeypatch, tmp_path: Path) -> None:
+def test_main_integration_uses_state_service_apply_delta(monkeypatch, tmp_path: Path) -> None:
     import baps.core.run as run_module
 
     called = {"value": False}

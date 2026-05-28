@@ -14,7 +14,7 @@ config/NorthStar → State → StateView → CreateGame
                                        PlayGame
                                      [research phase]
                                            ↓
-                               DeltaState → StateUpdateProposal → StateService → export
+                               integration-eligible DeltaState → StateService.apply_delta → export
 ```
 
 ---
@@ -372,8 +372,8 @@ docker/
    - Bounded retries with sanitized feedback on rejected attempts
 
 3. **Integration**
-   - Accepted delta mapped to `StateUpdateProposal` by adapter
-   - `StateService.apply_delta` applies as durable mutation
+   - `play_game` returns an integration-eligible `DeltaState` (or `None`)
+   - `_solve_gap` applies that `DeltaState` via `StateService.apply_delta` as the runtime mutation boundary
    - NorthStar artifact IDs are protected — proposals targeting them are rejected
 
 4. **Export**
@@ -467,7 +467,7 @@ All payload models use `model_config = ConfigDict(extra="forbid")`:
 ### `StateUpdateProposal`
 
 - Fields: `id`, `target`, `summary`, `payload`
-- Purpose: mutation request envelope consumed by `StateService`
+- Purpose: non-runtime mutation envelope consumed by `StateService.apply_update` for proposal/workflow use cases
 
 ---
 
@@ -588,7 +588,7 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 - **LanguagePlugin**: Protocol owning `docker_image`, `test_command`, and test lifecycle for a specific programming language within the coding adapter.
 - **RedFinding**: Adversarial reviewer decision output.
 - **RefereeDecision**: Game-local adjudication output.
-- **StateUpdateProposal**: Integration envelope for mutation through `StateService`.
+- **StateUpdateProposal**: Proposal/workflow mutation envelope used by `StateService.apply_update` (not the canonical runtime integration path).
 - **runtime**: Lifecycle orchestration via `start` (initialize-or-resume + game loop) and `reset` (wipe only).
 - **ModelClient**: Generation interface for model backends and test doubles.
 - **Role**: A named model client with schema, constrained-decoding flag, and optional research phase.

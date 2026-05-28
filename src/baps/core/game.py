@@ -150,6 +150,11 @@ def _sanitize_feedback_dict(d: dict) -> dict:
 def _derive_state_update_from_delta(
     delta_state: DeltaState, adapter: ProjectTypeAdapter
 ) -> StateUpdateProposal:
+    """Map DeltaState to StateUpdateProposal for non-runtime proposal workflows.
+
+    Canonical runtime integration in orchestration applies integration-eligible
+    DeltaState directly through StateService.apply_delta.
+    """
     return adapter.delta_to_state_update(delta_state)
 
 

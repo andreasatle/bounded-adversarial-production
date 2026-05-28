@@ -27,7 +27,10 @@ class StateService:
         return validate_state_artifacts(state, self.registry)
 
     def apply_delta(self, delta: DeltaState) -> State:
-        """Apply a typed DeltaState directly, bypassing the dict-based proposal path."""
+        """Apply a typed DeltaState directly.
+
+        This is the canonical runtime integration path used by orchestration.
+        """
         current = self.store.load()
         validated_current = validate_state_artifacts(current, self.registry)
         updated = apply_state_delta(validated_current, delta)
@@ -39,6 +42,7 @@ class StateService:
         return fingerprint_state(before) != fingerprint_state(after)
 
     def apply_update(self, proposal: StateUpdateProposal) -> State:
+        """Apply a StateUpdateProposal envelope for non-runtime proposal workflows."""
         current = self.store.load()
         validated_current = validate_state_artifacts(current, self.registry)
         if not validate_update_base_state(validated_current, proposal):
