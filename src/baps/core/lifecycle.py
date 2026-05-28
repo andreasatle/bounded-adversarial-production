@@ -6,6 +6,8 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from pydantic import BaseModel
+
 from baps.core.run_config import RunConfig, resolve_reset_targets, resolve_run_config
 from baps.core.runtime import (
     active_model_info,
@@ -13,6 +15,7 @@ from baps.core.runtime import (
     run_project,
 )
 from baps.core.workspace import wipe_workspace_state, write_run_result
+from baps.adapters.project_adapter import VerificationResult
 from baps.state.state import StopReason
 
 logger = logging.getLogger(__name__)
@@ -40,15 +43,30 @@ class StartRunSummary:
     stop_reason: StopReason = StopReason.NOT_RUN
     failed: bool = False
 
+    def record_iteration_result(self, result: "IterationRunResult") -> None:
+        self.update_applied = result.update_applied
+        self.state_changed = result.state_changed
+        self.output_exported = result.output_exported
+        self.output_changed = result.output_changed
+        self.northstar_proposal_written = result.northstar_proposal_written
+        verification_result = result.verification_result
+        self.verification_run = verification_result is not None
+        if verification_result is not None:
+            self.verification_passed = verification_result.passed
+            self.verification_exit_code = verification_result.exit_code
+            self.verification_command = verification_result.command
+            self.verification_cwd = verification_result.cwd
+        self.iterations_completed = result.iterations_completed
+        self.stop_reason = result.stop_reason
 
-@dataclass(frozen=True)
-class IterationRunResult:
+
+class IterationRunResult(BaseModel):
     update_applied: bool
     state_changed: bool
     output_exported: bool
     output_changed: bool
     northstar_proposal_written: bool
-    verification_result: object | None
+    verification_result: VerificationResult | None
     iterations_completed: int
     stop_reason: StopReason
 
@@ -62,33 +80,7 @@ def resolve_start_config(args: argparse.Namespace) -> RunConfig:
 
 
 def _to_iteration_run_result(raw: dict[str, object]) -> IterationRunResult:
-    return IterationRunResult(
-        update_applied=bool(raw["update_applied"]),
-        state_changed=bool(raw["state_changed"]),
-        output_exported=bool(raw["output_exported"]),
-        output_changed=bool(raw["output_changed"]),
-        northstar_proposal_written=bool(raw["northstar_proposal_written"]),
-        verification_result=raw["verification_result"],
-        iterations_completed=int(raw["iterations_completed"]),
-        stop_reason=raw["stop_reason"],
-    )
-
-
-def _map_iteration_results(summary: StartRunSummary, result: IterationRunResult) -> None:
-    summary.update_applied = result.update_applied
-    summary.state_changed = result.state_changed
-    summary.output_exported = result.output_exported
-    summary.output_changed = result.output_changed
-    summary.northstar_proposal_written = result.northstar_proposal_written
-    verification_result = result.verification_result
-    summary.verification_run = verification_result is not None
-    if verification_result is not None:
-        summary.verification_passed = verification_result.passed
-        summary.verification_exit_code = verification_result.exit_code
-        summary.verification_command = verification_result.command
-        summary.verification_cwd = verification_result.cwd
-    summary.iterations_completed = result.iterations_completed
-    summary.stop_reason = result.stop_reason
+    return IterationRunResult.model_validate(raw)
 
 
 def run_start_lifecycle(runtime, command: str) -> StartRunSummary:
@@ -103,7 +95,7 @@ def run_start_lifecycle(runtime, command: str) -> StartRunSummary:
     try:
         raw_result = run_project(runtime)
         iteration_result = _to_iteration_run_result(raw_result)
-        _map_iteration_results(summary, iteration_result)
+        summary.record_iteration_result(iteration_result)
     except (ValueError, RuntimeError) as exc:
         logger.error("%s", exc)
         summary.stop_reason = StopReason.ERROR
