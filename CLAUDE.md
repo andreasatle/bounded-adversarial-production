@@ -17,8 +17,10 @@ initializes authoritative `State`, renders model-facing `StateView` projections,
 
 ```
 config/NorthStar -> State -> StateView -> CreateGame -> GameSpec ->
-PlayGame -> DeltaState -> StateUpdateProposal -> StateService -> export
+PlayGame -> DeltaState -> StateService.apply_delta -> export
 ```
+
+Note: `StateUpdateProposal` / `StateService.apply_update` is a non-runtime proposal workflow (used by tests and `baps-apply-northstar`). The canonical runtime integration path calls `apply_delta` directly.
 
 This is the **only** active product path. Do not propose changes that bypass or fork this spine.
 
@@ -31,16 +33,28 @@ src/baps/
   core/
     run.py                  # Lifecycle commands (start, reset), config resolution, main()
     orchestration.py        # _solve_gap, _run_project_iterations, _RunContext — recursive gap solver
-    game.py                 # create_game, play_game, blackboard helpers
     prompts.py              # All prompt rendering functions
     parsers.py              # All model output parsing functions
     clients.py              # All client-building functions, SpecRole, backend resolution
     debug.py                # Debug print helpers
+  game/                     # Game execution package (split from core/game.py)
+    engine.py               # create_game, play_game — top-level orchestration entry points
+    attempt.py              # _run_play_game_attempt, _apply_play_game_attempt_decision
+    play.py                 # _record_play_game_telemetry
+    roles.py                # _resolve_play_game_roles, _build_play_game_fallbacks, role schemas
+    telemetry.py            # Blackboard helpers, _VERIFICATION_SUMMARY_CAP, sanitize utilities
   adapters/
     project_adapter.py      # ProjectTypeAdapter protocol, registry, sanitizers, Blue prompt core
     document_adapter.py     # DocumentProjectAdapter — all document mechanics
-    coding_adapter.py       # CodingProjectAdapter — all coding mechanics (language-agnostic)
+    coding_adapter.py       # CodingProjectAdapter facade — delegates to coding/ subpackage
     audit_adapter.py        # AuditProjectAdapter — all audit mechanics, source fingerprinting
+    coding/                 # CodingAdapter internals split by responsibility
+      common.py             # Shared utilities: _validate_file_path, _plugin_for, _config_language, coding_artifact_from_state
+      delta_apply.py        # _apply_delta_to_files, _normalize_coding_export_content
+      parsing.py            # parse_coding_delta_json, validation, malformed-JSON recovery
+      prompting.py          # render_coding_blue_prompt, _render_coding_evaluation_supplement
+      state_updates.py      # derive_coding_state_update_from_delta
+      views.py              # build_coding_create_game_state_view, build_coding_state_view
   state/
     state.py                # Authoritative schemas, mutation, artifact registry
     state_service.py        # StateService — the only mutation boundary
@@ -70,7 +84,14 @@ tests/
   test_clients.py
   test_config.py
   test_create_game.py
+  test_debug.py
   test_integration.py
+  test_integration_adapters.py
+  test_integration_candidate_verification.py
+  test_integration_export.py
+  test_integration_play_game.py
+  test_integration_run.py
+  test_integration_runtime.py
   test_language_plugin.py
   test_lifecycle.py
   test_model_output.py
@@ -80,6 +101,7 @@ tests/
   test_orchestration.py
   test_parsers.py
   test_play_game.py
+  test_play_game_attempts.py
   test_prompts.py
   test_run.py
   test_sandbox.py
@@ -105,7 +127,7 @@ docs/
 1. **`State` is authoritative.** Persisted JSON via `JsonStateStore`. Never bypass `StateService`.
 2. **`StateView` is a prompt-only projection.** It is not authority. It is never the same as `State`.
 3. **JSON is storage/transport format.** Do not pass raw `State` JSON to model prompts as `StateView`.
-4. **`NorthStar` is part of `State`.** Artifact IDs must remain disjoint from state artifact IDs.
+4. **`NorthStar` is stored in config, not `State`.** It lives as `northstar_markdown` in `baps-config.json`, separate from `state.json`. The automated pipeline never writes to it — protection is by isolation, not by a runtime guard.
 5. **`run.py` is generic.** All project-type mechanics belong in adapters.
 6. **`ProjectTypeAdapter` owns:** initial state creation, StateView rendering (CreateGame + PlayGame),
    Blue prompt supplement, delta parsing, delta→StateUpdateProposal mapping, export.
@@ -149,13 +171,21 @@ When working on adapters, they must implement:
 
 1. `create_initial_state(...)` — initial `State`
 2. `build_create_game_state_view(...)` — `StateView` for CreateGame
-3. `build_play_game_state_view(...)` — `StateView` for PlayGame
-4. `render_blue_prompt_supplement(...)` — project-specific Blue prompt rules
-5. `parse_blue_delta(...)` — parse model output into typed `DeltaState`
-6. `map_delta_to_proposal(...)` — `DeltaState` → `StateUpdateProposal`
-7. `export_state(...)` — write output files
+3. `render_create_game_prompt_supplement(...)` — project-specific CreateGame prompt rules
+4. `normalize_game_spec(...)` — post-process `GameSpec` after CreateGame (e.g. fix artifact_id)
+5. `build_state_view(...)` — `StateView` for PlayGame
+6. `render_blue_prompt(...)` — full Blue prompt including delta-shape instructions
+7. `render_red_prompt_supplement(...)` — project-specific Red prompt guidance
+8. `render_referee_prompt_supplement(...)` — project-specific Referee prompt guidance
+9. `build_blue_output_format()` — JSON schema or `None` for Blue's constrained output
+10. `build_blue_tools()` — tool definitions for Blue's tool-call interface
+11. `build_research_tools(role)` — tool definitions for research phases by role
+12. `tool_call_to_delta(tool_call)` — convert Blue tool call to `DeltaState`
+13. `parse_blue_delta(text)` — parse Blue JSON output into typed `DeltaState`
+14. `delta_to_state_update(delta_state)` — `DeltaState` → `StateUpdateProposal`
+15. `export_state(...)` — write output files
 
-Optional: `verify_export(...)`, `normalize_game_spec(...)`, supplements for CreateGame/Red/Referee.
+Optional: `verify_export(...)`, `verify_candidate(...)`, `commit_export(...)`.
 
 ---
 
@@ -182,7 +212,8 @@ uv run pytest
 - Use `FakeModelClient` for deterministic sequences — never couple tests to live model output.
 - Assert exact prompts, validation failures, stop reasons, and summary fields.
 - Test adapter boundaries explicitly: core orchestration must not receive project-specific output.
-- State schema tests in `test_state_schema.py`, mutation tests in `test_state_mutation.py`, delta tests in `test_state_delta.py`; orchestration contracts in `test_orchestration.py`; game phase tests in `test_create_game.py` and `test_play_game.py`.
+- State schema tests in `test_state_schema.py`, mutation tests in `test_state_mutation.py`, delta tests in `test_state_delta.py`; orchestration contracts in `test_orchestration.py`; game phase tests in `test_create_game.py`, `test_play_game.py`, and `test_play_game_attempts.py`.
+- Integration tests are split by domain: `test_integration_run.py`, `test_integration_runtime.py`, `test_integration_play_game.py`, `test_integration_export.py`, `test_integration_candidate_verification.py`, `test_integration_adapters.py`.
 
 ---
 
@@ -235,11 +266,12 @@ manually updates the NorthStar source (e.g. the spec YAML's `northstar_markdown`
 `baps-apply-northstar <workspace> [--index N] [--dry-run]` assists with applying an approved
 proposal to `baps-config.json`.
 
-### Enforcement in StateService
+### Why NorthStar cannot be mutated by the pipeline
 
-`StateService.apply_update` rejects any proposal whose `target.artifact_id` matches a NorthStar
-artifact ID, raising `ValueError("... human approval is required to update NorthStar")`. This
-guard is independent of the CreateGame signal and applies to all automated update paths.
+NorthStar lives in `baps-config.json` as a plain string field (`northstar_markdown`), completely
+separate from `state.json`. `StateService` only mutates `State` artifacts — it structurally cannot
+reach NorthStar. The automated pipeline has no write path to `baps-config.json` at all.
+`baps-apply-northstar` is the only tool that writes to it, after human review.
 
 ---
 
@@ -278,6 +310,8 @@ mutations.
 
 **Do not add logic to `run.py`.** `run.py` contains only lifecycle commands (`start`, `reset`), config resolution, and `main()`. Do not add orchestration logic (→ `orchestration.py`), prompt rendering (→ `prompts.py`), output parsing (→ `parsers.py`), or client-building (→ `clients.py`) to `run.py`. Use the appropriate focused module.
 
+**Game execution logic belongs in `game/`.** `create_game` and `play_game` entry points live in `game/engine.py`. Attempt logic → `game/attempt.py`. Role wiring → `game/roles.py`. Telemetry and blackboard writes → `game/telemetry.py`. Do not add game-execution logic to `core/`.
+
 ---
 
 ## Suggested next milestones (from ARCHITECTURE.md)
@@ -286,7 +320,7 @@ These are additive and preserve the canonical spine:
 
 1. ~~Blackboard reintegration as append-only run metadata (non-authoritative)~~ — done
 2. ~~Human-facing `baps-apply-northstar <workspace>` command~~ — done
-3. Formal tool boundary for controlled execution beyond prompt-only roles
+3. ~~Formal tool boundary for controlled execution beyond prompt-only roles~~ — done (`build_blue_tools`, `tool_call_to_delta` on `ProjectTypeAdapter`; coding adapter exposes `write_files`, `write_file`, `delete_file` tools)
 4. Adapter-level verification hook expansion (beyond coding pytest)
 5. Stronger contract tests around role outputs vs `success_condition` semantics
 6. Optional structured role envelopes for richer machine-checkable rationale

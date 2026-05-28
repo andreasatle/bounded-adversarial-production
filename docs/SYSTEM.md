@@ -18,7 +18,7 @@ config/NorthStar → State → StateView → CreateGame
                                        PlayGame
                                      [research phase]
                                            ↓
-                               DeltaState → StateUpdateProposal → StateService → export
+                               DeltaState → StateService.apply_delta → export
 ```
 
 This is the only active lifecycle execution path for `start`. No other lifecycle is canonical.
@@ -33,15 +33,15 @@ CreateGame is a **gap-analysis operation**, not a step-forward operation. It com
 2. `State` persists as JSON via the state store/service path.
 3. `StateView` is model-facing text projection, not authority.
 4. JSON is storage/transport format; it is not `StateView.content`.
-5. `NorthStar` belongs to `State` and is the target all gap analysis measures against.
-6. `NorthStar` is immutable through the automated pipeline; updates require human approval.
+5. `NorthStar` is a string field (`northstar_markdown`) stored in `baps-config.json`, separate from `state.json`. It is the target all gap analysis measures against.
+6. `NorthStar` is immutable through the automated pipeline; updates require human approval via `baps-apply-northstar`.
 7. Project behavior is adapter-owned behind `ProjectTypeAdapter`.
 8. Core orchestration remains project-type generic.
 9. CreateGame is `State`/`NorthStar`-aware through `StateView`. It performs gap analysis, not step derivation.
 10. PlayGame is `GameSpec`-bound. It has no access to `NorthStar` directly.
 11. `GameSpec.context_chain` carries all ancestor gap descriptions from the coarsest decomposition to the immediate task. Blue sees the full chain.
-12. `StateService` is the mutation boundary for durable state changes.
-13. `StateService` rejects proposals targeting NorthStar artifacts.
+12. `StateService` is the mutation boundary for durable state changes. The canonical runtime path uses `StateService.apply_delta(delta_state)` directly; `StateService.apply_update(proposal)` is for non-runtime proposal workflows only.
+13. NorthStar is protected by isolation, not by a runtime guard: it lives in `baps-config.json`, not in `State`. `StateService` can only mutate `State` artifacts, so it structurally cannot touch NorthStar.
 14. Export is one-way materialization from `State` to output files.
 15. Prompts consume `StateView` context, not raw authoritative `State` internals.
 16. Model-generated content is sanitized (NFKC-normalized, injection patterns removed) before embedding in any subsequent prompt.
@@ -54,15 +54,21 @@ CreateGame is a **gap-analysis operation**, not a step-forward operation. It com
 
 `ProjectTypeAdapter` owns project-specific mechanics:
 
-1. Initial state creation
-2. CreateGame `StateView` rendering
-3. PlayGame `StateView` rendering
-4. Project prompt supplements (CreateGame, Blue, Red, Referee)
-5. Blue delta parsing
-6. Delta → `StateUpdateProposal` mapping
-7. Export
-8. Optional export verification
-9. Language plugin resolution (coding adapter only): the `language` spec key selects a `LanguagePlugin` at state-creation time; the plugin owns `docker_image`, `test_command`, `initialize`, `run_tests`, `has_tests`, and `parse_test_failures`; unknown language names raise immediately with the list of available languages; adding a new language requires implementing `LanguagePlugin` and registering it — `sandbox.py` requires no changes
+1. Initial state creation (`create_initial_state`)
+2. CreateGame `StateView` rendering (`build_create_game_state_view`)
+3. CreateGame prompt supplement (`render_create_game_prompt_supplement`)
+4. GameSpec normalization (`normalize_game_spec` — e.g. enforce configured artifact_id)
+5. PlayGame `StateView` rendering (`build_state_view`)
+6. Full Blue prompt rendering (`render_blue_prompt` — includes delta-shape instructions)
+7. Red and Referee prompt supplements (`render_red_prompt_supplement`, `render_referee_prompt_supplement`)
+8. Blue tool interface (`build_blue_tools`, `tool_call_to_delta`) — Blue may produce deltas via tool call instead of JSON
+9. Blue output format (`build_blue_output_format`) — JSON schema or `None`
+10. Research phase tools per role (`build_research_tools(role)`)
+11. Blue delta parsing (`parse_blue_delta`) — JSON path
+12. Delta → `StateUpdateProposal` mapping (`delta_to_state_update`) — for non-runtime proposal workflows
+13. Export (`export_state`)
+14. Optional: `verify_export`, `verify_candidate`, `commit_export`
+15. Language plugin resolution (coding adapter only): the `language` spec key selects a `LanguagePlugin` at state-creation time; the plugin owns `docker_image`, `test_command`, `initialize`, `run_tests`, `has_tests`, and `parse_test_failures`; unknown language names raise immediately with the list of available languages; adding a new language requires implementing `LanguagePlugin` and registering it — `sandbox.py` requires no changes
 
 Core orchestration must call adapter interfaces and remain generic.
 
@@ -224,7 +230,7 @@ Every game execution writes its full reasoning trail to `<workspace>/blackboard/
 6. Introducing competing runtime spines.
 7. Exposing authoritative state internals directly to prompts outside `StateView` contract.
 8. Framing CreateGame as "what should I do next?" rather than "what gap to NorthStar must I close?".
-9. Mutating NorthStar through the automated pipeline without human approval.
+9. Mutating NorthStar through the automated pipeline. NorthStar lives in `baps-config.json` and can only be updated by `baps-apply-northstar`; the automated pipeline never writes to it.
 10. Allowing decomposition to continue past `max_depth`.
 11. Allowing a single `DecomposeSpec` to contain more than `max_sub_gaps` sub-gaps (default 5); excess entries are silently truncated before execution.
 12. Embedding model-generated content in prompts without sanitization.

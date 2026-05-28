@@ -104,11 +104,13 @@ Current implementation philosophy:
 - `_run_project_iterations(...)` — outer loop calling `_solve_gap` at depth 0 until stop
 - `_RunContext` — mutable context threaded through recursion tracking current state, remaining iterations, verification result, and stop reason
 
-**`game.py` — game execution:**
+**`game/` — game execution package (split from former `core/game.py`):**
 
-- `create_game(...)` — gap-analysis prompt, parsing (`GameSpec | DecomposeSpec`), validation, adapter normalization
-- `play_game(...)` — Blue/Red/Referee orchestration with optional research phases and bounded retries
-- `_sanitize_feedback_dict(...)` — sanitizes model-generated strings in feedback dicts before re-embedding in subsequent prompts
+- `engine.py` — `create_game(...)` and `play_game(...)` entry points; gap-analysis prompt, parsing, validation, adapter normalization, Blue/Red/Referee orchestration
+- `attempt.py` — `_run_play_game_attempt(...)` (single attempt: Blue → Red → Referee), `_apply_play_game_attempt_decision(...)` (accept/retry/stop logic)
+- `roles.py` — `_resolve_play_game_roles(...)`, `_build_play_game_fallbacks(...)`, role schemas (Red, Referee)
+- `play.py` — `_record_play_game_telemetry(...)` (blackboard + debug events at end of `play_game`)
+- `telemetry.py` — `_append_*_to_blackboard(...)` helpers, `_sanitize_feedback_dict(...)`, `_sanitize_game_spec_dict(...)`, `_VERIFICATION_SUMMARY_CAP`
 
 **`max_sub_gaps`:** Config key (default 5, spec-overridable) bounding decomposition branching factor. `_parse_create_game_output` truncates any `DecomposeSpec` whose `sub_gaps` length exceeds the limit and prints a notice. Validated >= 1 in `resolve_run_config`.
 
@@ -170,14 +172,25 @@ Client construction is handled by `_resolve_backend_model(role, config)` → `_b
 - Delta operations: `append_section`, `modify_section`, `delete_section`
 - Export: markdown file
 
-#### Coding (`src/baps/adapters/coding_adapter.py`)
+#### Coding (`src/baps/adapters/coding_adapter.py` + `src/baps/adapters/coding/`)
 
+`coding_adapter.py` is a thin facade; all implementation is split into focused modules under `coding/`:
+
+- `common.py` — `_validate_file_path`, `_plugin_for`, `_config_language`, `coding_artifact_from_state`
+- `delta_apply.py` — `_apply_delta_to_files`, `_normalize_coding_export_content`
+- `parsing.py` — `parse_coding_delta_json` (validates `write_file`, `write_files`, `delete_file`; malformed-JSON recovery path)
+- `prompting.py` — `render_coding_blue_prompt`, `_render_coding_evaluation_supplement`
+- `state_updates.py` — `derive_coding_state_update_from_delta`
+- `views.py` — `build_coding_create_game_state_view`, `build_coding_state_view`
+
+Adapter capabilities:
 - File-based codebase state; language-agnostic via plugin registry
 - CreateGame StateView: renders NorthStar + existing file contents (first 30 lines, sanitized)
 - PlayGame StateView: renders NorthStar + full file contents (sanitized)
 - Delta operations: `write_file`, `write_files` (preferred), `delete_file`
-- Export: file tree + language-plugin boilerplate
-- Verification: delegates to `LanguagePlugin.run_tests`; result evidence feeds next CreateGame
+- Tool-call interface: `write_files`, `write_file`, `delete_file` tools exposed via `build_blue_tools()`; `tool_call_to_delta()` converts tool call to `DeltaState`
+- Export: file tree + language-plugin boilerplate; `commit_export()` optionally git-commits to the output path
+- Verification: `verify_export()` (export-level tests), `verify_candidate()` (in-flight candidate in temp dir); both delegate to `LanguagePlugin.run_tests`; result evidence feeds next CreateGame
 - Sandbox: `sandbox_mode` propagated from config/CLI through `run.py` → `play_game` → adapter → plugin → `sandbox.run_sandboxed`
 - Language resolved from `CodingArtifact.language` (set at `create_initial_state` from the spec's `language` key; **required** — omitting it raises `ValueError` listing available languages); unknown names also raise `ValueError`
 
@@ -282,16 +295,28 @@ src/baps/
   core/
     run.py                  # Lifecycle commands (start, reset), config resolution, main()
     orchestration.py        # _solve_gap, _run_project_iterations, _RunContext — recursive gap solver
-    game.py                 # create_game, play_game, blackboard helpers
     prompts.py              # All prompt rendering functions
     parsers.py              # All model output parsing functions
     clients.py              # All client-building functions, SpecRole, backend resolution
     debug.py                # Debug print helpers
+  game/                     # Game execution package (split from core/game.py)
+    engine.py               # create_game, play_game — top-level orchestration entry points
+    attempt.py              # _run_play_game_attempt, _apply_play_game_attempt_decision
+    play.py                 # _record_play_game_telemetry
+    roles.py                # _resolve_play_game_roles, _build_play_game_fallbacks, role schemas
+    telemetry.py            # Blackboard helpers, _VERIFICATION_SUMMARY_CAP, sanitize utilities
   adapters/
     project_adapter.py      # ProjectTypeAdapter protocol, registry, sanitizers, Blue prompt core
     document_adapter.py     # DocumentProjectAdapter — all document mechanics
-    coding_adapter.py       # CodingProjectAdapter — all coding mechanics (language-agnostic)
+    coding_adapter.py       # CodingProjectAdapter facade — delegates to coding/ subpackage
     audit_adapter.py        # AuditProjectAdapter — all audit mechanics, source fingerprinting
+    coding/                 # CodingAdapter internals split by responsibility
+      common.py             # Shared utilities: _validate_file_path, _plugin_for, _config_language, coding_artifact_from_state
+      delta_apply.py        # _apply_delta_to_files, _normalize_coding_export_content
+      parsing.py            # parse_coding_delta_json, validation, malformed-JSON recovery
+      prompting.py          # render_coding_blue_prompt, _render_coding_evaluation_supplement
+      state_updates.py      # derive_coding_state_update_from_delta
+      views.py              # build_coding_create_game_state_view, build_coding_state_view
   state/
     state.py                # Authoritative schemas, mutation, delta application
     state_service.py        # StateService — the only mutation boundary
@@ -314,19 +339,42 @@ src/baps/
     northstar_apply.py      # baps-apply-northstar CLI
 
 tests/
-  test_state.py
+  conftest.py
+  test_audit_adapter.py
+  test_blackboard_game.py
+  test_clients.py
+  test_config.py
+  test_create_game.py
+  test_debug.py
+  test_integration.py
+  test_integration_adapters.py
+  test_integration_candidate_verification.py
+  test_integration_export.py
+  test_integration_play_game.py
+  test_integration_run.py
+  test_integration_runtime.py
+  test_language_plugin.py
+  test_lifecycle.py
+  test_model_output.py
+  test_models.py
+  test_northstar_apply.py
+  test_northstar_projection.py
+  test_orchestration.py
+  test_parsers.py
+  test_play_game.py
+  test_play_game_attempts.py
+  test_prompts.py
+  test_run.py
+  test_sandbox.py
+  test_scheduler.py
+  test_scheduler_policy.py
+  test_state_delta.py
+  test_state_mutation.py
+  test_state_schema.py
   test_state_service.py
   test_state_store.py
-  test_northstar_projection.py
-  test_models.py
-  test_run.py
-  test_audit_adapter.py
-  test_language_plugin.py
-  test_scheduler_policy.py
-  test_scheduler.py
-  test_northstar_apply.py
+  test_state_view.py
   test_tools.py
-  test_sandbox.py
 
 docs/
   SYSTEM.md               # Normative system contract
@@ -337,8 +385,9 @@ examples/
   document-project.yaml
   coding-project.yaml
   coding-project-zig.yaml
-  audit-baps.yaml         # Security audit spec (workspace: .baps-workspace-security)
-  audit-coverage.yaml     # Test coverage audit spec (workspace: .baps-workspace-coverage)
+  audit-baps.yaml         # Security audit spec
+  audit-coverage.yaml     # Test coverage audit spec
+  audit-dry.yaml
 
 docker/
   zig/
@@ -565,11 +614,12 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 
 1. ~~**`max_sub_gaps` enforcement**~~ — done: `max_sub_gaps` config key (default 5) truncates oversized `DecomposeSpec` before execution
 2. ~~**Language plugin system**~~ — done: `LanguagePlugin` protocol with Python and Zig implementations; language stored on `CodingArtifact`; `sandbox.run_sandboxed` is generic
-3. **Per-file staleness** — track source hash per file within audit sections for finer-grained invalidation
-4. **Docker network isolation** — add `--network=none` to the Docker sandbox for language plugins that do not need network access at test time (Zig is a candidate; Python with pip install is not)
-5. **Prompt-complexity routing** — extend DECOMPOSE role to select model based on StateView size or estimated task complexity
-6. **Stronger contract tests** — verify decomposition invariants and context chain integrity end-to-end
-7. **Additional language plugins** — C, JavaScript/Node, or others; each adds only a plugin file and registry entry
+3. ~~**Formal tool boundary**~~ — done: `build_blue_tools()` and `tool_call_to_delta()` on `ProjectTypeAdapter`; coding adapter exposes `write_files`, `write_file`, `delete_file` tools; Blue can produce deltas via tool call or JSON
+4. **Per-file staleness** — track source hash per file within audit sections for finer-grained invalidation
+5. **Docker network isolation** — add `--network=none` to the Docker sandbox for language plugins that do not need network access at test time (Zig is a candidate; Python with pip install is not)
+6. **Prompt-complexity routing** — extend DECOMPOSE role to select model based on StateView size or estimated task complexity
+7. **Stronger contract tests** — verify decomposition invariants and context chain integrity end-to-end
+8. **Additional language plugins** — C, JavaScript/Node, or others; each adds only a plugin file and registry entry
 
 ---
 
