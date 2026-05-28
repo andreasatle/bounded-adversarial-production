@@ -11,7 +11,7 @@ from baps.adapters.project_adapter import (
     _config_northstar_markdown,
     _verification_result_to_dict,
 )
-from baps.state.state import DeltaState, GameSpec, RedFinding, RefereeDecision, State
+from baps.state.state import DeltaState, GameSpec, PlayGameRuntime, RedFinding, RefereeDecision, State
 
 logger = logging.getLogger(__name__)
 
@@ -141,9 +141,18 @@ def _debug_print_play_game_input(state: State, game_spec: GameSpec) -> None:
     })
 
 
-def _debug_print_play_game_output(delta: DeltaState | None) -> None:
+def _debug_print_play_game_output(runtime: PlayGameRuntime) -> None:
     _debug_log("play_game.output", {
-        "current_best_delta": None if delta is None else delta.model_dump(mode="json"),
+        "current_best_delta": (
+            None
+            if runtime.current_best_delta is None
+            else runtime.current_best_delta.model_dump(mode="json")
+        ),
+        "integration_eligible_delta": (
+            None
+            if runtime.integration_eligible_delta is None
+            else runtime.integration_eligible_delta.model_dump(mode="json")
+        ),
     })
 
 

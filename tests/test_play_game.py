@@ -525,7 +525,7 @@ def test_play_game_referee_receives_gamespec_state_view_delta_and_red(monkeypatc
     assert captured["red_finding"] is not None
 
 
-def test_play_game_referee_revise_promotes_candidate_as_fallback() -> None:
+def test_play_game_referee_revise_only_returns_none() -> None:
 
     spec = GameSpec(
         objective="Any objective",
@@ -568,8 +568,7 @@ def test_play_game_referee_revise_promotes_candidate_as_fallback() -> None:
         ),
         max_attempts=1,
     )
-    assert delta is not None
-    assert delta.artifact_id == "main-document"
+    assert delta is None
 
 
 def test_play_game_referee_accept_sets_current_best_delta() -> None:
@@ -722,6 +721,40 @@ def test_play_game_referee_revise_retries_and_second_attempt_accepted() -> None:
     assert delta.artifact_id == "main-document"
     assert isinstance(delta, state_module.DeltaDocumentState)
     assert delta.payload.section.title == "Attempt Two"
+
+
+def test_play_game_debug_output_distinguishes_current_best_from_integration_eligible(monkeypatch) -> None:
+    captured: list[object] = []
+
+    def _capture_output(runtime):
+        captured.append(runtime)
+
+    monkeypatch.setattr("baps.core.game._debug_print_play_game_output", _capture_output)
+    spec, state = _make_document_spec_and_state()
+    delta = play_game(
+        state,
+        spec,
+        model_client=_make_blue_client("Attempt One", "Attempt Two"),
+        red_model_client=FakeModelClient(
+            [
+                '{"disposition":"accept","rationale":"ok"}',
+                '{"disposition":"accept","rationale":"ok"}',
+            ]
+        ),
+        referee_model_client=FakeModelClient(
+            [
+                '{"disposition":"revise","rationale":"promising but not ready"}',
+                '{"disposition":"reject","rationale":"still not acceptable"}',
+            ]
+        ),
+        max_attempts=2,
+    )
+    assert delta is None
+    assert len(captured) == 1
+    runtime = captured[0]
+    assert runtime.current_best_delta is not None
+    assert runtime.integration_eligible_delta is None
+    assert runtime.current_best_delta.payload.section.title == "Attempt One"
 
 
 def test_play_game_referee_reject_retries_and_second_attempt_accepted() -> None:

@@ -404,6 +404,7 @@ class RefereeDecision(BaseModel):
 
 class PlayGameRuntime(BaseModel):
     current_best_delta: SerializeAsAny[DeltaState] | None = None
+    integration_eligible_delta: SerializeAsAny[DeltaState] | None = None
 
 
 def apply_referee_decision_to_runtime(
@@ -411,16 +412,34 @@ def apply_referee_decision_to_runtime(
     candidate_delta: DeltaState,
     decision: RefereeDecision,
 ) -> PlayGameRuntime:
-    if decision.disposition in (Disposition.accept, Disposition.revise):
-        # Accept: done. Revise: promising — promote as best fallback for exhausted attempts.
-        return PlayGameRuntime(current_best_delta=candidate_delta.model_copy(deep=True))
-    # Reject: wrong direction — discard candidate, keep previous best.
+    if decision.disposition == Disposition.accept:
+        accepted = candidate_delta.model_copy(deep=True)
+        return PlayGameRuntime(
+            current_best_delta=accepted,
+            integration_eligible_delta=accepted.model_copy(deep=True),
+        )
+    if decision.disposition == Disposition.revise:
+        # Revise can retain internal progress but is not integration-eligible.
+        return PlayGameRuntime(
+            current_best_delta=candidate_delta.model_copy(deep=True),
+            integration_eligible_delta=(
+                runtime.integration_eligible_delta.model_copy(deep=True)
+                if runtime.integration_eligible_delta is not None
+                else None
+            ),
+        )
+    # Reject: wrong direction — discard candidate, keep previous progress state.
     return PlayGameRuntime(
         current_best_delta=(
             runtime.current_best_delta.model_copy(deep=True)
             if runtime.current_best_delta is not None
             else None
-        )
+        ),
+        integration_eligible_delta=(
+            runtime.integration_eligible_delta.model_copy(deep=True)
+            if runtime.integration_eligible_delta is not None
+            else None
+        ),
     )
 
 

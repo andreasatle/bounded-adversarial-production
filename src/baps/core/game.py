@@ -235,6 +235,8 @@ def _append_game_to_blackboard(
     attempt_records: list[dict],
     final_disposition: str,
     verification_result: VerificationResult | None,
+    current_best_delta: DeltaState | None,
+    integration_eligible_delta: DeltaState | None,
 ) -> None:
     blackboard_dir = workspace / _BLACKBOARD_DIR
     blackboard_dir.mkdir(parents=True, exist_ok=True)
@@ -248,6 +250,16 @@ def _append_game_to_blackboard(
         "attempts": attempt_records,
         "final_disposition": final_disposition,
         "verification_result": _summarize_verification_result(verification_result),
+        "current_best_delta": (
+            None
+            if current_best_delta is None
+            else _sanitize_feedback_dict(current_best_delta.model_dump(mode="json"))
+        ),
+        "integration_eligible_delta": (
+            None
+            if integration_eligible_delta is None
+            else _sanitize_feedback_dict(integration_eligible_delta.model_dump(mode="json"))
+        ),
     }
     games_path = blackboard_dir / _GAMES_FILE
     with games_path.open("a", encoding="utf-8") as f:
@@ -799,10 +811,10 @@ def play_game(
         }
         attempt_records.append(attempt_rec)
 
-    _debug_print_play_game_output(runtime.current_best_delta)
+    _debug_print_play_game_output(runtime)
     if _workspace is not None:
         final_disposition = (
-            "accepted" if runtime.current_best_delta is not None
+            "accepted" if runtime.integration_eligible_delta is not None
             else "rejected" if any(r["blue_delta"] is not None for r in attempt_records)
             else "no_delta"
         )
@@ -814,5 +826,7 @@ def play_game(
             attempt_records=attempt_records,
             final_disposition=final_disposition,
             verification_result=last_candidate_result,
+            current_best_delta=runtime.current_best_delta,
+            integration_eligible_delta=runtime.integration_eligible_delta,
         )
-    return runtime.current_best_delta
+    return runtime.integration_eligible_delta

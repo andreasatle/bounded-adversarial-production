@@ -89,6 +89,33 @@ def test_main_exits_cleanly_if_play_game_returns_none(monkeypatch, capsys, tmp_p
     assert "northstar_proposal_written=True" in captured.out
 
 
+def test_orchestration_does_not_apply_delta_when_play_game_has_no_integration_eligible_delta(
+    monkeypatch, tmp_path: Path
+) -> None:
+    called = {"apply_delta": 0}
+
+    def _count_apply_delta(self, delta):
+        called["apply_delta"] += 1
+        return self.store.load()
+
+    monkeypatch.setattr("baps.core.orchestration.play_game", lambda *_a, **_k: None)
+    monkeypatch.setattr("baps.core.orchestration.StateService.apply_delta", _count_apply_delta)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "start",
+            "--workspace",
+            str(tmp_path / "ws-no-eligible-delta"),
+            "--project-type",
+            "document",
+            "--artifact-id", "main-document", "--goal", "Write a report.", "--output", "output/report.md",
+        ],
+    )
+    main()
+    assert called["apply_delta"] == 0
+
+
 def test_main_max_iterations_two_runs_two_iterations_with_state_carry_forward(
     monkeypatch, capsys, tmp_path: Path
 ) -> None:
@@ -921,5 +948,4 @@ def test_solve_gap_max_depth_stops_recursion(monkeypatch, tmp_path: Path) -> Non
 
     assert result["stop_reason"] == "max_depth_reached"
     assert result["iterations_completed"] == 0
-
 

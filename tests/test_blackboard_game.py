@@ -174,6 +174,8 @@ def test_play_game_writes_play_game_blackboard_event(tmp_path: Path) -> None:
     assert "red_finding" in attempt
     assert "referee_decision" in attempt
     assert entry["final_disposition"] in ("accepted", "rejected", "no_delta")
+    assert "current_best_delta" in entry
+    assert "integration_eligible_delta" in entry
 
 
 def test_integration_writes_integration_blackboard_event(
@@ -251,6 +253,29 @@ def test_play_game_blackboard_final_disposition_rejected(tmp_path: Path) -> None
     attempt = entry["attempts"][0]
     assert attempt["blue_delta"] is not None
     assert attempt["referee_decision"]["disposition"] == "reject"
+    assert entry["integration_eligible_delta"] is None
+
+
+def test_play_game_blackboard_revise_only_is_not_integration_eligible(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws-revise-only"
+    config = _make_play_game_config(workspace)
+    state = create_state(config)
+    play_game(
+        state,
+        _make_document_game_spec(),
+        config=config,
+        referee_model_client=FakeModelClient(
+            ['{"disposition":"revise","rationale":"needs changes"}']
+        ),
+        max_attempts=1,
+    )
+
+    entry = json.loads(
+        (workspace / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip()
+    )
+    assert entry["final_disposition"] == "rejected"
+    assert entry["current_best_delta"] is not None
+    assert entry["integration_eligible_delta"] is None
 
 
 def test_play_game_blackboard_final_disposition_no_delta(tmp_path: Path) -> None:

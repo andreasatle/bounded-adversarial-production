@@ -262,6 +262,7 @@ def test_referee_decision_rejects_empty_rationale(bad_rationale: str) -> None:
 def test_play_game_runtime_defaults_current_best_delta_to_none() -> None:
     runtime = PlayGameRuntime()
     assert runtime.current_best_delta is None
+    assert runtime.integration_eligible_delta is None
 
 
 def test_play_game_runtime_preserves_earlier_accepted_delta_when_later_candidate_rejected() -> None:
@@ -292,6 +293,10 @@ def test_play_game_runtime_preserves_earlier_accepted_delta_when_later_candidate
     assert runtime_after_reject.current_best_delta.model_dump(mode="json") == accepted_delta.model_dump(
         mode="json"
     )
+    assert runtime_after_reject.integration_eligible_delta is not None
+    assert runtime_after_reject.integration_eligible_delta.model_dump(mode="json") == accepted_delta.model_dump(
+        mode="json"
+    )
 
 
 def test_apply_referee_decision_revise_promotes_candidate_as_best_delta() -> None:
@@ -308,6 +313,7 @@ def test_apply_referee_decision_revise_promotes_candidate_as_best_delta() -> Non
 
     assert runtime.current_best_delta is not None
     assert runtime.current_best_delta.model_dump(mode="json") == candidate.model_dump(mode="json")
+    assert runtime.integration_eligible_delta is None
 
 
 def test_apply_referee_decision_reject_discards_candidate_and_keeps_none() -> None:
@@ -323,6 +329,7 @@ def test_apply_referee_decision_reject_discards_candidate_and_keeps_none() -> No
     )
 
     assert runtime.current_best_delta is None
+    assert runtime.integration_eligible_delta is None
 
 
 def test_apply_referee_decision_revise_then_reject_keeps_revised_candidate() -> None:
@@ -349,6 +356,36 @@ def test_apply_referee_decision_revise_then_reject_keeps_revised_candidate() -> 
 
     assert runtime.current_best_delta is not None
     assert runtime.current_best_delta.model_dump(mode="json") == first_candidate.model_dump(mode="json")
+    assert runtime.integration_eligible_delta is None
+
+
+def test_apply_referee_decision_accept_then_revise_keeps_accepted_integration_candidate() -> None:
+    accepted_candidate = DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=AppendSectionDelta(section=Section(title="Accepted", body="Accepted body.")),
+    )
+    runtime = apply_referee_decision_to_runtime(
+        runtime=PlayGameRuntime(),
+        candidate_delta=accepted_candidate,
+        decision=RefereeDecision(disposition="accept", rationale="Approved."),
+    )
+    revised_candidate = DeltaDocumentState(
+        artifact_id="main-document",
+        operation="append_section",
+        payload=AppendSectionDelta(section=Section(title="Revised", body="Needs work.")),
+    )
+    runtime = apply_referee_decision_to_runtime(
+        runtime=runtime,
+        candidate_delta=revised_candidate,
+        decision=RefereeDecision(disposition="revise", rationale="Promising but not ready."),
+    )
+    assert runtime.current_best_delta is not None
+    assert runtime.current_best_delta.model_dump(mode="json") == revised_candidate.model_dump(mode="json")
+    assert runtime.integration_eligible_delta is not None
+    assert runtime.integration_eligible_delta.model_dump(mode="json") == accepted_candidate.model_dump(
+        mode="json"
+    )
 
 
 def test_document_artifact_is_subclass_and_instance_of_state_artifact() -> None:
