@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from baps.core.clients import SpecRole
+from baps.core.run_config import RunConfig
 from baps.models.model_output import parse_model_output
 from baps.adapters.project_adapter import ProjectTypeAdapter
 from baps.state.state import (
@@ -161,12 +162,12 @@ def _normalize_game_spec_with_adapter(
     adapter: ProjectTypeAdapter,
     game_spec: GameSpec,
     state: State,
-    config: dict[str, Any],
+    config: RunConfig,
 ) -> GameSpec:
     normalizer = getattr(adapter, "normalize_game_spec", None)
     if normalizer is None:
         return game_spec
-    return normalizer(game_spec, state, config)
+    return normalizer(game_spec, state, config.to_adapter_config())
 
 
 def _parse_role_output(

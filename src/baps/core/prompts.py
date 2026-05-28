@@ -43,7 +43,7 @@ def _render_create_game_prompt(
     )
     supplement = resolved_adapter.render_create_game_prompt_supplement(
         state=state,
-        config=config,
+        config=config.to_adapter_config(),
         state_view=state_view,
         verification_result=verification_result,
     )

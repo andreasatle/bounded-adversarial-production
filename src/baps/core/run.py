@@ -241,7 +241,7 @@ def resolve_run_config(args: argparse.Namespace) -> RunConfig:
 
 def create_state(config: RunConfig) -> State:
     adapter = _resolve_project_type_adapter(config.project_type)
-    state = adapter.create_initial_state(config)
+    state = adapter.create_initial_state(config.to_adapter_config())
     _debug_print_create_state(config=config, state=state)
     return state
 

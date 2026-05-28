@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from baps.core.run_config import RunConfig
+
 from baps.models.models import ToolCall, ToolDefinition
 from baps.northstar.northstar_projection import StateView
 from baps.state.state import DeltaState, GameSpec, State
@@ -40,17 +42,23 @@ def sanitize_model_title(text: str) -> str:
     return sanitize_model_string(single_line)
 
 
-def _config_artifact_id(config: dict[str, Any]) -> str:
-    if "artifact_id" not in config:
-        raise ValueError("artifact_id must be non-empty")
-    value = str(config["artifact_id"])
+def _config_artifact_id(config: dict[str, Any] | RunConfig) -> str:
+    if isinstance(config, RunConfig):
+        value = str(config.artifact_id)
+    else:
+        if "artifact_id" not in config:
+            raise ValueError("artifact_id must be non-empty")
+        value = str(config["artifact_id"])
     if value.strip() == "":
         raise ValueError("artifact_id must be non-empty")
     return value
 
 
-def _config_northstar_markdown(config: dict[str, Any]) -> str:
-    value = str(config.get("northstar_markdown", ""))
+def _config_northstar_markdown(config: dict[str, Any] | RunConfig) -> str:
+    if isinstance(config, RunConfig):
+        value = config.northstar_markdown
+    else:
+        value = str(config.get("northstar_markdown", ""))
     if value.strip() == "":
         raise ValueError("northstar_markdown must be non-empty")
     return value

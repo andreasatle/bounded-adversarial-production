@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -17,10 +16,10 @@ class RoleConfig(BaseModel):
     model: str | None = None
     fallback: RoleConfig | None = None
 
-    def __getitem__(self, key: str) -> Any:
+    def __getitem__(self, key: str) -> object:
         return getattr(self, key)
 
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(self, key: str, default: object | None = None) -> object | None:
         return getattr(self, key, default)
 
     def __contains__(self, key: object) -> bool:
@@ -30,10 +29,8 @@ class RoleConfig(BaseModel):
 class RunConfig(BaseModel):
     """Typed configuration for a single baps run.
 
-    All fields correspond exactly to the keys that resolve_run_config previously
-    stored in a plain dict. The __getitem__ / get / __contains__ methods allow
-    adapter implementations and any legacy call-sites that still use dict-style
-    access to work without modification.
+    All fields correspond to known runtime config inputs used by the main
+    execution path.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -56,11 +53,28 @@ class RunConfig(BaseModel):
     spec_model: str | None = None
     spec_roles: dict[str, RoleConfig] = Field(default_factory=dict)
 
-    def __getitem__(self, key: str) -> Any:
+    def __getitem__(self, key: str) -> object:
         return getattr(self, key)
 
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(self, key: str, default: object | None = None) -> object | None:
         return getattr(self, key, default)
 
     def __contains__(self, key: object) -> bool:
         return isinstance(key, str) and key in type(self).model_fields
+
+    def to_adapter_config(self) -> dict[str, object]:
+        return {
+            "workspace": str(self.workspace),
+            "project_type": self.project_type,
+            "artifact_id": self.artifact_id,
+            "language": self.language,
+            "northstar_markdown": self.northstar_markdown,
+            "goal": self.goal,
+            "output_path": str(self.output_path),
+            "max_iterations": self.max_iterations,
+            "max_sub_gaps": self.max_sub_gaps,
+            "max_depth": self.max_depth,
+            "source_path": self.source_path,
+            "source_include": self.source_include,
+            "sandbox": self.sandbox,
+        }

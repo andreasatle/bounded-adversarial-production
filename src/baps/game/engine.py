@@ -209,7 +209,7 @@ def create_game(
         if adapter is not None
         else resolve_project_type_adapter(config.project_type)
     )
-    state_view = resolved_adapter.build_create_game_state_view(state, config)
+    state_view = resolved_adapter.build_create_game_state_view(state, config.to_adapter_config())
     use_planner = model_client is None
     if use_planner:
         role_name_for_client = SpecRole.DECOMPOSE if depth > 0 else SpecRole.CREATE_GAME
