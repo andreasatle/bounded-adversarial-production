@@ -1,0 +1,58 @@
+project_type: coding
+artifact_id: main-codebase
+language: rust
+workspace: .baps-workspace/coding-project-rust
+roles:
+  blue:
+    backend: ollama
+    model: qwen2.5-coder:7b
+  red:
+    backend: ollama
+    model: qwen2.5-coder:7b
+  referee:
+    backend: ollama
+    model: qwen2.5-coder:7b
+  create_game:
+    backend: anthropic
+    model: claude-haiku-4-5-20251001
+  decompose:
+    backend: anthropic
+    model: claude-haiku-4-5-20251001
+goal: "Implement a word frequency counter in Rust that counts word occurrences in a string and returns them sorted by frequency descending."
+output: output/project
+max_iterations: 5
+northstar_markdown: |
+  # Goal
+
+  Implement a word frequency counter in Rust with comprehensive tests.
+
+  # Expected output layout
+
+  - `src/lib.rs` — must contain:
+    - `pub fn word_frequency(text: &str) -> Vec<(String, usize)>` — returns words and
+      their counts sorted by frequency descending, ties broken alphabetically
+    - `pub fn top_n(text: &str, n: usize) -> Vec<(String, usize)>` — returns the top N
+      most frequent words
+  - `Cargo.toml` — valid Cargo manifest, no external dependencies
+  - Tests in `#[cfg(test)]` modules inside `src/lib.rs` covering:
+    - empty string returns empty vec
+    - single word returns count of 1
+    - multiple words counted correctly
+    - sort order: frequency descending, ties alphabetical
+    - case folding: "The" and "the" count as the same word
+    - punctuation stripping: "word," and "word" count as the same word
+    - `top_n` returns at most n results
+    - `top_n` with n larger than unique word count returns all words
+
+  # Exact return type contract — do not deviate
+
+  - `word_frequency` returns `Vec<(String, usize)>` sorted by count descending,
+    ties broken alphabetically ascending
+  - `top_n` returns `Vec<(String, usize)>` — same shape, truncated to n items
+  - Both functions treat input as case-insensitive and strip punctuation
+
+  # Quality requirements
+
+  All functions must be `pub` with doc comments. Tests use `#[test]` only —
+  no external test frameworks. Project must compile and all tests must pass
+  with `cargo test`.
