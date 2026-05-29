@@ -77,12 +77,34 @@ def build_coding_create_game_state_view(
     )
 
 
-def build_coding_state_view(state: State, game_spec: GameSpec) -> StateView:
+def build_coding_state_view(
+    state: State,
+    game_spec: GameSpec,
+    summarization_context: SummarizationContext | None = None,
+) -> StateView:
     artifact = coding_artifact_from_state(state, game_spec.target_artifact_id)
+    target_entity = game_spec.target_entity
     file_lines: list[str] = []
     if artifact.files:
         for file in artifact.files:
-            file_lines.append(f"### {sanitize_model_title(file.path)}")
+            line_count = len(file.content.splitlines())
+            if target_entity is not None and file.path != target_entity:
+                summary = (
+                    summarization_context.summarize(file.content, objective=game_spec.objective)
+                    if summarization_context is not None
+                    else None
+                )
+                if summary is not None:
+                    file_lines.append(f"### {sanitize_model_title(file.path)} ({line_count} lines) [summary]")
+                    file_lines.append("")
+                    file_lines.append(summary)
+                    file_lines.append("")
+                    continue
+                file_lines.append(f"### {sanitize_model_title(file.path)} ({line_count} lines) [full]")
+            elif target_entity is not None:
+                file_lines.append(f"### {sanitize_model_title(file.path)} ({line_count} lines) [full]")
+            else:
+                file_lines.append(f"### {sanitize_model_title(file.path)}")
             file_lines.append("")
             fence = "````" if "```" in file.content else "```"
             file_lines.append(fence)

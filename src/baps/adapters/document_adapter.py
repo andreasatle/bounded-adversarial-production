@@ -97,7 +97,11 @@ def build_document_create_game_state_view(state: State, config: dict[str, Any]) 
     )
 
 
-def build_document_state_view(state: State, game_spec: GameSpec) -> StateView:
+def build_document_state_view(
+    state: State,
+    game_spec: GameSpec,
+    summarization_context: SummarizationContext | None = None,
+) -> StateView:
     target_artifact = next(
         (artifact for artifact in state.artifacts if artifact.id == game_spec.target_artifact_id),
         None,
@@ -119,10 +123,27 @@ def build_document_state_view(state: State, game_spec: GameSpec) -> StateView:
         "target_artifact_id": target_artifact.id,
         "sections": sections,
     }
+    target_entity = game_spec.target_entity
     section_lines: list[str] = []
     if target_artifact.sections:
         for section in target_artifact.sections:
-            section_lines.append(f"### {sanitize_model_title(section.title)}")
+            if target_entity is not None and section.title != target_entity:
+                summary = (
+                    summarization_context.summarize(section.body, objective=game_spec.objective)
+                    if summarization_context is not None
+                    else None
+                )
+                if summary is not None:
+                    section_lines.append(f"### {sanitize_model_title(section.title)} [summary]")
+                    section_lines.append("")
+                    section_lines.append(summary)
+                    section_lines.append("")
+                    continue
+                section_lines.append(f"### {sanitize_model_title(section.title)} [full]")
+            elif target_entity is not None:
+                section_lines.append(f"### {sanitize_model_title(section.title)} [full]")
+            else:
+                section_lines.append(f"### {sanitize_model_title(section.title)}")
             section_lines.append("")
             section_lines.append(sanitize_model_string(section.body))
             section_lines.append("")
@@ -294,8 +315,13 @@ class DocumentProjectAdapter:
         del state, config
         return game_spec
 
-    def build_state_view(self, state: State, game_spec: GameSpec) -> StateView:
-        return build_document_state_view(state, game_spec)
+    def build_state_view(
+        self,
+        state: State,
+        game_spec: GameSpec,
+        summarization_context: SummarizationContext | None = None,
+    ) -> StateView:
+        return build_document_state_view(state, game_spec, summarization_context=summarization_context)
 
     def render_blue_prompt(
         self,

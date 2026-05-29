@@ -181,6 +181,7 @@ def _solve_gap(
         sandbox_mode=sandbox_mode,
         config=config,
         depth=depth,
+        summarization_context=summarization_context,
     )
     if delta_state is None:
         ctx.stop_reason = StopReason.PLAY_GAME_NO_DELTA

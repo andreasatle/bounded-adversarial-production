@@ -127,8 +127,13 @@ class CodingProjectAdapter:
             success_condition=game_spec.success_condition,
         )
 
-    def build_state_view(self, state: State, game_spec: GameSpec) -> StateView:
-        return build_coding_state_view(state, game_spec)
+    def build_state_view(
+        self,
+        state: State,
+        game_spec: GameSpec,
+        summarization_context: SummarizationContext | None = None,
+    ) -> StateView:
+        return build_coding_state_view(state, game_spec, summarization_context=summarization_context)
 
     def render_blue_prompt(
         self,

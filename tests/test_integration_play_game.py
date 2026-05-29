@@ -18,7 +18,7 @@ def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
         def create_initial_state(self, _config):
             raise NotImplementedError
 
-        def build_state_view(self, _state, _game_spec):
+        def build_state_view(self, _state, _game_spec, summarization_context=None):
             self.calls.append("build_state_view")
             return StateView(
                 id="state-view:test",
@@ -84,7 +84,7 @@ def test_play_game_pre_seeds_verification_result_as_previous_feedback(monkeypatc
         project_type = "coding"
         supported_delta_type = "DeltaCodingState"
 
-        def build_state_view(self, state, game_spec):
+        def build_state_view(self, state, game_spec, summarization_context=None):
             from baps.northstar.northstar_projection import ProjectionType, StateView
             return StateView(
                 id="sv", projection_type=ProjectionType.NORTH_STAR,

@@ -224,9 +224,9 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
                 state, config, state_view, verification_result
             )
 
-        def build_state_view(self, state, game_spec):
+        def build_state_view(self, state, game_spec, summarization_context=None):
             self.calls.append("build_state_view")
-            return self._delegate.build_state_view(state, game_spec)
+            return self._delegate.build_state_view(state, game_spec, summarization_context=summarization_context)
 
         def render_blue_prompt(self, state_view, game_spec, attempt_number, previous_feedback):
             self.calls.append("render_blue_prompt")

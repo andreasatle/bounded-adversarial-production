@@ -318,3 +318,167 @@ def test_coding_create_game_state_view_line_count_present_with_summarizer() -> N
     view = CodingProjectAdapter().build_create_game_state_view(state, config, summarization_context=summarization_context)
     assert "src/abc.py (3 lines)" in view.content
     assert "three variable assignments" in view.content
+
+
+# ---------------------------------------------------------------------------
+# build_coding_state_view — target_entity / summarization tests
+# ---------------------------------------------------------------------------
+
+def _make_coding_state(files: list[tuple[str, str]]) -> state_module.State:
+    return state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(
+            id="main-codebase",
+            files=tuple(state_module.CodeFile(path=p, content=c) for p, c in files),
+        ),),
+    )
+
+
+def _make_coding_spec(target_entity: str | None = None) -> GameSpec:
+    return GameSpec(
+        objective="Fix the target file",
+        target_artifact_id="main-codebase",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="target file updated",
+        target_entity=target_entity,
+    )
+
+
+def test_coding_state_view_target_entity_match_is_full_others_summarized() -> None:
+    files = [
+        ("src/target.py", "def target(): pass\n"),
+        ("src/other.py", "def other(): pass\n"),
+    ]
+    state = _make_coding_state(files)
+    spec = _make_coding_spec(target_entity="src/target.py")
+    summarization_context = _make_summarization_context("summary of other")
+    view = CodingProjectAdapter().build_state_view(state, spec, summarization_context=summarization_context)
+    assert "src/target.py (1 lines) [full]" in view.content
+    assert "def target(): pass" in view.content
+    assert "src/other.py (1 lines) [summary]" in view.content
+    assert "summary of other" in view.content
+    assert "def other(): pass" not in view.content
+
+
+def test_coding_state_view_target_entity_none_all_full_current_behavior() -> None:
+    files = [
+        ("src/a.py", "x = 1\n"),
+        ("src/b.py", "y = 2\n"),
+    ]
+    state = _make_coding_state(files)
+    spec = _make_coding_spec(target_entity=None)
+    summarization_context = _make_summarization_context("should not appear")
+    view = CodingProjectAdapter().build_state_view(state, spec, summarization_context=summarization_context)
+    assert "[summary]" not in view.content
+    assert "[full]" not in view.content
+    assert "x = 1" in view.content
+    assert "y = 2" in view.content
+
+
+def test_coding_state_view_summarizer_none_all_full_regardless_of_target_entity() -> None:
+    files = [
+        ("src/target.py", "def t(): pass\n"),
+        ("src/other.py", "def o(): pass\n"),
+    ]
+    state = _make_coding_state(files)
+    spec = _make_coding_spec(target_entity="src/target.py")
+    ctx = SummarizationContext(summarizer=None, game_spec=spec)
+    view = CodingProjectAdapter().build_state_view(state, spec, summarization_context=ctx)
+    assert "[summary]" not in view.content
+    assert "def t(): pass" in view.content
+    assert "def o(): pass" in view.content
+
+
+def test_coding_state_view_fallback_to_full_when_summarization_context_none() -> None:
+    files = [
+        ("src/target.py", "def t(): pass\n"),
+        ("src/other.py", "def o(): pass\n"),
+    ]
+    state = _make_coding_state(files)
+    spec = _make_coding_spec(target_entity="src/target.py")
+    view = CodingProjectAdapter().build_state_view(state, spec, summarization_context=None)
+    assert "[summary]" not in view.content
+    assert "def t(): pass" in view.content
+    assert "def o(): pass" in view.content
+
+
+# ---------------------------------------------------------------------------
+# build_document_state_view — target_entity / summarization tests
+# ---------------------------------------------------------------------------
+
+def _make_document_state(sections: list[tuple[str, str]]) -> state_module.State:
+    return state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.DocumentArtifact(
+            id="main-document",
+            sections=tuple(state_module.Section(title=t, body=b) for t, b in sections),
+        ),),
+    )
+
+
+def _make_document_spec(target_entity: str | None = None) -> GameSpec:
+    return GameSpec(
+        objective="Update the target section",
+        target_artifact_id="main-document",
+        allowed_delta_type="DeltaDocumentState",
+        success_condition="target section updated",
+        target_entity=target_entity,
+    )
+
+
+def test_document_state_view_target_entity_match_is_full_others_summarized() -> None:
+    sections = [
+        ("Introduction", "Full intro body here."),
+        ("Background", "Background body text."),
+    ]
+    state = _make_document_state(sections)
+    spec = _make_document_spec(target_entity="Introduction")
+    summarization_context = _make_summarization_context("background summary")
+    view = DocumentProjectAdapter().build_state_view(state, spec, summarization_context=summarization_context)
+    assert "### Introduction [full]" in view.content
+    assert "Full intro body here." in view.content
+    assert "### Background [summary]" in view.content
+    assert "background summary" in view.content
+    assert "Background body text." not in view.content
+
+
+def test_document_state_view_target_entity_none_all_full_current_behavior() -> None:
+    sections = [
+        ("Sec A", "Body A."),
+        ("Sec B", "Body B."),
+    ]
+    state = _make_document_state(sections)
+    spec = _make_document_spec(target_entity=None)
+    summarization_context = _make_summarization_context("should not appear")
+    view = DocumentProjectAdapter().build_state_view(state, spec, summarization_context=summarization_context)
+    assert "[summary]" not in view.content
+    assert "[full]" not in view.content
+    assert "Body A." in view.content
+    assert "Body B." in view.content
+
+
+def test_document_state_view_summarizer_none_all_full_regardless_of_target_entity() -> None:
+    sections = [
+        ("Target", "Target body."),
+        ("Other", "Other body."),
+    ]
+    state = _make_document_state(sections)
+    spec = _make_document_spec(target_entity="Target")
+    ctx = SummarizationContext(summarizer=None, game_spec=spec)
+    view = DocumentProjectAdapter().build_state_view(state, spec, summarization_context=ctx)
+    assert "[summary]" not in view.content
+    assert "Target body." in view.content
+    assert "Other body." in view.content
+
+
+def test_document_state_view_fallback_to_full_when_summarization_context_none() -> None:
+    sections = [
+        ("Target", "Target body."),
+        ("Other", "Other body."),
+    ]
+    state = _make_document_state(sections)
+    spec = _make_document_spec(target_entity="Target")
+    view = DocumentProjectAdapter().build_state_view(state, spec, summarization_context=None)
+    assert "[summary]" not in view.content
+    assert "Target body." in view.content
+    assert "Other body." in view.content

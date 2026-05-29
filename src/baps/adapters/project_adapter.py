@@ -119,7 +119,12 @@ class ProjectTypeAdapter(Protocol):
     ) -> GameSpec:
         ...
 
-    def build_state_view(self, state: State, game_spec: GameSpec) -> StateView:
+    def build_state_view(
+        self,
+        state: State,
+        game_spec: GameSpec,
+        summarization_context: SummarizationContext | None = None,
+    ) -> StateView:
         ...
 
     def render_blue_prompt(

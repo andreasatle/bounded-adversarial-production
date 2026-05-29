@@ -373,6 +373,7 @@ def _build_play_game_context(
     render_red_prompt_fn: Callable[[StateView, GameSpec, DeltaState, VerificationResult | None, str], str],
     render_referee_prompt_fn: Callable[[StateView, GameSpec, DeltaState, RedFinding, VerificationResult | None, str], str],
     verify_candidate_fn: _VerifyCandidateFn,
+    summarization_context: SummarizationContext | None = None,
 ) -> PlayGameContext:
     resolved_adapter = (
         adapter
@@ -383,7 +384,7 @@ def _build_play_game_context(
         "state": state.model_dump(mode="json"),
         "game_spec": game_spec.model_dump(mode="json"),
     })
-    state_view = resolved_adapter.build_state_view(state, game_spec)
+    state_view = resolved_adapter.build_state_view(state, game_spec, summarization_context=summarization_context)
     game_id = str(uuid.uuid4())
     blue_role, red_role, referee_role = resolve_play_game_roles(
         resolved_adapter,
@@ -436,6 +437,7 @@ def play_game(
     sandbox_mode: str = "docker",
     config: RunConfig | None = None,
     depth: int = 0,
+    summarization_context: SummarizationContext | None = None,
 ) -> DeltaState | None:
     if max_attempts < 1:
         raise ValueError("max_attempts must be >= 1")
@@ -455,6 +457,7 @@ def play_game(
         render_red_prompt_fn=_render_red_prompt,
         render_referee_prompt_fn=_render_referee_prompt,
         verify_candidate_fn=_verify_candidate_with_adapter,
+        summarization_context=summarization_context,
     )
     runtime = PlayGameRuntime()
     previous_feedback: PlayGameFeedback | None = initial_play_game_feedback(verification_result)

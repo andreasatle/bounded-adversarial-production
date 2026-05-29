@@ -382,7 +382,13 @@ class AuditProjectAdapter:
         del state, config
         return game_spec
 
-    def build_state_view(self, state: State, game_spec: GameSpec) -> StateView:
+    def build_state_view(
+        self,
+        state: State,
+        game_spec: GameSpec,
+        summarization_context: SummarizationContext | None = None,
+    ) -> StateView:
+        del summarization_context
         source_path = _extract_source_path(_get_northstar_from_state(state))
         if source_path is not None and source_path.exists():
             self._current_source_hash = _compute_source_hash(source_path, _DEFAULT_SOURCE_PATTERNS)
