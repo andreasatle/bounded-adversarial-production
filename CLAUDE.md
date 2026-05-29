@@ -4,6 +4,16 @@ This file orients Claude Code on the `baps` project. Read it before suggesting a
 
 ---
 
+## Session Setup
+
+At the start of every session and after every /clear, run:
+
+    uv run python scripts/index_codebase.py > CODEBASE_INDEX.md
+
+Then read CODEBASE_INDEX.md before doing anything else.
+
+---
+
 ## What this project is
 
 `baps` is a bounded, adapter-driven runtime for model-mediated project evolution. A lifecycle run initializes authoritative `State`, renders model-facing `StateView` projections, derives a bounded `GameSpec`, runs an adversarial Blue/Red/Referee evaluation loop, integrates accepted deltas through `StateService`, and exports output files.
@@ -18,62 +28,6 @@ PlayGame -> DeltaState -> StateService.apply_delta -> export
 ```
 
 This is the **only** active product path. Do not propose changes that bypass or fork this spine.
-
----
-
-## Repository layout
-
-```
-src/baps/
-  core/
-    run.py            # CLI argument parsing and main()
-    lifecycle.py      # start_project, reset_project, StartRunSummary, IterationRunResult
-    runtime.py        # RuntimeContext, build_runtime, prepare_workspace, run_project, create_state
-    run_config.py     # RunConfig, RoleConfig, resolve_run_config, resolve_reset_targets
-    workspace.py      # Workspace I/O: settings, state path, run result, wipe
-    orchestration.py  # _solve_gap, _run_project_iterations, _RunContext
-    prompts.py        # All prompt rendering functions
-    parsers.py        # All model output parsing functions
-    clients.py        # All client-building functions, SpecRole, backend resolution
-    debug.py          # Debug print helpers
-  game/
-    engine.py         # create_game, play_game — top-level entry points
-    attempt.py        # PlayAttemptRecord, run_play_game_attempt, apply_play_game_attempt_decision
-    play.py           # record_play_game_telemetry
-    roles.py          # PlayGameContext, role resolution, fallback chains, callback Protocols
-    telemetry.py      # Blackboard helpers, sanitize utilities
-  adapters/
-    project_adapter.py   # ProjectTypeAdapter protocol, registry, sanitizers
-    document_adapter.py  # DocumentProjectAdapter
-    coding_adapter.py    # CodingProjectAdapter facade
-    audit_adapter.py     # AuditProjectAdapter
-    coding/              # CodingAdapter internals: common, delta_apply, parsing, prompting, views
-  state/
-    state.py          # Authoritative schemas, mutation, artifact registry
-    state_service.py  # StateService — the only mutation boundary
-    state_store.py    # JsonStateStore — JSON persistence
-  models/
-    models.py         # AnthropicClient, OpenAIClient, OllamaClient, FakeModelClient, Role
-    model_output.py   # Model output parsing pipeline
-  plugins/
-    language_plugin.py   # LanguagePlugin protocol + registry
-    language_python.py   # PythonLanguagePlugin
-    language_zig.py      # ZigLanguagePlugin
-  scheduler/
-    scheduler.py         # Adaptive multi-model scheduler
-    scheduler_policy.py  # ModelPolicy, EMA scoring, softmax selection
-  tools/
-    tools.py          # fetch_url, web_search, ToolExecutor
-    sandbox.py        # run_sandboxed — Docker/bare execution
-  northstar/
-    northstar_projection.py  # StateView, ProjectionType, projection utilities
-    northstar_apply.py       # baps-apply-northstar CLI
-
-tests/                # Run with: uv run pytest
-docs/
-  SYSTEM.md           # Normative system contract
-  ARCHITECTURE.md     # Implementation description
-```
 
 ---
 
