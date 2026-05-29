@@ -3,10 +3,10 @@ import pytest
 
 from baps.state.state import (
     build_default_state_artifact_registry,
+    CodingArtifactAdapter,
     DocumentArtifactAdapter,
     find_state_artifact,
     fingerprint_state,
-    GitRepositoryArtifactAdapter,
     State,
     StateArtifact,
     StateArtifactRegistry,
@@ -49,24 +49,6 @@ def test_registry_raises_for_unknown_artifact_kind() -> None:
     registry = StateArtifactRegistry()
     with pytest.raises(ValueError, match="unknown artifact kind"):
         registry.resolve("unknown")
-
-
-def test_document_and_git_adapters_return_artifact_unchanged() -> None:
-    artifact = StateArtifact(id="a1", kind="document")
-    document_adapter = DocumentArtifactAdapter()
-    git_adapter = GitRepositoryArtifactAdapter()
-
-    assert document_adapter.validate_artifact(artifact) is artifact
-    assert git_adapter.validate_artifact(artifact) is artifact
-
-
-def test_document_and_git_adapters_return_deterministic_projection_strings() -> None:
-    artifact = StateArtifact(id="a1", kind="document")
-    document_adapter = DocumentArtifactAdapter()
-    git_adapter = GitRepositoryArtifactAdapter()
-
-    assert document_adapter.project_artifact(artifact) == "document artifact: a1"
-    assert git_adapter.project_artifact(artifact) == "git repository artifact: a1"
 
 
 def test_fingerprint_state_is_deterministic_for_repeated_calls() -> None:
@@ -167,33 +149,20 @@ def test_build_default_registry_resolves_document_adapter() -> None:
     assert isinstance(adapter, DocumentArtifactAdapter)
 
 
-def test_build_default_registry_resolves_git_repository_adapter() -> None:
-    registry = build_default_state_artifact_registry()
-    adapter = registry.resolve("git_repository")
-    assert isinstance(adapter, GitRepositoryArtifactAdapter)
-
-
 def test_build_default_registry_adapters_validate_artifacts_unchanged() -> None:
     registry = build_default_state_artifact_registry()
     document_artifact = StateArtifact(id="doc-1", kind="document")
-    git_artifact = StateArtifact(id="repo-1", kind="git_repository")
 
     assert registry.resolve("document").validate_artifact(document_artifact) is document_artifact
-    assert registry.resolve("git_repository").validate_artifact(git_artifact) is git_artifact
 
 
 def test_build_default_registry_adapters_project_deterministic_strings() -> None:
     registry = build_default_state_artifact_registry()
     document_artifact = StateArtifact(id="doc-1", kind="document")
-    git_artifact = StateArtifact(id="repo-1", kind="git_repository")
 
     assert (
         registry.resolve("document").project_artifact(document_artifact)
         == "document artifact: doc-1"
-    )
-    assert (
-        registry.resolve("git_repository").project_artifact(git_artifact)
-        == "git repository artifact: repo-1"
     )
 
 
@@ -300,12 +269,12 @@ def test_validate_state_artifacts_preserves_ordering() -> None:
     state = State(
         artifacts=(
             StateArtifact(id="s1", kind="document"),
-            StateArtifact(id="s2", kind="git_repository"),
+            StateArtifact(id="s2", kind="coding"),
         ),
     )
     registry = StateArtifactRegistry()
     registry.register(DocumentArtifactAdapter())
-    registry.register(GitRepositoryArtifactAdapter())
+    registry.register(CodingArtifactAdapter())
 
     validated = validate_state_artifacts(state, registry)
     assert [artifact.id for artifact in validated.artifacts] == ["s1", "s2"]
@@ -375,12 +344,11 @@ def test_validate_state_artifacts_raises_if_adapter_changes_kind() -> None:
 
 def test_validate_state_artifacts_does_not_mutate_input_state() -> None:
     state = State(
-        artifacts=(StateArtifact(id="s1", kind="git_repository"),),
+        artifacts=(StateArtifact(id="s1", kind="coding"),),
     )
     before = state.model_dump(mode="json")
     registry = StateArtifactRegistry()
-    registry.register(DocumentArtifactAdapter())
-    registry.register(GitRepositoryArtifactAdapter())
+    registry.register(CodingArtifactAdapter())
 
     _ = validate_state_artifacts(state, registry)
 
@@ -397,17 +365,17 @@ def test_project_state_projects_artifacts_through_adapters() -> None:
     state = State(
         artifacts=(
             StateArtifact(id="n1", kind="document"),
-            StateArtifact(id="n2", kind="git_repository"),
+            StateArtifact(id="n2", kind="coding"),
         ),
     )
     registry = StateArtifactRegistry()
     registry.register(DocumentArtifactAdapter())
-    registry.register(GitRepositoryArtifactAdapter())
+    registry.register(CodingArtifactAdapter())
 
     projection = project_state(state, registry)
     assert projection.artifacts == (
         "document artifact: n1",
-        "git repository artifact: n2",
+        "coding artifact: n2",
     )
 
 
@@ -415,34 +383,34 @@ def test_project_state_projects_ordinary_artifacts_through_adapters() -> None:
     state = State(
         artifacts=(
             StateArtifact(id="s1", kind="document"),
-            StateArtifact(id="s2", kind="git_repository"),
+            StateArtifact(id="s2", kind="coding"),
         ),
     )
     registry = StateArtifactRegistry()
     registry.register(DocumentArtifactAdapter())
-    registry.register(GitRepositoryArtifactAdapter())
+    registry.register(CodingArtifactAdapter())
 
     projection = project_state(state, registry)
     assert projection.artifacts == (
         "document artifact: s1",
-        "git repository artifact: s2",
+        "coding artifact: s2",
     )
 
 
 def test_project_state_preserves_ordering() -> None:
     state = State(
         artifacts=(
-            StateArtifact(id="s1", kind="git_repository"),
+            StateArtifact(id="s1", kind="coding"),
             StateArtifact(id="s2", kind="document"),
         ),
     )
     registry = StateArtifactRegistry()
     registry.register(DocumentArtifactAdapter())
-    registry.register(GitRepositoryArtifactAdapter())
+    registry.register(CodingArtifactAdapter())
 
     projection = project_state(state, registry)
     assert projection.artifacts == (
-        "git repository artifact: s1",
+        "coding artifact: s1",
         "document artifact: s2",
     )
 
@@ -480,12 +448,11 @@ def test_project_state_raises_if_adapter_projection_is_empty_or_whitespace() -> 
 
 def test_project_state_does_not_mutate_input_state() -> None:
     state = State(
-        artifacts=(StateArtifact(id="s1", kind="git_repository"),),
+        artifacts=(StateArtifact(id="s1", kind="coding"),),
     )
     before = state.model_dump(mode="json")
     registry = StateArtifactRegistry()
-    registry.register(DocumentArtifactAdapter())
-    registry.register(GitRepositoryArtifactAdapter())
+    registry.register(CodingArtifactAdapter())
 
     _ = project_state(state, registry)
 

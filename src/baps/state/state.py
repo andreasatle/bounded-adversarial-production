@@ -544,16 +544,6 @@ class DocumentArtifactAdapter:
         return f"document artifact: {artifact.id}"
 
 
-class GitRepositoryArtifactAdapter:
-    kind = "git_repository"
-
-    def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
-        return artifact
-
-    def project_artifact(self, artifact: StateArtifact) -> str:
-        return f"git repository artifact: {artifact.id}"
-
-
 class CodingArtifactAdapter:
     kind = "coding"
 
@@ -568,5 +558,4 @@ def build_default_state_artifact_registry() -> StateArtifactRegistry:
     registry = StateArtifactRegistry()
     registry.register(DocumentArtifactAdapter())
     registry.register(CodingArtifactAdapter())
-    registry.register(GitRepositoryArtifactAdapter())
     return registry
