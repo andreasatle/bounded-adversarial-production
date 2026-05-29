@@ -22,8 +22,8 @@ from baps.state.state import (
     apply_referee_decision_to_runtime,
 )
 
-from baps.game.roles import _PlayGameContext
-from baps.game.telemetry import _sanitize_feedback_dict, _summarize_verification_result
+from baps.game.roles import PlayGameContext
+from baps.game.telemetry import sanitize_feedback_dict, summarize_verification_result
 
 
 @dataclass
@@ -44,9 +44,9 @@ class PlayAttemptRecord:
         }
 
 
-def _run_play_game_attempt(
+def run_play_game_attempt(
     *,
-    ctx: _PlayGameContext,
+    ctx: PlayGameContext,
     attempt: int,
     previous_feedback: dict[str, Any] | None,
     verification_result: VerificationResult | None,
@@ -118,7 +118,7 @@ def _run_play_game_attempt(
             }
             return attempt_rec, None, None, None, updated_feedback
     ctx.debug_event_fn("blue.output", {"delta_state": candidate_delta.model_dump(mode="json")})
-    attempt_rec.blue_delta = _sanitize_feedback_dict(candidate_delta.model_dump(mode="json"))
+    attempt_rec.blue_delta = sanitize_feedback_dict(candidate_delta.model_dump(mode="json"))
 
     red_session: list[ToolCallRecord] = []
     red_summary = ""
@@ -183,7 +183,7 @@ def _run_play_game_attempt(
         retry_fn=ctx.red_role.generate, fallback_fn=ctx.red_fallback_fn,
     )
     ctx.debug_event_fn("red.output", {"red_finding": red_finding.model_dump(mode="json")})
-    attempt_rec.red_finding = _sanitize_feedback_dict(red_finding.model_dump(mode="json"))
+    attempt_rec.red_finding = sanitize_feedback_dict(red_finding.model_dump(mode="json"))
 
     referee_session: list[ToolCallRecord] = []
     referee_summary = ""
@@ -255,13 +255,13 @@ def _run_play_game_attempt(
         retry_fn=ctx.referee_role.generate, fallback_fn=ctx.referee_fallback_fn,
     )
     ctx.debug_event_fn("referee.output", {"referee_decision": referee_decision.model_dump(mode="json")})
-    attempt_rec.referee_decision = _sanitize_feedback_dict(referee_decision.model_dump(mode="json"))
+    attempt_rec.referee_decision = sanitize_feedback_dict(referee_decision.model_dump(mode="json"))
     return attempt_rec, candidate_delta, red_finding, referee_decision, previous_feedback
 
 
-def _apply_play_game_attempt_decision(
+def apply_play_game_attempt_decision(
     *,
-    ctx: _PlayGameContext,
+    ctx: PlayGameContext,
     runtime: PlayGameRuntime,
     attempt: int,
     attempt_rec: PlayAttemptRecord,
@@ -279,15 +279,15 @@ def _apply_play_game_attempt_decision(
             ctx.resolved_adapter, candidate_delta, ctx.state, ctx.game_spec.target_artifact_id,
             sandbox_mode=ctx.sandbox_mode,
         )
-        attempt_rec.candidate_verification = _summarize_verification_result(candidate_result)
+        attempt_rec.candidate_verification = summarize_verification_result(candidate_result)
         if (
             candidate_result is not None
             and not candidate_result.passed
             and attempt < ctx.max_attempts
         ):
             previous_feedback = {
-                "red_finding": _sanitize_feedback_dict(red_finding.model_dump(mode="json")),
-                "referee_decision": _sanitize_feedback_dict(referee_decision.model_dump(mode="json")),
+                "red_finding": sanitize_feedback_dict(red_finding.model_dump(mode="json")),
+                "referee_decision": sanitize_feedback_dict(referee_decision.model_dump(mode="json")),
                 "candidate_verification": {
                     "exit_code": candidate_result.exit_code,
                     "passed": False,
@@ -298,7 +298,7 @@ def _apply_play_game_attempt_decision(
             return runtime, previous_feedback, candidate_result, False
         return runtime, None, candidate_result, True
     previous_feedback = {
-        "red_finding": _sanitize_feedback_dict(red_finding.model_dump(mode="json")),
-        "referee_decision": _sanitize_feedback_dict(referee_decision.model_dump(mode="json")),
+        "red_finding": sanitize_feedback_dict(red_finding.model_dump(mode="json")),
+        "referee_decision": sanitize_feedback_dict(referee_decision.model_dump(mode="json")),
     }
     return runtime, previous_feedback, None, False

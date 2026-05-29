@@ -46,7 +46,7 @@ _REFEREE_DECISION_SCHEMA: dict = {
 
 
 @dataclass
-class _PlayGameContext:
+class PlayGameContext:
     """Immutable per-game setup resolved once before the attempt loop."""
     resolved_adapter: ProjectTypeAdapter
     state: State
@@ -69,7 +69,7 @@ class _PlayGameContext:
     verify_candidate_fn: Any
 
 
-def _initial_play_game_feedback(
+def initial_play_game_feedback(
     verification_result: VerificationResult | None,
 ) -> dict[str, Any] | None:
     if verification_result is None:
@@ -84,7 +84,7 @@ def _initial_play_game_feedback(
     }
 
 
-def _resolve_play_game_roles(
+def resolve_play_game_roles(
     resolved_adapter: ProjectTypeAdapter,
     config: RunConfig | None,
     model_client: ModelClient | None,
@@ -121,7 +121,7 @@ def _resolve_play_game_roles(
     return blue_role, red_role, referee_role
 
 
-def _build_play_game_fallbacks(
+def build_play_game_fallbacks(
     config: RunConfig | None,
     red_model_client: ModelClient | None,
     referee_model_client: ModelClient | None,

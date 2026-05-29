@@ -14,8 +14,8 @@ from baps.game.engine import (
     play_game,
 )
 from baps.game.telemetry import (
-    _append_integration_to_blackboard,
-    _append_northstar_proposal_to_blackboard,
+    append_integration_to_blackboard,
+    append_northstar_proposal_to_blackboard,
 )
 from baps.core.parsers import NoNewGameError, NorthStarUpdateNeededError
 from baps.adapters.project_adapter import (
@@ -97,7 +97,7 @@ def _solve_gap(
                     "[solve_gap] create_game returned no_new_game twice with "
                     "failing verification; escalating to northstar_update_proposed."
                 )
-                _append_northstar_proposal_to_blackboard(
+                append_northstar_proposal_to_blackboard(
                     workspace=config.workspace,
                     rationale=(
                         "create_game returned no_new_game despite failing verification "
@@ -114,7 +114,7 @@ def _solve_gap(
         return
     except NorthStarUpdateNeededError as exc:
         _debug_print_northstar_update_proposal(exc.rationale, exc.proposed_northstar)
-        _append_northstar_proposal_to_blackboard(
+        append_northstar_proposal_to_blackboard(
             workspace=config.workspace,
             rationale=exc.rationale,
             proposed_northstar=exc.proposed_northstar,
@@ -175,7 +175,7 @@ def _solve_gap(
 
     _integration_workspace = config.workspace
     if _integration_workspace is not None:
-        _append_integration_to_blackboard(
+        append_integration_to_blackboard(
             workspace=_integration_workspace,
             depth=depth,
             proposal_id=str(uuid.uuid4()),
@@ -253,7 +253,7 @@ def _run_project_iterations(
                     "NorthStar may need clarification or the success condition may "
                     "need revision."
                 )
-            _append_northstar_proposal_to_blackboard(
+            append_northstar_proposal_to_blackboard(
                 workspace=config.workspace,
                 rationale=rationale,
                 proposed_northstar=_config_northstar_markdown(config),

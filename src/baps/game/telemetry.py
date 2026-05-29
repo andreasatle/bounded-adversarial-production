@@ -18,7 +18,7 @@ _GAMES_FILE = "games.jsonl"
 _VERIFICATION_SUMMARY_CAP = 500
 
 
-def _sanitize_feedback_dict(d: dict) -> dict:
+def sanitize_feedback_dict(d: dict) -> dict:
     result = {}
     for k, v in d.items():
         if isinstance(v, str):
@@ -26,13 +26,13 @@ def _sanitize_feedback_dict(d: dict) -> dict:
         elif isinstance(v, list):
             result[k] = [sanitize_model_string(i) if isinstance(i, str) else i for i in v]
         elif isinstance(v, dict):
-            result[k] = _sanitize_feedback_dict(v)
+            result[k] = sanitize_feedback_dict(v)
         else:
             result[k] = v
     return result
 
 
-def _summarize_verification_result(result: VerificationResult | None) -> dict | None:
+def summarize_verification_result(result: VerificationResult | None) -> dict | None:
     if result is None:
         return None
     return {
@@ -43,7 +43,7 @@ def _summarize_verification_result(result: VerificationResult | None) -> dict | 
     }
 
 
-def _sanitize_game_spec_dict(game_spec: GameSpec) -> dict:
+def sanitize_game_spec_dict(game_spec: GameSpec) -> dict:
     return {
         "objective": sanitize_model_string(game_spec.objective),
         "target_artifact_id": game_spec.target_artifact_id,
@@ -52,7 +52,7 @@ def _sanitize_game_spec_dict(game_spec: GameSpec) -> dict:
     }
 
 
-def _append_northstar_proposal_to_blackboard(
+def append_northstar_proposal_to_blackboard(
     workspace: Path, rationale: str, proposed_northstar: str
 ) -> None:
     blackboard_dir = workspace / _BLACKBOARD_DIR
@@ -68,7 +68,7 @@ def _append_northstar_proposal_to_blackboard(
         f.write(json.dumps(entry) + "\n")
 
 
-def _append_game_to_blackboard(
+def append_game_to_blackboard(
     workspace: Path,
     game_id: str,
     depth: int,
@@ -87,19 +87,19 @@ def _append_game_to_blackboard(
         "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
         "depth": depth,
         "context_chain": list(game_spec.context_chain),
-        "game_spec": _sanitize_game_spec_dict(game_spec),
+        "game_spec": sanitize_game_spec_dict(game_spec),
         "attempts": attempt_records,
         "final_disposition": final_disposition,
-        "verification_result": _summarize_verification_result(verification_result),
+        "verification_result": summarize_verification_result(verification_result),
         "current_best_delta": (
             None
             if current_best_delta is None
-            else _sanitize_feedback_dict(current_best_delta.model_dump(mode="json"))
+            else sanitize_feedback_dict(current_best_delta.model_dump(mode="json"))
         ),
         "integration_eligible_delta": (
             None
             if integration_eligible_delta is None
-            else _sanitize_feedback_dict(integration_eligible_delta.model_dump(mode="json"))
+            else sanitize_feedback_dict(integration_eligible_delta.model_dump(mode="json"))
         ),
     }
     games_path = blackboard_dir / _GAMES_FILE
@@ -107,7 +107,7 @@ def _append_game_to_blackboard(
         f.write(json.dumps(entry) + "\n")
 
 
-def _append_create_game_to_blackboard(
+def append_create_game_to_blackboard(
     workspace: Path,
     depth: int,
     context_chain: tuple[str, ...],
@@ -133,7 +133,7 @@ def _append_create_game_to_blackboard(
         f.write(json.dumps(entry) + "\n")
 
 
-def _append_integration_to_blackboard(
+def append_integration_to_blackboard(
     workspace: Path,
     depth: int,
     proposal_id: str,
@@ -157,5 +157,5 @@ def _append_integration_to_blackboard(
         f.write(json.dumps(entry) + "\n")
 
 
-def _client_model_name(client: ModelClient) -> str:
+def client_model_name(client: ModelClient) -> str:
     return getattr(client, "model", type(client).__name__)

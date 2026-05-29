@@ -22,24 +22,24 @@ from baps.core.run_config import RunConfig
 from baps.models.models import ModelClient, Role
 from baps.game.attempt import (
     PlayAttemptRecord,
-    _apply_play_game_attempt_decision,
-    _run_play_game_attempt,
+    apply_play_game_attempt_decision,
+    run_play_game_attempt,
 )
-from baps.game.play import _record_play_game_telemetry
+from baps.game.play import record_play_game_telemetry
 from baps.game.roles import (
-    _PlayGameContext,
+    PlayGameContext,
     _RED_FINDING_SCHEMA,
-    _build_play_game_fallbacks,
-    _initial_play_game_feedback,
-    _resolve_play_game_roles,
+    build_play_game_fallbacks,
+    initial_play_game_feedback,
+    resolve_play_game_roles,
 )
 from baps.game.telemetry import (
     _VERIFICATION_SUMMARY_CAP,
-    _append_create_game_to_blackboard,
-    _append_integration_to_blackboard,
-    _append_northstar_proposal_to_blackboard,
-    _client_model_name,
-    _sanitize_game_spec_dict,
+    append_create_game_to_blackboard,
+    append_integration_to_blackboard,
+    append_northstar_proposal_to_blackboard,
+    client_model_name,
+    sanitize_game_spec_dict,
 )
 from baps.core.parsers import (
     NoNewGameError,
@@ -237,7 +237,7 @@ def create_game(
     _cg_workspace = config.workspace
     _bb_result_type: str | None = None
     _bb_result: dict | None = None
-    _bb_model_used = _client_model_name(role.client)
+    _bb_model_used = client_model_name(role.client)
 
     try:
         for attempt in range(1, max_create_game_attempts + 1):
@@ -305,13 +305,13 @@ def create_game(
                     # Unparseable Red output — accept the GameSpec as-is
                     debug_event("create_game.output", {"game_spec": game_spec.model_dump(mode="json")})
                     _bb_result_type = "game_spec"
-                    _bb_result = _sanitize_game_spec_dict(game_spec)
+                    _bb_result = sanitize_game_spec_dict(game_spec)
                     return game_spec
                 debug_event("create_game_red.output", {"red_finding": red_finding.model_dump(mode="json")})
                 if red_finding.disposition == "accept":
                     debug_event("create_game.output", {"game_spec": game_spec.model_dump(mode="json")})
                     _bb_result_type = "game_spec"
-                    _bb_result = _sanitize_game_spec_dict(game_spec)
+                    _bb_result = sanitize_game_spec_dict(game_spec)
                     return game_spec
                 # Red rejects/revises — inject feedback and retry
                 red_feedback = red_finding.model_dump(mode="json")
@@ -319,14 +319,14 @@ def create_game(
 
             debug_event("create_game.output", {"game_spec": game_spec.model_dump(mode="json")})
             _bb_result_type = "game_spec"
-            _bb_result = _sanitize_game_spec_dict(game_spec)
+            _bb_result = sanitize_game_spec_dict(game_spec)
             return game_spec
 
         # All attempts exhausted — return best available spec
         if last_valid_game_spec is not None:
             debug_event("create_game.output", {"game_spec": last_valid_game_spec.model_dump(mode="json")})
             _bb_result_type = "game_spec"
-            _bb_result = _sanitize_game_spec_dict(last_valid_game_spec)
+            _bb_result = sanitize_game_spec_dict(last_valid_game_spec)
             return last_valid_game_spec
         raise ValueError("create_game failed to produce a valid GameSpec after all attempts")
 
@@ -338,7 +338,7 @@ def create_game(
         raise
     finally:
         if _cg_workspace is not None and _bb_result_type is not None:
-            _append_create_game_to_blackboard(
+            append_create_game_to_blackboard(
                 _cg_workspace,
                 depth,
                 context_chain,
@@ -365,7 +365,7 @@ def _build_play_game_context(
     render_red_prompt_fn: Any,
     render_referee_prompt_fn: Any,
     verify_candidate_fn: Any,
-) -> _PlayGameContext:
+) -> PlayGameContext:
     resolved_adapter = (
         adapter
         if adapter is not None
@@ -377,7 +377,7 @@ def _build_play_game_context(
     })
     state_view = resolved_adapter.build_state_view(state, game_spec)
     game_id = str(uuid.uuid4())
-    blue_role, red_role, referee_role = _resolve_play_game_roles(
+    blue_role, red_role, referee_role = resolve_play_game_roles(
         resolved_adapter,
         config,
         model_client,
@@ -386,13 +386,13 @@ def _build_play_game_context(
         build_client_for_role_fn=_build_client_for_role,
         build_role_client_fn=_build_role_client,
     )
-    workspace, red_fallback_fn, referee_fallback_fn = _build_play_game_fallbacks(
+    workspace, red_fallback_fn, referee_fallback_fn = build_play_game_fallbacks(
         config,
         red_model_client,
         referee_model_client,
         build_fallback_chain_for_role_fn=_build_fallback_chain_for_role,
     )
-    return _PlayGameContext(
+    return PlayGameContext(
         resolved_adapter=resolved_adapter,
         state=state,
         game_spec=game_spec,
@@ -449,13 +449,13 @@ def play_game(
         verify_candidate_fn=_verify_candidate_with_adapter,
     )
     runtime = PlayGameRuntime()
-    previous_feedback = _initial_play_game_feedback(verification_result)
+    previous_feedback = initial_play_game_feedback(verification_result)
     attempt_records: list[PlayAttemptRecord] = []
     last_candidate_result: VerificationResult | None = None
 
     for attempt in range(1, max_attempts + 1):
         debug_event("play_game.attempt", {"attempt": attempt})
-        attempt_rec, candidate_delta, red_finding, referee_decision, updated_feedback = _run_play_game_attempt(
+        attempt_rec, candidate_delta, red_finding, referee_decision, updated_feedback = run_play_game_attempt(
             ctx=ctx,
             attempt=attempt,
             previous_feedback=previous_feedback,
@@ -465,7 +465,7 @@ def play_game(
             previous_feedback = updated_feedback
             attempt_records.append(attempt_rec)
             continue
-        runtime, previous_feedback, candidate_result, stop_attempts = _apply_play_game_attempt_decision(
+        runtime, previous_feedback, candidate_result, stop_attempts = apply_play_game_attempt_decision(
             ctx=ctx,
             runtime=runtime,
             attempt=attempt,
@@ -480,7 +480,7 @@ def play_game(
         if stop_attempts:
             break
 
-    _record_play_game_telemetry(
+    record_play_game_telemetry(
         ctx=ctx,
         runtime=runtime,
         attempt_records=attempt_records,

@@ -4,13 +4,13 @@ from baps.adapters.project_adapter import VerificationResult
 from baps.state.state import PlayGameRuntime
 
 from baps.game.attempt import PlayAttemptRecord
-from baps.game.roles import _PlayGameContext
-from baps.game.telemetry import _append_game_to_blackboard
+from baps.game.roles import PlayGameContext
+from baps.game.telemetry import append_game_to_blackboard
 
 
-def _record_play_game_telemetry(
+def record_play_game_telemetry(
     *,
-    ctx: _PlayGameContext,
+    ctx: PlayGameContext,
     attempt_records: list[PlayAttemptRecord],
     last_candidate_result: VerificationResult | None,
     runtime: PlayGameRuntime,
@@ -35,7 +35,7 @@ def _record_play_game_telemetry(
         else "no_delta"
     )
     attempt_records_payload = [record.to_telemetry_dict() for record in attempt_records]
-    _append_game_to_blackboard(
+    append_game_to_blackboard(
         workspace=ctx.workspace,
         game_id=ctx.game_id,
         depth=ctx.depth,
