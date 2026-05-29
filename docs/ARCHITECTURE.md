@@ -114,11 +114,11 @@ Current implementation philosophy:
 
 **`game/` — game execution package (split from former `core/game.py`):**
 
-- `engine.py` — `create_game(...)` and `play_game(...)` entry points; gap-analysis prompt, parsing, validation, adapter normalization, Blue/Red/Referee orchestration; includes a CreateGame Red challenge loop (`CREATE_GAME_RED` role, up to `max_create_game_attempts=2` rounds of critique-and-retry before accepting a `GameSpec`)
-- `attempt.py` — `PlayAttemptRecord` (typed dataclass recording one attempt's deltas and decisions), `_run_play_game_attempt(...)` (single attempt: Blue → Red → Referee), `_apply_play_game_attempt_decision(...)` (accept/retry/stop logic)
-- `roles.py` — `_PlayGameContext` (immutable per-game setup dataclass), `_resolve_play_game_roles(...)`, `_build_play_game_fallbacks(...)`, role schemas (Red, Referee)
-- `play.py` — `_record_play_game_telemetry(...)` (blackboard + debug events at end of `play_game`)
-- `telemetry.py` — `_append_*_to_blackboard(...)` helpers, `_sanitize_feedback_dict(...)`, `_sanitize_game_spec_dict(...)`, `_VERIFICATION_SUMMARY_CAP`; writes to both `games.jsonl` (create_game, play_game, integration events) and `northstar_proposals.jsonl`
+- `engine.py` — `create_game(...)` and `play_game(...)` entry points; gap-analysis prompt, parsing, validation, adapter normalization, Blue/Red/Referee orchestration; includes a CreateGame Red challenge loop (`CREATE_GAME_RED` role, up to `max_create_game_attempts` rounds — a `RunConfig` field, default 2 — of critique-and-retry before accepting a `GameSpec`)
+- `attempt.py` — `PlayAttemptRecord` (typed dataclass recording one attempt's deltas and decisions), `run_play_game_attempt(...)` (single attempt: Blue → Red → Referee), `apply_play_game_attempt_decision(...)` (accept/retry/stop logic)
+- `roles.py` — `PlayGameContext` (immutable per-game setup dataclass with fully typed callback fields), `resolve_play_game_roles(...)`, `build_play_game_fallbacks(...)`, `_VerifyCandidateFn` protocol, role schemas (`_RED_FINDING_SCHEMA`, `_REFEREE_DECISION_SCHEMA` — canonical definitions; imported by `engine.py`)
+- `play.py` — `record_play_game_telemetry(...)` (blackboard + debug events at end of `play_game`)
+- `telemetry.py` — `append_*_to_blackboard(...)` helpers, `sanitize_feedback_dict(...)`, `sanitize_game_spec_dict(...)`, `_VERIFICATION_SUMMARY_CAP`; writes to both `games.jsonl` (create_game, play_game, integration events) and `northstar_proposals.jsonl`
 
 **`max_sub_gaps`:** Config key (default 5, spec-overridable) bounding decomposition branching factor. `_parse_create_game_output` truncates any `DecomposeSpec` whose `sub_gaps` length exceeds the limit and prints a notice. Validated >= 1 in `resolve_run_config`.
 
@@ -320,9 +320,9 @@ src/baps/
     debug.py                # Debug print helpers
   game/                     # Game execution package (split from core/game.py)
     engine.py               # create_game, play_game — top-level orchestration entry points
-    attempt.py              # PlayAttemptRecord, _run_play_game_attempt, _apply_play_game_attempt_decision
-    play.py                 # _record_play_game_telemetry
-    roles.py                # _PlayGameContext, _resolve_play_game_roles, _build_play_game_fallbacks, role schemas
+    attempt.py              # PlayAttemptRecord, run_play_game_attempt, apply_play_game_attempt_decision
+    play.py                 # record_play_game_telemetry
+    roles.py                # PlayGameContext, resolve_play_game_roles, build_play_game_fallbacks, _VerifyCandidateFn, role schemas
     telemetry.py            # Blackboard helpers, _VERIFICATION_SUMMARY_CAP, sanitize utilities
   adapters/
     project_adapter.py      # ProjectTypeAdapter protocol, registry, sanitizers, Blue prompt core

@@ -41,9 +41,9 @@ src/baps/
     debug.py                # Debug print helpers
   game/                     # Game execution package (split from core/game.py)
     engine.py               # create_game, play_game — top-level orchestration entry points
-    attempt.py              # _run_play_game_attempt, _apply_play_game_attempt_decision, PlayAttemptRecord
-    play.py                 # _record_play_game_telemetry
-    roles.py                # _PlayGameContext, _resolve_play_game_roles, _build_play_game_fallbacks, role schemas
+    attempt.py              # PlayAttemptRecord, run_play_game_attempt, apply_play_game_attempt_decision
+    play.py                 # record_play_game_telemetry
+    roles.py                # PlayGameContext, resolve_play_game_roles, build_play_game_fallbacks, _VerifyCandidateFn, role schemas
     telemetry.py            # Blackboard helpers, _VERIFICATION_SUMMARY_CAP, sanitize utilities
   adapters/
     project_adapter.py      # ProjectTypeAdapter protocol, registry, sanitizers, Blue prompt core
