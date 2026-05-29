@@ -2,22 +2,8 @@ project_type: coding
 artifact_id: main-codebase
 language: rust
 workspace: .baps-workspace/coding-project-rust
-roles:
-  blue:
-    backend: ollama
-    model: qwen2.5-coder:7b
-  red:
-    backend: ollama
-    model: qwen2.5-coder:7b
-  referee:
-    backend: ollama
-    model: qwen2.5-coder:7b
-  create_game:
-    backend: anthropic
-    model: claude-haiku-4-5-20251001
-  decompose:
-    backend: anthropic
-    model: claude-haiku-4-5-20251001
+backend: anthropic
+model: claude-haiku-4-5-20251001
 goal: "Implement a word frequency counter in Rust that counts word occurrences in a string and returns them sorted by frequency descending."
 output: output/project
 max_iterations: 5
