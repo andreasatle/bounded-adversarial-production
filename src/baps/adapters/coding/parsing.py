@@ -134,7 +134,7 @@ def _recover_malformed_coding_delta_json(text: str) -> dict[str, object] | None:
 
 def parse_coding_delta_json(text: str, workspace: Path | None = None) -> DeltaCodingState | DeltaCodingBatchState:
     try:
-        parsed = parse_model_output(text, _BLUE_CODING_KEYS, context="blue:coding", workspace=workspace)
+        parsed, _ = parse_model_output(text, _BLUE_CODING_KEYS, context="blue:coding", workspace=workspace)
     except ValueError as exc:
         if "must be valid JSON" not in str(exc):
             raise

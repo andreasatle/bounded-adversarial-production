@@ -8,6 +8,19 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Callable
 
+from pydantic import BaseModel, Field
+
+
+class ParseRecoveryRecord(BaseModel):
+    """Structured record of what parser recovery was applied to a model response."""
+
+    unexpected_keys_stripped: list[str] = Field(default_factory=list)
+    response_shape_rescued: bool = False
+    output_truncated: bool = False
+    empty_items_filtered: bool = False
+    retry_used: bool = False
+    fallback_used: bool = False
+
 
 class BlackboardEvent(StrEnum):
     NORTHSTAR_UPDATE_PROPOSAL = "northstar_update_proposal"
@@ -113,40 +126,44 @@ def _try_normalize(
     expected_keys: frozenset[str],
     context: str,
     workspace: Path | None,
-) -> tuple[dict[str, Any] | None, str, str]:
+) -> tuple[dict[str, Any] | None, str, str, list[str], bool]:
     """Single-attempt parse and normalize.
 
-    Returns (result, next_correction_prompt, failure_kind).
+    Returns (result, next_correction_prompt, failure_kind, stripped_keys, react_rescued).
     failure_kind: 'json' | 'shape' | 'react'.
     result is None on any failure.
     """
     try:
         parsed = json.loads(normalized)
     except json.JSONDecodeError:
-        return None, _CORRECTION_PROMPT, "json"
+        return None, _CORRECTION_PROMPT, "json", [], False
 
     if not isinstance(parsed, dict):
-        return None, _OBJECT_CORRECTION_PROMPT, "shape"
+        return None, _OBJECT_CORRECTION_PROMPT, "shape", [], False
 
+    react_rescued = False
     if _is_react_format(parsed):
         rescued = _rescue_react_payload(parsed)
         if rescued is not None:
             logger.debug("%s: rescued payload from ReAct/tool-calling wrapper", context)
             parsed = rescued
+            react_rescued = True
         else:
             logger.debug(
                 "%s: ReAct format detected but action_input is not a dict; retrying", context
             )
-            return None, _REACT_CORRECTION_PROMPT, "react"
+            return None, _REACT_CORRECTION_PROMPT, "react", [], False
 
     extra = set(parsed.keys()) - expected_keys
+    stripped: list[str] = []
     if extra:
-        logger.warning("%s: stripping unexpected keys: %s", context, sorted(extra))
+        stripped = sorted(extra)
+        logger.warning("%s: stripping unexpected keys: %s", context, stripped)
         for k in extra:
             del parsed[k]
-        _log_stripped_keys(workspace, sorted(extra), context)
+        _log_stripped_keys(workspace, stripped, context)
 
-    return parsed, "", ""
+    return parsed, "", "", stripped, react_rescued
 
 
 def parse_model_output(
@@ -157,8 +174,8 @@ def parse_model_output(
     workspace: Path | None = None,
     retry_fn: Callable[[str], str] | None = None,
     fallback_fn: Callable[[str], str] | None = None,
-) -> dict[str, Any]:
-    """Parse raw model text into a clean JSON dict.
+) -> tuple[dict[str, Any], ParseRecoveryRecord]:
+    """Parse raw model text into a clean JSON dict, with a recovery record.
 
     Normalization pipeline (applied to initial text and each retry):
     1. Strip markdown fences and size-check (_extract_json_candidate).
@@ -166,7 +183,7 @@ def parse_model_output(
     3. Parse JSON; detect and rescue ReAct/tool-calling wrappers.
     4. Verify result is a dict.
     5. Strip keys not in expected_keys; log warning + blackboard event.
-    6. Return cleaned dict.
+    6. Return cleaned dict and ParseRecoveryRecord describing what recovery occurred.
 
     On failure: retry up to _MAX_RETRIES times via retry_fn with a targeted
     correction prompt (different prompts for JSON errors, shape errors, and
@@ -174,18 +191,24 @@ def parse_model_output(
     (one attempt with a final correction prompt). Raises ValueError if all
     attempts fail.
     """
+    retry_used = False
+
     normalized = _extract_json_candidate(text)
-    result, next_prompt, failure_kind = _try_normalize(
+    result, next_prompt, failure_kind, stripped_keys, react_rescued = _try_normalize(
         normalized, expected_keys, context, workspace
     )
     if result is not None:
-        return result
+        return result, ParseRecoveryRecord(
+            unexpected_keys_stripped=stripped_keys,
+            response_shape_rescued=react_rescued,
+        )
 
     last_failure_kind = failure_kind
 
     for attempt in range(_MAX_RETRIES):
         if retry_fn is None:
             break
+        retry_used = True
         logger.debug(
             "%s: parse failed [%s] (attempt %d/%d), retrying with correction prompt",
             context, failure_kind, attempt + 1, _MAX_RETRIES,
@@ -196,12 +219,16 @@ def parse_model_output(
             logger.debug("%s: retry_fn raised on attempt %d: %s", context, attempt + 1, exc)
             break
         normalized = _extract_json_candidate(raw)
-        result, next_prompt, failure_kind = _try_normalize(
+        result, next_prompt, failure_kind, stripped_keys, react_rescued = _try_normalize(
             normalized, expected_keys, context, workspace
         )
         last_failure_kind = failure_kind
         if result is not None:
-            return result
+            return result, ParseRecoveryRecord(
+                unexpected_keys_stripped=stripped_keys,
+                response_shape_rescued=react_rescued,
+                retry_used=True,
+            )
 
     if fallback_fn is not None:
         logger.warning(
@@ -216,11 +243,16 @@ def parse_model_output(
             logger.warning("%s: fallback_fn raised: %s", context, exc)
         else:
             normalized = _extract_json_candidate(raw)
-            result, _, failure_kind = _try_normalize(
+            result, _, failure_kind, stripped_keys, react_rescued = _try_normalize(
                 normalized, expected_keys, context, workspace
             )
             if result is not None:
-                return result
+                return result, ParseRecoveryRecord(
+                    unexpected_keys_stripped=stripped_keys,
+                    response_shape_rescued=react_rescued,
+                    retry_used=retry_used,
+                    fallback_used=True,
+                )
             last_failure_kind = failure_kind
 
     if last_failure_kind == "shape":

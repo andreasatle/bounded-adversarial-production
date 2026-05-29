@@ -210,7 +210,7 @@ _BLUE_DOCUMENT_KEYS = frozenset({"artifact_id", "operation", "payload"})
 
 
 def parse_document_delta_json(text: str, workspace: Path | None = None) -> DeltaDocumentState | DeltaModifyDocumentState:
-    parsed = parse_model_output(text, _BLUE_DOCUMENT_KEYS, context="blue:document", workspace=workspace)
+    parsed, _ = parse_model_output(text, _BLUE_DOCUMENT_KEYS, context="blue:document", workspace=workspace)
     if not _BLUE_DOCUMENT_KEYS.issubset(parsed.keys()):
         raise ValueError(
             "blue model output must contain keys: artifact_id, operation, payload"

@@ -21,6 +21,7 @@ from baps.models.model_output import (
     _rescue_react_payload,
     parse_model_output,
     wrap_json_prompt,
+    ParseRecoveryRecord,
 )
 
 
@@ -159,27 +160,27 @@ class TestRescueReactPayload:
 class TestCleanPassthrough:
     def test_clean_response_passthrough(self) -> None:
         text = json.dumps({"a": 1, "b": 2, "c": 3})
-        result = parse_model_output(text, _KEYS, context="test")
+        result, _ = parse_model_output(text, _KEYS, context="test")
         assert result == {"a": 1, "b": 2, "c": 3}
 
     def test_subset_of_expected_keys_passes(self) -> None:
         text = json.dumps({"a": 1})
-        result = parse_model_output(text, _KEYS, context="test")
+        result, _ = parse_model_output(text, _KEYS, context="test")
         assert result == {"a": 1}
 
     def test_markdown_fence_stripped(self) -> None:
         text = "```json\n" + json.dumps({"a": 1}) + "\n```"
-        result = parse_model_output(text, _KEYS, context="test")
+        result, _ = parse_model_output(text, _KEYS, context="test")
         assert result == {"a": 1}
 
     def test_prose_wrapped_json_extracted(self) -> None:
         text = 'Here is the result: {"a": 1}'
-        result = parse_model_output(text, _KEYS, context="test")
+        result, _ = parse_model_output(text, _KEYS, context="test")
         assert result == {"a": 1}
 
     def test_multiline_prose_wrapped_json_extracted(self) -> None:
         text = "Thinking step by step...\n\nFinal answer:\n{\"a\": 1, \"b\": 2}"
-        result = parse_model_output(text, _KEYS, context="test")
+        result, _ = parse_model_output(text, _KEYS, context="test")
         assert result == {"a": 1, "b": 2}
 
 
@@ -190,7 +191,7 @@ class TestCleanPassthrough:
 class TestExtraKeysStripped:
     def test_extra_keys_stripped(self) -> None:
         text = json.dumps({"a": 1, "b": 2, "reasoning": "step by step", "confidence": 0.9})
-        result = parse_model_output(text, _KEYS, context="test")
+        result, _ = parse_model_output(text, _KEYS, context="test")
         assert result == {"a": 1, "b": 2}
         assert "reasoning" not in result
         assert "confidence" not in result
@@ -224,7 +225,7 @@ class TestExtraKeysStripped:
     def test_prose_json_with_extra_keys_stripped(self) -> None:
         payload = {"a": 1, "thoughts": "hmm", "confidence": 0.9}
         text = "Here is my answer: " + json.dumps(payload)
-        result = parse_model_output(text, _KEYS, context="test")
+        result, _ = parse_model_output(text, _KEYS, context="test")
         assert result == {"a": 1}
 
 
@@ -236,26 +237,26 @@ class TestReactRescue:
     def test_react_format_rescued_from_action_input(self) -> None:
         payload = {"action": "respond", "action_input": {"a": 1}}
         text = json.dumps(payload)
-        result = parse_model_output(text, _KEYS, context="test")
+        result, _ = parse_model_output(text, _KEYS, context="test")
         assert result == {"a": 1}
 
     def test_react_format_with_thought_rescued(self) -> None:
         payload = {"thought": "Let me think...", "action": "respond", "action_input": {"a": 1, "b": 2}}
         text = json.dumps(payload)
-        result = parse_model_output(text, _KEYS, context="test")
+        result, _ = parse_model_output(text, _KEYS, context="test")
         assert result == {"a": 1, "b": 2}
 
     def test_tool_use_format_rescued(self) -> None:
         payload = {"type": "tool_use", "name": "output", "input": {"a": 1}}
         text = json.dumps(payload)
-        result = parse_model_output(text, _KEYS, context="test")
+        result, _ = parse_model_output(text, _KEYS, context="test")
         assert result == {"a": 1}
 
     def test_react_rescued_payload_extra_keys_stripped(self) -> None:
         # action_input itself has extra keys that should still be stripped
         payload = {"action": "respond", "action_input": {"a": 1, "extra": "noise"}}
         text = json.dumps(payload)
-        result = parse_model_output(text, _KEYS, context="test")
+        result, _ = parse_model_output(text, _KEYS, context="test")
         assert result == {"a": 1}
         assert "extra" not in result
 
@@ -268,7 +269,7 @@ class TestReactRescue:
             return valid
 
         payload = {"action": "respond", "action_input": "not a dict"}
-        result = parse_model_output(json.dumps(payload), _KEYS, context="test", retry_fn=retry_fn)
+        result, _ = parse_model_output(json.dumps(payload), _KEYS, context="test", retry_fn=retry_fn)
         assert result == {"a": 1}
         assert len(calls) == 1
         assert calls[0] == _REACT_CORRECTION_PROMPT
@@ -294,7 +295,7 @@ class TestReactRescue:
         # Prose wraps a ReAct JSON which wraps the real payload
         inner = {"action": "respond", "action_input": {"a": 1}}
         text = "Here is the output: " + json.dumps(inner)
-        result = parse_model_output(text, _KEYS, context="test")
+        result, _ = parse_model_output(text, _KEYS, context="test")
         assert result == {"a": 1}
 
 
@@ -315,7 +316,7 @@ class TestInvalidJsonRetry:
             calls.append(prompt)
             return valid
 
-        result = parse_model_output("not-json", _KEYS, context="test", retry_fn=retry_fn)
+        result, _ = parse_model_output("not-json", _KEYS, context="test", retry_fn=retry_fn)
         assert result == {"a": 1}
         assert len(calls) == 1
 
@@ -400,7 +401,7 @@ class TestNonDictJson:
         def retry_fn(prompt: str) -> str:
             return valid
 
-        result = parse_model_output("[1, 2]", _KEYS, context="test", retry_fn=retry_fn)
+        result, _ = parse_model_output("[1, 2]", _KEYS, context="test", retry_fn=retry_fn)
         assert result == {"a": 1}
 
 
@@ -434,7 +435,7 @@ class TestFallbackEscalation:
             fallback_calls.append(prompt)
             return valid
 
-        result = parse_model_output(
+        result, _ = parse_model_output(
             "bad", _KEYS, context="test", retry_fn=retry_fn, fallback_fn=fallback_fn
         )
         assert result == {"a": 1}
@@ -525,7 +526,7 @@ class TestFallbackEscalation:
             fallback_calls.append(prompt)
             return json.dumps({"a": 1})
 
-        result = parse_model_output("bad", _KEYS, context="test", fallback_fn=fallback_fn)
+        result, _ = parse_model_output("bad", _KEYS, context="test", fallback_fn=fallback_fn)
         assert result == {"a": 1}
         assert len(fallback_calls) == 1
 
@@ -569,3 +570,64 @@ class TestWrapJsonPrompt:
         wrapped = wrap_json_prompt("")
         assert wrapped.startswith(_JSON_ONLY_INSTRUCTION)
         assert wrapped.endswith(_JSON_ONLY_INSTRUCTION)
+
+
+# ---------------------------------------------------------------------------
+# parse_model_output — ParseRecoveryRecord
+# ---------------------------------------------------------------------------
+
+class TestParseRecoveryRecord:
+    def test_clean_response_has_empty_recovery(self) -> None:
+        text = json.dumps({"a": 1})
+        _, recovery = parse_model_output(text, _KEYS, context="test")
+        assert recovery.unexpected_keys_stripped == []
+        assert not recovery.response_shape_rescued
+        assert not recovery.retry_used
+        assert not recovery.fallback_used
+
+    def test_stripped_keys_recorded(self) -> None:
+        text = json.dumps({"a": 1, "extra": "noise", "thoughts": "hmm"})
+        _, recovery = parse_model_output(text, _KEYS, context="test")
+        assert "extra" in recovery.unexpected_keys_stripped
+        assert "thoughts" in recovery.unexpected_keys_stripped
+        assert recovery.unexpected_keys_stripped == sorted(["extra", "thoughts"])
+
+    def test_react_rescued_recorded(self) -> None:
+        payload = {"action": "respond", "action_input": {"a": 1}}
+        _, recovery = parse_model_output(json.dumps(payload), _KEYS, context="test")
+        assert recovery.response_shape_rescued is True
+
+    def test_retry_used_recorded_on_retry_success(self) -> None:
+        _, recovery = parse_model_output(
+            "bad-json",
+            _KEYS,
+            context="test",
+            retry_fn=lambda _: json.dumps({"a": 1}),
+        )
+        assert recovery.retry_used is True
+        assert not recovery.fallback_used
+
+    def test_fallback_used_recorded(self) -> None:
+        _, recovery = parse_model_output(
+            "bad",
+            _KEYS,
+            context="test",
+            retry_fn=lambda _: "still-bad",
+            fallback_fn=lambda _: json.dumps({"a": 1}),
+        )
+        assert recovery.fallback_used is True
+        assert recovery.retry_used is True
+
+    def test_fallback_without_retry_fn(self) -> None:
+        _, recovery = parse_model_output(
+            "bad",
+            _KEYS,
+            context="test",
+            fallback_fn=lambda _: json.dumps({"a": 1}),
+        )
+        assert recovery.fallback_used is True
+        assert not recovery.retry_used
+
+    def test_no_recovery_needed_fields_all_false(self) -> None:
+        _, recovery = parse_model_output(json.dumps({"a": 1, "b": 2}), _KEYS, context="test")
+        assert recovery == ParseRecoveryRecord()

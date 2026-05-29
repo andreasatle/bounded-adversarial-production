@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from baps.core.clients import SpecRole
 from baps.core.run_config import RunConfig
-from baps.models.model_output import parse_model_output
+from baps.models.model_output import ParseRecoveryRecord, parse_model_output
 from baps.adapters.project_adapter import ProjectTypeAdapter
 from baps.state.state import (
     DecomposeSpec,
@@ -71,7 +71,7 @@ def _parse_create_game_output(
     retry_fn: Any = None,
     fallback_fn: Any = None,
 ) -> GameSpec | DecomposeSpec:
-    parsed = parse_model_output(
+    parsed, _ = parse_model_output(
         text,
         _CREATE_GAME_ALL_KEYS,
         context=SpecRole.CREATE_GAME,
@@ -179,8 +179,8 @@ def _parse_role_output(
     workspace: Path | None = None,
     retry_fn: Any = None,
     fallback_fn: Any = None,
-) -> Any:
-    parsed = parse_model_output(
+) -> tuple[Any, ParseRecoveryRecord]:
+    parsed, recovery = parse_model_output(
         text, all_keys, context=context, workspace=workspace,
         retry_fn=retry_fn, fallback_fn=fallback_fn,
     )
@@ -188,7 +188,7 @@ def _parse_role_output(
     if missing:
         raise ValueError(f"{context} model output missing required keys: {sorted(missing)}")
     try:
-        return model_cls.model_validate(parsed)
+        return model_cls.model_validate(parsed), recovery
     except ValidationError as exc:
         raise ValueError(
             f"{context} model output failed {model_cls.__name__} validation"
@@ -200,7 +200,7 @@ def _parse_red_finding_json(
     workspace: Path | None = None,
     retry_fn: Any = None,
     fallback_fn: Any = None,
-) -> RedFinding:
+) -> tuple[RedFinding, ParseRecoveryRecord]:
     return _parse_role_output(
         text, _RED_ALL_KEYS, _RED_REQUIRED_KEYS, RedFinding,
         context=SpecRole.RED, workspace=workspace, retry_fn=retry_fn, fallback_fn=fallback_fn,
@@ -212,7 +212,7 @@ def _parse_referee_decision_json(
     workspace: Path | None = None,
     retry_fn: Any = None,
     fallback_fn: Any = None,
-) -> RefereeDecision:
+) -> tuple[RefereeDecision, ParseRecoveryRecord]:
     return _parse_role_output(
         text, _REFEREE_ALL_KEYS, _REFEREE_REQUIRED_KEYS, RefereeDecision,
         context=SpecRole.REFEREE, workspace=workspace, retry_fn=retry_fn, fallback_fn=fallback_fn,

@@ -300,7 +300,7 @@ def create_game(
                 })
                 red_generated = red_role.generate(red_prompt)
                 try:
-                    red_finding = _parse_red_finding_json(
+                    red_finding, _ = _parse_red_finding_json(
                         red_generated, workspace=config.workspace,
                         retry_fn=red_role.generate, fallback_fn=_red_cg_fallback_fn,
                     )

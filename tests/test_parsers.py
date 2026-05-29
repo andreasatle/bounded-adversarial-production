@@ -287,7 +287,7 @@ def test_parse_create_game_output_game_spec_with_false_marker_keys_and_extra_key
 # ---------------------------------------------------------------------------
 
 def test_red_finding_optional_fields_parse_when_present() -> None:
-    red = _parse_red_finding_json(
+    red, _ = _parse_red_finding_json(
         '{"disposition":"revise","rationale":"needs work",'
         '"success_condition_met":false,'
         '"findings":["section body is too short","title duplicates existing section"]}'
@@ -298,7 +298,7 @@ def test_red_finding_optional_fields_parse_when_present() -> None:
 
 
 def test_red_finding_defaults_when_optional_fields_absent() -> None:
-    red = _parse_red_finding_json(
+    red, _ = _parse_red_finding_json(
         '{"disposition":"accept","rationale":"looks good"}'
     )
     assert red.success_condition_met is None
@@ -306,11 +306,12 @@ def test_red_finding_defaults_when_optional_fields_absent() -> None:
 
 
 def test_red_finding_unexpected_key_stripped() -> None:
-    red = _parse_red_finding_json(
+    red, recovery = _parse_red_finding_json(
         '{"disposition":"accept","rationale":"ok","confidence":0.9}'
     )
     assert red.disposition == "accept"
     assert not hasattr(red, "confidence")
+    assert "confidence" in recovery.unexpected_keys_stripped
 
 
 def test_red_finding_missing_required_key_rejected() -> None:
@@ -323,7 +324,7 @@ def test_red_finding_missing_required_key_rejected() -> None:
 # ---------------------------------------------------------------------------
 
 def test_referee_decision_optional_fields_parse_when_present() -> None:
-    decision = _parse_referee_decision_json(
+    decision, _ = _parse_referee_decision_json(
         '{"disposition":"revise","rationale":"override Red",'
         '"red_override":true,'
         '"improvement_hints":["add concrete section body","cite NorthStar goal"]}'
@@ -334,7 +335,7 @@ def test_referee_decision_optional_fields_parse_when_present() -> None:
 
 
 def test_referee_decision_defaults_when_optional_fields_absent() -> None:
-    decision = _parse_referee_decision_json(
+    decision, _ = _parse_referee_decision_json(
         '{"disposition":"accept","rationale":"approved"}'
     )
     assert decision.red_override is None
@@ -342,11 +343,12 @@ def test_referee_decision_defaults_when_optional_fields_absent() -> None:
 
 
 def test_referee_decision_unexpected_key_stripped() -> None:
-    decision = _parse_referee_decision_json(
+    decision, recovery = _parse_referee_decision_json(
         '{"disposition":"accept","rationale":"ok","confidence":0.9}'
     )
     assert decision.disposition == "accept"
     assert not hasattr(decision, "confidence")
+    assert "confidence" in recovery.unexpected_keys_stripped
 
 
 def test_referee_decision_missing_required_key_rejected() -> None:

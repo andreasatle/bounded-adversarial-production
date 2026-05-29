@@ -5,6 +5,7 @@ from typing import Any
 
 from baps.core.clients import SpecRole
 from baps.core.parsers import _parse_red_finding_json, _parse_referee_decision_json
+from baps.models.model_output import ParseRecoveryRecord
 from baps.core.prompts import (
     _get_research_tools,
     _render_red_prompt_supplement_with_adapter,
@@ -33,6 +34,7 @@ class PlayAttemptRecord:
     red_finding: dict[str, Any] | None = None
     referee_decision: dict[str, Any] | None = None
     candidate_verification: dict[str, Any] | None = None
+    parse_recovery: ParseRecoveryRecord | None = None
 
     def to_telemetry_dict(self) -> dict[str, Any]:
         return {
@@ -41,7 +43,24 @@ class PlayAttemptRecord:
             "red_finding": self.red_finding,
             "referee_decision": self.referee_decision,
             "candidate_verification": self.candidate_verification,
+            "parse_recovery": (
+                self.parse_recovery.model_dump(mode="json")
+                if self.parse_recovery is not None
+                else None
+            ),
         }
+
+
+def _aggregate_parse_recovery(records: list[ParseRecoveryRecord]) -> ParseRecoveryRecord:
+    all_keys = sorted({k for r in records for k in r.unexpected_keys_stripped})
+    return ParseRecoveryRecord(
+        unexpected_keys_stripped=all_keys,
+        response_shape_rescued=any(r.response_shape_rescued for r in records),
+        output_truncated=any(r.output_truncated for r in records),
+        empty_items_filtered=any(r.empty_items_filtered for r in records),
+        retry_used=any(r.retry_used for r in records),
+        fallback_used=any(r.fallback_used for r in records),
+    )
 
 
 def run_play_game_attempt(
@@ -178,7 +197,7 @@ def run_play_game_attempt(
         red_supplement_with_tools,
     )
     red_generated = ctx.red_role.generate(red_prompt)
-    red_finding = _parse_red_finding_json(
+    red_finding, red_recovery = _parse_red_finding_json(
         red_generated, workspace=ctx.workspace,
         retry_fn=ctx.red_role.generate, fallback_fn=ctx.red_fallback_fn,
     )
@@ -250,12 +269,13 @@ def run_play_game_attempt(
         referee_supplement_with_tools,
     )
     referee_generated = ctx.referee_role.generate(referee_prompt)
-    referee_decision = _parse_referee_decision_json(
+    referee_decision, referee_recovery = _parse_referee_decision_json(
         referee_generated, workspace=ctx.workspace,
         retry_fn=ctx.referee_role.generate, fallback_fn=ctx.referee_fallback_fn,
     )
     ctx.debug_event_fn("referee.output", {"referee_decision": referee_decision.model_dump(mode="json")})
     attempt_rec.referee_decision = sanitize_feedback_dict(referee_decision.model_dump(mode="json"))
+    attempt_rec.parse_recovery = _aggregate_parse_recovery([red_recovery, referee_recovery])
     return attempt_rec, candidate_delta, red_finding, referee_decision, previous_feedback
 
 

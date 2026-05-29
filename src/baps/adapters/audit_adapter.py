@@ -540,7 +540,7 @@ class AuditProjectAdapter:
         from baps.state.state import DeltaDocumentState
         _AUDIT_KEYS = frozenset({"artifact_id", "operation", "file", "rationale", "payload"})
         try:
-            raw = parse_model_output(text, _AUDIT_KEYS, context="blue:audit")
+            raw, _ = parse_model_output(text, _AUDIT_KEYS, context="blue:audit")
         except ValueError:
             return parse_document_delta_json(text)
         if raw.get("operation") == "no_finding":
