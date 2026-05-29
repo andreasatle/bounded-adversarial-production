@@ -66,7 +66,7 @@ CreateGame is a **gap-analysis operation**, not a step-forward operation. It com
 10. Research phase tools per role (`build_research_tools(role)`)
 11. Blue delta parsing (`parse_blue_delta`) — JSON path
 12. Export (`export_state`)
-14. Optional: `verify_export`, `verify_candidate`, `commit_export`
+13. Optional: `verify_export`, `verify_candidate`, `commit_export`
 15. Language plugin resolution (coding adapter only): the `language` spec key selects a `LanguagePlugin` at state-creation time; the plugin owns `docker_image`, `test_command`, `initialize`, `run_tests`, `has_tests`, and `parse_test_failures`; unknown language names raise immediately with the list of available languages; adding a new language requires implementing `LanguagePlugin` and registering it — `sandbox.py` requires no changes
 
 Core orchestration must call adapter interfaces and remain generic.
@@ -118,7 +118,13 @@ PlayGame involves three roles, each optionally preceded by a research phase:
 - **Red** — adversarially reviews the candidate against `GameSpec`
 - **Referee** — adjudicates and decides accept/revise/reject
 
-Each role may use a different model backend/model via environment variables (`BAPS_{ROLE}_BACKEND`, `BAPS_{ROLE}_MODEL`). The **DECOMPOSE** role handles CreateGame calls at decomposition nodes (`depth > 0`) and may be assigned a lighter model than the leaf-execution roles.
+CreateGame has two additional roles:
+
+- **CREATE_GAME** — produces the initial `GameSpec` or `DecomposeSpec` at depth 0
+- **CREATE_GAME_RED** — optional Red challenge role that critiques the produced `GameSpec`; when wired, `create_game` runs up to `max_create_game_attempts` (default 2) rounds of critique-and-retry before accepting the spec
+- **DECOMPOSE** — handles CreateGame calls at decomposition nodes (`depth > 0`); may be assigned a lighter model than leaf-execution roles
+
+Each role may use a different model backend/model via environment variables (`BAPS_{ROLE}_BACKEND`, `BAPS_{ROLE}_MODEL`).
 
 Each role may optionally declare a `fallback` block in the spec. Fallback chains can be arbitrarily deep: a `fallback` block may itself contain a `fallback`, and so on. The chain is traversed in order after the primary model exhausts all JSON-correction retries — each link is tried exactly once. Escalation occurs only for roles with an explicit fallback declared in the spec; no implicit escalation. A WARNING is logged at each escalation step with the source and target model names. If the entire chain is exhausted without producing valid output, the run raises `RuntimeError("<role>: all models in fallback chain exhausted")`.
 

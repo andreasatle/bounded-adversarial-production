@@ -29,7 +29,11 @@ This is the **only** active product path. Do not propose changes that bypass or 
 ```
 src/baps/
   core/
-    run.py                  # Lifecycle commands (start, reset), config resolution, main()
+    run.py                  # CLI argument parsing and main()
+    lifecycle.py            # start_project, reset_project, StartRunSummary, IterationRunResult
+    runtime.py              # RuntimeContext, build_runtime, prepare_workspace, run_project, create_state
+    run_config.py           # RunConfig, RoleConfig, resolve_run_config, resolve_reset_targets
+    workspace.py            # Workspace I/O: settings, state path, run result, wipe
     orchestration.py        # _solve_gap, _run_project_iterations, _RunContext — recursive gap solver
     prompts.py              # All prompt rendering functions
     parsers.py              # All model output parsing functions
@@ -37,9 +41,9 @@ src/baps/
     debug.py                # Debug print helpers
   game/                     # Game execution package (split from core/game.py)
     engine.py               # create_game, play_game — top-level orchestration entry points
-    attempt.py              # _run_play_game_attempt, _apply_play_game_attempt_decision
+    attempt.py              # _run_play_game_attempt, _apply_play_game_attempt_decision, PlayAttemptRecord
     play.py                 # _record_play_game_telemetry
-    roles.py                # _resolve_play_game_roles, _build_play_game_fallbacks, role schemas
+    roles.py                # _PlayGameContext, _resolve_play_game_roles, _build_play_game_fallbacks, role schemas
     telemetry.py            # Blackboard helpers, _VERIFICATION_SUMMARY_CAP, sanitize utilities
   adapters/
     project_adapter.py      # ProjectTypeAdapter protocol, registry, sanitizers, Blue prompt core
@@ -51,7 +55,6 @@ src/baps/
       delta_apply.py        # _apply_delta_to_files, _normalize_coding_export_content
       parsing.py            # parse_coding_delta_json, validation, malformed-JSON recovery
       prompting.py          # render_coding_blue_prompt, _render_coding_evaluation_supplement
-      state_updates.py      # derive_coding_state_update_from_delta
       views.py              # build_coding_create_game_state_view, build_coding_state_view
   state/
     state.py                # Authoritative schemas, mutation, artifact registry
@@ -102,6 +105,7 @@ tests/
   test_play_game_attempts.py
   test_prompts.py
   test_run.py
+  test_runconfig_migration_guard.py
   test_sandbox.py
   test_scheduler.py
   test_scheduler_policy.py
@@ -128,7 +132,7 @@ docs/
 4. **`NorthStar` is never mutated by the automated pipeline.** For document/coding adapters it lives as `northstar_markdown` in `baps-config.json`, outside `State` entirely. For the audit adapter it is stored inside `State` as a read-only meta artifact (`audit:meta:*`), but the pipeline is constrained to only target the configured findings artifact and never touches the meta artifact.
 5. **`run.py` is generic.** All project-type mechanics belong in adapters.
 6. **`ProjectTypeAdapter` owns:** initial state creation, CreateGame and PlayGame `StateView` rendering, full Blue prompt rendering (including delta-shape instructions), Red/Referee prompt supplements, Blue tool interface, delta parsing, export.
-7. **`StateService` is the only mutation boundary.** The runtime integration path calls `StateService.apply_delta(delta_state)` directly. `apply_update(proposal)` exists for non-runtime proposal workflows only.
+7. **`StateService` is the only mutation boundary.** The runtime integration path calls `StateService.apply_delta(delta_state)` directly.
 8. **Export is one-way.** Exported files are derived materialization; they do not feed back as authority.
 9. **Model prompts consume `StateView` only** — never raw `State` internals.
 10. **Runtime loops are bounded** — `max_iterations` (outer), `max_attempts` (PlayGame, default 3).
@@ -278,10 +282,10 @@ review of a proposal.
 
 ## Blackboard status
 
-`<workspace>/blackboard/northstar_proposals.jsonl` is active and written by the canonical spine
-when CreateGame signals trajectory drift. It is **append-only and non-authoritative** — it does
-not feed back into `State`. Do not read blackboard files as input to model prompts or state
-mutations.
+Two blackboard files are active under `<workspace>/blackboard/`. Both are **append-only and non-authoritative** — they never feed back into `State`. Do not read blackboard files as input to model prompts or state mutations.
+
+- **`northstar_proposals.jsonl`** — written when CreateGame signals trajectory drift or when the outer loop cannot close an identified gap; contains `northstar_update_proposal` events.
+- **`games.jsonl`** — written by every `create_game`, `play_game`, and integration step; contains `create_game`, `play_game`, and `integration` events forming a complete audit trail of each run.
 
 ---
 
@@ -309,7 +313,7 @@ mutations.
 
 **Tests must verify content.** Assertions like `isinstance(result, State)` or `len(calls) == 2` without content verification are not acceptable. Assert specific field values.
 
-**Do not add logic to `run.py`.** `run.py` contains only lifecycle commands (`start`, `reset`), config resolution, and `main()`. Do not add orchestration logic (→ `orchestration.py`), prompt rendering (→ `prompts.py`), output parsing (→ `parsers.py`), or client-building (→ `clients.py`) to `run.py`. Use the appropriate focused module.
+**Do not add logic to `run.py`.** `run.py` contains only CLI argument parsing and `main()`. Lifecycle orchestration belongs in `lifecycle.py`. Runtime assembly (workspace init, adapter resolution, state service wiring) belongs in `runtime.py`. Config resolution belongs in `run_config.py`. Workspace I/O belongs in `workspace.py`. Orchestration logic belongs in `orchestration.py`. Prompt rendering belongs in `prompts.py`. Output parsing belongs in `parsers.py`. Client-building belongs in `clients.py`.
 
 **Game execution logic belongs in `game/`.** `create_game` and `play_game` entry points live in `game/engine.py`. Attempt logic → `game/attempt.py`. Role wiring → `game/roles.py`. Telemetry and blackboard writes → `game/telemetry.py`. Do not add game-execution logic to `core/`.
 

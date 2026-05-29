@@ -94,9 +94,17 @@ Current implementation philosophy:
 
 ---
 
-### Runtime (`src/baps/core/run.py`, `src/baps/core/orchestration.py`)
+### Runtime (`src/baps/core/`)
 
-**`run.py` — lifecycle commands:** `start`, `reset`, config resolution, `main()`
+**`run.py` — CLI entry point:** argument parsing and `main()` only. All substantive logic is in the modules below.
+
+**`lifecycle.py` — run execution:** `start_project`, `reset_project`, `StartRunSummary`, `IterationRunResult`, `run_start_lifecycle`, `emit_start_result`
+
+**`runtime.py` — runtime assembly:** `RuntimeContext` (frozen dataclass holding config, adapter, state service, and initial state), `build_runtime`, `prepare_workspace` (initialize-or-resume), `run_project`, `create_state`, `active_model_info`
+
+**`run_config.py` — typed config:** `RunConfig` (frozen Pydantic model with all runtime parameters), `RoleConfig` (per-role backend/model/fallback, recursively typed), `resolve_run_config`, `resolve_reset_targets`
+
+**`workspace.py` — workspace I/O:** `save_workspace_settings`, `load_workspace_settings`, `wipe_workspace_state`, `write_run_result`, `state_path_for_workspace`
 
 **`orchestration.py` — recursive gap solver:**
 
@@ -106,11 +114,11 @@ Current implementation philosophy:
 
 **`game/` — game execution package (split from former `core/game.py`):**
 
-- `engine.py` — `create_game(...)` and `play_game(...)` entry points; gap-analysis prompt, parsing, validation, adapter normalization, Blue/Red/Referee orchestration
-- `attempt.py` — `_run_play_game_attempt(...)` (single attempt: Blue → Red → Referee), `_apply_play_game_attempt_decision(...)` (accept/retry/stop logic)
-- `roles.py` — `_resolve_play_game_roles(...)`, `_build_play_game_fallbacks(...)`, role schemas (Red, Referee)
+- `engine.py` — `create_game(...)` and `play_game(...)` entry points; gap-analysis prompt, parsing, validation, adapter normalization, Blue/Red/Referee orchestration; includes a CreateGame Red challenge loop (`CREATE_GAME_RED` role, up to `max_create_game_attempts=2` rounds of critique-and-retry before accepting a `GameSpec`)
+- `attempt.py` — `PlayAttemptRecord` (typed dataclass recording one attempt's deltas and decisions), `_run_play_game_attempt(...)` (single attempt: Blue → Red → Referee), `_apply_play_game_attempt_decision(...)` (accept/retry/stop logic)
+- `roles.py` — `_PlayGameContext` (immutable per-game setup dataclass), `_resolve_play_game_roles(...)`, `_build_play_game_fallbacks(...)`, role schemas (Red, Referee)
 - `play.py` — `_record_play_game_telemetry(...)` (blackboard + debug events at end of `play_game`)
-- `telemetry.py` — `_append_*_to_blackboard(...)` helpers, `_sanitize_feedback_dict(...)`, `_sanitize_game_spec_dict(...)`, `_VERIFICATION_SUMMARY_CAP`
+- `telemetry.py` — `_append_*_to_blackboard(...)` helpers, `_sanitize_feedback_dict(...)`, `_sanitize_game_spec_dict(...)`, `_VERIFICATION_SUMMARY_CAP`; writes to both `games.jsonl` (create_game, play_game, integration events) and `northstar_proposals.jsonl`
 
 **`max_sub_gaps`:** Config key (default 5, spec-overridable) bounding decomposition branching factor. `_parse_create_game_output` truncates any `DecomposeSpec` whose `sub_gaps` length exceeds the limit and prints a notice. Validated >= 1 in `resolve_run_config`.
 
@@ -132,6 +140,9 @@ roles:                   # optional per-role overrides
     fallback:            # escalated to only after all primary JSON-correction retries are exhausted
       backend: ollama
       model: gemma4:27b
+  create_game_red:       # optional Red challenge for CreateGame spec critique
+    backend: ollama
+    model: gemma4:e4b
   decompose:
     backend: ollama
     model: gemma4:e4b
@@ -297,7 +308,11 @@ Reads `<workspace>/blackboard/northstar_proposals.jsonl`, lists proposals intera
 ```
 src/baps/
   core/
-    run.py                  # Lifecycle commands (start, reset), config resolution, main()
+    run.py                  # CLI argument parsing and main()
+    lifecycle.py            # start_project, reset_project, StartRunSummary, IterationRunResult
+    runtime.py              # RuntimeContext, build_runtime, prepare_workspace, run_project, create_state
+    run_config.py           # RunConfig, RoleConfig, resolve_run_config, resolve_reset_targets
+    workspace.py            # Workspace I/O: settings, state path, run result, wipe
     orchestration.py        # _solve_gap, _run_project_iterations, _RunContext — recursive gap solver
     prompts.py              # All prompt rendering functions
     parsers.py              # All model output parsing functions
@@ -305,9 +320,9 @@ src/baps/
     debug.py                # Debug print helpers
   game/                     # Game execution package (split from core/game.py)
     engine.py               # create_game, play_game — top-level orchestration entry points
-    attempt.py              # _run_play_game_attempt, _apply_play_game_attempt_decision
+    attempt.py              # PlayAttemptRecord, _run_play_game_attempt, _apply_play_game_attempt_decision
     play.py                 # _record_play_game_telemetry
-    roles.py                # _resolve_play_game_roles, _build_play_game_fallbacks, role schemas
+    roles.py                # _PlayGameContext, _resolve_play_game_roles, _build_play_game_fallbacks, role schemas
     telemetry.py            # Blackboard helpers, _VERIFICATION_SUMMARY_CAP, sanitize utilities
   adapters/
     project_adapter.py      # ProjectTypeAdapter protocol, registry, sanitizers, Blue prompt core
@@ -319,10 +334,9 @@ src/baps/
       delta_apply.py        # _apply_delta_to_files, _normalize_coding_export_content
       parsing.py            # parse_coding_delta_json, validation, malformed-JSON recovery
       prompting.py          # render_coding_blue_prompt, _render_coding_evaluation_supplement
-      state_updates.py      # derive_coding_state_update_from_delta
       views.py              # build_coding_create_game_state_view, build_coding_state_view
   state/
-    state.py                # Authoritative schemas, mutation, delta application
+    state.py                # Authoritative schemas, mutation, delta application, artifact registry
     state_service.py        # StateService — the only mutation boundary
     state_store.py          # JsonStateStore — JSON persistence
   models/
@@ -369,6 +383,7 @@ tests/
   test_play_game_attempts.py
   test_prompts.py
   test_run.py
+  test_runconfig_migration_guard.py
   test_sandbox.py
   test_scheduler.py
   test_scheduler_policy.py
@@ -457,7 +472,7 @@ Only leaf PlayGame executions count against `max_iterations`. Decomposition is f
 ### Persistence
 
 - Authoritative state: `<workspace>/state/state.json`
-- Blackboard (non-authoritative): `<workspace>/blackboard/northstar_proposals.jsonl`
+- Blackboard (non-authoritative): `<workspace>/blackboard/northstar_proposals.jsonl`, `<workspace>/blackboard/games.jsonl`
 - Workspace config: `<workspace>/baps-config.json`
 - Run result: `<workspace>/run-result.json`
 
@@ -586,7 +601,7 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 4. CreateGame performs gap analysis, not step derivation.
 5. `context_chain` carries full ancestor context to every leaf game.
 6. Adapter owns all project-specific mechanics.
-7. `StateService` is the runtime mutation boundary. The only integration path is `StateService.apply_delta(delta_state)`, called directly by `orchestration._solve_gap`.
+7. `StateService` is the runtime mutation boundary. The only integration path is `StateService.apply_delta(delta_state)`, called directly by `orchestration._solve_gap`. (`apply_update` no longer exists.)
 8. Core orchestration remains project-type generic.
 9. Export is one-way from `State`.
 10. Schema validation enforced via typed models and runtime checks.
@@ -637,7 +652,6 @@ Philosophy: contract-first deterministic testing of runtime boundaries and parse
 - **LanguagePlugin**: Protocol owning `docker_image`, `test_command`, and test lifecycle for a specific programming language within the coding adapter.
 - **RedFinding**: Adversarial reviewer decision output.
 - **RefereeDecision**: Game-local adjudication output.
-- **StateUpdateProposal**: Proposal/workflow mutation envelope used by `StateService.apply_update` (not the canonical runtime integration path).
 - **runtime**: Lifecycle orchestration via `start` (initialize-or-resume + game loop) and `reset` (wipe only).
 - **ModelClient**: Generation interface for model backends and test doubles.
 - **Role**: A named model client with schema, constrained-decoding flag, and optional research phase.
