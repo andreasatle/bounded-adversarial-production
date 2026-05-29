@@ -163,6 +163,14 @@ class ProjectTypeAdapter(Protocol):
     def build_research_tools(self, role: str) -> list[ToolDefinition]:
         ...
 
+    def build_create_game_research_tools(self, state: State) -> list:
+        ...
+
+    def execute_create_game_research_tool(
+        self, tool_name: str, tool_input: dict, state: State
+    ) -> str:
+        ...
+
     def tool_call_to_delta(self, tool_call: ToolCall) -> DeltaState:
         ...
 

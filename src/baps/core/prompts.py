@@ -342,6 +342,21 @@ def _render_referee_prompt(
     )
 
 
+def _render_create_game_research_prompt(state_view: StateView, config: RunConfig) -> str:
+    return (
+        "Before producing a GameSpec, use the available tools to inspect any artifact files "
+        "whose summaries leave gaps in your understanding of the current codebase.\n\n"
+        f"Goal: {config.goal}\n\n"
+        "Use fetch_file to retrieve the full content of any file shown in the state view "
+        "that you need to understand thoroughly for accurate gap analysis.\n\n"
+        "State view (may contain API summaries):\n"
+        f"{state_view.content[:3000]}\n\n"
+        "When you have finished investigating, write a brief summary of what you found relevant "
+        "to the gap analysis. If no files needed deeper inspection, say so explicitly.\n"
+        "Do not produce a GameSpec here — only research and summarize."
+    )
+
+
 def _get_research_tools(adapter: ProjectTypeAdapter, role: str) -> list:
     getter = getattr(adapter, "build_research_tools", None)
     if getter is None:

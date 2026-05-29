@@ -431,6 +431,55 @@ class AuditProjectAdapter:
         del state_view, game_spec, delta_state, verification_result
         return _REFEREE_SUPPLEMENT
 
+    def build_create_game_research_tools(self, state: State) -> list:
+        northstar_markdown = _get_northstar_from_state(state)
+        source_path = _extract_source_path(northstar_markdown)
+        if source_path is None or not source_path.exists():
+            return []
+        return [ToolDefinition(
+            name="fetch_source_file",
+            description=(
+                "Fetch the full content of a source file from the source tree. "
+                "Use this when the file listing is insufficient for confident gap analysis."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative file path within the source root",
+                    },
+                },
+                "required": ["path"],
+            },
+        )]
+
+    def execute_create_game_research_tool(
+        self, tool_name: str, tool_input: dict, state: State
+    ) -> str:
+        if tool_name == "fetch_source_file":
+            northstar_markdown = _get_northstar_from_state(state)
+            source_path = _extract_source_path(northstar_markdown)
+            if source_path is None or not source_path.exists():
+                return "tool_error: source_path not configured or does not exist"
+            rel_path = tool_input.get("path", "")
+            if not isinstance(rel_path, str) or not rel_path:
+                return "tool_error: fetch_source_file requires a non-empty 'path' string"
+            target = (source_path / rel_path).resolve()
+            if not target.is_relative_to(source_path.resolve()):
+                return f"tool_error: path '{rel_path}' escapes source root"
+            if not target.exists():
+                patterns = _DEFAULT_SOURCE_PATTERNS
+                files = _collect_source_files(source_path, patterns)
+                available = sorted(str(f.relative_to(source_path)) for f in files)
+                available_str = ", ".join(f"'{p}'" for p in available[:20]) if available else "(none)"
+                return f"File '{rel_path}' not found in source tree. Available files: {available_str}"
+            try:
+                return target.read_text(encoding="utf-8", errors="replace")
+            except OSError as exc:
+                return f"tool_error: could not read '{rel_path}': {exc}"
+        return f"tool_error: unknown tool {tool_name!r}"
+
     def build_blue_output_format(self) -> str | dict | None:
         return None
 

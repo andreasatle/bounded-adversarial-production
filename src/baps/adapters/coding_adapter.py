@@ -32,6 +32,7 @@ from baps.adapters.coding.prompting import (
 )
 from baps.adapters.coding.views import build_coding_create_game_state_view, build_coding_state_view
 from baps.models.models import ToolCall, ToolDefinition
+from baps.tools.tools import FETCH_FILE_DEFINITION
 from baps.northstar.northstar_projection import StateView, require_state_view_metadata
 from baps.state.state import (
     CodingArtifact,
@@ -174,6 +175,30 @@ class CodingProjectAdapter:
 
     def build_blue_output_format(self) -> str | dict | None:
         return None
+
+    def build_research_tools(self, role: str) -> list[ToolDefinition]:
+        del role
+        return []
+
+    def build_create_game_research_tools(self, state: State) -> list:
+        artifact = next((a for a in state.artifacts if isinstance(a, CodingArtifact)), None)
+        if artifact is None:
+            return []
+        return [FETCH_FILE_DEFINITION]
+
+    def execute_create_game_research_tool(
+        self, tool_name: str, tool_input: dict, state: State
+    ) -> str:
+        if tool_name == "fetch_file":
+            artifact = next((a for a in state.artifacts if isinstance(a, CodingArtifact)), None)
+            if artifact is None:
+                return "tool_error: no coding artifact found in state"
+            path = tool_input.get("path", "")
+            if not isinstance(path, str) or not path:
+                return "tool_error: fetch_file requires a non-empty 'path' string"
+            from baps.tools.tools import fetch_file
+            return fetch_file(path, artifact)
+        return f"tool_error: unknown tool {tool_name!r}"
 
     def build_blue_tools(self) -> list[ToolDefinition]:
         _file_schema = {

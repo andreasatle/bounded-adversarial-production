@@ -5,10 +5,13 @@ from unittest.mock import patch
 
 from baps.models.models import ToolDefinition
 from baps.tools.tools import (
+    FETCH_FILE_DEFINITION,
     FETCH_URL_DEFINITION,
     WEB_SEARCH_DEFINITION,
     ToolExecutor,
     build_default_tool_executor,
+    build_fetch_file_tool,
+    fetch_file,
     fetch_url,
     web_search,
     _is_private_host,
@@ -304,3 +307,92 @@ def test_web_search_definition_has_query_parameter() -> None:
     assert WEB_SEARCH_DEFINITION.name == "web_search"
     required = WEB_SEARCH_DEFINITION.parameters.get("required", [])
     assert "query" in required
+
+
+# ---------------------------------------------------------------------------
+# fetch_file
+# ---------------------------------------------------------------------------
+
+def _make_artifact(files: list[tuple[str, str]]):
+    from baps.state.state import CodingArtifact, CodeFile
+    return CodingArtifact(
+        id="art",
+        language="python",
+        files=tuple(CodeFile(path=p, content=c) for p, c in files),
+    )
+
+
+def test_fetch_file_returns_content_for_known_path() -> None:
+    artifact = _make_artifact([("src/foo.py", "def foo(): pass")])
+    result = fetch_file("src/foo.py", artifact)
+    assert result == "def foo(): pass"
+
+
+def test_fetch_file_returns_error_for_unknown_path() -> None:
+    artifact = _make_artifact([("src/foo.py", "content")])
+    result = fetch_file("src/bar.py", artifact)
+    assert "src/bar.py" in result
+    assert "not found" in result
+    assert "src/foo.py" in result
+
+
+def test_fetch_file_empty_artifact_lists_none() -> None:
+    artifact = _make_artifact([])
+    result = fetch_file("anything.py", artifact)
+    assert "not found" in result
+    assert "(none)" in result
+
+
+def test_build_fetch_file_tool_returns_fetch_file_definition() -> None:
+    artifact = _make_artifact([])
+    defn = build_fetch_file_tool(artifact)
+    assert defn is FETCH_FILE_DEFINITION
+    assert defn.name == "fetch_file"
+    assert "path" in defn.parameters.get("required", [])
+
+
+# ---------------------------------------------------------------------------
+# ToolExecutor with adapter_tools
+# ---------------------------------------------------------------------------
+
+def test_tool_executor_without_adapter_tools_does_not_expose_unknown_tool() -> None:
+    executor = ToolExecutor()
+    assert "fetch_file" not in executor
+    result = executor.execute("fetch_file", {"path": "x.py"})
+    assert "tool_error" in result
+    assert "fetch_file" in result
+
+
+def test_tool_executor_with_adapter_tools_dispatches_correctly() -> None:
+    artifact = _make_artifact([("utils.py", "def helper(): ...")])
+    executor = ToolExecutor(
+        adapter_tools={"fetch_file": lambda inp: fetch_file(inp["path"], artifact)}
+    )
+    assert "fetch_file" in executor
+    result = executor.execute("fetch_file", {"path": "utils.py"})
+    assert "def helper" in result
+
+
+def test_tool_executor_adapter_tools_error_returns_tool_error() -> None:
+    def boom(inp):
+        raise RuntimeError("kaboom")
+    executor = ToolExecutor(adapter_tools={"boom_tool": boom})
+    result = executor.execute("boom_tool", {})
+    assert "tool_error" in result
+
+
+def test_tool_executor_adapter_tools_unknown_still_returns_error() -> None:
+    executor = ToolExecutor(adapter_tools={"known": lambda _: "ok"})
+    result = executor.execute("unknown_tool", {})
+    assert "tool_error" in result
+    assert "unknown_tool" in result
+
+
+def test_tool_executor_adapter_tools_via_fetch_file_unknown_path() -> None:
+    artifact = _make_artifact([("utils.py", "content")])
+    executor = ToolExecutor(
+        adapter_tools={"fetch_file": lambda inp: fetch_file(inp["path"], artifact)}
+    )
+    result = executor.execute("fetch_file", {"path": "missing.py"})
+    assert "not found" in result
+    assert "utils.py" in result

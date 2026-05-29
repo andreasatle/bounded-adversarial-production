@@ -8,9 +8,12 @@ import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from baps.models.models import ToolDefinition
+
+if TYPE_CHECKING:
+    from baps.state.state import CodingArtifact
 
 _FETCH_TIMEOUT = 10
 _MAX_FETCH_BYTES = 50_000
@@ -156,6 +159,41 @@ def web_search(query: str) -> str:
     return _sanitize_external_content("\n".join(parts))
 
 
+def fetch_file(path: str, artifact: CodingArtifact) -> str:
+    """Return full content of a file in the artifact, or an error listing available paths."""
+    files_by_path = {f.path: f for f in artifact.files}
+    if path not in files_by_path:
+        available = sorted(files_by_path.keys())
+        available_str = ", ".join(f"'{p}'" for p in available) if available else "(none)"
+        return f"File '{path}' not found in artifact. Available files: {available_str}"
+    return files_by_path[path].content
+
+
+FETCH_FILE_DEFINITION = ToolDefinition(
+    name="fetch_file",
+    description=(
+        "Fetch the full content of a file in the current coding artifact. "
+        "Use this when the API surface summary is insufficient for confident gap analysis."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Relative file path within the artifact",
+            },
+        },
+        "required": ["path"],
+    },
+)
+
+
+def build_fetch_file_tool(artifact: CodingArtifact) -> ToolDefinition:
+    """Return the fetch_file tool definition (artifact-independent schema)."""
+    del artifact
+    return FETCH_FILE_DEFINITION
+
+
 FETCH_URL_DEFINITION = ToolDefinition(
     name="fetch_url",
     description=(
@@ -196,8 +234,12 @@ _DEFAULT_TOOLS: dict[str, tuple[ToolDefinition, Callable[..., str]]] = {
 class ToolExecutor:
     """Maps tool names to callable implementations and executes them safely."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        adapter_tools: dict[str, Callable[..., str]] | None = None,
+    ) -> None:
         self._registry: dict[str, tuple[ToolDefinition, Callable[..., str]]] = {}
+        self._adapter_tools: dict[str, Callable[..., str]] = dict(adapter_tools) if adapter_tools else {}
 
     def register(self, defn: ToolDefinition, fn: Callable[..., str]) -> "ToolExecutor":
         self._registry[defn.name] = (defn, fn)
@@ -208,18 +250,24 @@ class ToolExecutor:
 
     def execute(self, tool_name: str, arguments: dict[str, Any]) -> str:
         entry = self._registry.get(tool_name)
-        if entry is None:
-            return f"tool_error: unknown tool {tool_name!r}"
-        _, fn = entry
-        try:
-            return str(fn(**arguments))
-        except TypeError as exc:
-            return f"tool_error: bad arguments for {tool_name!r}: {exc}"
-        except Exception as exc:
-            return f"tool_error: {exc}"
+        if entry is not None:
+            _, fn = entry
+            try:
+                return str(fn(**arguments))
+            except TypeError as exc:
+                return f"tool_error: bad arguments for {tool_name!r}: {exc}"
+            except Exception as exc:
+                return f"tool_error: {exc}"
+        adapter_fn = self._adapter_tools.get(tool_name)
+        if adapter_fn is not None:
+            try:
+                return str(adapter_fn(arguments))
+            except Exception as exc:
+                return f"tool_error: {exc}"
+        return f"tool_error: unknown tool {tool_name!r}"
 
     def __contains__(self, tool_name: str) -> bool:
-        return tool_name in self._registry
+        return tool_name in self._registry or tool_name in self._adapter_tools
 
 
 def build_default_tool_executor() -> ToolExecutor:

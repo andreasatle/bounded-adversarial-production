@@ -285,3 +285,136 @@ def test_coding_adapter_render_blue_prompt_requires_language_metadata() -> None:
             attempt_number=1,
             previous_feedback=None,
         )
+
+
+# ---------------------------------------------------------------------------
+# CodingProjectAdapter.build_research_tools / build_create_game_research_tools
+# ---------------------------------------------------------------------------
+
+def test_coding_adapter_build_research_tools_returns_empty_for_all_roles() -> None:
+    adapter = CodingProjectAdapter()
+    for role in ("create_game", "blue", "red", "referee"):
+        assert adapter.build_research_tools(role) == [], role
+
+
+def test_coding_adapter_build_create_game_research_tools_with_artifact() -> None:
+    adapter = CodingProjectAdapter()
+    state = state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(id="art", language="python", files=(
+            state_module.CodeFile(path="src/main.py", content="def main(): pass"),
+        )),),
+    )
+    tools = adapter.build_create_game_research_tools(state)
+    assert len(tools) == 1
+    assert tools[0].name == "fetch_file"
+    assert "path" in tools[0].parameters.get("required", [])
+
+
+def test_coding_adapter_build_create_game_research_tools_no_artifact_returns_empty() -> None:
+    adapter = CodingProjectAdapter()
+    state = state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.DocumentArtifact(id="doc", sections=()),),
+    )
+    assert adapter.build_create_game_research_tools(state) == []
+
+
+def test_coding_adapter_execute_create_game_research_tool_returns_content() -> None:
+    adapter = CodingProjectAdapter()
+    state = state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(id="art", language="python", files=(
+            state_module.CodeFile(path="src/main.py", content="def main(): pass"),
+        )),),
+    )
+    result = adapter.execute_create_game_research_tool("fetch_file", {"path": "src/main.py"}, state)
+    assert "def main" in result
+
+
+def test_coding_adapter_execute_create_game_research_tool_unknown_path() -> None:
+    adapter = CodingProjectAdapter()
+    state = state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(id="art", language="python", files=(
+            state_module.CodeFile(path="src/main.py", content="content"),
+        )),),
+    )
+    result = adapter.execute_create_game_research_tool("fetch_file", {"path": "missing.py"}, state)
+    assert "not found" in result
+    assert "src/main.py" in result
+
+
+def test_coding_adapter_execute_create_game_research_tool_unknown_tool() -> None:
+    adapter = CodingProjectAdapter()
+    state = state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(id="art", language="python", files=()),),
+    )
+    result = adapter.execute_create_game_research_tool("bogus_tool", {}, state)
+    assert "tool_error" in result
+
+
+# ---------------------------------------------------------------------------
+# DocumentProjectAdapter.build_create_game_research_tools
+# ---------------------------------------------------------------------------
+
+def test_document_adapter_build_create_game_research_tools_with_sections() -> None:
+    adapter = DocumentProjectAdapter()
+    state = state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.DocumentArtifact(
+            id="doc",
+            sections=(state_module.Section(title="Intro", body="Introduction body."),),
+        ),),
+    )
+    tools = adapter.build_create_game_research_tools(state)
+    assert len(tools) == 1
+    assert tools[0].name == "fetch_section"
+    assert "title" in tools[0].parameters.get("required", [])
+
+
+def test_document_adapter_build_create_game_research_tools_no_sections_returns_empty() -> None:
+    adapter = DocumentProjectAdapter()
+    state = state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.DocumentArtifact(id="doc", sections=()),),
+    )
+    assert adapter.build_create_game_research_tools(state) == []
+
+
+def test_document_adapter_execute_create_game_research_tool_returns_body() -> None:
+    adapter = DocumentProjectAdapter()
+    state = state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.DocumentArtifact(
+            id="doc",
+            sections=(state_module.Section(title="Intro", body="Introduction body."),),
+        ),),
+    )
+    result = adapter.execute_create_game_research_tool("fetch_section", {"title": "Intro"}, state)
+    assert result == "Introduction body."
+
+
+def test_document_adapter_execute_create_game_research_tool_unknown_title() -> None:
+    adapter = DocumentProjectAdapter()
+    state = state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.DocumentArtifact(
+            id="doc",
+            sections=(state_module.Section(title="Intro", body="body"),),
+        ),),
+    )
+    result = adapter.execute_create_game_research_tool("fetch_section", {"title": "Missing"}, state)
+    assert "not found" in result
+    assert "Intro" in result
+
+
+def test_document_adapter_execute_create_game_research_tool_unknown_tool() -> None:
+    adapter = DocumentProjectAdapter()
+    state = state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.DocumentArtifact(id="doc", sections=()),),
+    )
+    result = adapter.execute_create_game_research_tool("bogus", {}, state)
+    assert "tool_error" in result

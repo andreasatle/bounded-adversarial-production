@@ -61,8 +61,10 @@ from baps.adapters.project_adapter import (
 from baps.core.prompts import (
     _render_create_game_prompt,
     _render_create_game_red_prompt,
+    _render_create_game_research_prompt,
     _render_red_prompt,
     _render_referee_prompt,
+    _render_tool_session_block,
 )
 from baps.northstar.northstar_projection import StateView
 from baps.summarizer.summarizer import SummarizationContext
@@ -247,6 +249,26 @@ def create_game(
     _bb_result: dict | None = None
     _bb_model_used = client_model_name(role.client)
 
+    # One-shot research phase before the attempt loop.
+    _cg_research_fn = getattr(resolved_adapter, "build_create_game_research_tools", None)
+    _cg_research_tools = _cg_research_fn(state) if _cg_research_fn is not None else []
+    _cg_research_summary = ""
+    _cg_research_session: list = []
+    if _cg_research_tools:
+        _cg_exec_fn = getattr(resolved_adapter, "execute_create_game_research_tool", None)
+        _cg_adapter_tools: dict = {}
+        if _cg_exec_fn is not None:
+            for tool_defn in _cg_research_tools:
+                _tool_name = tool_defn.name
+                _cg_adapter_tools[_tool_name] = (
+                    lambda tool_input, _tn=_tool_name: _cg_exec_fn(_tn, tool_input, state)
+                )
+        _cg_executor = ToolExecutor(adapter_tools=_cg_adapter_tools)
+        _cg_research_prompt = _render_create_game_research_prompt(state_view, config)
+        _cg_research_summary, _cg_research_session = role.generate_agentic(
+            _cg_research_prompt, _cg_research_tools, _cg_executor
+        )
+
     try:
         for attempt in range(1, max_create_game_attempts + 1):
             prompt = _render_create_game_prompt(
@@ -258,6 +280,14 @@ def create_game(
                 context_chain=context_chain,
                 create_game_red_feedback=red_feedback,
             )
+            if _cg_research_session or _cg_research_summary:
+                prompt = (
+                    _render_tool_session_block(
+                        [(SpecRole.CREATE_GAME, _cg_research_session, _cg_research_summary)]
+                    )
+                    + "\n\n"
+                    + prompt
+                )
             _debug_print_create_game_prompt(prompt)
             result = _generate_create_game_with_json_retry(
                 role, prompt, max_sub_gaps=max_sub_gaps, workspace=config.workspace,

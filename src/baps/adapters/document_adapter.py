@@ -357,6 +357,52 @@ class DocumentProjectAdapter:
         del state_view, game_spec, delta_state, verification_result
         return ""
 
+    def build_create_game_research_tools(self, state: State) -> list:
+        artifact = next(
+            (a for a in state.artifacts if isinstance(a, DocumentArtifact) and a.sections),
+            None,
+        )
+        if artifact is None:
+            return []
+        return [ToolDefinition(
+            name="fetch_section",
+            description=(
+                "Fetch the full body of a named section in the current document artifact. "
+                "Use this when the section summary is insufficient for confident gap analysis."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "description": "Exact section title",
+                    },
+                },
+                "required": ["title"],
+            },
+        )]
+
+    def execute_create_game_research_tool(
+        self, tool_name: str, tool_input: dict, state: State
+    ) -> str:
+        if tool_name == "fetch_section":
+            artifact = next(
+                (a for a in state.artifacts if isinstance(a, DocumentArtifact) and a.sections),
+                None,
+            )
+            if artifact is None:
+                return "tool_error: no document artifact with sections found in state"
+            title = tool_input.get("title", "")
+            if not isinstance(title, str) or not title:
+                return "tool_error: fetch_section requires a non-empty 'title' string"
+            section = next((s for s in artifact.sections if s.title == title), None)
+            if section is None:
+                available = sorted(s.title for s in artifact.sections)
+                available_str = ", ".join(f"'{t}'" for t in available) if available else "(none)"
+                return f"Section '{title}' not found in artifact. Available sections: {available_str}"
+            return section.body
+        return f"tool_error: unknown tool {tool_name!r}"
+
     def build_blue_output_format(self) -> str | dict | None:
         # Two valid operation shapes — return None so prompt instructions drive format
         # rather than a single rigid constrained-decoding schema.

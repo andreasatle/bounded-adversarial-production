@@ -816,3 +816,76 @@ def test_create_game_red_revise_triggers_retry() -> None:
         create_game_red_client=FakeModelClient([red_revise]),
     )
     assert "2+ paragraphs" in game_spec.success_condition
+
+
+# ---------------------------------------------------------------------------
+# CreateGame research phase (fetch_file for coding adapter)
+# ---------------------------------------------------------------------------
+
+def _make_coding_config(
+    artifact_id: str = "main-codebase",
+    goal: str = "Implement a utility module.",
+) -> RunConfig:
+    return RunConfig(
+        workspace=Path(".baps-workspace"),
+        project_type="coding",
+        artifact_id=artifact_id,
+        language="python",
+        goal=goal,
+        northstar_markdown=f"# Goal\n\n{goal}",
+        output_path=Path(".baps-workspace/output/project"),
+        max_iterations=2,
+        spec_path=None,
+    )
+
+
+def test_create_game_research_phase_calls_fetch_file_tool() -> None:
+    """Coding adapter's fetch_file is dispatched via adapter_tools during create_game research."""
+    from baps.adapters.coding_adapter import CodingProjectAdapter
+
+    config = _make_coding_config()
+    state = create_state(config)
+
+    spec_json = (
+        '{"objective":"Add utils module","target_artifact_id":"main-codebase",'
+        '"allowed_delta_type":"DeltaCodingState","success_condition":"utils.py present."}'
+    )
+    research_summary = "Found no existing files; artifact is empty."
+    fake_client = FakeModelClient(
+        responses=[spec_json],
+        agentic_sequences=[[research_summary]],
+    )
+    adapter = CodingProjectAdapter()
+    game_spec = create_game(config, state, model_client=fake_client, adapter=adapter)
+    assert game_spec.objective == "Add utils module"
+    assert fake_client._agentic_sequences == []
+
+
+def test_create_game_research_phase_fetch_file_dispatches_via_adapter() -> None:
+    """execute_create_game_research_tool is dispatched by ToolExecutor during research."""
+    from baps.adapters.coding_adapter import CodingProjectAdapter
+    from baps.models.models import ToolCall
+    from baps.state.state import CodingArtifact, CodeFile, State, NorthStar
+
+    config = _make_coding_config()
+    state = State(
+        northstar=NorthStar(artifacts=()),
+        artifacts=(CodingArtifact(
+            id="main-codebase",
+            language="python",
+            files=(CodeFile(path="src/main.py", content="def main(): pass"),),
+        ),),
+    )
+    spec_json = (
+        '{"objective":"Add tests","target_artifact_id":"main-codebase",'
+        '"allowed_delta_type":"DeltaCodingState","success_condition":"tests.py present."}'
+    )
+    fetch_call = ToolCall(name="fetch_file", arguments={"path": "src/main.py"})
+    fake_client = FakeModelClient(
+        responses=[spec_json],
+        agentic_sequences=[[fetch_call, "Reviewed src/main.py — it defines main()"]],
+    )
+    adapter = CodingProjectAdapter()
+    game_spec = create_game(config, state, model_client=fake_client, adapter=adapter)
+    assert game_spec.objective == "Add tests"
+    assert fake_client._agentic_sequences == []
