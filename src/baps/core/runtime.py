@@ -8,7 +8,7 @@ from baps.adapters.project_adapter import (
     resolve_adapter_for_allowed_delta_type,
     resolve_project_type_adapter,
 )
-from baps.core.clients import SpecRole, _resolve_backend_model
+from baps.core.clients import SpecRole, _build_client_for_role, _resolve_backend_model
 from baps.core.debug import _debug_print_create_state
 from baps.core.orchestration import IterationRunResult, _run_project_iterations
 from baps.core.run_config import RunConfig
@@ -16,9 +16,11 @@ from baps.core.workspace import (
     save_workspace_settings,
     state_path_for_workspace,
 )
+from baps.models.models import Role
 from baps.state.state import State, build_default_state_artifact_registry
 from baps.state.state_service import StateService
 from baps.state.state_store import JsonStateStore
+from baps.summarizer.summarizer import SummarizationContext
 
 
 @dataclass(frozen=True)
@@ -27,6 +29,7 @@ class RuntimeContext:
     adapter: ProjectTypeAdapter
     state_service: StateService
     initial_state: State
+    summarization_context: SummarizationContext
 
 
 def create_state(config: RunConfig) -> State:
@@ -88,6 +91,16 @@ def prepare_workspace(
     return _initialize_project(config, create_state_fn=create_state_fn)
 
 
+def _resolve_summarize_role(config: RunConfig) -> Role | None:
+    if SpecRole.SUMMARIZE not in (config.spec_roles or {}):
+        return None
+    try:
+        client = _build_client_for_role(SpecRole.SUMMARIZE, config)
+        return Role(name=SpecRole.SUMMARIZE, client=client)
+    except ValueError:
+        return None
+
+
 def build_runtime(
     config: RunConfig,
     create_state_fn=None,
@@ -96,11 +109,13 @@ def build_runtime(
         create_state_fn = create_state
     adapter = _resolve_project_type_adapter(config.project_type)
     state_service, current_state = prepare_workspace(config, create_state_fn=create_state_fn)
+    summarizer = _resolve_summarize_role(config)
     return RuntimeContext(
         config=config,
         adapter=adapter,
         state_service=state_service,
         initial_state=current_state,
+        summarization_context=SummarizationContext(summarizer=summarizer, game_spec=None),
     )
 
 

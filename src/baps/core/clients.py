@@ -34,6 +34,7 @@ class SpecRole(StrEnum):
     CREATE_GAME = "create_game"
     DECOMPOSE = "decompose"
     CREATE_GAME_RED = "create_game_red"
+    SUMMARIZE = "summarize"
 
 
 _VALID_SPEC_ROLES = frozenset(SpecRole)
