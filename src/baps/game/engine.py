@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from baps.core.clients import (
     SpecRole,
@@ -29,6 +29,7 @@ from baps.game.play import record_play_game_telemetry
 from baps.game.roles import (
     PlayGameContext,
     _RED_FINDING_SCHEMA,
+    _VerifyCandidateFn,
     build_play_game_fallbacks,
     initial_play_game_feedback,
     resolve_play_game_roles,
@@ -62,11 +63,13 @@ from baps.core.prompts import (
     _render_red_prompt,
     _render_referee_prompt,
 )
+from baps.northstar.northstar_projection import StateView
 from baps.state.state import (
     DecomposeSpec,
     DeltaState,
     GameSpec,
     PlayGameRuntime,
+    RedFinding,
     State,
 )
 from baps.tools.tools import ToolExecutor
@@ -361,10 +364,10 @@ def _build_play_game_context(
     config: RunConfig | None,
     depth: int,
     max_attempts: int,
-    debug_event_fn: Any,
-    render_red_prompt_fn: Any,
-    render_referee_prompt_fn: Any,
-    verify_candidate_fn: Any,
+    debug_event_fn: Callable[[str, dict[str, Any]], None],
+    render_red_prompt_fn: Callable[[StateView, GameSpec, DeltaState, VerificationResult | None, str], str],
+    render_referee_prompt_fn: Callable[[StateView, GameSpec, DeltaState, RedFinding, VerificationResult | None, str], str],
+    verify_candidate_fn: _VerifyCandidateFn,
 ) -> PlayGameContext:
     resolved_adapter = (
         adapter

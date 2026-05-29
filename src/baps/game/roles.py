@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Protocol
 
 from baps.core.run_config import RunConfig
 from baps.core.clients import (
@@ -15,7 +15,8 @@ from baps.core.clients import (
 )
 from baps.models.models import ModelClient, Role
 from baps.adapters.project_adapter import ProjectTypeAdapter, VerificationResult
-from baps.state.state import GameSpec, State
+from baps.northstar.northstar_projection import StateView
+from baps.state.state import DeltaState, GameSpec, RedFinding, State
 from baps.tools.tools import ToolExecutor
 
 
@@ -45,13 +46,25 @@ _REFEREE_DECISION_SCHEMA: dict = {
 }
 
 
+class _VerifyCandidateFn(Protocol):
+    def __call__(
+        self,
+        adapter: ProjectTypeAdapter,
+        delta_state: DeltaState,
+        state: State,
+        artifact_id: str,
+        *,
+        sandbox_mode: str,
+    ) -> VerificationResult | None: ...
+
+
 @dataclass
 class PlayGameContext:
     """Immutable per-game setup resolved once before the attempt loop."""
     resolved_adapter: ProjectTypeAdapter
     state: State
     game_spec: GameSpec
-    state_view: Any
+    state_view: StateView
     game_id: str
     workspace: Path | None
     sandbox_mode: str
@@ -59,14 +72,14 @@ class PlayGameContext:
     blue_role: Role
     red_role: Role
     referee_role: Role
-    red_fallback_fn: Any
-    referee_fallback_fn: Any
+    red_fallback_fn: Callable[[str], str] | None
+    referee_fallback_fn: Callable[[str], str] | None
     depth: int
     max_attempts: int
-    debug_event_fn: Any
-    render_red_prompt_fn: Any
-    render_referee_prompt_fn: Any
-    verify_candidate_fn: Any
+    debug_event_fn: Callable[[str, dict[str, Any]], None]
+    render_red_prompt_fn: Callable[[StateView, GameSpec, DeltaState, VerificationResult | None, str], str]
+    render_referee_prompt_fn: Callable[[StateView, GameSpec, DeltaState, RedFinding, VerificationResult | None, str], str]
+    verify_candidate_fn: _VerifyCandidateFn
 
 
 def initial_play_game_feedback(
@@ -126,7 +139,7 @@ def build_play_game_fallbacks(
     red_model_client: ModelClient | None,
     referee_model_client: ModelClient | None,
     build_fallback_chain_for_role_fn: Any = _build_fallback_chain_for_role,
-) -> tuple[Path | None, Any, Any]:
+) -> tuple[Path | None, Callable[[str], str] | None, Callable[[str], str] | None]:
     workspace = config.workspace if config else None
     if config is None:
         return workspace, None, None
