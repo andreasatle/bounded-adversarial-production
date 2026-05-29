@@ -33,7 +33,12 @@ class SummarizationContext:
     def summarize(self, content: str, objective: str | None) -> str | None:
         if self.summarizer is None:
             return None
-        cache_key = hashlib.sha256((content + (objective or "")).encode()).hexdigest()
+        content_hash = hashlib.sha256(content.encode()).hexdigest()
+        if objective is None:
+            cache_key = f"api:{content_hash}"
+        else:
+            objective_hash = hashlib.sha256(objective.encode()).hexdigest()
+            cache_key = f"objective:{objective_hash}:{content_hash}"
         if cache_key in self._cache:
             return self._cache[cache_key]
         prompt = (

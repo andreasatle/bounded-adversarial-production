@@ -123,6 +123,22 @@ def test_cache_key_includes_objective_not_just_content() -> None:
     assert len(role.client.prompts) == 2
 
 
+def test_cache_key_distinguishes_none_and_empty_objective() -> None:
+    """Verify API mode (objective=None) does not collide with objective mode objective=''."""
+    content = "def fn(): pass\n"
+    role = _make_role(["api-summary", "empty-objective-summary"])
+    ctx = SummarizationContext(summarizer=role, game_spec=None)
+
+    r_api = ctx.summarize(content, objective=None)
+    r_empty = ctx.summarize(content, objective="")
+
+    assert r_api == "api-summary"
+    assert r_empty == "empty-objective-summary"
+    assert len(role.client.prompts) == 2
+    assert "Extract the public API surface" in role.client.prompts[0]
+    assert "Extract the public API surface" not in role.client.prompts[1]
+
+
 def test_two_context_instances_have_independent_caches() -> None:
     """Each SummarizationContext instance owns its own cache dict."""
     ctx1 = SummarizationContext(summarizer=None, game_spec=None)

@@ -132,12 +132,16 @@ def _render_create_game_prompt(
         '  "target_artifact_id": "...",\n'
         '  "allowed_delta_type": "...",\n'
         '  "success_condition": "...",\n'
-        '  "max_words": <integer or null>\n'
+        '  "max_words": <integer or null>,\n'
+        '  "target_entity": "..." | null\n'
         "}\n\n"
         "objective: name the gap being closed and what the closed state looks like.\n"
         "success_condition: verifiable from the artifact alone — state what must be present or true.\n"
         "max_words: set a word budget for Blue's output when scope should be tightly bounded "
         "(e.g. a focused section, a single function). Omit (null) only when scope is inherently open-ended.\n"
+        "target_entity: set when the proposed game is naturally focused on one specific entity "
+        "(for example one file, one section, or one source entity) so play-time context can stay focused. "
+        "Set to null or omit when the game requires broad context across multiple entities.\n"
         "Do not artificially split a coherent gap into multiple games — use decompose instead.\n"
         "All files or sections that must change together to close a gap belong in one game.\n"
         f"For this project type, allowed_delta_type must be {resolved_adapter.supported_delta_type}.\n"
@@ -347,8 +351,8 @@ def _render_create_game_research_prompt(state_view: StateView, config: RunConfig
         "Before producing a GameSpec, use the available tools to inspect any artifact files "
         "whose summaries leave gaps in your understanding of the current codebase.\n\n"
         f"Goal: {config.goal}\n\n"
-        "Use fetch_file to retrieve the full content of any file shown in the state view "
-        "that you need to understand thoroughly for accurate gap analysis.\n\n"
+        "Use the available research tools to inspect specific entities shown in the state view "
+        "when the summary-level view is insufficient for accurate gap analysis.\n\n"
         "State view (may contain API summaries):\n"
         f"{state_view.content[:3000]}\n\n"
         "When you have finished investigating, write a brief summary of what you found relevant "
