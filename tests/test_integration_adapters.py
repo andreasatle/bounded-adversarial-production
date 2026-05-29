@@ -306,9 +306,11 @@ def test_coding_adapter_build_create_game_research_tools_with_artifact() -> None
         )),),
     )
     tools = adapter.build_create_game_research_tools(state)
-    assert len(tools) == 1
-    assert tools[0].name == "fetch_file"
-    assert "path" in tools[0].parameters.get("required", [])
+    tool_names = [t.name for t in tools]
+    assert "list_modules" in tool_names
+    assert "fetch_module" in tool_names
+    assert "fetch_entity" in tool_names
+    assert len(tools) == 3
 
 
 def test_coding_adapter_build_create_game_research_tools_no_artifact_returns_empty() -> None:
@@ -369,9 +371,11 @@ def test_document_adapter_build_create_game_research_tools_with_sections() -> No
         ),),
     )
     tools = adapter.build_create_game_research_tools(state)
-    assert len(tools) == 1
-    assert tools[0].name == "fetch_section"
-    assert "title" in tools[0].parameters.get("required", [])
+    tool_names = [t.name for t in tools]
+    assert "list_modules" in tool_names
+    assert "fetch_module" in tool_names
+    assert "fetch_entity" in tool_names
+    assert len(tools) == 3
 
 
 def test_document_adapter_build_create_game_research_tools_no_sections_returns_empty() -> None:

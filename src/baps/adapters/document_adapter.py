@@ -33,6 +33,72 @@ from baps.state.state import (
 
 
 
+def _first_sentence(text: str) -> str:
+    """Return the first sentence of *text* (up to the first period, or 100 chars)."""
+    idx = text.find(".")
+    if idx != -1 and idx < 150:
+        return text[: idx + 1].strip()
+    return text[:100].strip()
+
+
+def _build_module_research_tools(
+    filters: list[str],
+    list_desc: str,
+    fetch_desc: str,
+    entity_desc: str,
+) -> list[ToolDefinition]:
+    filter_prop: dict = {
+        "type": "string",
+        "enum": filters,
+        "description": f"Detail level. Options: {', '.join(filters)}. Omit for names and counts only.",
+    }
+    return [
+        ToolDefinition(
+            name="list_modules",
+            description=list_desc,
+            parameters={
+                "type": "object",
+                "properties": {"filter": filter_prop},
+                "required": [],
+            },
+        ),
+        ToolDefinition(
+            name="fetch_module",
+            description=fetch_desc,
+            parameters={
+                "type": "object",
+                "properties": {
+                    "module_id": {
+                        "type": "string",
+                        "description": "Identifier of the unit (from list_modules output).",
+                    },
+                    "filter": filter_prop,
+                },
+                "required": ["module_id"],
+            },
+        ),
+        ToolDefinition(
+            name="fetch_entity",
+            description=entity_desc,
+            parameters={
+                "type": "object",
+                "properties": {
+                    "module_id": {
+                        "type": "string",
+                        "description": "Identifier of the containing unit.",
+                    },
+                    "entity_id": {
+                        "type": "string",
+                        "description": "Name of the entity within the unit.",
+                    },
+                    "filter": filter_prop,
+                },
+                "required": ["module_id", "entity_id"],
+            },
+        ),
+    ]
+
+
 def build_northstar_artifact_from_markdown(markdown: str) -> DocumentArtifact:
     fingerprint = hashlib.sha256(markdown.encode("utf-8")).hexdigest()[:12]
     return DocumentArtifact(
@@ -357,6 +423,9 @@ class DocumentProjectAdapter:
         del state_view, game_spec, delta_state, verification_result
         return ""
 
+    def supported_filters(self) -> list[str]:
+        return ["summary", "full"]
+
     def build_research_tools(self, role: str) -> list[ToolDefinition]:
         del role
         return []
@@ -368,33 +437,66 @@ class DocumentProjectAdapter:
         )
         if artifact is None:
             return []
-        return [ToolDefinition(
-            name="fetch_section",
-            description=(
-                "Fetch the full body of a named section in the current document artifact. "
-                "Use this when the section summary is insufficient for confident gap analysis."
-            ),
-            parameters={
-                "type": "object",
-                "properties": {
-                    "title": {
-                        "type": "string",
-                        "description": "Exact section title",
-                    },
-                },
-                "required": ["title"],
-            },
-        )]
+        filters = self.supported_filters()
+        return _build_module_research_tools(
+            filters,
+            list_desc="List document sections with title and word count.",
+            fetch_desc="Get a document section by title.",
+            entity_desc="Not supported for document artifacts.",
+        )
 
     def execute_create_game_research_tool(
         self, tool_name: str, tool_input: dict, state: State
     ) -> str:
-        if tool_name == "fetch_section":
-            artifact = next(
-                (a for a in state.artifacts if isinstance(a, DocumentArtifact) and a.sections),
-                None,
-            )
+        artifact = next(
+            (a for a in state.artifacts if isinstance(a, DocumentArtifact)),
+            None,
+        )
+        if tool_name == "list_modules":
+            if artifact is None or not artifact.sections:
+                return "(no sections)"
+            filter_val = tool_input.get("filter")
+            if filter_val is not None and filter_val not in self.supported_filters():
+                return f"Unknown filter '{filter_val}'. Available filters: {', '.join(self.supported_filters())}"
+            lines = []
+            for sec in artifact.sections:
+                word_count = len(sec.body.split())
+                entry = f"{sec.title} ({word_count} words)"
+                if filter_val == "summary":
+                    first_sentence = _first_sentence(sec.body)
+                    entry += f"\n  {first_sentence}"
+                lines.append(entry)
+            return "\n".join(lines)
+
+        if tool_name == "fetch_module":
+            module_id = tool_input.get("module_id", "")
+            if not isinstance(module_id, str) or not module_id:
+                return "tool_error: fetch_module requires a non-empty 'module_id' string"
             if artifact is None:
+                return "tool_error: no document artifact found in state"
+            section = next((s for s in artifact.sections if s.title == module_id), None)
+            if section is None:
+                available = sorted(s.title for s in artifact.sections)
+                available_str = ", ".join(f"'{t}'" for t in available) if available else "(none)"
+                return f"Section '{module_id}' not found. Available sections: {available_str}"
+            filter_val = tool_input.get("filter")
+            if filter_val is not None and filter_val not in self.supported_filters():
+                return f"Unknown filter '{filter_val}'. Available filters: {', '.join(self.supported_filters())}"
+            if filter_val is None:
+                return f"{section.title} ({len(section.body.split())} words)"
+            if filter_val == "summary":
+                parts = section.body.split("\n\n")
+                return parts[0].strip()
+            return section.body  # "full"
+
+        if tool_name == "fetch_entity":
+            return (
+                "tool_error: fetch_entity is not supported for document artifacts. "
+                "Use fetch_module to retrieve section content."
+            )
+
+        if tool_name == "fetch_section":
+            if artifact is None or not artifact.sections:
                 return "tool_error: no document artifact with sections found in state"
             title = tool_input.get("title", "")
             if not isinstance(title, str) or not title:
@@ -405,6 +507,7 @@ class DocumentProjectAdapter:
                 available_str = ", ".join(f"'{t}'" for t in available) if available else "(none)"
                 return f"Section '{title}' not found in artifact. Available sections: {available_str}"
             return section.body
+
         return f"tool_error: unknown tool {tool_name!r}"
 
     def build_blue_output_format(self) -> str | dict | None:

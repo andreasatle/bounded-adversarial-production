@@ -108,3 +108,15 @@ class RustLanguagePlugin:
 
     def summarize_file(self, file, objective):
         raise NotImplementedError
+
+    def supported_filters(self) -> list[str]:
+        return ["api", "tests", "full"]
+
+    def extract_api(self, file, filter=None) -> str:
+        raise NotImplementedError
+
+    def extract_tests(self, file) -> str:
+        raise NotImplementedError
+
+    def extract_entity(self, file, entity_id: str, filter=None) -> str:
+        raise NotImplementedError

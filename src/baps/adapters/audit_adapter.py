@@ -27,6 +27,8 @@ from baps.state.state import (
     State,
 )
 from baps.adapters.document_adapter import (
+    _build_module_research_tools,
+    _first_sentence,
     document_artifact_from_state,
     export_document_artifact,
     parse_document_delta_json,
@@ -431,6 +433,9 @@ class AuditProjectAdapter:
         del state_view, game_spec, delta_state, verification_result
         return _REFEREE_SUPPLEMENT
 
+    def supported_filters(self) -> list[str]:
+        return ["summary", "full"]
+
     def build_research_tools(self, role: str) -> list[ToolDefinition]:
         del role
         return []
@@ -438,9 +443,7 @@ class AuditProjectAdapter:
     def build_create_game_research_tools(self, state: State) -> list:
         northstar_markdown = _get_northstar_from_state(state)
         source_path = _extract_source_path(northstar_markdown)
-        if source_path is None or not source_path.exists():
-            return []
-        return [ToolDefinition(
+        source_tool = ToolDefinition(
             name="fetch_source_file",
             description=(
                 "Fetch the full content of a source file from the source tree. "
@@ -456,7 +459,24 @@ class AuditProjectAdapter:
                 },
                 "required": ["path"],
             },
-        )]
+        )
+        finding_tools = []
+        artifact = next(
+            (a for a in state.artifacts if isinstance(a, DocumentArtifact)
+             and not a.id.startswith("audit:meta:")),
+            None,
+        )
+        if artifact is not None and artifact.sections:
+            filters = self.supported_filters()
+            finding_tools = _build_module_research_tools(
+                filters,
+                list_desc="List audit findings with title and word count.",
+                fetch_desc="Get an audit finding by title.",
+                entity_desc="Not supported for audit findings.",
+            )
+        if source_path is None or not source_path.exists():
+            return finding_tools
+        return [source_tool] + finding_tools
 
     def execute_create_game_research_tool(
         self, tool_name: str, tool_input: dict, state: State
@@ -482,6 +502,55 @@ class AuditProjectAdapter:
                 return target.read_text(encoding="utf-8", errors="replace")
             except OSError as exc:
                 return f"tool_error: could not read '{rel_path}': {exc}"
+
+        artifact = next(
+            (a for a in state.artifacts if isinstance(a, DocumentArtifact)
+             and not a.id.startswith("audit:meta:")),
+            None,
+        )
+
+        if tool_name == "list_modules":
+            if artifact is None or not artifact.sections:
+                return "(no findings)"
+            filter_val = tool_input.get("filter")
+            if filter_val is not None and filter_val not in self.supported_filters():
+                return f"Unknown filter '{filter_val}'. Available filters: {', '.join(self.supported_filters())}"
+            lines = []
+            for sec in artifact.sections:
+                word_count = len(sec.body.split())
+                entry = f"{sec.title} ({word_count} words)"
+                if filter_val == "summary":
+                    entry += f"\n  {_first_sentence(sec.body)}"
+                lines.append(entry)
+            return "\n".join(lines)
+
+        if tool_name == "fetch_module":
+            module_id = tool_input.get("module_id", "")
+            if not isinstance(module_id, str) or not module_id:
+                return "tool_error: fetch_module requires a non-empty 'module_id' string"
+            if artifact is None:
+                return "tool_error: no audit findings artifact found in state"
+            section = next((s for s in artifact.sections if s.title == module_id), None)
+            if section is None:
+                available = sorted(s.title for s in artifact.sections)
+                available_str = ", ".join(f"'{t}'" for t in available) if available else "(none)"
+                return f"Finding '{module_id}' not found. Available findings: {available_str}"
+            filter_val = tool_input.get("filter")
+            if filter_val is not None and filter_val not in self.supported_filters():
+                return f"Unknown filter '{filter_val}'. Available filters: {', '.join(self.supported_filters())}"
+            if filter_val is None:
+                return f"{section.title} ({len(section.body.split())} words)"
+            if filter_val == "summary":
+                parts = section.body.split("\n\n")
+                return parts[0].strip()
+            return section.body  # "full"
+
+        if tool_name == "fetch_entity":
+            return (
+                "tool_error: fetch_entity is not supported for audit findings. "
+                "Use fetch_module to retrieve finding content."
+            )
+
         return f"tool_error: unknown tool {tool_name!r}"
 
     def build_blue_output_format(self) -> str | dict | None:

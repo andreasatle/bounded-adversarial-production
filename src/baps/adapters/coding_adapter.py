@@ -31,6 +31,7 @@ from baps.adapters.coding.prompting import (
     render_coding_blue_prompt,
 )
 from baps.adapters.coding.views import build_coding_create_game_state_view, build_coding_state_view
+from baps.adapters.document_adapter import _build_module_research_tools
 from baps.models.models import ToolCall, ToolDefinition
 from baps.tools.tools import FETCH_FILE_DEFINITION
 from baps.northstar.northstar_projection import StateView, require_state_view_metadata
@@ -43,6 +44,31 @@ from baps.state.state import (
     GameSpec,
     State,
 )
+
+def _coding_api_stats(file, plugin) -> str:
+    """Return ' — N signatures, M documented' for list_modules filter='api'."""
+    try:
+        api_text = plugin.extract_api(file)
+    except NotImplementedError:
+        return ""
+    lines = api_text.splitlines()
+    sig_count = sum(
+        1 for ln in lines
+        if ln.lstrip().startswith("def ") or ln.lstrip().startswith("async def ")
+    )
+    doc_count = sum(1 for ln in lines if '"""' in ln and "def " not in ln)
+    return f" — {sig_count} signatures, {doc_count} documented"
+
+
+def _coding_test_stats(file, plugin) -> str:
+    """Return ' — N tests' for list_modules filter='tests'."""
+    try:
+        test_text = plugin.extract_tests(file)
+    except NotImplementedError:
+        return ""
+    test_count = sum(1 for ln in test_text.splitlines() if ln.strip().startswith("test_"))
+    return f" — {test_count} tests"
+
 
 __all__ = [
     "CodingProjectAdapter",
@@ -178,6 +204,10 @@ class CodingProjectAdapter:
     def build_blue_output_format(self) -> str | dict | None:
         return None
 
+    def supported_filters(self) -> list[str]:
+        # Return superset; per-artifact filter list is resolved from the language plugin
+        return ["api", "tests", "full"]
+
     def build_research_tools(self, role: str) -> list[ToolDefinition]:
         del role
         return []
@@ -186,13 +216,88 @@ class CodingProjectAdapter:
         artifact = next((a for a in state.artifacts if isinstance(a, CodingArtifact)), None)
         if artifact is None:
             return []
-        return [FETCH_FILE_DEFINITION]
+        plugin = _plugin_for(artifact.language)
+        filters = plugin.supported_filters()
+        return _build_module_research_tools(
+            filters,
+            list_desc="List coding artifact files with name and line count.",
+            fetch_desc="Get a file from the coding artifact by path.",
+            entity_desc="Get a top-level entity (function or class) from a file.",
+        )
 
     def execute_create_game_research_tool(
         self, tool_name: str, tool_input: dict, state: State
     ) -> str:
+        artifact = next((a for a in state.artifacts if isinstance(a, CodingArtifact)), None)
+
+        if tool_name == "list_modules":
+            if artifact is None or not artifact.files:
+                return "(no files)"
+            plugin = _plugin_for(artifact.language)
+            filter_val = tool_input.get("filter")
+            if filter_val is not None and filter_val not in plugin.supported_filters():
+                return f"Unknown filter '{filter_val}'. Available filters: {', '.join(plugin.supported_filters())}"
+            lines = []
+            for file in artifact.files:
+                line_count = len(file.content.splitlines())
+                entry = f"{file.path} ({line_count} lines)"
+                if filter_val == "api":
+                    entry += _coding_api_stats(file, plugin)
+                elif filter_val == "tests":
+                    entry += _coding_test_stats(file, plugin)
+                lines.append(entry)
+            return "\n".join(lines)
+
+        if tool_name == "fetch_module":
+            module_id = tool_input.get("module_id", "")
+            if not isinstance(module_id, str) or not module_id:
+                return "tool_error: fetch_module requires a non-empty 'module_id' string"
+            if artifact is None:
+                return "tool_error: no coding artifact found in state"
+            file = next((f for f in artifact.files if f.path == module_id), None)
+            if file is None:
+                available = sorted(f.path for f in artifact.files)
+                available_str = ", ".join(f"'{p}'" for p in available) if available else "(none)"
+                return f"File '{module_id}' not found. Available files: {available_str}"
+            plugin = _plugin_for(artifact.language)
+            filter_val = tool_input.get("filter")
+            if filter_val is not None and filter_val not in plugin.supported_filters():
+                return f"Unknown filter '{filter_val}'. Available filters: {', '.join(plugin.supported_filters())}"
+            if filter_val is None:
+                line_count = len(file.content.splitlines())
+                return f"{file.path} ({line_count} lines)"
+            if filter_val == "api":
+                try:
+                    return plugin.extract_api(file)
+                except NotImplementedError:
+                    return f"tool_error: extract_api not implemented for language '{artifact.language}'"
+            if filter_val == "tests":
+                try:
+                    return plugin.extract_tests(file)
+                except NotImplementedError:
+                    return f"tool_error: extract_tests not implemented for language '{artifact.language}'"
+            return file.content  # "full"
+
+        if tool_name == "fetch_entity":
+            module_id = tool_input.get("module_id", "")
+            entity_id = tool_input.get("entity_id", "")
+            if not isinstance(module_id, str) or not module_id:
+                return "tool_error: fetch_entity requires a non-empty 'module_id' string"
+            if not isinstance(entity_id, str) or not entity_id:
+                return "tool_error: fetch_entity requires a non-empty 'entity_id' string"
+            if artifact is None:
+                return "tool_error: no coding artifact found in state"
+            file = next((f for f in artifact.files if f.path == module_id), None)
+            if file is None:
+                return f"tool_error: file '{module_id}' not found in artifact"
+            plugin = _plugin_for(artifact.language)
+            filter_val = tool_input.get("filter")
+            try:
+                return plugin.extract_entity(file, entity_id, filter_val)
+            except NotImplementedError:
+                return f"tool_error: extract_entity not implemented for language '{artifact.language}'"
+
         if tool_name == "fetch_file":
-            artifact = next((a for a in state.artifacts if isinstance(a, CodingArtifact)), None)
             if artifact is None:
                 return "tool_error: no coding artifact found in state"
             path = tool_input.get("path", "")
@@ -200,6 +305,7 @@ class CodingProjectAdapter:
                 return "tool_error: fetch_file requires a non-empty 'path' string"
             from baps.tools.tools import fetch_file
             return fetch_file(path, artifact)
+
         return f"tool_error: unknown tool {tool_name!r}"
 
     def build_blue_tools(self) -> list[ToolDefinition]:

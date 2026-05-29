@@ -160,6 +160,9 @@ class ProjectTypeAdapter(Protocol):
     def build_blue_tools(self) -> list[ToolDefinition]:
         ...
 
+    def supported_filters(self) -> list[str]:
+        ...
+
     def build_research_tools(self, role: str) -> list[ToolDefinition]:
         ...
 

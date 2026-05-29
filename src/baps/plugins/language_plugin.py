@@ -45,6 +45,27 @@ class LanguagePlugin(Protocol):
         """
         raise NotImplementedError
 
+    def supported_filters(self) -> list[str]:
+        """Return filter values supported by this plugin's extract_* methods."""
+        raise NotImplementedError
+
+    def extract_api(self, file: CodeFile) -> str:
+        """Return the API surface of *file*: signatures and docstring first lines, no bodies."""
+        raise NotImplementedError
+
+    def extract_tests(self, file: CodeFile) -> str:
+        """Return test function names from *file* grouped under 'Tests:'."""
+        raise NotImplementedError
+
+    def extract_entity(self, file: CodeFile, entity_id: str, filter: str | None) -> str:
+        """Return a top-level entity (function or class) from *file* shaped by *filter*.
+
+        filter=None or 'full': complete source body.
+        filter='api': signature and docstring first line only.
+        Unknown filter: return helpful error string listing supported filters.
+        """
+        raise NotImplementedError
+
 
 def get_language_plugin(name: str) -> LanguagePlugin:
     """Return the plugin for *name*, raising ValueError if not registered."""
