@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
+from pydantic import BaseModel
+
 from baps.core.run_config import RunConfig
 from baps.core.clients import (
     SpecRole,
@@ -18,6 +20,23 @@ from baps.adapters.project_adapter import ProjectTypeAdapter, VerificationResult
 from baps.northstar.northstar_projection import StateView
 from baps.state.state import DeltaState, GameSpec, RedFinding, State
 from baps.tools.tools import ToolExecutor
+
+
+class PriorExportFeedback(BaseModel):
+    prior_export_verification: dict
+
+
+class BlueValidationFeedback(BaseModel):
+    attempt_rejection: dict
+
+
+class AttemptRejectionFeedback(BaseModel):
+    red_finding: dict
+    referee_decision: dict
+    candidate_verification: dict | None = None
+
+
+PlayGameFeedback = PriorExportFeedback | BlueValidationFeedback | AttemptRejectionFeedback
 
 
 # Keep schemas colocated with role wiring to avoid duplicating literals.
@@ -84,17 +103,17 @@ class PlayGameContext:
 
 def initial_play_game_feedback(
     verification_result: VerificationResult | None,
-) -> dict[str, Any] | None:
+) -> PriorExportFeedback | None:
     if verification_result is None:
         return None
-    return {
-        "prior_export_verification": {
+    return PriorExportFeedback(
+        prior_export_verification={
             "exit_code": verification_result.exit_code,
             "passed": verification_result.passed,
             "stdout": verification_result.stdout,
             "stderr": verification_result.stderr,
         }
-    }
+    )
 
 
 def resolve_play_game_roles(

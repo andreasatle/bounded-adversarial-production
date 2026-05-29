@@ -28,6 +28,7 @@ from baps.game.attempt import (
 from baps.game.play import record_play_game_telemetry
 from baps.game.roles import (
     PlayGameContext,
+    PlayGameFeedback,
     _RED_FINDING_SCHEMA,
     _VerifyCandidateFn,
     build_play_game_fallbacks,
@@ -452,7 +453,7 @@ def play_game(
         verify_candidate_fn=_verify_candidate_with_adapter,
     )
     runtime = PlayGameRuntime()
-    previous_feedback = initial_play_game_feedback(verification_result)
+    previous_feedback: PlayGameFeedback | None = initial_play_game_feedback(verification_result)
     attempt_records: list[PlayAttemptRecord] = []
     last_candidate_result: VerificationResult | None = None
 

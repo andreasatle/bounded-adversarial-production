@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
+
+from pydantic import BaseModel
 
 from baps.core.clients import SpecRole
 from baps.core.parsers import _parse_red_finding_json, _parse_referee_decision_json
@@ -23,12 +24,16 @@ from baps.state.state import (
     apply_referee_decision_to_runtime,
 )
 
-from baps.game.roles import PlayGameContext
+from baps.game.roles import (
+    AttemptRejectionFeedback,
+    BlueValidationFeedback,
+    PlayGameContext,
+    PlayGameFeedback,
+)
 from baps.game.telemetry import sanitize_feedback_dict, summarize_verification_result
 
 
-@dataclass
-class PlayAttemptRecord:
+class PlayAttemptRecord(BaseModel):
     attempt_number: int
     blue_delta: dict[str, Any] | None = None
     red_finding: dict[str, Any] | None = None
@@ -37,18 +42,7 @@ class PlayAttemptRecord:
     parse_recovery: ParseRecoveryRecord | None = None
 
     def to_telemetry_dict(self) -> dict[str, Any]:
-        return {
-            "attempt_number": self.attempt_number,
-            "blue_delta": self.blue_delta,
-            "red_finding": self.red_finding,
-            "referee_decision": self.referee_decision,
-            "candidate_verification": self.candidate_verification,
-            "parse_recovery": (
-                self.parse_recovery.model_dump(mode="json")
-                if self.parse_recovery is not None
-                else None
-            ),
-        }
+        return self.model_dump(mode="json")
 
 
 def _aggregate_parse_recovery(records: list[ParseRecoveryRecord]) -> ParseRecoveryRecord:
@@ -67,14 +61,14 @@ def run_play_game_attempt(
     *,
     ctx: PlayGameContext,
     attempt: int,
-    previous_feedback: dict[str, Any] | None,
+    previous_feedback: PlayGameFeedback | None,
     verification_result: VerificationResult | None,
 ) -> tuple[
     PlayAttemptRecord,
     DeltaState | None,
     RedFinding | None,
     RefereeDecision | None,
-    dict[str, Any] | None,
+    PlayGameFeedback | None,
 ]:
     attempt_rec = PlayAttemptRecord(attempt_number=attempt)
 
@@ -92,7 +86,10 @@ def run_play_game_attempt(
         "game_spec": ctx.game_spec.model_dump(mode="json"),
         "state_view": ctx.state_view.model_dump(mode="json"),
         "attempt_number": attempt,
-        "previous_feedback": previous_feedback,
+        "previous_feedback": (
+            previous_feedback.model_dump(mode="json", exclude_none=True)
+            if previous_feedback is not None else None
+        ),
     })
     blue_prompt = ctx.resolved_adapter.render_blue_prompt(
         ctx.state_view, ctx.game_spec, attempt, previous_feedback
@@ -113,13 +110,13 @@ def run_play_game_attempt(
             ctx.debug_event_fn("blue.failed_tool_call", {"tool_call": str(blue_tool_call)})
             reason = f"blue output failed DeltaState validation: {exc}"
             ctx.debug_event_fn("play_game.attempt_rejected", {"attempt": attempt, "reason": reason})
-            updated_feedback = {
-                "attempt_rejection": {
+            updated_feedback = BlueValidationFeedback(
+                attempt_rejection={
                     "stage": SpecRole.BLUE,
                     "reason": reason,
                     "validation_error": str(exc),
                 }
-            }
+            )
             return attempt_rec, None, None, None, updated_feedback
     else:
         blue_generated = ctx.blue_role.generate(blue_prompt)
@@ -128,13 +125,13 @@ def run_play_game_attempt(
         except ValueError as exc:
             reason = f"blue output failed DeltaState validation: {exc}"
             ctx.debug_event_fn("play_game.attempt_rejected", {"attempt": attempt, "reason": reason})
-            updated_feedback = {
-                "attempt_rejection": {
+            updated_feedback = BlueValidationFeedback(
+                attempt_rejection={
                     "stage": SpecRole.BLUE,
                     "reason": reason,
                     "validation_error": str(exc),
                 }
-            }
+            )
             return attempt_rec, None, None, None, updated_feedback
     ctx.debug_event_fn("blue.output", {"delta_state": candidate_delta.model_dump(mode="json")})
     attempt_rec.blue_delta = sanitize_feedback_dict(candidate_delta.model_dump(mode="json"))
@@ -288,7 +285,7 @@ def apply_play_game_attempt_decision(
     candidate_delta: DeltaState,
     red_finding: RedFinding,
     referee_decision: RefereeDecision,
-) -> tuple[PlayGameRuntime, dict[str, Any] | None, VerificationResult | None, bool]:
+) -> tuple[PlayGameRuntime, AttemptRejectionFeedback | None, VerificationResult | None, bool]:
     runtime = apply_referee_decision_to_runtime(
         runtime=runtime,
         candidate_delta=candidate_delta,
@@ -305,20 +302,20 @@ def apply_play_game_attempt_decision(
             and not candidate_result.passed
             and attempt < ctx.max_attempts
         ):
-            previous_feedback = {
-                "red_finding": sanitize_feedback_dict(red_finding.model_dump(mode="json")),
-                "referee_decision": sanitize_feedback_dict(referee_decision.model_dump(mode="json")),
-                "candidate_verification": {
+            previous_feedback = AttemptRejectionFeedback(
+                red_finding=sanitize_feedback_dict(red_finding.model_dump(mode="json")),
+                referee_decision=sanitize_feedback_dict(referee_decision.model_dump(mode="json")),
+                candidate_verification={
                     "exit_code": candidate_result.exit_code,
                     "passed": False,
                     "stdout": candidate_result.stdout,
                     "stderr": candidate_result.stderr,
                 },
-            }
+            )
             return runtime, previous_feedback, candidate_result, False
         return runtime, None, candidate_result, True
-    previous_feedback = {
-        "red_finding": sanitize_feedback_dict(red_finding.model_dump(mode="json")),
-        "referee_decision": sanitize_feedback_dict(referee_decision.model_dump(mode="json")),
-    }
+    previous_feedback = AttemptRejectionFeedback(
+        red_finding=sanitize_feedback_dict(red_finding.model_dump(mode="json")),
+        referee_decision=sanitize_feedback_dict(referee_decision.model_dump(mode="json")),
+    )
     return runtime, previous_feedback, None, False

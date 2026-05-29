@@ -4,6 +4,7 @@ import pytest
 
 from baps.adapters.project_adapter import VerificationResult
 from baps.core.run_config import RunConfig
+from baps.game.roles import AttemptRejectionFeedback, PriorExportFeedback
 from baps.state.state import GameSpec
 from baps.adapters.coding_adapter import CodingProjectAdapter
 from baps.adapters.document_adapter import DocumentProjectAdapter
@@ -171,14 +172,14 @@ def test_coding_blue_prompt_includes_prior_export_failures() -> None:
         allowed_delta_type="DeltaCodingState",
         success_condition="tests pass",
     )
-    previous_feedback = {
-        "prior_export_verification": {
+    previous_feedback = PriorExportFeedback(
+        prior_export_verification={
             "exit_code": 1,
             "passed": False,
             "stdout": "FAILED tests/test_foo.py::test_bar - AssertionError: wrong\n",
             "stderr": "",
         }
-    }
+    )
     prompt = render_coding_blue_prompt(
         state_view=state_view,
         game_spec=game_spec,
@@ -237,14 +238,16 @@ def test_coding_blue_prompt_includes_candidate_verification_failures() -> None:
         allowed_delta_type="DeltaCodingState",
         success_condition="tests pass",
     )
-    previous_feedback = {
-        "candidate_verification": {
+    previous_feedback = AttemptRejectionFeedback(
+        red_finding={},
+        referee_decision={},
+        candidate_verification={
             "exit_code": 1,
             "passed": False,
             "stdout": "FAILED tests/test_calc.py::test_add - AssertionError: assert 99 == 3\n",
             "stderr": "",
-        }
-    }
+        },
+    )
     prompt = render_coding_blue_prompt(
         state_view=state_view,
         game_spec=game_spec,

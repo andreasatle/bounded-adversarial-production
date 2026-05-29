@@ -10,7 +10,7 @@ from baps.adapters.project_adapter import (
 )
 from baps.core.clients import SpecRole, _resolve_backend_model
 from baps.core.debug import _debug_print_create_state
-from baps.core.orchestration import _run_project_iterations
+from baps.core.orchestration import IterationRunResult, _run_project_iterations
 from baps.core.run_config import RunConfig
 from baps.core.workspace import (
     save_workspace_settings,
@@ -104,7 +104,7 @@ def build_runtime(
     )
 
 
-def run_project(runtime: RuntimeContext) -> dict[str, object]:
+def run_project(runtime: RuntimeContext) -> IterationRunResult:
     return _run_project_iterations(
         config=runtime.config,
         adapter=runtime.adapter,

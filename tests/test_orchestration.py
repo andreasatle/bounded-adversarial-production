@@ -892,7 +892,7 @@ def test_solve_gap_decompose_then_play(monkeypatch, tmp_path: Path) -> None:
     assert len(played) == 2
     assert "Sub-gap A" in played[0]
     assert "Sub-gap B" in played[1]
-    assert result["iterations_completed"] == 2
+    assert result.iterations_completed == 2
 
 
 def test_solve_gap_context_chain_injected_into_game_spec(monkeypatch, tmp_path: Path) -> None:
@@ -974,5 +974,5 @@ def test_solve_gap_max_depth_stops_recursion(monkeypatch, tmp_path: Path) -> Non
     adapter = DocumentProjectAdapter()
     result = _run_project_iterations(config, adapter, service, state)
 
-    assert result["stop_reason"] == "max_depth_reached"
-    assert result["iterations_completed"] == 0
+    assert result.stop_reason.value == "max_depth_reached"
+    assert result.iterations_completed == 0

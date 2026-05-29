@@ -9,6 +9,9 @@ from baps.adapters.project_adapter import (
     _config_artifact_id,
     _verification_result_to_dict,
 )
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from baps.game.roles import PlayGameFeedback
 from baps.adapters.coding.common import (
     _config_language,
     _plugin_for,
@@ -126,7 +129,7 @@ class CodingProjectAdapter:
         state_view: StateView,
         game_spec: GameSpec,
         attempt_number: int,
-        previous_feedback: dict[str, object] | None,
+        previous_feedback: PlayGameFeedback | None,
     ) -> str:
         language = require_state_view_metadata(state_view, "language")
         plugin = _plugin_for(language)

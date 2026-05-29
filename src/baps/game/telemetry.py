@@ -10,6 +10,10 @@ from baps.models.model_output import BlackboardEvent
 from baps.models.models import ModelClient
 from baps.state.state import DeltaState, GameSpec
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from baps.game.attempt import PlayAttemptRecord
+
 logger = logging.getLogger(__name__)
 
 _BLACKBOARD_DIR = "blackboard"
@@ -73,7 +77,7 @@ def append_game_to_blackboard(
     game_id: str,
     depth: int,
     game_spec: GameSpec,
-    attempt_records: list[dict],
+    attempt_records: list[PlayAttemptRecord],
     final_disposition: str,
     verification_result: VerificationResult | None,
     current_best_delta: DeltaState | None,
@@ -88,7 +92,7 @@ def append_game_to_blackboard(
         "depth": depth,
         "context_chain": list(game_spec.context_chain),
         "game_spec": sanitize_game_spec_dict(game_spec),
-        "attempts": attempt_records,
+        "attempts": [r.to_telemetry_dict() for r in attempt_records],
         "final_disposition": final_disposition,
         "verification_result": summarize_verification_result(verification_result),
         "current_best_delta": (

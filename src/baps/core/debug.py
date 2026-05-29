@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import argparse
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from baps.core.run_config import RunConfig
+
+if TYPE_CHECKING:
+    from baps.game.roles import PlayGameFeedback
 from baps.northstar.northstar_projection import StateView
 from baps.adapters.project_adapter import (
     VerificationResult,
@@ -177,7 +180,7 @@ def _debug_print_blue_input(
     state_view: StateView,
     game_spec: GameSpec,
     attempt_number: int,
-    previous_feedback: dict[str, Any] | None,
+    previous_feedback: PlayGameFeedback | None,
 ) -> None:
     _debug_log("blue.input", {
         "game_spec": game_spec.model_dump(mode="json"),

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from baps.models.model_output import parse_model_output
 from baps.models.models import ToolCall, ToolDefinition
@@ -15,6 +15,9 @@ from baps.adapters.project_adapter import (
     sanitize_model_string,
     sanitize_model_title,
 )
+
+if TYPE_CHECKING:
+    from baps.game.roles import PlayGameFeedback
 from baps.state.state import (
     DeltaDeleteDocumentState,
     DeltaDocumentState,
@@ -148,7 +151,7 @@ def render_document_blue_prompt(
     state_view: StateView,
     game_spec: GameSpec,
     attempt_number: int,
-    previous_feedback: dict[str, object] | None,
+    previous_feedback: PlayGameFeedback | None,
 ) -> str:
     document_delta_instructions = (
         "Document delta rules:\n"

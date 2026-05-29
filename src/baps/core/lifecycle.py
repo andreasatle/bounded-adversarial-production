@@ -6,9 +6,8 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from pydantic import BaseModel
-
 from baps.core.run_config import RunConfig, resolve_reset_targets, resolve_run_config
+from baps.core.orchestration import IterationRunResult
 from baps.core.runtime import (
     active_model_info,
     build_runtime,
@@ -60,27 +59,12 @@ class StartRunSummary:
         self.stop_reason = result.stop_reason
 
 
-class IterationRunResult(BaseModel):
-    update_applied: bool
-    state_changed: bool
-    output_exported: bool
-    output_changed: bool
-    northstar_proposal_written: bool
-    verification_result: VerificationResult | None
-    iterations_completed: int
-    stop_reason: StopReason
-
-
 def resolve_start_config(args: argparse.Namespace) -> RunConfig:
     try:
         return resolve_run_config(args)
     except ValueError as exc:
         logger.error("%s", exc)
         raise SystemExit(2) from exc
-
-
-def _to_iteration_run_result(raw: dict[str, object]) -> IterationRunResult:
-    return IterationRunResult.model_validate(raw)
 
 
 def run_start_lifecycle(runtime, command: str) -> StartRunSummary:
@@ -93,8 +77,7 @@ def run_start_lifecycle(runtime, command: str) -> StartRunSummary:
         max_iterations=runtime.config.max_iterations,
     )
     try:
-        raw_result = run_project(runtime)
-        iteration_result = _to_iteration_run_result(raw_result)
+        iteration_result = run_project(runtime)
         summary.record_iteration_result(iteration_result)
     except (ValueError, RuntimeError) as exc:
         logger.error("%s", exc)

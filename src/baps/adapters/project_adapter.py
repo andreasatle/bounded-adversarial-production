@@ -6,7 +6,10 @@ import types
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from baps.game.roles import PlayGameFeedback
 
 from baps.core.run_config import RunConfig
 
@@ -118,7 +121,7 @@ class ProjectTypeAdapter(Protocol):
         state_view: StateView,
         game_spec: GameSpec,
         attempt_number: int,
-        previous_feedback: dict[str, object] | None,
+        previous_feedback: PlayGameFeedback | None,
     ) -> str:
         ...
 
@@ -201,12 +204,16 @@ def render_blue_prompt_core(
     state_view: StateView,
     game_spec: GameSpec,
     attempt_number: int,
-    previous_feedback: dict[str, object] | None,
+    previous_feedback: PlayGameFeedback | None,
     project_delta_instructions: str = "",
 ) -> str:
     import json
 
-    previous_feedback_json = json.dumps(previous_feedback, sort_keys=True)
+    feedback_dict = (
+        previous_feedback.model_dump(mode="json", exclude_none=True)
+        if previous_feedback is not None else None
+    )
+    previous_feedback_json = json.dumps(feedback_dict, sort_keys=True)
     context_block = ""
     if game_spec.context_chain:
         lines = ["Planning context (coarsest → finest scope):"]

@@ -4,6 +4,8 @@ import logging
 import uuid
 from pathlib import Path
 
+from pydantic import BaseModel
+
 from baps.core.clients import SpecRole, _build_client_for_role
 from baps.core.run_config import RunConfig
 from baps.core.debug import _debug_print_northstar_update_proposal, _debug_print_verification_result
@@ -27,6 +29,17 @@ from baps.adapters.project_adapter import (
 from baps.state.state import DecomposeSpec, State, StopReason
 from baps.state.state_service import StateService
 from baps.tools.tools import build_default_tool_executor
+
+
+class IterationRunResult(BaseModel):
+    update_applied: bool
+    state_changed: bool
+    output_exported: bool
+    output_changed: bool
+    northstar_proposal_written: bool
+    verification_result: VerificationResult | None
+    iterations_completed: int
+    stop_reason: StopReason
 
 logger = logging.getLogger(__name__)
 
@@ -210,7 +223,7 @@ def _run_project_iterations(
     adapter: ProjectTypeAdapter,
     state_service: StateService,
     initial_state: State,
-) -> dict[str, object]:
+) -> IterationRunResult:
     output_path = config.output_path
     max_iterations = config.max_iterations
     artifact_id = _config_artifact_id(config)
@@ -264,13 +277,13 @@ def _run_project_iterations(
     if ctx.stop_reason is None:
         ctx.stop_reason = StopReason.ITERATION_LIMIT_REACHED
 
-    return {
-        "update_applied": ctx.update_applied,
-        "state_changed": ctx.state_changed,
-        "output_exported": ctx.output_exported,
-        "output_changed": ctx.output_changed,
-        "northstar_proposal_written": ctx.northstar_proposal_written,
-        "verification_result": ctx.verification_result,
-        "iterations_completed": ctx.iterations_completed,
-        "stop_reason": ctx.stop_reason,
-    }
+    return IterationRunResult(
+        update_applied=ctx.update_applied,
+        state_changed=ctx.state_changed,
+        output_exported=ctx.output_exported,
+        output_changed=ctx.output_changed,
+        northstar_proposal_written=ctx.northstar_proposal_written,
+        verification_result=ctx.verification_result,
+        iterations_completed=ctx.iterations_completed,
+        stop_reason=ctx.stop_reason,
+    )

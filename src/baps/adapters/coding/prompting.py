@@ -4,19 +4,20 @@ from baps.adapters.project_adapter import VerificationResult, render_blue_prompt
 from baps.northstar.northstar_projection import StateView
 from baps.plugins.language_plugin import LanguagePlugin
 from baps.state.state import GameSpec
+from baps.game.roles import AttemptRejectionFeedback, PlayGameFeedback, PriorExportFeedback
 
 from .common import _BLUE_CONTENT_FORBIDDEN_MARKERS
 
 
 def _render_verification_feedback_section(
-    previous_feedback: dict[str, object] | None,
+    previous_feedback: PlayGameFeedback | None,
     plugin: LanguagePlugin,
 ) -> str:
     if previous_feedback is None:
         return ""
     section = ""
-    if "prior_export_verification" in previous_feedback:
-        pv = previous_feedback["prior_export_verification"]
+    if isinstance(previous_feedback, PriorExportFeedback):
+        pv = previous_feedback.prior_export_verification
         exit_code = pv.get("exit_code", "?")
         stdout = str(pv.get("stdout", ""))
         failures = plugin.parse_test_failures(stdout)
@@ -32,8 +33,8 @@ def _render_verification_feedback_section(
                 f"\nPrevious export verification failed (exit_code={exit_code}).\n"
                 "- Inspect prior_export_verification in previous_feedback_json and repair the cause.\n"
             )
-    if "candidate_verification" in previous_feedback:
-        cv = previous_feedback["candidate_verification"]
+    elif isinstance(previous_feedback, AttemptRejectionFeedback) and previous_feedback.candidate_verification is not None:
+        cv = previous_feedback.candidate_verification
         exit_code = cv.get("exit_code", "?")
         stdout = str(cv.get("stdout", ""))
         failures = plugin.parse_test_failures(stdout)
@@ -56,7 +57,7 @@ def render_coding_blue_prompt(
     state_view: StateView,
     game_spec: GameSpec,
     attempt_number: int,
-    previous_feedback: dict[str, object] | None,
+    previous_feedback: PlayGameFeedback | None,
     plugin: LanguagePlugin,
 ) -> str:
     verification_section = _render_verification_feedback_section(previous_feedback, plugin)
