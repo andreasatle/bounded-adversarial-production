@@ -126,6 +126,8 @@ class CodingProjectAdapter:
             target_artifact_id=configured_artifact_id,
             allowed_delta_type=game_spec.allowed_delta_type,
             success_condition=game_spec.success_condition,
+            max_words=game_spec.max_words,
+            target_entity=game_spec.target_entity,
         )
 
     def build_state_view(

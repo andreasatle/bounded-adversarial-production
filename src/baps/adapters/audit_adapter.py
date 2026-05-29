@@ -431,6 +431,10 @@ class AuditProjectAdapter:
         del state_view, game_spec, delta_state, verification_result
         return _REFEREE_SUPPLEMENT
 
+    def build_research_tools(self, role: str) -> list[ToolDefinition]:
+        del role
+        return []
+
     def build_create_game_research_tools(self, state: State) -> list:
         northstar_markdown = _get_northstar_from_state(state)
         source_path = _extract_source_path(northstar_markdown)

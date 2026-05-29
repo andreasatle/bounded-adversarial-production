@@ -357,6 +357,10 @@ class DocumentProjectAdapter:
         del state_view, game_spec, delta_state, verification_result
         return ""
 
+    def build_research_tools(self, role: str) -> list[ToolDefinition]:
+        del role
+        return []
+
     def build_create_game_research_tools(self, state: State) -> list:
         artifact = next(
             (a for a in state.artifacts if isinstance(a, DocumentArtifact) and a.sections),

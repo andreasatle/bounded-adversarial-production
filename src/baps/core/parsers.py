@@ -40,7 +40,7 @@ _CREATE_GAME_ALL_KEYS = frozenset({
     "northstar_update_needed", "rationale", "proposed_northstar",
     "decompose", "sub_gaps",
     "objective", "target_artifact_id", "allowed_delta_type", "success_condition",
-    "max_words", "context_chain",
+    "max_words", "context_chain", "target_entity",
 })
 
 _DECOMPOSE_EMPTY_SUBGAPS_CORRECTION_PROMPT = (
