@@ -535,9 +535,9 @@ def test_create_game_uses_adapter_build_create_game_state_view(monkeypatch) -> N
             super().__init__()
             self.called = False
 
-        def build_create_game_state_view(self, state, config):
+        def build_create_game_state_view(self, state, config, summarization_context=None):
             self.called = True
-            return super().build_create_game_state_view(state, config)
+            return super().build_create_game_state_view(state, config, summarization_context=summarization_context)
 
     config = RunConfig(
         workspace=Path(".baps-workspace"),

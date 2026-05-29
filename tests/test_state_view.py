@@ -1,12 +1,19 @@
 from pathlib import Path
 
 from baps.core.run_config import RunConfig
+from baps.models.models import FakeModelClient, Role
 from baps.state.state import (
     GameSpec,
 )
 from baps.adapters.document_adapter import DocumentProjectAdapter
 from baps.adapters.coding_adapter import CodingProjectAdapter
+from baps.summarizer.summarizer import SummarizationContext
 import baps.state.state as state_module
+
+
+def _make_summarization_context(response: str) -> SummarizationContext:
+    role = Role(name="summarize", client=FakeModelClient([response]))
+    return SummarizationContext(summarizer=role, game_spec=None)
 
 
 def test_state_view_is_derived_from_state_and_gamespec_with_existing_sections() -> None:
@@ -208,3 +215,106 @@ def test_coding_create_game_state_view_truncates_long_files() -> None:
     assert "more lines" in view.content
     assert "line_0 = 0" in view.content
     assert "line_99 = 99" not in view.content
+
+
+def test_coding_create_game_state_view_line_count_in_heading_without_summarizer() -> None:
+    state = state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(
+            id="main-codebase",
+            files=(state_module.CodeFile(path="src/hello.py", content="def hello():\n    return 'hi'\n"),),
+        ),),
+    )
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "coding",
+        "artifact_id": "main-codebase",
+        "goal": "Build something",
+        "northstar_markdown": "# Goal",
+        "output_path": Path(".baps-workspace/output"),
+        "max_iterations": 1,
+        "spec_path": None,
+    }
+    view = CodingProjectAdapter().build_create_game_state_view(state, config, summarization_context=None)
+    assert "src/hello.py (2 lines)" in view.content
+    assert "def hello():" in view.content
+
+
+def test_coding_create_game_state_view_summarizer_replaces_truncation() -> None:
+    long_content = "\n".join(f"line_{i} = {i}" for i in range(100))
+    state = state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(
+            id="main-codebase",
+            files=(state_module.CodeFile(path="src/big.py", content=long_content),),
+        ),),
+    )
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "coding",
+        "artifact_id": "main-codebase",
+        "goal": "Build something",
+        "northstar_markdown": "# Goal",
+        "output_path": Path(".baps-workspace/output"),
+        "max_iterations": 1,
+        "spec_path": None,
+    }
+    summarization_context = _make_summarization_context("API summary: assigns integers to variables")
+    view = CodingProjectAdapter().build_create_game_state_view(state, config, summarization_context=summarization_context)
+    assert "API summary: assigns integers to variables" in view.content
+    assert "more lines" not in view.content
+    assert "line_0 = 0" not in view.content
+    assert "src/big.py (100 lines)" in view.content
+
+
+def test_coding_create_game_state_view_summarizer_cache_hit_on_second_call() -> None:
+    content = "x = 1\ny = 2\n"
+    state = state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(
+            id="main-codebase",
+            files=(state_module.CodeFile(path="src/vars.py", content=content),),
+        ),),
+    )
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "coding",
+        "artifact_id": "main-codebase",
+        "goal": "Build something",
+        "northstar_markdown": "# Goal",
+        "output_path": Path(".baps-workspace/output"),
+        "max_iterations": 1,
+        "spec_path": None,
+    }
+    # FakeModelClient with one response — a second call would exhaust and raise
+    summarization_context = _make_summarization_context("summary: two int assignments")
+    adapter = CodingProjectAdapter()
+    view1 = adapter.build_create_game_state_view(state, config, summarization_context=summarization_context)
+    view2 = adapter.build_create_game_state_view(state, config, summarization_context=summarization_context)
+    assert "summary: two int assignments" in view1.content
+    assert "summary: two int assignments" in view2.content
+
+
+def test_coding_create_game_state_view_line_count_present_with_summarizer() -> None:
+    content = "a = 1\nb = 2\nc = 3\n"
+    state = state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(
+            id="main-codebase",
+            files=(state_module.CodeFile(path="src/abc.py", content=content),),
+        ),),
+    )
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "coding",
+        "artifact_id": "main-codebase",
+        "goal": "Build something",
+        "northstar_markdown": "# Goal",
+        "output_path": Path(".baps-workspace/output"),
+        "max_iterations": 1,
+        "spec_path": None,
+    }
+    summarization_context = _make_summarization_context("three variable assignments")
+    view = CodingProjectAdapter().build_create_game_state_view(state, config, summarization_context=summarization_context)
+    assert "src/abc.py (3 lines)" in view.content
+    assert "three variable assignments" in view.content

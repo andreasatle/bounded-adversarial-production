@@ -18,6 +18,7 @@ from baps.adapters.project_adapter import (
 
 if TYPE_CHECKING:
     from baps.game.roles import PlayGameFeedback
+    from baps.summarizer.summarizer import SummarizationContext
 from baps.state.state import (
     DeltaState,
     DocumentArtifact,
@@ -356,7 +357,13 @@ class AuditProjectAdapter:
             ),
         )
 
-    def build_create_game_state_view(self, state: State, config: dict[str, object]) -> StateView:
+    def build_create_game_state_view(
+        self,
+        state: State,
+        config: dict[str, object],
+        summarization_context: SummarizationContext | None = None,
+    ) -> StateView:
+        del summarization_context
         return build_audit_create_game_state_view(state, config)
 
     def render_create_game_prompt_supplement(

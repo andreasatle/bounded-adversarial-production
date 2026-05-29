@@ -212,9 +212,9 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
             self.calls.append("create_initial_state")
             return self._delegate.create_initial_state(config)
 
-        def build_create_game_state_view(self, state, config):
+        def build_create_game_state_view(self, state, config, summarization_context=None):
             self.calls.append("build_create_game_state_view")
-            return self._delegate.build_create_game_state_view(state, config)
+            return self._delegate.build_create_game_state_view(state, config, summarization_context=summarization_context)
 
         def render_create_game_prompt_supplement(
             self, state, config, state_view, verification_result

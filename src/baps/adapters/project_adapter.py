@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from baps.game.roles import PlayGameFeedback
+    from baps.summarizer.summarizer import SummarizationContext
 
 from baps.core.run_config import RunConfig
 
@@ -96,7 +97,12 @@ class ProjectTypeAdapter(Protocol):
     def create_initial_state(self, config: dict[str, object]) -> State:
         ...
 
-    def build_create_game_state_view(self, state: State, config: dict[str, object]) -> StateView:
+    def build_create_game_state_view(
+        self,
+        state: State,
+        config: dict[str, object],
+        summarization_context: SummarizationContext | None = None,
+    ) -> StateView:
         ...
 
     def render_create_game_prompt_supplement(

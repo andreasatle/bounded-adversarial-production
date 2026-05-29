@@ -125,6 +125,7 @@ def run_project(runtime: RuntimeContext) -> IterationRunResult:
         adapter=runtime.adapter,
         state_service=runtime.state_service,
         initial_state=runtime.initial_state,
+        summarization_context=runtime.summarization_context,
     )
 
 

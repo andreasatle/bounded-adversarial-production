@@ -65,6 +65,7 @@ from baps.core.prompts import (
     _render_referee_prompt,
 )
 from baps.northstar.northstar_projection import StateView
+from baps.summarizer.summarizer import SummarizationContext
 from baps.state.state import (
     DecomposeSpec,
     DeltaState,
@@ -192,6 +193,7 @@ def create_game(
     context_chain: tuple[str, ...] = (),
     depth: int = 0,
     create_game_red_client: ModelClient | None = None,
+    summarization_context: SummarizationContext | None = None,
 ) -> GameSpec | DecomposeSpec:
     debug_event("create_game.input", {"state": state.model_dump(mode="json")})
     resolved_adapter = (
@@ -199,7 +201,9 @@ def create_game(
         if adapter is not None
         else resolve_project_type_adapter(config.project_type)
     )
-    state_view = resolved_adapter.build_create_game_state_view(state, config.to_adapter_config())
+    state_view = resolved_adapter.build_create_game_state_view(
+        state, config.to_adapter_config(), summarization_context=summarization_context
+    )
     use_planner = model_client is None
     if use_planner:
         role_name_for_client = SpecRole.DECOMPOSE if depth > 0 else SpecRole.CREATE_GAME

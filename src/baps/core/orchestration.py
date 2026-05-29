@@ -28,6 +28,7 @@ from baps.adapters.project_adapter import (
 )
 from baps.state.state import DecomposeSpec, State, StopReason
 from baps.state.state_service import StateService
+from baps.summarizer.summarizer import SummarizationContext
 from baps.tools.tools import build_default_tool_executor
 
 
@@ -75,6 +76,7 @@ def _solve_gap(
     artifact_id: str,
     max_depth: int,
     depth: int,
+    summarization_context: SummarizationContext | None = None,
 ) -> None:
     """Recursively plan and execute within a gap scope. Mutates ctx."""
     if ctx.stop_reason is not None:
@@ -89,6 +91,7 @@ def _solve_gap(
             context_chain=context_chain,
             depth=depth,
             create_game_red_client=_build_client_for_role(SpecRole.CREATE_GAME_RED, config),
+            summarization_context=summarization_context,
         )
     except NoNewGameError:
         if depth == 0:
@@ -156,6 +159,7 @@ def _solve_gap(
                 artifact_id,
                 max_depth,
                 depth + 1,
+                summarization_context=summarization_context,
             )
             if ctx.stop_reason == StopReason.PLAY_GAME_NO_DELTA:
                 ctx.stop_reason = None  # leaf found nothing; continue sibling sub-gaps
@@ -223,6 +227,7 @@ def _run_project_iterations(
     adapter: ProjectTypeAdapter,
     state_service: StateService,
     initial_state: State,
+    summarization_context: SummarizationContext | None = None,
 ) -> IterationRunResult:
     output_path = config.output_path
     max_iterations = config.max_iterations
@@ -246,6 +251,7 @@ def _run_project_iterations(
             artifact_id=artifact_id,
             max_depth=max_depth,
             depth=0,
+            summarization_context=summarization_context,
         )
         # A gap was identified but the system could not close it.  Escalate to
         # a NorthStar proposal so the human is alerted through the normal

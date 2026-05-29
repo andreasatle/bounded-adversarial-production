@@ -12,6 +12,7 @@ from baps.adapters.project_adapter import (
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from baps.game.roles import PlayGameFeedback
+    from baps.summarizer.summarizer import SummarizationContext
 from baps.adapters.coding.common import (
     _config_language,
     _plugin_for,
@@ -65,8 +66,13 @@ class CodingProjectAdapter:
             artifacts=(CodingArtifact(id=_config_artifact_id(config), language=language, files=()),),
         )
 
-    def build_create_game_state_view(self, state: State, config: dict[str, object]) -> StateView:
-        return build_coding_create_game_state_view(state, config)
+    def build_create_game_state_view(
+        self,
+        state: State,
+        config: dict[str, object],
+        summarization_context: SummarizationContext | None = None,
+    ) -> StateView:
+        return build_coding_create_game_state_view(state, config, summarization_context)
 
     def render_create_game_prompt_supplement(
         self,
