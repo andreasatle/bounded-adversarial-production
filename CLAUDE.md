@@ -181,6 +181,35 @@ Two append-only files under `<workspace>/blackboard/`. Never feed back into `Sta
 
 ---
 
+## Testing
+
+Run all tests: `uv run pytest`
+
+- Use `FakeModelClient` for deterministic sequences — never couple tests to live model output.
+- Assert exact prompts, validation failures, stop reasons, and summary fields.
+- Test adapter boundaries explicitly: core orchestration must not receive project-specific output.
+
+Test file ownership:
+
+| File | Domain |
+|---|---|
+| `test_state_schema.py` | State schemas |
+| `test_state_mutation.py` | State mutation |
+| `test_state_delta.py` | Delta operations |
+| `test_state_service.py` | StateService boundary |
+| `test_orchestration.py` | Orchestration contracts |
+| `test_create_game.py` | CreateGame phase |
+| `test_play_game.py` | PlayGame phase |
+| `test_play_game_attempts.py` | PlayGame attempt logic |
+| `test_integration_run.py` | Full run integration |
+| `test_integration_runtime.py` | Runtime assembly |
+| `test_integration_play_game.py` | PlayGame integration |
+| `test_integration_export.py` | Export integration |
+| `test_integration_candidate_verification.py` | Candidate verification |
+| `test_integration_adapters.py` | Adapter integration |
+
+---
+
 ## Coding rules — enforce in every session
 
 - **No string literals as identifiers.** Use defined enums: `SpecRole`, `Backend`, `StopReason`, `BlackboardEvent`, `ProjectionType`. Add to the enum first, then use the member.
