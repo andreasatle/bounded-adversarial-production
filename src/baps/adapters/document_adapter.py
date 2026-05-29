@@ -6,7 +6,7 @@ from typing import Any
 
 from baps.models.model_output import parse_model_output
 from baps.models.models import ToolCall, ToolDefinition
-from baps.northstar.northstar_projection import ProjectionType, STATE_VIEW_END, STATE_VIEW_START, StateView
+from baps.northstar.northstar_projection import ProjectionType, StateView, assemble_state_view
 from baps.adapters.project_adapter import (
     VerificationResult,
     _config_artifact_id,
@@ -69,10 +69,11 @@ def build_document_create_game_state_view(state: State, config: dict[str, Any]) 
     else:
         section_lines.append("No sections.")
 
-    content = "\n".join(
-        [
-            STATE_VIEW_START,
-            "",
+    return assemble_state_view(
+        stage="create-game",
+        artifact_id=target_artifact.id,
+        projection_type=ProjectionType.CREATE_GAME,
+        inner_lines=[
             "--- NorthStar ---",
             "",
             northstar_content if northstar_content else "No NorthStar content.",
@@ -87,15 +88,7 @@ def build_document_create_game_state_view(state: State, config: dict[str, Any]) 
             "",
             *section_lines,
             "",
-            STATE_VIEW_END,
-        ]
-    ).rstrip()
-    input_fingerprint = hashlib.sha256(content.encode("utf-8")).hexdigest()
-    return StateView(
-        id=f"state-view:create-game:{target_artifact.id}:{input_fingerprint[:12]}",
-        projection_type=ProjectionType.NORTH_STAR,
-        content=content,
-        input_fingerprint=input_fingerprint,
+        ],
         metadata=metadata,
     )
 
@@ -132,10 +125,11 @@ def build_document_state_view(state: State, game_spec: GameSpec) -> StateView:
     else:
         section_lines.append("No sections.")
 
-    content = "\n".join(
-        [
-            STATE_VIEW_START,
-            "",
+    return assemble_state_view(
+        stage="blue",
+        artifact_id=target_artifact.id,
+        projection_type=ProjectionType.PLAY_GAME,
+        inner_lines=[
             "--- State Artifacts ---",
             "",
             f"## Artifact: {target_artifact.id}",
@@ -145,15 +139,7 @@ def build_document_state_view(state: State, game_spec: GameSpec) -> StateView:
             "### Current Sections",
             "",
             *section_lines,
-            STATE_VIEW_END,
-        ]
-    ).rstrip()
-    input_fingerprint = hashlib.sha256(content.encode("utf-8")).hexdigest()
-    return StateView(
-        id=f"state-view:blue:{target_artifact.id}:{input_fingerprint[:12]}",
-        projection_type=ProjectionType.NORTH_STAR,
-        content=content,
-        input_fingerprint=input_fingerprint,
+        ],
         metadata=metadata,
     )
 

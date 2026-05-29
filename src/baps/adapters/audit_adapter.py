@@ -6,7 +6,7 @@ from typing import Any
 
 from baps.models.model_output import parse_model_output
 from baps.models.models import ToolCall, ToolDefinition
-from baps.northstar.northstar_projection import ProjectionType, STATE_VIEW_END, STATE_VIEW_START, StateView
+from baps.northstar.northstar_projection import ProjectionType, StateView, assemble_state_view
 from baps.adapters.project_adapter import (
     VerificationResult,
     _config_artifact_id,
@@ -185,33 +185,27 @@ def build_audit_create_game_state_view(state: State, config: dict[str, Any]) -> 
         section_lines.append("No findings yet.")
 
     stale_note = f", {stale_count} stale" if stale_count else ""
-    content = "\n".join([
-        STATE_VIEW_START,
-        "",
-        "--- NorthStar ---",
-        "",
-        northstar_content if northstar_content else "No NorthStar content.",
-        "",
-        "--- Source Files ---",
-        "",
-        source_header,
-        source_block,
-        "",
-        "--- Audit Report (current) ---",
-        "",
-        f"## Artifact: {artifact.id}",
-        f"findings so far: {len(artifact.sections)}{stale_note}",
-        "",
-        *section_lines,
-        STATE_VIEW_END,
-    ]).rstrip()
-
-    input_fingerprint = hashlib.sha256(content.encode("utf-8")).hexdigest()
-    return StateView(
-        id=f"state-view:create-game:{artifact.id}:{input_fingerprint[:12]}",
-        projection_type=ProjectionType.NORTH_STAR,
-        content=content,
-        input_fingerprint=input_fingerprint,
+    return assemble_state_view(
+        stage="create-game",
+        artifact_id=artifact.id,
+        projection_type=ProjectionType.CREATE_GAME,
+        inner_lines=[
+            "--- NorthStar ---",
+            "",
+            northstar_content if northstar_content else "No NorthStar content.",
+            "",
+            "--- Source Files ---",
+            "",
+            source_header,
+            source_block,
+            "",
+            "--- Audit Report (current) ---",
+            "",
+            f"## Artifact: {artifact.id}",
+            f"findings so far: {len(artifact.sections)}{stale_note}",
+            "",
+            *section_lines,
+        ],
         metadata={
             "target_artifact_id": artifact.id,
             "findings_count": len(artifact.sections),
@@ -245,29 +239,23 @@ def build_audit_play_game_state_view(state: State, game_spec: GameSpec) -> State
     else:
         section_lines.append("No findings yet.")
 
-    content = "\n".join([
-        STATE_VIEW_START,
-        "",
-        "--- Source Code (read-only) ---",
-        "",
-        source_header,
-        "",
-        source_content,
-        "",
-        "--- Audit Report (current findings) ---",
-        "",
-        f"## Artifact: {artifact.id}",
-        "",
-        *section_lines,
-        STATE_VIEW_END,
-    ]).rstrip()
-
-    input_fingerprint = hashlib.sha256(content.encode("utf-8")).hexdigest()
-    return StateView(
-        id=f"state-view:blue:{artifact.id}:{input_fingerprint[:12]}",
-        projection_type=ProjectionType.NORTH_STAR,
-        content=content,
-        input_fingerprint=input_fingerprint,
+    return assemble_state_view(
+        stage="blue",
+        artifact_id=artifact.id,
+        projection_type=ProjectionType.PLAY_GAME,
+        inner_lines=[
+            "--- Source Code (read-only) ---",
+            "",
+            source_header,
+            "",
+            source_content,
+            "",
+            "--- Audit Report (current findings) ---",
+            "",
+            f"## Artifact: {artifact.id}",
+            "",
+            *section_lines,
+        ],
         metadata={
             "target_artifact_id": artifact.id,
             "findings_count": len(artifact.sections),

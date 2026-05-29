@@ -49,6 +49,8 @@ STATE_VIEW_END = "=== StateView End ==="
 
 class ProjectionType(StrEnum):
     NORTH_STAR = "north_star"
+    CREATE_GAME = "create_game"
+    PLAY_GAME = "play_game"
 
 
 class StateView(BaseModel):
@@ -73,6 +75,30 @@ def require_state_view_metadata(state_view: StateView, key: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"state_view.metadata[{key!r}] must be a non-empty string")
     return value
+
+
+def assemble_state_view(
+    *,
+    stage: str,
+    artifact_id: str,
+    projection_type: ProjectionType,
+    inner_lines: list[str],
+    metadata: dict,
+) -> StateView:
+    """Build a StateView from section content lines, adding STATE_VIEW framing and fingerprint.
+
+    Adapters provide inner_lines (everything between the delimiters); framing,
+    fingerprinting, and ID construction happen here.
+    """
+    content = "\n".join([STATE_VIEW_START, "", *inner_lines, STATE_VIEW_END]).rstrip()
+    input_fingerprint = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    return StateView(
+        id=f"state-view:{stage}:{artifact_id}:{input_fingerprint[:12]}",
+        projection_type=projection_type,
+        content=content,
+        input_fingerprint=input_fingerprint,
+        metadata=metadata,
+    )
 
 
 class ProjectionRenderer(Protocol):
