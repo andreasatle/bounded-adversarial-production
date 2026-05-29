@@ -268,6 +268,7 @@ class GameSpec(BaseModel):
     success_condition: str
     context_chain: tuple[str, ...] = ()
     max_words: int | None = None
+    target_entity: str | None = None
 
     _validate_objective = field_validator("objective")(_require_non_empty)
     _validate_target_artifact_id = field_validator("target_artifact_id")(_require_non_empty)

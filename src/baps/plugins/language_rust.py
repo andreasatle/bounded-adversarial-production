@@ -105,3 +105,6 @@ class RustLanguagePlugin:
 
     def has_tests(self, file_paths: Sequence[str]) -> bool:
         return any(p.endswith(".rs") for p in file_paths)
+
+    def summarize_file(self, file, objective):
+        raise NotImplementedError

@@ -111,3 +111,6 @@ class PythonLanguagePlugin:
             p.startswith("tests/") or p.startswith("test_")
             for p in file_paths
         )
+
+    def summarize_file(self, file, objective):
+        raise NotImplementedError

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Protocol, Sequence, runtime_checkable
 
 from baps.adapters.project_adapter import VerificationResult
+from baps.state.state import CodeFile
 
 
 @runtime_checkable
@@ -33,6 +34,16 @@ class LanguagePlugin(Protocol):
     def has_tests(self, file_paths: Sequence[str]) -> bool:
         """Return True if any of the given paths look like test files for this language."""
         ...
+
+    def summarize_file(self, file: CodeFile, objective: str | None) -> str:
+        """Return a summary of *file* relative to *objective*.
+
+        When objective is None: structural API surface (signatures, doc comments,
+        test names, line count — no bodies).
+        When objective is provided: objective-aware summary of what the file does
+        relative to that goal.
+        """
+        raise NotImplementedError
 
 
 def get_language_plugin(name: str) -> LanguagePlugin:
