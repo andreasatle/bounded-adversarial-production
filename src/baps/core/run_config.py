@@ -49,6 +49,7 @@ class RunConfig(BaseModel):
     max_iterations: int
     max_sub_gaps: int = 5
     max_depth: int = 3
+    max_create_game_attempts: int = 2
     spec_path: Path | None = None
     source_path: str | None = None
     source_include: list[str] | None = None

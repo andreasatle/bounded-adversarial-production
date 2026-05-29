@@ -28,6 +28,7 @@ from baps.game.attempt import (
 from baps.game.play import _record_play_game_telemetry
 from baps.game.roles import (
     _PlayGameContext,
+    _RED_FINDING_SCHEMA,
     _build_play_game_fallbacks,
     _initial_play_game_feedback,
     _resolve_play_game_roles,
@@ -76,8 +77,6 @@ _DEFAULT_MAX_PLAY_GAME_ATTEMPTS = 3
 
 __all__ = [
     "_VERIFICATION_SUMMARY_CAP",
-    "_append_integration_to_blackboard",
-    "_append_northstar_proposal_to_blackboard",
     "_commit_export_with_adapter",
     "_verify_export_with_adapter",
     "create_game",
@@ -109,19 +108,6 @@ _CREATE_GAME_SCHEMA: dict = {
     },
     "additionalProperties": False,
 }
-_CREATE_GAME_RED_FINDING_SCHEMA: dict = {
-    "type": "object",
-    "properties": {
-        "disposition": {"type": "string", "enum": ["accept", "revise", "reject"]},
-        "rationale": {"type": "string", "maxLength": 500},
-        "success_condition_met": {"type": ["boolean", "null"]},
-        "findings": {"type": "array", "items": {"type": "string", "maxLength": 300}},
-    },
-    "required": ["disposition", "rationale"],
-    "additionalProperties": False,
-}
-
-
 def _verify_export_with_adapter(
     adapter: ProjectTypeAdapter,
     output_path: Path,
@@ -202,7 +188,6 @@ def create_game(
     context_chain: tuple[str, ...] = (),
     depth: int = 0,
     create_game_red_client: ModelClient | None = None,
-    max_create_game_attempts: int = 2,
 ) -> GameSpec | DecomposeSpec:
     debug_event("create_game.input", {"state": state.model_dump(mode="json")})
     resolved_adapter = (
@@ -220,7 +205,7 @@ def create_game(
     role_name = SpecRole.DECOMPOSE if depth > 0 else SpecRole.CREATE_GAME
     role = Role(role_name, client, _CREATE_GAME_SCHEMA, constrained=False)
     red_role = (
-        Role(SpecRole.CREATE_GAME_RED, create_game_red_client, _CREATE_GAME_RED_FINDING_SCHEMA, constrained=True)
+        Role(SpecRole.CREATE_GAME_RED, create_game_red_client, _RED_FINDING_SCHEMA, constrained=True)
         if create_game_red_client is not None
         else None
     )
@@ -228,6 +213,7 @@ def create_game(
     red_feedback: dict[str, Any] | None = None
     last_valid_game_spec: GameSpec | None = None
     max_sub_gaps = config.max_sub_gaps
+    max_create_game_attempts = config.max_create_game_attempts
 
     # Build fallback chains once — they don't change across attempts.
     try:

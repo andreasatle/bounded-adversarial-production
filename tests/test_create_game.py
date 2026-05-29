@@ -722,7 +722,6 @@ def test_create_game_red_reject_triggers_retry_with_feedback() -> None:
         state,
         model_client=FakeModelClient([first_spec, second_spec]),
         create_game_red_client=FakeModelClient([red_reject]),
-        max_create_game_attempts=2,
     )
     assert game_spec.objective == "Write introduction section"
 
@@ -755,7 +754,6 @@ def test_create_game_red_feedback_appears_in_retry_prompt() -> None:
         state,
         model_client=CapturingClient(),
         create_game_red_client=FakeModelClient([red_reject]),
-        max_create_game_attempts=2,
     )
     assert len(prompts_seen) == 2
     assert "Too broad" in prompts_seen[1]
@@ -816,6 +814,5 @@ def test_create_game_red_revise_triggers_retry() -> None:
         state,
         model_client=FakeModelClient([first_spec, second_spec]),
         create_game_red_client=FakeModelClient([red_revise]),
-        max_create_game_attempts=2,
     )
     assert "2+ paragraphs" in game_spec.success_condition

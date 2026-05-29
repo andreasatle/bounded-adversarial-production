@@ -8,12 +8,14 @@ from baps.core.clients import SpecRole, _build_client_for_role
 from baps.core.run_config import RunConfig
 from baps.core.debug import _debug_print_northstar_update_proposal, _debug_print_verification_result
 from baps.game.engine import (
-    _append_integration_to_blackboard,
-    _append_northstar_proposal_to_blackboard,
     _commit_export_with_adapter,
     _verify_export_with_adapter,
     create_game,
     play_game,
+)
+from baps.game.telemetry import (
+    _append_integration_to_blackboard,
+    _append_northstar_proposal_to_blackboard,
 )
 from baps.core.parsers import NoNewGameError, NorthStarUpdateNeededError
 from baps.adapters.project_adapter import (
