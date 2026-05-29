@@ -1,0 +1,54 @@
+project_type: coding
+artifact_id: main-codebase
+language: rust
+workspace: .baps-workspace/rust-project
+roles:
+  blue:
+    backend: anthropic
+    model: claude-sonnet-4-6
+  red:
+    backend: ollama
+    model: qwen2.5-coder:7b
+  referee:
+    backend: ollama
+    model: qwen2.5-coder:7b
+  create_game:
+    backend: ollama
+    model: gemma4:e4b
+    fallback:
+      backend: ollama
+      model: gemma4:26b
+  decompose:
+    backend: ollama
+    model: gemma4:e4b
+    fallback:
+      backend: ollama
+      model: gemma4:26b
+goal: "Implement a simple queue data structure in Rust with enqueue, dequeue, and peek operations, plus tests."
+output: output/project-rust
+max_iterations: 5
+northstar_markdown: |
+  # Goal
+
+  Implement a generic queue data structure in Rust with unit tests.
+
+  # Expected output layout
+
+  - `src/lib.rs` — must contain:
+    - `Queue<T>` — a generic queue type backed by `std::collections::VecDeque`
+    - `enqueue(&mut self, item: T)` — add an item to the back
+    - `dequeue(&mut self) -> Option<T>` — remove and return the front item, or None if empty
+    - `peek(&self) -> Option<&T>` — return a reference to the front item without removing it, or None if empty
+    - `len(&self) -> usize` — return the current number of items
+    - `is_empty(&self) -> bool` — return true if the queue has no items
+  - Tests must be in a `#[cfg(test)]` module inside `src/lib.rs`:
+    - enqueue/dequeue round-trip: enqueue three integers, dequeue all three in FIFO order
+    - peek does not remove: peek returns the same value on repeated calls
+    - empty queue: dequeue and peek both return None on an empty queue
+    - len and is_empty: len increases on enqueue, decreases on dequeue; is_empty reflects emptiness
+
+  # Constraints
+
+  - Use only the Rust standard library — no external crates.
+  - All public functions must have doc comments.
+  - Tests must use `#[test]` attributes and standard `assert_eq!` / `assert!` macros.

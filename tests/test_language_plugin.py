@@ -647,3 +647,224 @@ def test_coding_adapter_verify_candidate_zig_does_not_use_python_image(tmp_path:
     assert result is not None
     docker_args = mock_run.call_args[0][0]
     assert "python:3.12-slim" not in docker_args
+
+
+# ---------------------------------------------------------------------------
+# RustLanguagePlugin
+# ---------------------------------------------------------------------------
+
+def test_rust_plugin_satisfies_language_plugin_protocol() -> None:
+    from baps.plugins.language_plugin import LanguagePlugin
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    assert isinstance(RustLanguagePlugin(), LanguagePlugin)
+
+
+def test_rust_plugin_name() -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    assert RustLanguagePlugin.name == "rust"
+
+
+def test_rust_plugin_docker_image() -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    assert RustLanguagePlugin.docker_image == "rust:latest"
+
+
+def test_rust_plugin_test_command() -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    assert RustLanguagePlugin.test_command == "cargo test"
+
+
+def test_get_language_plugin_rust_returns_rust_plugin() -> None:
+    from baps.plugins.language_plugin import get_language_plugin
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    plugin = get_language_plugin("rust")
+    assert isinstance(plugin, RustLanguagePlugin)
+
+
+def test_get_language_plugin_error_message_lists_rust() -> None:
+    from baps.plugins.language_plugin import get_language_plugin
+
+    with pytest.raises(ValueError, match="rust"):
+        get_language_plugin("cobol")
+
+
+def test_rust_plugin_initialize_creates_cargo_toml(tmp_path: Path) -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    RustLanguagePlugin().initialize(tmp_path)
+    assert (tmp_path / "Cargo.toml").exists()
+
+
+def test_rust_plugin_initialize_creates_src_lib_rs(tmp_path: Path) -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    RustLanguagePlugin().initialize(tmp_path)
+    assert (tmp_path / "src" / "lib.rs").exists()
+
+
+def test_rust_plugin_initialize_creates_gitignore(tmp_path: Path) -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin, _GITIGNORE_CONTENT
+
+    RustLanguagePlugin().initialize(tmp_path)
+    assert (tmp_path / ".gitignore").read_text(encoding="utf-8") == _GITIGNORE_CONTENT
+
+
+def test_rust_plugin_initialize_returns_true_first_call(tmp_path: Path) -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    assert RustLanguagePlugin().initialize(tmp_path) is True
+
+
+def test_rust_plugin_initialize_returns_false_when_unchanged(tmp_path: Path) -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    plugin = RustLanguagePlugin()
+    plugin.initialize(tmp_path)
+    assert plugin.initialize(tmp_path) is False
+
+
+def test_rust_plugin_initialize_skips_existing_cargo_toml(tmp_path: Path) -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    cargo_toml = tmp_path / "Cargo.toml"
+    cargo_toml.write_text("# custom\n", encoding="utf-8")
+    RustLanguagePlugin().initialize(tmp_path)
+    assert cargo_toml.read_text(encoding="utf-8") == "# custom\n"
+
+
+def test_rust_plugin_initialize_creates_project_path_if_missing(tmp_path: Path) -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    new_dir = tmp_path / "subdir" / "project"
+    assert not new_dir.exists()
+    RustLanguagePlugin().initialize(new_dir)
+    assert new_dir.is_dir()
+    assert (new_dir / "Cargo.toml").exists()
+
+
+def test_rust_plugin_has_tests_detects_rs_files() -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    assert RustLanguagePlugin().has_tests(["src/lib.rs"]) is True
+
+
+def test_rust_plugin_has_tests_returns_false_for_non_rs() -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    assert RustLanguagePlugin().has_tests(["README.md", "Cargo.toml"]) is False
+
+
+def test_rust_plugin_has_tests_returns_false_for_empty() -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    assert RustLanguagePlugin().has_tests([]) is False
+
+
+def test_rust_plugin_parse_test_failures_empty() -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    assert RustLanguagePlugin().parse_test_failures("") == []
+
+
+def test_rust_plugin_parse_test_failures_no_failures() -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    stdout = "test tests::it_works ... ok\ntest result: ok. 1 passed; 0 failed\n"
+    assert RustLanguagePlugin().parse_test_failures(stdout) == []
+
+
+def test_rust_plugin_parse_test_failures_detects_failed_lines() -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    stdout = "test tests::it_fails ... FAILED\ntest result: FAILED. 0 passed; 1 failed\n"
+    result = RustLanguagePlugin().parse_test_failures(stdout)
+    assert len(result) == 1
+    assert result[0]["test_id"] == "tests::it_fails"
+
+
+def test_rust_plugin_parse_test_failures_multiple() -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    stdout = (
+        "test tests::first ... FAILED\n"
+        "test tests::second ... ok\n"
+        "test tests::third ... FAILED\n"
+    )
+    result = RustLanguagePlugin().parse_test_failures(stdout)
+    assert len(result) == 2
+    assert result[0]["test_id"] == "tests::first"
+    assert result[1]["test_id"] == "tests::third"
+
+
+def test_rust_plugin_run_tests_bare_uses_cargo_test(tmp_path: Path) -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    completed = _make_completed(returncode=0, stdout="test result: ok.")
+    with patch("baps.plugins.language_rust.subprocess.run", return_value=completed) as mock_run:
+        result = RustLanguagePlugin().run_tests(tmp_path, "none")
+
+    assert result.passed is True
+    assert mock_run.call_args[0][0] == ["cargo", "test"]
+    assert result.command == "cargo test"
+
+
+def test_rust_plugin_run_tests_bare_wraps_failure(tmp_path: Path) -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    completed = _make_completed(returncode=101, stdout="test tests::bad ... FAILED", stderr="err")
+    with patch("baps.plugins.language_rust.subprocess.run", return_value=completed):
+        result = RustLanguagePlugin().run_tests(tmp_path, "none")
+
+    assert result.passed is False
+    assert result.exit_code == 101
+
+
+def test_rust_plugin_run_tests_docker_uses_plugin_values(tmp_path: Path) -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    plugin = RustLanguagePlugin()
+    completed = _make_completed(returncode=0)
+    with patch("baps.tools.sandbox.subprocess.run", return_value=completed) as mock_run:
+        plugin.run_tests(tmp_path, "docker")
+
+    docker_args = mock_run.call_args[0][0]
+    assert plugin.docker_image in docker_args
+    assert plugin.test_command in docker_args
+
+
+def test_rust_plugin_build_raises_on_failure(tmp_path: Path) -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    completed = _make_completed(returncode=1, stderr="error[E0308]: mismatched types")
+    with patch("baps.plugins.language_rust.subprocess.run", return_value=completed):
+        with pytest.raises(RuntimeError, match="cargo build failed"):
+            RustLanguagePlugin().build(tmp_path)
+
+
+def test_rust_plugin_build_succeeds_silently(tmp_path: Path) -> None:
+    from baps.plugins.language_rust import RustLanguagePlugin
+
+    completed = _make_completed(returncode=0)
+    with patch("baps.plugins.language_rust.subprocess.run", return_value=completed):
+        result = RustLanguagePlugin().build(tmp_path)
+
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# CodingProjectAdapter language selection — Rust
+# ---------------------------------------------------------------------------
+
+def test_coding_adapter_create_initial_state_accepts_rust() -> None:
+    from baps.adapters.coding_adapter import CodingProjectAdapter
+
+    state = CodingProjectAdapter().create_initial_state(
+        {"artifact_id": "art", "language": "rust", "northstar_markdown": "x"}
+    )
+    artifact = next(a for a in state.artifacts if a.id == "art")
+    assert artifact.language == "rust"  # type: ignore[union-attr]

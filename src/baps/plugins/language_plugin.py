@@ -38,10 +38,12 @@ class LanguagePlugin(Protocol):
 def get_language_plugin(name: str) -> LanguagePlugin:
     """Return the plugin for *name*, raising ValueError if not registered."""
     from baps.plugins.language_python import PythonLanguagePlugin
+    from baps.plugins.language_rust import RustLanguagePlugin
     from baps.plugins.language_zig import ZigLanguagePlugin
 
     _registry: dict[str, LanguagePlugin] = {
         "python": PythonLanguagePlugin(),
+        "rust": RustLanguagePlugin(),
         "zig": ZigLanguagePlugin(),
     }
     if name not in _registry:

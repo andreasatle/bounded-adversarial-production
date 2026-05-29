@@ -34,10 +34,12 @@ def _validate_file_path(path: str) -> None:
 
 def _build_language_registry() -> dict[str, LanguagePlugin]:
     from baps.plugins.language_python import PythonLanguagePlugin
+    from baps.plugins.language_rust import RustLanguagePlugin
     from baps.plugins.language_zig import ZigLanguagePlugin
 
     return {
         "python": PythonLanguagePlugin(),
+        "rust": RustLanguagePlugin(),
         "zig": ZigLanguagePlugin(),
     }
 
