@@ -10,7 +10,7 @@ from typing import Sequence
 from baps.adapters.project_adapter import VerificationResult
 
 DOCKER_IMAGE = "baps-rust-indexer:latest"
-BUILD_CMD = "docker build -t baps-rust-indexer:latest docker/rust-indexer/"
+BUILD_CMD = "docker build -t baps-rust-indexer:latest -f docker/rust-indexer/Dockerfile ."
 
 
 _CARGO_TOML_CONTENT = """\

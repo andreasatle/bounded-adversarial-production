@@ -6,7 +6,7 @@ and emits a JSON index of top-level items to stdout.
 ## Build
 
 ```
-docker build -t baps-rust-indexer:latest docker/rust-indexer/
+docker build -t baps-rust-indexer:latest -f docker/rust-indexer/Dockerfile .
 ```
 
 ## Usage
