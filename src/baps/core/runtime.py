@@ -7,7 +7,6 @@ from pathlib import Path
 
 from baps .adapters .project_adapter import (
 ProjectTypeAdapter ,
-resolve_adapter_for_allowed_delta_type ,
 resolve_project_type_adapter ,
 )
 from baps .core .clients import SpecRole ,build_client_for_role ,resolve_backend_model 
@@ -53,11 +52,6 @@ def _build_project_type_adapters ()->dict [str ,ProjectTypeAdapter ]:
 def _resolve_project_type_adapter (project_type :str )->ProjectTypeAdapter :
     """Return the adapter for the given project type name, raising ValueError if unknown."""
     return resolve_project_type_adapter (project_type )
-
-
-def _resolve_adapter_for_allowed_delta_type (allowed_delta_type :str )->ProjectTypeAdapter :
-    """Return the adapter that owns the given allowed_delta_type, raising ValueError if unrecognised."""
-    return resolve_adapter_for_allowed_delta_type (allowed_delta_type )
 
 
 def _initialize_project (

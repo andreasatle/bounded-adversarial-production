@@ -2,7 +2,6 @@
 
 from __future__ import annotations 
 
-import hashlib 
 from pathlib import Path 
 from typing import TYPE_CHECKING ,Any 
 
@@ -100,15 +99,6 @@ entity_desc :str ,
     },
     ),
     ]
-
-
-def build_northstar_artifact_from_markdown (markdown :str )->DocumentArtifact :
-    """Build and return northstar artifact from markdown."""
-    fingerprint =hashlib .sha256 (markdown .encode ("utf-8")).hexdigest ()[:12 ]
-    return DocumentArtifact (
-    id =f"northstar:{fingerprint }",
-    sections =(Section (title ="NorthStar",body =markdown ),),
-    )
 
 
 def document_artifact_from_state (state :State ,artifact_id :str )->DocumentArtifact :
