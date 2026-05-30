@@ -47,9 +47,6 @@ class IterationRunResult (BaseModel ):
 
 logger =logging .getLogger (__name__ )
 
-_DEFAULT_MAX_DEPTH =3 
-
-
 class _RunContext :
     """Mutable execution context threaded through recursive gap solving."""
 

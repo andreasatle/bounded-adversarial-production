@@ -138,20 +138,6 @@ def build_role_client (role :str )->ModelClient :
     return _build_client (backend ,model )
 
 
-def _build_decompose_client ()->ModelClient :
-    """Build a model client for the decompose role.
-
-    Checks BAPS_DECOMPOSE_BACKEND / BAPS_DECOMPOSE_MODEL first.
-    Falls back to the create_game client when no decompose-specific vars are set,
-    so the decompose role is a transparent no-op by default.
-    """
-    role_backend =os .getenv ("BAPS_DECOMPOSE_BACKEND","").strip ().lower ()
-    role_model =os .getenv ("BAPS_DECOMPOSE_MODEL","").strip ()
-    if role_backend or role_model :
-        return build_role_client (SpecRole .DECOMPOSE )
-    return _build_planner_model_client ()
-
-
 def _parse_role_backend_model (cfg :dict ,path :str )->dict [str ,str ]:
     """Parse backend and model fields from a role config dict, validating backend."""
     parsed :dict [str ,str ]={}
@@ -307,10 +293,3 @@ chain :list [tuple [str ,ModelClient ]],
 
     return fn 
 
-
-def _make_fallback_fn (client :ModelClient )->Any :
-    """Build a fallback generate callable that wraps the correction prompt with JSON-only instruction."""
-    from baps .models .model_output import wrap_json_prompt 
-    def fn (prompt :str )->str :
-        return client .generate (wrap_json_prompt (prompt ))
-    return fn 

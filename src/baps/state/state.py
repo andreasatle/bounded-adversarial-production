@@ -423,11 +423,6 @@ class NorthStar(BaseModel):
 
     artifacts: tuple[SerializeAsAny[StateArtifact], ...]
 
-    def render_content(self) -> str:
-        """Render all artifact text representations joined for prompt consumption."""
-        parts = [a.render_as_text() for a in self.artifacts]
-        return "\n\n".join(p for p in parts if p).strip()
-
     @field_validator("artifacts", mode="before")
     @classmethod
     def _coerce_artifact_types(
@@ -500,17 +495,6 @@ def find_state_artifact(state: State, artifact_id: str) -> StateArtifact:
         if artifact.id == resolved_artifact_id:
             return artifact
     raise ValueError(f"artifact id not found in state: {resolved_artifact_id}")
-
-
-def _replace_artifact_in_state(
-    state: State, artifact_id: str, replacement: StateArtifact
-) -> State:
-    """Return a new State with the artifact matching artifact_id replaced by replacement."""
-    new_artifacts = tuple(
-        replacement if a.id == artifact_id else a
-        for a in state.artifacts
-    )
-    return State(artifacts=new_artifacts)
 
 
 def apply_state_delta(state: State, delta: DeltaState) -> State:

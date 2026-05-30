@@ -4,20 +4,16 @@ from __future__ import annotations
 
 import argparse 
 import logging 
-from typing import TYPE_CHECKING ,Any 
+from typing import Any 
 
 from baps .core .run_config import RunConfig 
-
-if TYPE_CHECKING :
-    from baps .game .roles import PlayGameFeedback 
-from baps .northstar .northstar_projection import StateView 
 from baps .adapters .project_adapter import (
 VerificationResult ,
 config_artifact_id ,
 config_northstar_markdown ,
 verification_result_to_dict ,
 )
-from baps .state .state import DeltaState ,GameSpec ,PlayGameRuntime ,RedFinding ,RefereeDecision ,State 
+from baps .state .state import State 
 
 logger =logging .getLogger (__name__ )
 
@@ -135,128 +131,11 @@ def debug_print_create_state (config :RunConfig ,state :State )->None :
     _debug_log ("create_state.output",{"state":state .model_dump (mode ="json")})
 
 
-def _debug_print_create_game_input (state :State )->None :
-    """Log the State passed into create_game at DEBUG level."""
-    _debug_log ("create_game.input",{"state":state .model_dump (mode ="json")})
-
-
-def _debug_print_create_game_output (game_spec :GameSpec )->None :
-    """Log the GameSpec produced by create_game at DEBUG level."""
-    _debug_log ("create_game.output",{"game_spec":game_spec .model_dump (mode ="json")})
-
-
 def debug_print_create_game_prompt (prompt :str )->None :
     """Log the full create_game prompt text at DEBUG level."""
     if logger .isEnabledFor (logging .DEBUG ):
         indented ="\n".join (f"  {line }"for line in (prompt .splitlines ()or [""]))
         logger .debug ("create_game.prompt:\n%s",indented )
-
-
-def _debug_print_play_game_input (state :State ,game_spec :GameSpec )->None :
-    """Log the State and GameSpec passed into play_game at DEBUG level."""
-    _debug_log ("play_game.input",{
-    "state":state .model_dump (mode ="json"),
-    "game_spec":game_spec .model_dump (mode ="json"),
-    })
-
-
-def _debug_print_play_game_output (runtime :PlayGameRuntime )->None :
-    """Log the play_game runtime delta fields at DEBUG level."""
-    _debug_log ("play_game.output",{
-    "current_best_delta":(
-    None 
-    if runtime .current_best_delta is None 
-    else runtime .current_best_delta .model_dump (mode ="json")
-    ),
-    "integration_eligible_delta":(
-    None 
-    if runtime .integration_eligible_delta is None 
-    else runtime .integration_eligible_delta .model_dump (mode ="json")
-    ),
-    })
-
-
-def _debug_print_play_game_attempt (attempt :int )->None :
-    """Log the current play_game attempt number at DEBUG level."""
-    _debug_log ("play_game.attempt",{"attempt":attempt })
-
-
-def _debug_print_blue_failed_tool_call (tool_call :object )->None :
-    """Log a Blue tool call that could not be converted to a DeltaState at DEBUG level."""
-    _debug_log ("blue.failed_tool_call",{"tool_call":str (tool_call )})
-
-
-def _debug_print_attempt_rejected (attempt :int ,reason :str )->None :
-    """Log the rejection of a play_game attempt and its reason at DEBUG level."""
-    _debug_log ("play_game.attempt_rejected",{"attempt":attempt ,"reason":reason })
-
-
-def _debug_print_blue_input (
-state_view :StateView ,
-game_spec :GameSpec ,
-attempt_number :int ,
-previous_feedback :PlayGameFeedback |None ,
-)->None :
-    """Log the inputs sent to the Blue role at DEBUG level."""
-    _debug_log ("blue.input",{
-    "game_spec":game_spec .model_dump (mode ="json"),
-    "state_view":state_view .model_dump (mode ="json"),
-    "attempt_number":attempt_number ,
-    "previous_feedback":previous_feedback ,
-    })
-
-
-def _debug_print_blue_output (delta :DeltaState )->None :
-    """Log the DeltaState produced by Blue at DEBUG level."""
-    _debug_log ("blue.output",{"delta_state":delta .model_dump (mode ="json")})
-
-
-def _debug_print_red_input (
-state_view :StateView ,
-game_spec :GameSpec ,
-delta_state :DeltaState ,
-verification_result :VerificationResult |None =None ,
-)->None :
-    """Log the inputs sent to the Red role at DEBUG level."""
-    _debug_log ("red.input",{
-    "game_spec":game_spec .model_dump (mode ="json"),
-    "state_view":state_view .model_dump (mode ="json"),
-    "delta_state":delta_state .model_dump (mode ="json"),
-    "verification_result":(
-    None if verification_result is None 
-    else verification_result_to_dict (verification_result )
-    ),
-    })
-
-
-def _debug_print_red_output (red_finding :RedFinding )->None :
-    """Log the RedFinding produced by the Red role at DEBUG level."""
-    _debug_log ("red.output",{"red_finding":red_finding .model_dump (mode ="json")})
-
-
-def _debug_print_referee_input (
-state_view :StateView ,
-game_spec :GameSpec ,
-delta_state :DeltaState ,
-red_finding :RedFinding ,
-verification_result :VerificationResult |None =None ,
-)->None :
-    """Log the inputs sent to the Referee role at DEBUG level."""
-    _debug_log ("referee.input",{
-    "game_spec":game_spec .model_dump (mode ="json"),
-    "state_view":state_view .model_dump (mode ="json"),
-    "delta_state":delta_state .model_dump (mode ="json"),
-    "red_finding":red_finding .model_dump (mode ="json"),
-    "verification_result":(
-    None if verification_result is None 
-    else verification_result_to_dict (verification_result )
-    ),
-    })
-
-
-def _debug_print_referee_output (referee_decision :RefereeDecision )->None :
-    """Log the RefereeDecision at DEBUG level."""
-    _debug_log ("referee.output",{"referee_decision":referee_decision .model_dump (mode ="json")})
 
 
 def debug_print_northstar_update_proposal (rationale :str ,proposed_northstar :str )->None :
@@ -272,34 +151,6 @@ def debug_print_create_game_raw_model_output (raw_text :str )->None :
     if logger .isEnabledFor (logging .DEBUG ):
         indented ="\n".join (f"  {line }"for line in (raw_text .splitlines ()or [""]))
         logger .debug ("create_game.raw_model_output:\n%s",indented )
-
-
-def _debug_print_create_game_red_input (state_view :StateView ,game_spec :GameSpec )->None :
-    """Log the inputs to the create_game Red challenge step at DEBUG level."""
-    _debug_log ("create_game_red.input",{
-    "game_spec":game_spec .model_dump (mode ="json"),
-    "state_view_id":state_view .id ,
-    })
-
-
-def _debug_print_create_game_red_output (red_finding :RedFinding )->None :
-    """Log the RedFinding from the create_game Red challenge at DEBUG level."""
-    _debug_log ("create_game_red.output",{"red_finding":red_finding .model_dump (mode ="json")})
-
-
-def _debug_print_create_game_validation_input (game_spec :GameSpec )->None :
-    """Log the GameSpec fields being structurally validated at DEBUG level."""
-    _debug_log ("create_game.validation_input",{
-    "objective":game_spec .objective ,
-    "success_condition":game_spec .success_condition ,
-    "target_artifact_id":game_spec .target_artifact_id ,
-    "allowed_delta_type":game_spec .allowed_delta_type ,
-    })
-
-
-def _debug_print_create_game_validation_failure (message :str )->None :
-    """Log a GameSpec validation failure message at DEBUG level."""
-    _debug_log ("create_game.validation_failure",{"message":message })
 
 
 def debug_print_verification_result (result :VerificationResult |None )->None :
