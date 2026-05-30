@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Sequence
 
 from baps.adapters.project_adapter import VerificationResult
+from baps.tools.sandbox import DOCKER_DAEMON_ERROR, is_docker_unavailable_error
 
 DOCKER_IMAGE = "baps-rust-indexer:latest"
 BUILD_CMD = "docker build -t baps-rust-indexer:latest -f docker/rust-indexer/Dockerfile ."
@@ -182,6 +183,8 @@ class RustLanguagePlugin:
             )
         except subprocess.CalledProcessError as exc:
             stderr = exc.stderr or ""
+            if is_docker_unavailable_error(stderr):
+                raise RuntimeError(DOCKER_DAEMON_ERROR) from exc
             if "Unable to find image" in stderr or "No such image" in stderr or "pull access denied" in stderr:
                 raise RuntimeError(
                     f"RustLanguagePlugin: Docker image '{DOCKER_IMAGE}' not found.\n"

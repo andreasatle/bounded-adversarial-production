@@ -413,28 +413,56 @@ def test_extract_entity_unknown_filter_returns_helpful_error() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Rust / Zig stubs raise NotImplementedError
+# Rust extract_* delegate to Docker indexer
 # ---------------------------------------------------------------------------
 
-def test_rust_extract_api_raises_not_implemented() -> None:
+def _rust_mock(items: list) -> "MagicMock":
+    import json
+    from unittest.mock import MagicMock
+    m = MagicMock()
+    m.stdout = json.dumps({"items": items})
+    m.returncode = 0
+    return m
+
+
+_FOO_ITEM = {
+    "kind": "fn", "name": "foo", "pub": True,
+    "signature": "pub fn foo ()", "doc": None,
+    "is_test": False, "body_start": 1, "body_end": 1,
+}
+
+_TEST_FOO_ITEM = {
+    "kind": "fn", "name": "test_foo", "pub": False,
+    "signature": "fn test_foo ()", "doc": None,
+    "is_test": True, "body_start": 2, "body_end": 2,
+}
+
+
+def test_rust_extract_api_returns_public_items() -> None:
+    from unittest.mock import patch
     from baps.plugins.language_rust import RustLanguagePlugin
     file = CodeFile(path="lib.rs", content="pub fn foo() {}")
-    with pytest.raises(NotImplementedError):
-        RustLanguagePlugin().extract_api(file)
+    with patch("baps.plugins.language_rust.subprocess.run", return_value=_rust_mock([_FOO_ITEM])):
+        result = RustLanguagePlugin().extract_api(file)
+    assert "foo" in result
 
 
-def test_rust_extract_tests_raises_not_implemented() -> None:
+def test_rust_extract_tests_returns_test_items() -> None:
+    from unittest.mock import patch
     from baps.plugins.language_rust import RustLanguagePlugin
     file = CodeFile(path="lib.rs", content="#[test]\nfn test_foo() {}")
-    with pytest.raises(NotImplementedError):
-        RustLanguagePlugin().extract_tests(file)
+    with patch("baps.plugins.language_rust.subprocess.run", return_value=_rust_mock([_TEST_FOO_ITEM])):
+        result = RustLanguagePlugin().extract_tests(file)
+    assert "test_foo" in result
 
 
-def test_rust_extract_entity_raises_not_implemented() -> None:
+def test_rust_extract_entity_returns_entity_body() -> None:
+    from unittest.mock import patch
     from baps.plugins.language_rust import RustLanguagePlugin
     file = CodeFile(path="lib.rs", content="pub fn foo() {}")
-    with pytest.raises(NotImplementedError):
-        RustLanguagePlugin().extract_entity(file, "foo", None)
+    with patch("baps.plugins.language_rust.subprocess.run", return_value=_rust_mock([_FOO_ITEM])):
+        result = RustLanguagePlugin().extract_entity(file, "foo", None)
+    assert "foo" in result
 
 
 def test_zig_extract_api_raises_not_implemented() -> None:

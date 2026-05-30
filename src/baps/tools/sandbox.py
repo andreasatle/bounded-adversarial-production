@@ -11,6 +11,22 @@ SANDBOX_NONE_WARNING = (
     "Do not use in production.\n"
 )
 
+DOCKER_DAEMON_ERROR = (
+    "Docker daemon is not running. Start it with: colima start\n"
+    "(or 'open -a Docker' if using Docker Desktop)"
+)
+
+_DOCKER_UNAVAILABLE_HINTS = (
+    "failed to connect to the docker API",
+    "Cannot connect to the Docker daemon",
+    "dial unix",
+)
+
+
+def is_docker_unavailable_error(stderr: str) -> bool:
+    """Return True if stderr indicates the Docker daemon is not running."""
+    return any(hint in stderr for hint in _DOCKER_UNAVAILABLE_HINTS)
+
 
 def is_docker_available() -> bool:
     """Return True if Docker is installed and the daemon is reachable."""
@@ -70,4 +86,6 @@ def _run_docker(
         f" {docker_image} sh -c '{test_command}'"
     )
     completed = subprocess.run(docker_args, capture_output=True, text=True, check=False)
+    if is_docker_unavailable_error(completed.stderr):
+        raise RuntimeError(DOCKER_DAEMON_ERROR)
     return command, completed
