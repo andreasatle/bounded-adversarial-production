@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 from typing import Sequence
 
 from baps.adapters.project_adapter import VerificationResult
+
+DOCKER_IMAGE = "baps-rust-indexer:latest"
+BUILD_CMD = "docker build -t baps-rust-indexer:latest docker/rust-indexer/"
 
 
 _CARGO_TOML_CONTENT = """\
@@ -120,17 +124,73 @@ class RustLanguagePlugin:
         raise NotImplementedError
 
     def supported_filters(self) -> list[str]:
-        """Return supported values for ed filters."""
+        """Return supported values for extract filters."""
         return ["api", "tests", "full"]
 
     def extract_api(self, file, filter=None) -> str:
-        """Extract and return api."""
-        raise NotImplementedError
+        """Return public API surface: signatures and first doc lines, no bodies."""
+        items = self._run_indexer(file)
+        pub_items = [
+            it for it in items
+            if it["pub"] and it["kind"] in ("fn", "struct", "trait", "enum", "type")
+        ]
+        line_count = len(file.content.splitlines())
+        parts = [f"// {file.path} ({line_count} lines)"]
+        for it in pub_items:
+            parts.append(it["signature"])
+            parts.append(f"  /// {it['doc'] or 'MISSING'}")
+        return "\n".join(parts)
 
     def extract_tests(self, file) -> str:
-        """Extract and return tests."""
-        raise NotImplementedError
+        """Return test function names with doc lines."""
+        items = self._run_indexer(file)
+        test_items = [it for it in items if it["is_test"]]
+        parts = [f"// Tests in {file.path}"]
+        for it in test_items:
+            parts.append(f"fn {it['name']}")
+            parts.append(f"  /// {it['doc'] or 'MISSING'}")
+        return "\n".join(parts)
 
     def extract_entity(self, file, entity_id: str, filter=None) -> str:
-        """Extract and return entity."""
-        raise NotImplementedError
+        """Return a named entity shaped by filter ('full' or 'api')."""
+        items = self._run_indexer(file)
+        matches = [it for it in items if it["name"] == entity_id]
+        if not matches:
+            available = ", ".join(it["name"] for it in items)
+            return (
+                f"Entity {entity_id!r} not found in {file.path}.\n"
+                f"Available: {available}"
+            )
+        it = matches[0]
+        if filter == "api":
+            return f"{it['signature']}\n  /// {it['doc'] or 'MISSING'}"
+        src_lines = file.content.splitlines()
+        return "\n".join(src_lines[it["body_start"] - 1 : it["body_end"]])
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _run_indexer(self, file) -> list[dict]:
+        try:
+            result = subprocess.run(
+                ["docker", "run", "--rm", "-i", DOCKER_IMAGE],
+                input=file.content,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            stderr = exc.stderr or ""
+            if "Unable to find image" in stderr or "No such image" in stderr or "pull access denied" in stderr:
+                raise RuntimeError(
+                    f"RustLanguagePlugin: Docker image '{DOCKER_IMAGE}' not found.\n"
+                    f"Build it with: {BUILD_CMD}"
+                ) from exc
+            raise
+        except FileNotFoundError:
+            raise RuntimeError(
+                f"RustLanguagePlugin: Docker image '{DOCKER_IMAGE}' not found.\n"
+                f"Build it with: {BUILD_CMD}"
+            )
+        return json.loads(result.stdout)["items"]
