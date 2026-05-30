@@ -53,14 +53,14 @@ def test_rust_plugin_supported_filters_returns_api_tests_full() -> None:
     assert RustLanguagePlugin().supported_filters() == ["api", "tests", "full"]
 
 
-def test_zig_plugin_supported_filters_returns_api_full() -> None:
+def test_zig_plugin_supported_filters_returns_api_tests_full() -> None:
     from baps.plugins.language_zig import ZigLanguagePlugin
-    assert ZigLanguagePlugin().supported_filters() == ["api", "full"]
+    assert ZigLanguagePlugin().supported_filters() == ["api", "tests", "full"]
 
 
-def test_zig_plugin_supported_filters_excludes_tests() -> None:
+def test_zig_plugin_supported_filters_includes_tests() -> None:
     from baps.plugins.language_zig import ZigLanguagePlugin
-    assert "tests" not in ZigLanguagePlugin().supported_filters()
+    assert "tests" in ZigLanguagePlugin().supported_filters()
 
 
 # ---------------------------------------------------------------------------
@@ -465,18 +465,28 @@ def test_rust_extract_entity_returns_entity_body() -> None:
     assert "foo" in result
 
 
-def test_zig_extract_api_raises_not_implemented() -> None:
+def test_zig_extract_api_is_implemented() -> None:
+    from unittest.mock import MagicMock, patch
+    import json
     from baps.plugins.language_zig import ZigLanguagePlugin
     file = CodeFile(path="main.zig", content="pub fn foo() void {}")
-    with pytest.raises(NotImplementedError):
-        ZigLanguagePlugin().extract_api(file)
+    mock = MagicMock()
+    mock.stdout = json.dumps({"items": [{"kind": "fn", "name": "foo", "pub": True, "signature": "pub fn foo() void", "doc": None, "is_test": False, "body_start": 1, "body_end": 1}]})
+    with patch("baps.plugins.language_zig.subprocess.run", return_value=mock):
+        result = ZigLanguagePlugin().extract_api(file)
+    assert "foo" in result
 
 
-def test_zig_extract_entity_raises_not_implemented() -> None:
+def test_zig_extract_entity_is_implemented() -> None:
+    from unittest.mock import MagicMock, patch
+    import json
     from baps.plugins.language_zig import ZigLanguagePlugin
     file = CodeFile(path="main.zig", content="pub fn foo() void {}")
-    with pytest.raises(NotImplementedError):
-        ZigLanguagePlugin().extract_entity(file, "foo", None)
+    mock = MagicMock()
+    mock.stdout = json.dumps({"items": [{"kind": "fn", "name": "foo", "pub": True, "signature": "pub fn foo() void", "doc": None, "is_test": False, "body_start": 1, "body_end": 1}]})
+    with patch("baps.plugins.language_zig.subprocess.run", return_value=mock):
+        result = ZigLanguagePlugin().extract_entity(file, "foo", None)
+    assert "foo" in result
 
 
 # ---------------------------------------------------------------------------
@@ -795,13 +805,13 @@ def test_coding_unknown_filter_message_includes_available_filters() -> None:
 # Zig adapter uses plugin-specific filters in tool schema
 # ---------------------------------------------------------------------------
 
-def test_coding_adapter_zig_build_tools_filter_enum_excludes_tests() -> None:
+def test_coding_adapter_zig_build_tools_filter_enum_includes_tests() -> None:
     from baps.adapters.coding_adapter import CodingProjectAdapter
     state = _coding_state([("src/main.zig", "// code\n")], language="zig")
     tools = CodingProjectAdapter().build_create_game_research_tools(state)
     list_tool = next(t for t in tools if t.name == "list_modules")
     filter_enum = list_tool.parameters.get("properties", {}).get("filter", {}).get("enum", [])
-    assert "tests" not in filter_enum
+    assert "tests" in filter_enum
     assert "api" in filter_enum
     assert "full" in filter_enum
 
