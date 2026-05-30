@@ -43,6 +43,7 @@ def run_sandboxed(
 
 
 def _run_bare(cwd: Path, test_command: str) -> tuple[str, subprocess.CompletedProcess]:
+    """Run test_command directly in cwd via the shell without any sandboxing."""
     completed = subprocess.run(
         test_command, cwd=cwd, capture_output=True, text=True, check=False, shell=True
     )
@@ -52,6 +53,7 @@ def _run_bare(cwd: Path, test_command: str) -> tuple[str, subprocess.CompletedPr
 def _run_docker(
     cwd: Path, test_command: str, docker_image: str
 ) -> tuple[str, subprocess.CompletedProcess]:
+    """Run test_command inside a Docker container with cwd bind-mounted at /work."""
     resolved = cwd.resolve()
     docker_args = [
         "docker", "run", "--rm",

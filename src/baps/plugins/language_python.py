@@ -61,6 +61,7 @@ def _format_class_api(node: ast.ClassDef) -> str:
 
 
 def _parse_pytest_failures(stdout: str) -> list[dict[str, str]]:
+    """Parse and return pytest failures."""
     failures = []
     for line in stdout.splitlines():
         if line.startswith("FAILED "):
@@ -74,11 +75,13 @@ def _parse_pytest_failures(stdout: str) -> list[dict[str, str]]:
 
 
 class PythonLanguagePlugin:
+    """Represent the PythonLanguagePlugin type."""
     name = "python"
     docker_image = "python:3.12-slim"
     test_command = "pip install pytest -q 2>/dev/null && python -m pytest"
 
     def initialize(self, project_path: Path) -> bool:
+        """Handle initialize."""
         project_path.mkdir(parents=True, exist_ok=True)
         changed = False
 
@@ -101,6 +104,7 @@ class PythonLanguagePlugin:
         return changed
 
     def run_tests(self, project_path: Path, sandbox_mode: str) -> VerificationResult:
+        """Handle run tests."""
         if sandbox_mode == "none":
             command, completed = self._run_bare(project_path)
         else:
@@ -121,6 +125,7 @@ class PythonLanguagePlugin:
         # Use uv when available; fall back to the current interpreter.
         # test_command is for Docker (needs pip install); bare execution relies
         # on the dev environment having pytest already installed.
+        """Handle run bare."""
         try:
             completed = subprocess.run(
                 ["uv", "run", "pytest"],
@@ -135,24 +140,30 @@ class PythonLanguagePlugin:
             return f"{sys.executable} -m pytest", completed
 
     def build(self, project_path: Path) -> None:
+        """Handle build."""
         pass
 
     def parse_test_failures(self, stdout: str) -> list[dict[str, str]]:
+        """Parse and return test failures."""
         return _parse_pytest_failures(stdout)
 
     def has_tests(self, file_paths: Sequence[str]) -> bool:
+        """Return whether the object has tests."""
         return any(
             p.startswith("tests/") or p.startswith("test_")
             for p in file_paths
         )
 
     def summarize_file(self, file, objective):
+        """Handle summarize file."""
         raise NotImplementedError
 
     def supported_filters(self) -> list[str]:
+        """Return supported values for ed filters."""
         return ["api", "tests", "full"]
 
     def extract_api(self, file: CodeFile) -> str:
+        """Extract and return api."""
         try:
             tree = ast.parse(file.content)
         except SyntaxError:
@@ -191,6 +202,7 @@ class PythonLanguagePlugin:
         return "\n".join(lines).rstrip()
 
     def extract_tests(self, file: CodeFile) -> str:
+        """Extract and return tests."""
         try:
             tree = ast.parse(file.content)
         except SyntaxError:
@@ -211,6 +223,7 @@ class PythonLanguagePlugin:
         return "Tests:\n" + "\n".join(entries)
 
     def extract_entity(self, file: CodeFile, entity_id: str, filter: str | None) -> str:
+        """Extract and return entity."""
         try:
             tree = ast.parse(file.content)
         except SyntaxError:

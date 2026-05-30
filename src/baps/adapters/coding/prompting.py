@@ -13,6 +13,7 @@ def _render_verification_feedback_section(
     previous_feedback: PlayGameFeedback | None,
     plugin: LanguagePlugin,
 ) -> str:
+    """Render a verification failure summary block for Blue from prior export or candidate feedback."""
     if previous_feedback is None:
         return ""
     section = ""
@@ -60,6 +61,7 @@ def render_coding_blue_prompt(
     previous_feedback: PlayGameFeedback | None,
     plugin: LanguagePlugin,
 ) -> str:
+    """Render the full Blue prompt for a coding project, including delta shape rules and verification context."""
     verification_section = _render_verification_feedback_section(previous_feedback, plugin)
     coding_delta_instructions = (
         "Coding delta rules:\n"
@@ -119,6 +121,7 @@ def render_coding_blue_prompt(
 
 
 def _truncate_lines(text: str, max_lines: int) -> str:
+    """Return text truncated to max_lines, appending a count of omitted lines if truncated."""
     lines = text.splitlines()
     if len(lines) <= max_lines:
         return text
@@ -126,6 +129,7 @@ def _truncate_lines(text: str, max_lines: int) -> str:
 
 
 def _render_coding_evaluation_supplement(verification_result: VerificationResult | None) -> str:
+    """Render coding-specific Red/Referee evaluation guidance, including verification evidence hints."""
     base = (
         "Coding evaluation guidance:\n"
         "- target_artifact_id is the artifact id, not a file path.\n"

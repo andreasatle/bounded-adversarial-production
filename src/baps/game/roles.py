@@ -23,14 +23,20 @@ from baps.tools.tools import ToolExecutor
 
 
 class PriorExportFeedback(BaseModel):
+    """Feedback carrying the prior export verification result into the next Blue attempt."""
+
     prior_export_verification: dict
 
 
 class BlueValidationFeedback(BaseModel):
+    """Feedback carrying a Blue output validation error back to the next Blue attempt."""
+
     attempt_rejection: dict
 
 
 class AttemptRejectionFeedback(BaseModel):
+    """Feedback from a rejected attempt carrying Red/Referee findings for the next Blue attempt."""
+
     red_finding: dict
     referee_decision: dict
     candidate_verification: dict | None = None
@@ -66,6 +72,8 @@ _REFEREE_DECISION_SCHEMA: dict = {
 
 
 class _VerifyCandidateFn(Protocol):
+    """Protocol for candidate delta verification callables used within play_game."""
+
     def __call__(
         self,
         adapter: ProjectTypeAdapter,
@@ -74,7 +82,9 @@ class _VerifyCandidateFn(Protocol):
         artifact_id: str,
         *,
         sandbox_mode: str,
-    ) -> VerificationResult | None: ...
+    ) -> VerificationResult | None:
+        """Verify the candidate delta and return a VerificationResult, or None if not applicable."""
+        ...
 
 
 @dataclass
@@ -104,6 +114,7 @@ class PlayGameContext:
 def initial_play_game_feedback(
     verification_result: VerificationResult | None,
 ) -> PriorExportFeedback | None:
+    """Return PriorExportFeedback from a verification result, or None if no result was provided."""
     if verification_result is None:
         return None
     return PriorExportFeedback(
@@ -125,6 +136,7 @@ def resolve_play_game_roles(
     build_client_for_role_fn: Any = _build_client_for_role,
     build_role_client_fn: Any = _build_role_client,
 ) -> tuple[Role, Role, Role]:
+    """Resolve and return (blue_role, red_role, referee_role) using explicit clients or config-derived ones."""
     def _get_client(explicit: ModelClient | None, role: str) -> ModelClient:
         if explicit is not None:
             return explicit
@@ -159,6 +171,7 @@ def build_play_game_fallbacks(
     referee_model_client: ModelClient | None,
     build_fallback_chain_for_role_fn: Any = _build_fallback_chain_for_role,
 ) -> tuple[Path | None, Callable[[str], str] | None, Callable[[str], str] | None]:
+    """Build and return (workspace, red_fallback_fn, referee_fallback_fn) from the config fallback chains."""
     workspace = config.workspace if config else None
     if config is None:
         return workspace, None, None

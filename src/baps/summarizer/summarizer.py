@@ -8,6 +8,7 @@ from baps.state.state import GameSpec
 
 
 def _build_api_prompt(content: str) -> str:
+    """Build a prompt asking the model to extract the public API surface of the given code."""
     return (
         "Extract the public API surface of this code — function/method signatures, "
         "doc comments, struct/class definitions (no bodies), test function names, and "
@@ -17,6 +18,7 @@ def _build_api_prompt(content: str) -> str:
 
 
 def _build_objective_prompt(content: str, objective: str) -> str:
+    """Build a prompt asking the model to summarize code relative to the given objective."""
     return (
         f"Given this code and the current objective: '{objective}', summarize what this "
         "code does and how it relates to the objective. Be concise.\n\n"
@@ -26,11 +28,13 @@ def _build_objective_prompt(content: str, objective: str) -> str:
 
 @dataclass
 class SummarizationContext:
+    """Holds a summarizer Role and a per-instance cache for deduplicating model calls."""
     summarizer: Role | None
     game_spec: GameSpec | None
     _cache: dict[str, str] = field(default_factory=dict, init=False)
 
     def summarize(self, content: str, objective: str | None) -> str | None:
+        """Return a model-generated summary of content, using the cache to avoid redundant calls."""
         if self.summarizer is None:
             return None
         content_hash = hashlib.sha256(content.encode()).hexdigest()

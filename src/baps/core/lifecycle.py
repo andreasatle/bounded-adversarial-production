@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class StartRunSummary:
+    """Collects outcome fields from a completed baps start lifecycle run for reporting."""
     workspace: Path
     project_type: str
     command: str
@@ -43,6 +44,7 @@ class StartRunSummary:
     failed: bool = False
 
     def record_iteration_result(self, result: "IterationRunResult") -> None:
+        """Update summary fields from the completed IterationRunResult."""
         self.update_applied = result.update_applied
         self.state_changed = result.state_changed
         self.output_exported = result.output_exported
@@ -60,6 +62,7 @@ class StartRunSummary:
 
 
 def resolve_start_config(args: argparse.Namespace) -> RunConfig:
+    """Resolve CLI args into a RunConfig, exiting with code 2 on validation error."""
     try:
         return resolve_run_config(args)
     except ValueError as exc:
@@ -68,6 +71,7 @@ def resolve_start_config(args: argparse.Namespace) -> RunConfig:
 
 
 def run_start_lifecycle(runtime, command: str) -> StartRunSummary:
+    """Run the project iteration loop and return a summary of the outcome."""
     summary = StartRunSummary(
         workspace=runtime.config.workspace,
         project_type=runtime.config.project_type,
@@ -87,6 +91,7 @@ def run_start_lifecycle(runtime, command: str) -> StartRunSummary:
 
 
 def _print_start_summary(summary: StartRunSummary) -> None:
+    """Print all summary fields to stdout as key=value lines."""
     print(f"workspace={summary.workspace}")
     print(f"project_type={summary.project_type}")
     print(f"command={summary.command}")
@@ -108,6 +113,7 @@ def _print_start_summary(summary: StartRunSummary) -> None:
 
 
 def _write_start_result(config: RunConfig, summary: StartRunSummary) -> None:
+    """Write a structured run-result.json to the workspace from the summary and active model info."""
     model_info = active_model_info(config)
     result_data: dict[str, object] = {
         "stop_reason": summary.stop_reason,
@@ -122,11 +128,13 @@ def _write_start_result(config: RunConfig, summary: StartRunSummary) -> None:
 
 
 def emit_start_result(config: RunConfig, summary: StartRunSummary) -> None:
+    """Print the start summary and write run-result.json."""
     _print_start_summary(summary)
     _write_start_result(config, summary)
 
 
 def build_start_runtime(config: RunConfig):
+    """Build the RuntimeContext for a start run, exiting with code 2 on error."""
     try:
         return build_runtime(config)
     except ValueError as exc:
@@ -135,11 +143,13 @@ def build_start_runtime(config: RunConfig):
 
 
 def exit_if_failed(summary: StartRunSummary) -> None:
+    """Raise SystemExit(2) if the summary indicates a failed run."""
     if summary.failed:
         raise SystemExit(2)
 
 
 def start_project(args: argparse.Namespace) -> None:
+    """Resolve config, build runtime, run the lifecycle, emit result, and exit on failure."""
     config = resolve_start_config(args)
     runtime = build_start_runtime(config)
     summary = run_start_lifecycle(runtime, command=str(args.command))
@@ -148,6 +158,7 @@ def start_project(args: argparse.Namespace) -> None:
 
 
 def reset_project(args: argparse.Namespace) -> None:
+    """Wipe workspace state and output, then print the reset summary."""
     try:
         workspace, output_path = resolve_reset_targets(args)
     except ValueError as exc:

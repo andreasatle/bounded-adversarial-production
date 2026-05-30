@@ -15,6 +15,7 @@ _WORKSPACE_CONFIG_FILE = "baps-config.json"
 
 
 def _load_proposals(workspace: Path) -> list[dict]:
+    """Load and parse all NorthStar proposals from the blackboard JSONL file."""
     path = workspace / _BLACKBOARD_DIR / _NORTHSTAR_PROPOSALS_FILE
     if not path.exists():
         return []
@@ -30,6 +31,7 @@ def _load_proposals(workspace: Path) -> list[dict]:
 
 
 def _load_workspace_config(workspace: Path) -> dict:
+    """Load and return the baps-config.json from the workspace, or an empty dict if missing."""
     path = workspace / _WORKSPACE_CONFIG_FILE
     if not path.exists():
         return {}
@@ -37,6 +39,7 @@ def _load_workspace_config(workspace: Path) -> dict:
 
 
 def _save_workspace_config(workspace: Path, config: dict) -> None:
+    """Write config to baps-config.json, raising ValueError if the path would escape the workspace."""
     path = workspace / _WORKSPACE_CONFIG_FILE
     resolved = path.resolve()
     if not resolved.is_relative_to(workspace.resolve()):
@@ -45,6 +48,7 @@ def _save_workspace_config(workspace: Path, config: dict) -> None:
 
 
 def _apply_proposal(workspace: Path, proposal: dict, dry_run: bool) -> None:
+    """Apply a NorthStar proposal to the workspace config, or log the proposal if dry_run is True."""
     config = _load_workspace_config(workspace)
     if not config:
         logger.error("[apply-northstar] no workspace config found at %s", workspace / _WORKSPACE_CONFIG_FILE)
@@ -64,6 +68,7 @@ def _apply_proposal(workspace: Path, proposal: dict, dry_run: bool) -> None:
 
 
 def main() -> None:
+    """CLI entry point for baps-apply-northstar: list proposals and apply a chosen one."""
     _log_level = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
     logging.basicConfig(level=_log_level, format="%(asctime)s %(levelname)-5s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 

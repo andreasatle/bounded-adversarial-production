@@ -14,6 +14,7 @@ _BLUE_CODING_KEYS = frozenset({"artifact_id", "operation", "payload"})
 
 
 def _fix_one_file_content_quotes(file_data: dict) -> None:
+    """Fix escaped double-quotes in a single file dict's content field if safe to do so."""
     content = file_data.get("content")
     path = file_data.get("path")
     if not isinstance(content, str) or '\\"' not in content:
@@ -36,6 +37,7 @@ def _fix_one_file_content_quotes(file_data: dict) -> None:
 
 
 def _fix_delta_file_content_quotes(parsed: dict) -> None:
+    """Apply quote-fixing to all file content fields in a parsed coding delta dict."""
     operation = parsed.get("operation")
     payload = parsed.get("payload")
     if not isinstance(payload, dict):
@@ -54,6 +56,7 @@ def _fix_delta_file_content_quotes(parsed: dict) -> None:
 
 
 def _validate_coding_write_file_artifact_purity(delta: DeltaCodingState) -> None:
+    """Raise ValueError if the write_file delta contains an unsafe path or forbidden reasoning markers."""
     _validate_file_path(delta.payload.file.path)
     lowered = delta.payload.file.content.lower()
     for marker in _BLUE_CONTENT_FORBIDDEN_MARKERS:
@@ -65,6 +68,7 @@ def _validate_coding_write_file_artifact_purity(delta: DeltaCodingState) -> None
 
 
 def _validate_coding_write_files_purity(delta: DeltaCodingBatchState) -> None:
+    """Raise ValueError if any file in a write_files delta has an unsafe path or forbidden marker."""
     for code_file in delta.payload.files:
         _validate_file_path(code_file.path)
         lowered = code_file.content.lower()
@@ -77,6 +81,7 @@ def _validate_coding_write_files_purity(delta: DeltaCodingBatchState) -> None:
 
 
 def _recover_malformed_coding_delta_json(text: str) -> dict[str, object] | None:
+    """Attempt to reconstruct a valid coding delta dict from malformed JSON text, or return None."""
     artifact_match = re.search(r'"artifact_id"\s*:\s*"([^"]+)"', text)
     operation_match = re.search(r'"operation"\s*:\s*"([^"]+)"', text)
     path_match = re.search(r'"path"\s*:\s*"([^"]+)"', text)
@@ -133,6 +138,7 @@ def _recover_malformed_coding_delta_json(text: str) -> dict[str, object] | None:
 
 
 def parse_coding_delta_json(text: str, workspace: Path | None = None) -> DeltaCodingState | DeltaCodingBatchState:
+    """Parse Blue model text output into a validated coding delta, with malformed-JSON recovery."""
     try:
         parsed, _ = parse_model_output(text, _BLUE_CODING_KEYS, context="blue:coding", workspace=workspace)
     except ValueError as exc:

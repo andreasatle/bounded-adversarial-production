@@ -12,6 +12,7 @@ from baps.state.state import StopReason
 
 @dataclass
 class ModelConfig:
+    """Represent the ModelConfig type."""
     name: str       # short display name, used as key in policy state
     backend: Backend
     model_id: str   # the model string passed to the API
@@ -45,6 +46,7 @@ def compute_reward(result: dict) -> float:
 
 @dataclass
 class _ModelStats:
+    """Represent the _ModelStats type."""
     score: float = 0.5
     runs: int = 0
 
@@ -63,6 +65,7 @@ class ModelPolicy:
     TEMP_DECAY: float = 0.02  # temperature = TEMP_INIT / (1 + total_runs * TEMP_DECAY)
 
     def __init__(self, models: list[ModelConfig]) -> None:
+        """Initialize the instance."""
         if not models:
             raise ValueError("model ladder must not be empty")
         self.models = list(models)
@@ -71,6 +74,7 @@ class ModelPolicy:
 
     @property
     def temperature(self) -> float:
+        """Handle temperature."""
         return self.TEMP_INIT / (1 + self.total_runs * self.TEMP_DECAY)
 
     def select(self) -> ModelConfig:
@@ -108,16 +112,19 @@ class ModelPolicy:
         self.total_runs += 1
 
     def snapshot(self) -> dict[str, dict]:
+        """Handle snapshot."""
         return {
             name: {"score": round(s.score, 4), "runs": s.runs}
             for name, s in self._stats.items()
         }
 
     def save(self, path: Path) -> None:
+        """Handle save."""
         data = {"total_runs": self.total_runs, "stats": self.snapshot()}
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
     def load_stats(self, path: Path) -> None:
+        """Load and return stats."""
         if not path.exists():
             return
         data = json.loads(path.read_text(encoding="utf-8"))

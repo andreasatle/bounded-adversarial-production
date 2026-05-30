@@ -28,6 +28,7 @@ _VALID_BACKENDS = frozenset(Backend)
 
 
 class SpecRole(StrEnum):
+    """Named roles used in spec-file configuration and role-specific client resolution."""
     BLUE = "blue"
     RED = "red"
     REFEREE = "referee"
@@ -67,6 +68,7 @@ def _build_client(backend: str | Backend, model: str) -> ModelClient:
 
 
 def _build_client_for_backend(backend: str | Backend) -> ModelClient:
+    """Build a client for the given backend using its default model env var."""
     if backend == Backend.ANTHROPIC:
         return _build_client(backend, os.getenv("BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL))
     if backend == Backend.OPENAI:
@@ -87,6 +89,7 @@ def _build_multi_backend_client() -> ModelClient | None:
 
 
 def _build_model_client() -> ModelClient:
+    """Build the default model client from BAPS_BACKENDS or BAPS_BACKEND env vars."""
     client = _build_multi_backend_client()
     if client is not None:
         return client
@@ -94,6 +97,7 @@ def _build_model_client() -> ModelClient:
 
 
 def _build_planner_model_client() -> ModelClient:
+    """Build the planner (create_game) model client, preferring BAPS_OLLAMA_PLANNER_MODEL when set."""
     client = _build_multi_backend_client()
     if client is not None:
         return client
@@ -175,6 +179,7 @@ def _parse_role_config(cfg: dict, path: str) -> RoleConfig:
 
 
 def _parse_spec_roles(roles_raw: object) -> dict[str, RoleConfig]:
+    """Parse the raw roles mapping from a spec file into a validated dict of RoleConfig objects."""
     if not isinstance(roles_raw, dict):
         raise ValueError("spec 'roles' must be a mapping")
     result: dict[str, RoleConfig] = {}

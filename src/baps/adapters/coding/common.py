@@ -33,6 +33,7 @@ def _validate_file_path(path: str) -> None:
 
 
 def _build_language_registry() -> dict[str, LanguagePlugin]:
+    """Instantiate and return a registry mapping language names to their plugin."""
     from baps.plugins.language_python import PythonLanguagePlugin
     from baps.plugins.language_rust import RustLanguagePlugin
     from baps.plugins.language_zig import ZigLanguagePlugin
@@ -45,6 +46,7 @@ def _build_language_registry() -> dict[str, LanguagePlugin]:
 
 
 def _plugin_for(language: str) -> LanguagePlugin:
+    """Return the LanguagePlugin for the given language name, raising ValueError if unsupported."""
     registry = _build_language_registry()
     if language not in registry:
         available = ", ".join(sorted(registry))
@@ -55,6 +57,7 @@ def _plugin_for(language: str) -> LanguagePlugin:
 
 
 def _config_language(config: dict[str, object]) -> str:
+    """Extract the required 'language' field from a coding project config dict."""
     language = config.get("language")
     if not language:
         registry = _build_language_registry()
@@ -66,6 +69,7 @@ def _config_language(config: dict[str, object]) -> str:
 
 
 def coding_artifact_from_state(state: State, artifact_id: str) -> CodingArtifact:
+    """Return the CodingArtifact with the given id from state, raising ValueError if missing."""
     artifact = next((a for a in state.artifacts if a.id == artifact_id), None)
     if artifact is None:
         raise ValueError(f"target coding artifact not found in state: {artifact_id}")

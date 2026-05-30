@@ -50,11 +50,13 @@ _GITIGNORE_CONTENT = (
 
 
 class ZigLanguagePlugin:
+    """Represent the ZigLanguagePlugin type."""
     name = "zig"
     docker_image = "baps-zig:latest"
     test_command = "zig build test"
 
     def initialize(self, project_path: Path) -> bool:
+        """Handle initialize."""
         project_path.mkdir(parents=True, exist_ok=True)
         changed = False
 
@@ -81,6 +83,7 @@ class ZigLanguagePlugin:
         return changed
 
     def run_tests(self, project_path: Path, sandbox_mode: str) -> VerificationResult:
+        """Handle run tests."""
         if sandbox_mode == "none":
             command, completed = self._run_bare(project_path)
         else:
@@ -98,6 +101,7 @@ class ZigLanguagePlugin:
         )
 
     def _run_bare(self, project_path: Path) -> tuple[str, subprocess.CompletedProcess]:
+        """Handle run bare."""
         completed = subprocess.run(
             ["zig", "build", "test"],
             cwd=project_path, capture_output=True, text=True, check=False,
@@ -105,9 +109,11 @@ class ZigLanguagePlugin:
         return "zig build test", completed
 
     def build(self, project_path: Path) -> None:
+        """Handle build."""
         pass
 
     def parse_test_failures(self, stdout: str) -> list[dict[str, str]]:
+        """Parse and return test failures."""
         failures = []
         for line in stdout.splitlines():
             if line.startswith("FAIL "):
@@ -118,19 +124,25 @@ class ZigLanguagePlugin:
         return failures
 
     def has_tests(self, file_paths: Sequence[str]) -> bool:
+        """Return whether the object has tests."""
         return any(p.endswith(".zig") for p in file_paths)
 
     def summarize_file(self, file, objective):
+        """Handle summarize file."""
         raise NotImplementedError
 
     def supported_filters(self) -> list[str]:
+        """Return supported values for ed filters."""
         return ["api", "full"]
 
     def extract_api(self, file, filter=None) -> str:
+        """Extract and return api."""
         raise NotImplementedError
 
     def extract_tests(self, file) -> str:
+        """Extract and return tests."""
         raise NotImplementedError
 
     def extract_entity(self, file, entity_id: str, filter=None) -> str:
+        """Extract and return entity."""
         raise NotImplementedError

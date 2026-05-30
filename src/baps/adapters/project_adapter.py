@@ -47,6 +47,7 @@ def sanitize_model_title(text: str) -> str:
 
 
 def _config_artifact_id(config: dict[str, Any] | RunConfig) -> str:
+    """Handle config artifact id."""
     if isinstance(config, RunConfig):
         value = str(config.artifact_id)
     else:
@@ -59,6 +60,7 @@ def _config_artifact_id(config: dict[str, Any] | RunConfig) -> str:
 
 
 def _config_northstar_markdown(config: dict[str, Any] | RunConfig) -> str:
+    """Handle config northstar markdown."""
     if isinstance(config, RunConfig):
         value = config.northstar_markdown
     else:
@@ -71,6 +73,7 @@ def _config_northstar_markdown(config: dict[str, Any] | RunConfig) -> str:
 
 @dataclass(frozen=True)
 class VerificationResult:
+    """Represent the VerificationResult type."""
     command: str
     cwd: str
     exit_code: int
@@ -80,6 +83,7 @@ class VerificationResult:
 
 
 def _verification_result_to_dict(result: VerificationResult) -> dict[str, Any]:
+    """Handle verification result to dict."""
     return {
         "command": result.command,
         "cwd": result.cwd,
@@ -91,10 +95,12 @@ def _verification_result_to_dict(result: VerificationResult) -> dict[str, Any]:
 
 
 class ProjectTypeAdapter(Protocol):
+    """Implement the ProjectTypeAdapter project adapter."""
     project_type: str
     supported_delta_type: str
 
     def create_initial_state(self, config: dict[str, object]) -> State:
+        """Create and return initial state."""
         ...
 
     def build_create_game_state_view(
@@ -103,6 +109,7 @@ class ProjectTypeAdapter(Protocol):
         config: dict[str, object],
         summarization_context: SummarizationContext | None = None,
     ) -> StateView:
+        """Build and return create game state view."""
         ...
 
     def render_create_game_prompt_supplement(
@@ -112,11 +119,13 @@ class ProjectTypeAdapter(Protocol):
         state_view: StateView,
         verification_result: VerificationResult | None,
     ) -> str:
+        """Render and return create game prompt supplement."""
         ...
 
     def normalize_game_spec(
         self, game_spec: GameSpec, state: State, config: dict[str, object]
     ) -> GameSpec:
+        """Normalize and return game spec."""
         ...
 
     def build_state_view(
@@ -125,6 +134,7 @@ class ProjectTypeAdapter(Protocol):
         game_spec: GameSpec,
         summarization_context: SummarizationContext | None = None,
     ) -> StateView:
+        """Build and return state view."""
         ...
 
     def render_blue_prompt(
@@ -134,6 +144,7 @@ class ProjectTypeAdapter(Protocol):
         attempt_number: int,
         previous_feedback: PlayGameFeedback | None,
     ) -> str:
+        """Render and return blue prompt."""
         ...
 
     def render_red_prompt_supplement(
@@ -143,6 +154,7 @@ class ProjectTypeAdapter(Protocol):
         delta_state: DeltaState,
         verification_result: VerificationResult | None,
     ) -> str:
+        """Render and return red prompt supplement."""
         ...
 
     def render_referee_prompt_supplement(
@@ -152,44 +164,56 @@ class ProjectTypeAdapter(Protocol):
         delta_state: DeltaState,
         verification_result: VerificationResult | None,
     ) -> str:
+        """Render and return referee prompt supplement."""
         ...
 
     def build_blue_output_format(self) -> str | dict | None:
+        """Build and return blue output format."""
         ...
 
     def build_blue_tools(self) -> list[ToolDefinition]:
+        """Build and return blue tools."""
         ...
 
     def supported_filters(self) -> list[str]:
+        """Return supported values for ed filters."""
         ...
 
     def build_research_tools(self, role: str) -> list[ToolDefinition]:
+        """Build and return research tools."""
         ...
 
     def build_create_game_research_tools(self, state: State) -> list:
+        """Build and return create game research tools."""
         ...
 
     def execute_create_game_research_tool(
         self, tool_name: str, tool_input: dict, state: State
     ) -> str:
+        """Execute and return create game research tool."""
         ...
 
     def tool_call_to_delta(self, tool_call: ToolCall) -> DeltaState:
+        """Handle tool call to delta."""
         ...
 
     def parse_blue_delta(self, text: str) -> DeltaState:
+        """Parse and return blue delta."""
         ...
 
     def export_state(self, state: State, output_path: Path, artifact_id: str) -> bool:
+        """Export and return state."""
         ...
 
     def verify_export(
         self, output_path: Path, state: State, artifact_id: str, sandbox_mode: str = "docker"
     ) -> VerificationResult | None:
+        """Verify and return export."""
         ...
 
 
 def build_default_project_type_adapters() -> dict[str, ProjectTypeAdapter]:
+    """Build and return default project type adapters."""
     from baps.adapters.coding_adapter import CodingProjectAdapter
     from baps.adapters.document_adapter import DocumentProjectAdapter
     from baps.adapters.audit_adapter import AuditProjectAdapter
@@ -203,10 +227,12 @@ def build_default_project_type_adapters() -> dict[str, ProjectTypeAdapter]:
 
 @functools.lru_cache(maxsize=None)
 def _cached_default_adapters() -> types.MappingProxyType:
+    """Handle cached default adapters."""
     return types.MappingProxyType(build_default_project_type_adapters())
 
 
 def resolve_project_type_adapter(project_type: str) -> ProjectTypeAdapter:
+    """Resolve and return project type adapter."""
     if project_type == "git":
         raise ValueError("project_type 'git' is not implemented")
     adapter = _cached_default_adapters().get(project_type)
@@ -216,6 +242,7 @@ def resolve_project_type_adapter(project_type: str) -> ProjectTypeAdapter:
 
 
 def resolve_adapter_for_allowed_delta_type(allowed_delta_type: str) -> ProjectTypeAdapter:
+    """Resolve and return adapter for allowed delta type."""
     for adapter in _cached_default_adapters().values():
         if adapter.supported_delta_type == allowed_delta_type:
             return adapter
@@ -229,6 +256,7 @@ def render_blue_prompt_core(
     previous_feedback: PlayGameFeedback | None,
     project_delta_instructions: str = "",
 ) -> str:
+    """Render and return blue prompt core."""
     import json
 
     feedback_dict = (

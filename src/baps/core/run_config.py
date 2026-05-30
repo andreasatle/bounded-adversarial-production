@@ -21,12 +21,15 @@ class RoleConfig(BaseModel):
     fallback: RoleConfig | None = None
 
     def __getitem__(self, key: str) -> object:
+        """Return the value of the named config field."""
         return getattr(self, key)
 
     def get(self, key: str, default: object | None = None) -> object | None:
+        """Return the value of the named config field, or default if absent."""
         return getattr(self, key, default)
 
     def __contains__(self, key: object) -> bool:
+        """Return True if key is a defined field of this model."""
         return isinstance(key, str) and key in type(self).model_fields
 
 
@@ -59,15 +62,19 @@ class RunConfig(BaseModel):
     spec_roles: dict[str, RoleConfig] = Field(default_factory=dict)
 
     def __getitem__(self, key: str) -> object:
+        """Return the value of the named config field."""
         return getattr(self, key)
 
     def get(self, key: str, default: object | None = None) -> object | None:
+        """Return the value of the named config field, or default if absent."""
         return getattr(self, key, default)
 
     def __contains__(self, key: object) -> bool:
+        """Return True if key is a defined field of this model."""
         return isinstance(key, str) and key in type(self).model_fields
 
     def to_adapter_config(self) -> dict[str, object]:
+        """Return a plain dict projection of config fields suitable for passing to adapters."""
         return {
             "workspace": str(self.workspace),
             "project_type": self.project_type,
@@ -107,12 +114,14 @@ _KNOWN_SPEC_KEYS = frozenset({
 
 
 def _require_non_empty(value: str, field_name: str) -> str:
+    """Raise ValueError with a descriptive message if value is blank; otherwise return it."""
     if value.strip() == "":
         raise ValueError(f"{field_name} must be non-empty")
     return value
 
 
 def _load_spec(spec_path: Path) -> dict[str, object]:
+    """Load and return the YAML spec file as a dict, raising ValueError on bad format."""
     if not spec_path.exists():
         raise ValueError(f"spec file not found: {spec_path}")
 
@@ -125,6 +134,7 @@ def _load_spec(spec_path: Path) -> dict[str, object]:
 
 
 def resolve_run_config(args: argparse.Namespace) -> RunConfig:
+    """Merge CLI args, YAML spec, and workspace settings into a validated RunConfig."""
     from baps.core.debug import _debug_print_read_config
     from baps.core.clients import _VALID_BACKENDS, _parse_spec_roles
 
@@ -275,6 +285,7 @@ def resolve_run_config(args: argparse.Namespace) -> RunConfig:
 
 
 def resolve_reset_targets(args: argparse.Namespace) -> tuple[Path, Path | None]:
+    """Return the workspace path and optional output path to wipe for a reset command."""
     spec_data: dict[str, object] = {}
     if args.spec:
         spec_data = _load_spec(Path(args.spec))

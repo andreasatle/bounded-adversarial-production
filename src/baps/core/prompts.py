@@ -18,6 +18,7 @@ from baps.state.state import DeltaState, GameSpec, RedFinding, State
 
 
 def _render_verification_block(result: VerificationResult | None, *, guidance: str) -> str:
+    """Render and return verification block."""
     if result is None:
         return ""
     verification_json = json.dumps(_verification_result_to_dict(result), sort_keys=True)
@@ -36,6 +37,7 @@ def _render_create_game_prompt(
     context_chain: tuple[str, ...] = (),
     create_game_red_feedback: dict[str, Any] | None = None,
 ) -> str:
+    """Render and return create game prompt."""
     resolved_adapter = (
         adapter
         if adapter is not None
@@ -155,6 +157,7 @@ def _render_create_game_red_prompt(
     game_spec: GameSpec,
     config: RunConfig,
 ) -> str:
+    """Render and return create game red prompt."""
     game_spec_json = json.dumps(game_spec.model_dump(mode="json"), sort_keys=True)
     return (
         "Review the proposed GameSpec and determine whether it represents the right game to play.\n\n"
@@ -200,6 +203,7 @@ def _render_red_prompt_supplement_with_adapter(
     delta_state: DeltaState,
     verification_result: VerificationResult | None,
 ) -> str:
+    """Render and return red prompt supplement with adapter."""
     renderer = getattr(adapter, "render_red_prompt_supplement", None)
     if renderer is None:
         return ""
@@ -218,6 +222,7 @@ def _render_referee_prompt_supplement_with_adapter(
     delta_state: DeltaState,
     verification_result: VerificationResult | None,
 ) -> str:
+    """Render and return referee prompt supplement with adapter."""
     renderer = getattr(adapter, "render_referee_prompt_supplement", None)
     if renderer is None:
         return ""
@@ -236,6 +241,7 @@ def _render_red_prompt(
     verification_result: VerificationResult | None = None,
     prompt_supplement: str = "",
 ) -> str:
+    """Render and return red prompt."""
     state_view_json = json.dumps(state_view.model_dump(mode="json"), sort_keys=True)
     delta_state_json = json.dumps(delta_state.model_dump(mode="json"), sort_keys=True)
     _red_guidance = (
@@ -293,6 +299,7 @@ def _render_referee_prompt(
     verification_result: VerificationResult | None = None,
     prompt_supplement: str = "",
 ) -> str:
+    """Render and return referee prompt."""
     state_view_json = json.dumps(state_view.model_dump(mode="json"), sort_keys=True)
     delta_state_json = json.dumps(delta_state.model_dump(mode="json"), sort_keys=True)
     red_finding_json = json.dumps(red_finding.model_dump(mode="json"), sort_keys=True)
@@ -347,6 +354,7 @@ def _render_referee_prompt(
 
 
 def _render_create_game_research_prompt(state_view: StateView, config: RunConfig) -> str:
+    """Render and return create game research prompt."""
     return (
         "Before producing a GameSpec, use the available tools to inspect any artifact files "
         "whose summaries leave gaps in your understanding of the current codebase.\n\n"
@@ -362,6 +370,7 @@ def _render_create_game_research_prompt(state_view: StateView, config: RunConfig
 
 
 def _get_research_tools(adapter: ProjectTypeAdapter, role: str) -> list:
+    """Return research tools."""
     getter = getattr(adapter, "build_research_tools", None)
     if getter is None:
         return []
@@ -395,6 +404,7 @@ def _render_research_prompt(
     game_spec: GameSpec,
     prior_sessions: list[tuple[str, list[ToolCallRecord], str]],
 ) -> str:
+    """Render and return research prompt."""
     prior_block = _render_tool_session_block(prior_sessions)
     prior_section = f"\nPrior research from other roles:\n{prior_block}\n" if prior_block else ""
     return (

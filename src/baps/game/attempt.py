@@ -34,6 +34,8 @@ from baps.game.telemetry import sanitize_feedback_dict, summarize_verification_r
 
 
 class PlayAttemptRecord(BaseModel):
+    """Records the inputs and outputs for a single play_game attempt for telemetry."""
+
     attempt_number: int
     blue_delta: dict[str, Any] | None = None
     red_finding: dict[str, Any] | None = None
@@ -42,10 +44,12 @@ class PlayAttemptRecord(BaseModel):
     parse_recovery: ParseRecoveryRecord | None = None
 
     def to_telemetry_dict(self) -> dict[str, Any]:
+        """Serialize this record to a JSON-safe dict for blackboard writing."""
         return self.model_dump(mode="json")
 
 
 def _aggregate_parse_recovery(records: list[ParseRecoveryRecord]) -> ParseRecoveryRecord:
+    """Combine multiple ParseRecoveryRecords into one by union of keys and OR of boolean flags."""
     all_keys = sorted({k for r in records for k in r.unexpected_keys_stripped})
     return ParseRecoveryRecord(
         unexpected_keys_stripped=all_keys,
@@ -70,6 +74,7 @@ def run_play_game_attempt(
     RefereeDecision | None,
     PlayGameFeedback | None,
 ]:
+    """Execute one Blue/Red/Referee attempt cycle and return the attempt record and role outputs."""
     attempt_rec = PlayAttemptRecord(attempt_number=attempt)
 
     blue_session: list[ToolCallRecord] = []
@@ -286,6 +291,7 @@ def apply_play_game_attempt_decision(
     red_finding: RedFinding,
     referee_decision: RefereeDecision,
 ) -> tuple[PlayGameRuntime, AttemptRejectionFeedback | None, VerificationResult | None, bool]:
+    """Apply the Referee decision to runtime, optionally verify the candidate, and return updated state."""
     runtime = apply_referee_decision_to_runtime(
         runtime=runtime,
         candidate_delta=candidate_delta,

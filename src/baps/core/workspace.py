@@ -11,6 +11,7 @@ _WORKSPACE_CONFIG_FIELDS = ("project_type", "artifact_id", "northstar_markdown",
 
 
 def resolve_output_path(workspace: Path, output_value: str) -> Path:
+    """Resolve output_value to an absolute path, treating relative values as relative to workspace."""
     output_candidate = Path(output_value)
     if output_candidate.is_absolute():
         return output_candidate.resolve()
@@ -18,14 +19,17 @@ def resolve_output_path(workspace: Path, output_value: str) -> Path:
 
 
 def state_path_for_workspace(workspace: Path) -> Path:
+    """Return the canonical state.json path for the given workspace directory."""
     return workspace / "state" / "state.json"
 
 
 def workspace_config_path(workspace: Path) -> Path:
+    """Return the path to the baps-config.json file inside the workspace."""
     return workspace / _WORKSPACE_CONFIG_FILE
 
 
 def save_workspace_settings(run_config: "RunConfig", workspace: Path) -> None:
+    """Persist the run config's key fields to baps-config.json so a subsequent run can resume."""
     workspace.mkdir(parents=True, exist_ok=True)
     output_path = run_config.output_path
     try:
@@ -45,6 +49,7 @@ def save_workspace_settings(run_config: "RunConfig", workspace: Path) -> None:
 
 
 def load_workspace_settings(workspace: Path) -> dict[str, object]:
+    """Load and return recognised settings from baps-config.json, or an empty dict if absent."""
     path = workspace_config_path(workspace)
     if not path.exists():
         return {}
@@ -58,6 +63,7 @@ def load_workspace_settings(workspace: Path) -> dict[str, object]:
 
 
 def wipe_workspace_state(workspace: Path, output_path: Path | None = None) -> None:
+    """Delete the state file, workspace config, and optionally the output path to reset a workspace."""
     state_path = state_path_for_workspace(workspace)
     if state_path.exists():
         state_path.unlink()
@@ -74,6 +80,7 @@ def wipe_workspace_state(workspace: Path, output_path: Path | None = None) -> No
 
 
 def write_run_result(workspace: Path, result_data: dict[str, object]) -> None:
+    """Write result_data as JSON to run-result.json in the workspace directory."""
     workspace.mkdir(parents=True, exist_ok=True)
     (workspace / "run-result.json").write_text(
         json.dumps(result_data, indent=2), encoding="utf-8"

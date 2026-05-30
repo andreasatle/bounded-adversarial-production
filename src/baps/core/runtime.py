@@ -25,6 +25,7 @@ from baps.summarizer.summarizer import SummarizationContext
 
 @dataclass(frozen=True)
 class RuntimeContext:
+    """Immutable bundle of all resolved runtime dependencies for a single baps run."""
     config: RunConfig
     adapter: ProjectTypeAdapter
     state_service: StateService
@@ -33,6 +34,7 @@ class RuntimeContext:
 
 
 def create_state(config: RunConfig) -> State:
+    """Create and return a new initial State via the adapter for the configured project type."""
     adapter = resolve_project_type_adapter(config.project_type)
     state = adapter.create_initial_state(config.to_adapter_config())
     _debug_print_create_state(config=config, state=state)
@@ -40,16 +42,19 @@ def create_state(config: RunConfig) -> State:
 
 
 def _build_project_type_adapters() -> dict[str, ProjectTypeAdapter]:
+    """Return the default mapping of project type names to adapter instances."""
     from baps.adapters.project_adapter import build_default_project_type_adapters
 
     return build_default_project_type_adapters()
 
 
 def _resolve_project_type_adapter(project_type: str) -> ProjectTypeAdapter:
+    """Return the adapter for the given project type name, raising ValueError if unknown."""
     return resolve_project_type_adapter(project_type)
 
 
 def _resolve_adapter_for_allowed_delta_type(allowed_delta_type: str) -> ProjectTypeAdapter:
+    """Return the adapter that owns the given allowed_delta_type, raising ValueError if unrecognised."""
     return resolve_adapter_for_allowed_delta_type(allowed_delta_type)
 
 
@@ -57,6 +62,7 @@ def _initialize_project(
     config: RunConfig,
     create_state_fn=None,
 ) -> tuple[StateService, State]:
+    """Create initial State, persist it, save workspace settings, and return (StateService, State)."""
     if create_state_fn is None:
         create_state_fn = create_state
     workspace = config.workspace
@@ -72,6 +78,7 @@ def _initialize_project(
 
 
 def _load_project_service(workspace: Path) -> StateService:
+    """Build and return a StateService backed by the existing JSON state file in workspace."""
     return StateService(
         store=JsonStateStore(state_path_for_workspace(workspace)),
         registry=build_default_state_artifact_registry(),
@@ -82,6 +89,7 @@ def prepare_workspace(
     config: RunConfig,
     create_state_fn=None,
 ) -> tuple[StateService, State]:
+    """Load existing state if present, otherwise initialise a fresh project; return (StateService, State)."""
     if create_state_fn is None:
         create_state_fn = create_state
     state_path = state_path_for_workspace(config.workspace)
@@ -92,6 +100,7 @@ def prepare_workspace(
 
 
 def _resolve_summarize_role(config: RunConfig) -> Role | None:
+    """Return a Role for the summarize spec role if configured, otherwise None."""
     if SpecRole.SUMMARIZE not in (config.spec_roles or {}):
         return None
     try:
@@ -105,6 +114,7 @@ def build_runtime(
     config: RunConfig,
     create_state_fn=None,
 ) -> RuntimeContext:
+    """Assemble and return a fully resolved RuntimeContext for the given config."""
     if create_state_fn is None:
         create_state_fn = create_state
     adapter = _resolve_project_type_adapter(config.project_type)
@@ -120,6 +130,7 @@ def build_runtime(
 
 
 def run_project(runtime: RuntimeContext) -> IterationRunResult:
+    """Execute the project iteration loop using the assembled runtime and return the result."""
     return _run_project_iterations(
         config=runtime.config,
         adapter=runtime.adapter,
@@ -130,6 +141,7 @@ def run_project(runtime: RuntimeContext) -> IterationRunResult:
 
 
 def active_model_info(config: RunConfig | None = None) -> dict[str, str]:
+    """Return a dict with 'backend' and 'model' for the active blue role, or 'unknown' on error."""
     if config is None:
         return {"backend": "unknown", "model": "unknown"}
     try:

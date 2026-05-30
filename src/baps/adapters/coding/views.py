@@ -17,6 +17,7 @@ def build_coding_create_game_state_view(
     config: dict[str, Any],
     summarization_context: SummarizationContext | None = None,
 ) -> StateView:
+    """Build the CreateGame StateView for a coding project, including NorthStar and current files."""
     artifact_id = _config_artifact_id(config)
     target_artifact = coding_artifact_from_state(state, artifact_id)
     northstar_content = _config_northstar_markdown(config)
@@ -82,6 +83,7 @@ def build_coding_state_view(
     game_spec: GameSpec,
     summarization_context: SummarizationContext | None = None,
 ) -> StateView:
+    """Build the PlayGame StateView for a coding project, with per-file summaries when a summarizer is available."""
     artifact = coding_artifact_from_state(state, game_spec.target_artifact_id)
     target_entity = game_spec.target_entity
     file_lines: list[str] = []

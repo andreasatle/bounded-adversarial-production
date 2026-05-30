@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 def _format_debug_yaml_like(value: Any, indent: int = 0) -> list[str]:
+    """Recursively format a value as indented YAML-like lines for human-readable debug output."""
     prefix = " " * indent
     if isinstance(value, dict):
         if not value:
@@ -85,15 +86,18 @@ def _format_debug_yaml_like(value: Any, indent: int = 0) -> list[str]:
 
 
 def _debug_log(key: str, payload: object) -> None:
+    """Log key and YAML-formatted payload at DEBUG level when debug logging is enabled."""
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug("%s:\n%s", key, "\n".join(_format_debug_yaml_like(payload, indent=2)))
 
 
 def debug_event(name: str, payload: dict[str, Any]) -> None:
+    """Log a named debug event with its payload dict."""
     _debug_log(name, payload)
 
 
 def _debug_print_read_config(args: argparse.Namespace, spec_data: dict[str, Any], config: RunConfig) -> None:
+    """Log the resolved CLI args, spec data, and resulting RunConfig fields at DEBUG level."""
     _debug_log("read_config.input", {
         "cli_args": {
             "workspace": args.workspace,
@@ -116,6 +120,7 @@ def _debug_print_read_config(args: argparse.Namespace, spec_data: dict[str, Any]
 
 
 def _debug_print_create_state(config: RunConfig, state: State) -> None:
+    """Log the create_state inputs and the resulting State at DEBUG level."""
     _debug_log("create_state.input", {
         "project_type": config.project_type,
         "artifact_id": _config_artifact_id(config),
@@ -129,20 +134,24 @@ def _debug_print_create_state(config: RunConfig, state: State) -> None:
 
 
 def _debug_print_create_game_input(state: State) -> None:
+    """Log the State passed into create_game at DEBUG level."""
     _debug_log("create_game.input", {"state": state.model_dump(mode="json")})
 
 
 def _debug_print_create_game_output(game_spec: GameSpec) -> None:
+    """Log the GameSpec produced by create_game at DEBUG level."""
     _debug_log("create_game.output", {"game_spec": game_spec.model_dump(mode="json")})
 
 
 def _debug_print_create_game_prompt(prompt: str) -> None:
+    """Log the full create_game prompt text at DEBUG level."""
     if logger.isEnabledFor(logging.DEBUG):
         indented = "\n".join(f"  {line}" for line in (prompt.splitlines() or [""]))
         logger.debug("create_game.prompt:\n%s", indented)
 
 
 def _debug_print_play_game_input(state: State, game_spec: GameSpec) -> None:
+    """Log the State and GameSpec passed into play_game at DEBUG level."""
     _debug_log("play_game.input", {
         "state": state.model_dump(mode="json"),
         "game_spec": game_spec.model_dump(mode="json"),
@@ -150,6 +159,7 @@ def _debug_print_play_game_input(state: State, game_spec: GameSpec) -> None:
 
 
 def _debug_print_play_game_output(runtime: PlayGameRuntime) -> None:
+    """Log the play_game runtime delta fields at DEBUG level."""
     _debug_log("play_game.output", {
         "current_best_delta": (
             None
@@ -165,14 +175,17 @@ def _debug_print_play_game_output(runtime: PlayGameRuntime) -> None:
 
 
 def _debug_print_play_game_attempt(attempt: int) -> None:
+    """Log the current play_game attempt number at DEBUG level."""
     _debug_log("play_game.attempt", {"attempt": attempt})
 
 
 def _debug_print_blue_failed_tool_call(tool_call: object) -> None:
+    """Log a Blue tool call that could not be converted to a DeltaState at DEBUG level."""
     _debug_log("blue.failed_tool_call", {"tool_call": str(tool_call)})
 
 
 def _debug_print_attempt_rejected(attempt: int, reason: str) -> None:
+    """Log the rejection of a play_game attempt and its reason at DEBUG level."""
     _debug_log("play_game.attempt_rejected", {"attempt": attempt, "reason": reason})
 
 
@@ -182,6 +195,7 @@ def _debug_print_blue_input(
     attempt_number: int,
     previous_feedback: PlayGameFeedback | None,
 ) -> None:
+    """Log the inputs sent to the Blue role at DEBUG level."""
     _debug_log("blue.input", {
         "game_spec": game_spec.model_dump(mode="json"),
         "state_view": state_view.model_dump(mode="json"),
@@ -191,6 +205,7 @@ def _debug_print_blue_input(
 
 
 def _debug_print_blue_output(delta: DeltaState) -> None:
+    """Log the DeltaState produced by Blue at DEBUG level."""
     _debug_log("blue.output", {"delta_state": delta.model_dump(mode="json")})
 
 
@@ -200,6 +215,7 @@ def _debug_print_red_input(
     delta_state: DeltaState,
     verification_result: VerificationResult | None = None,
 ) -> None:
+    """Log the inputs sent to the Red role at DEBUG level."""
     _debug_log("red.input", {
         "game_spec": game_spec.model_dump(mode="json"),
         "state_view": state_view.model_dump(mode="json"),
@@ -212,6 +228,7 @@ def _debug_print_red_input(
 
 
 def _debug_print_red_output(red_finding: RedFinding) -> None:
+    """Log the RedFinding produced by the Red role at DEBUG level."""
     _debug_log("red.output", {"red_finding": red_finding.model_dump(mode="json")})
 
 
@@ -222,6 +239,7 @@ def _debug_print_referee_input(
     red_finding: RedFinding,
     verification_result: VerificationResult | None = None,
 ) -> None:
+    """Log the inputs sent to the Referee role at DEBUG level."""
     _debug_log("referee.input", {
         "game_spec": game_spec.model_dump(mode="json"),
         "state_view": state_view.model_dump(mode="json"),
@@ -235,10 +253,12 @@ def _debug_print_referee_input(
 
 
 def _debug_print_referee_output(referee_decision: RefereeDecision) -> None:
+    """Log the RefereeDecision at DEBUG level."""
     _debug_log("referee.output", {"referee_decision": referee_decision.model_dump(mode="json")})
 
 
 def _debug_print_northstar_update_proposal(rationale: str, proposed_northstar: str) -> None:
+    """Log a NorthStar update proposal with its rationale and proposed text at DEBUG level."""
     _debug_log("create_game.northstar_update_proposal", {
         "rationale": rationale,
         "proposed_northstar": proposed_northstar,
@@ -246,12 +266,14 @@ def _debug_print_northstar_update_proposal(rationale: str, proposed_northstar: s
 
 
 def _debug_print_create_game_raw_model_output(raw_text: str) -> None:
+    """Log the raw unparsed create_game model response text at DEBUG level."""
     if logger.isEnabledFor(logging.DEBUG):
         indented = "\n".join(f"  {line}" for line in (raw_text.splitlines() or [""]))
         logger.debug("create_game.raw_model_output:\n%s", indented)
 
 
 def _debug_print_create_game_red_input(state_view: StateView, game_spec: GameSpec) -> None:
+    """Log the inputs to the create_game Red challenge step at DEBUG level."""
     _debug_log("create_game_red.input", {
         "game_spec": game_spec.model_dump(mode="json"),
         "state_view_id": state_view.id,
@@ -259,10 +281,12 @@ def _debug_print_create_game_red_input(state_view: StateView, game_spec: GameSpe
 
 
 def _debug_print_create_game_red_output(red_finding: RedFinding) -> None:
+    """Log the RedFinding from the create_game Red challenge at DEBUG level."""
     _debug_log("create_game_red.output", {"red_finding": red_finding.model_dump(mode="json")})
 
 
 def _debug_print_create_game_validation_input(game_spec: GameSpec) -> None:
+    """Log the GameSpec fields being structurally validated at DEBUG level."""
     _debug_log("create_game.validation_input", {
         "objective": game_spec.objective,
         "success_condition": game_spec.success_condition,
@@ -272,9 +296,11 @@ def _debug_print_create_game_validation_input(game_spec: GameSpec) -> None:
 
 
 def _debug_print_create_game_validation_failure(message: str) -> None:
+    """Log a GameSpec validation failure message at DEBUG level."""
     _debug_log("create_game.validation_failure", {"message": message})
 
 
 def _debug_print_verification_result(result: VerificationResult | None) -> None:
+    """Log the export verification result at DEBUG level, if one is present."""
     if result is not None:
         _debug_log("verify_export.result", {"verification": _verification_result_to_dict(result)})

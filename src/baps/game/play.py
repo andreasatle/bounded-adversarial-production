@@ -15,6 +15,7 @@ def record_play_game_telemetry(
     last_candidate_result: VerificationResult | None,
     runtime: PlayGameRuntime,
 ) -> None:
+    """Emit a debug event and write the completed game record to the blackboard."""
     ctx.debug_event_fn("play_game.output", {
         "current_best_delta": (
             None

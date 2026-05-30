@@ -4,6 +4,7 @@ from baps.state.state import CodeFile, DeltaCodingBatchState, DeltaCodingState, 
 
 
 def _normalize_coding_export_content(content: str) -> str:
+    """Unescape JSON-encoded escape sequences in file content when no real newlines are present."""
     if "\n" in content:
         return content
     if "\\n" not in content and "\\t" not in content and '\\"' not in content:
@@ -15,6 +16,7 @@ def _apply_delta_to_files(
     current_files: tuple[CodeFile, ...],
     delta: DeltaState,
 ) -> list[CodeFile]:
+    """Apply a coding delta to a file list, replacing or removing the affected file."""
     files = list(current_files)
     if isinstance(delta, DeltaCodingBatchState):
         for new_file in delta.payload.files:

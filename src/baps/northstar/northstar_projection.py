@@ -9,12 +9,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 def _require_non_empty(value: str) -> str:
+    """Raise ValueError if value is blank; used as a Pydantic field validator."""
     if not value.strip():
         raise ValueError("must be a non-empty string")
     return value
 
 
 class ProjectionPolicy(StrEnum):
+    """Governs how a NorthStarProjectionItem's content is rendered into the StateView."""
     VERBATIM = "verbatim"
     SUMMARIZED = "summarized"
     FILTERED = "filtered"
@@ -22,6 +24,8 @@ class ProjectionPolicy(StrEnum):
 
 
 class NorthStarProjectionItem(BaseModel):
+    """A single projection item with provenance metadata and a rendering policy."""
+
     id: str
     content: str
     source: str
@@ -37,6 +41,8 @@ class NorthStarProjectionItem(BaseModel):
 
 
 class NorthStarProjectionInput(BaseModel):
+    """Structured input for the NorthStar projection renderer, grouping items by section."""
+
     framework_policy: tuple[NorthStarProjectionItem, ...] = ()
     project_state: tuple[NorthStarProjectionItem, ...] = ()
     blackboard_history: tuple[NorthStarProjectionItem, ...] = ()
@@ -48,12 +54,16 @@ STATE_VIEW_END = "=== StateView End ==="
 
 
 class ProjectionType(StrEnum):
+    """Identifies the lifecycle stage for which a StateView was constructed."""
+
     NORTH_STAR = "north_star"
     CREATE_GAME = "create_game"
     PLAY_GAME = "play_game"
 
 
 class StateView(BaseModel):
+    """Immutable model-facing projection of state: framed content, fingerprint, and metadata."""
+
     model_config = ConfigDict(frozen=True)
 
     id: str
@@ -69,6 +79,7 @@ class StateView(BaseModel):
 
 
 def require_state_view_metadata(state_view: StateView, key: str) -> str:
+    """Return the non-empty string value at key from state_view.metadata, raising ValueError if absent."""
     if key not in state_view.metadata:
         raise ValueError(f"state_view.metadata missing required key: {key}")
     value = state_view.metadata[key]
@@ -102,11 +113,15 @@ def assemble_state_view(
 
 
 class ProjectionRenderer(Protocol):
+    """Protocol for components that convert NorthStarProjectionInput into a StateView."""
+
     def render(self, input_data: NorthStarProjectionInput) -> StateView:
+        """Render the projection input and return a StateView."""
         ...
 
 
 def _render_section(title: str, items: tuple[NorthStarProjectionItem, ...]) -> str:
+    """Render a single named section of the NorthStar projection with its items and provenance."""
     lines = [f"## {title}"]
     if not items:
         lines.append("_No items._")
@@ -127,6 +142,7 @@ def _render_section(title: str, items: tuple[NorthStarProjectionItem, ...]) -> s
 
 
 def render_northstar_projection(input_data: NorthStarProjectionInput) -> str:
+    """Render all four projection sections into a single multi-section markdown string."""
     sections = (
         _render_section("Framework Policy", input_data.framework_policy),
         _render_section("Project State", input_data.project_state),
@@ -137,6 +153,7 @@ def render_northstar_projection(input_data: NorthStarProjectionInput) -> str:
 
 
 def fingerprint_northstar_projection_input(input_data: NorthStarProjectionInput) -> str:
+    """Return a deterministic SHA-256 hex fingerprint of the canonically serialized projection input."""
     canonical = json.dumps(
         input_data.model_dump(mode="json"),
         sort_keys=True,
@@ -146,7 +163,10 @@ def fingerprint_northstar_projection_input(input_data: NorthStarProjectionInput)
 
 
 class NorthStarProjectionRenderer:
+    """Renders NorthStarProjectionInput into a NorthStarView StateView with fingerprinting."""
+
     def render(self, input_data: NorthStarProjectionInput) -> "NorthStarView":
+        """Render the input into a NorthStarView StateView."""
         content = render_northstar_projection(input_data)
         input_fingerprint = fingerprint_northstar_projection_input(input_data)
         return NorthStarView(
@@ -163,4 +183,5 @@ NorthStarView = StateView
 def render_northstar_view(
     input_data: NorthStarProjectionInput,
 ) -> NorthStarView:
+    """Convenience function that renders a NorthStarProjectionInput to a NorthStarView."""
     return NorthStarProjectionRenderer().render(input_data)

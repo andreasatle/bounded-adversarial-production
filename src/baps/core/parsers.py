@@ -30,6 +30,7 @@ class NorthStarUpdateNeededError(ValueError):
     """Raised when CreateGame signals the trajectory has drifted from NorthStar intent."""
 
     def __init__(self, rationale: str, proposed_northstar: str) -> None:
+        """Initialize the instance."""
         super().__init__(rationale)
         self.rationale = rationale
         self.proposed_northstar = proposed_northstar
@@ -71,6 +72,7 @@ def _parse_create_game_output(
     retry_fn: Any = None,
     fallback_fn: Any = None,
 ) -> GameSpec | DecomposeSpec:
+    """Parse and return create game output."""
     parsed, _ = parse_model_output(
         text,
         _CREATE_GAME_ALL_KEYS,
@@ -164,6 +166,7 @@ def _normalize_game_spec_with_adapter(
     state: State,
     config: RunConfig,
 ) -> GameSpec:
+    """Normalize and return game spec with adapter."""
     normalizer = getattr(adapter, "normalize_game_spec", None)
     if normalizer is None:
         return game_spec
@@ -180,6 +183,7 @@ def _parse_role_output(
     retry_fn: Any = None,
     fallback_fn: Any = None,
 ) -> tuple[Any, ParseRecoveryRecord]:
+    """Parse and return role output."""
     parsed, recovery = parse_model_output(
         text, all_keys, context=context, workspace=workspace,
         retry_fn=retry_fn, fallback_fn=fallback_fn,
@@ -201,6 +205,7 @@ def _parse_red_finding_json(
     retry_fn: Any = None,
     fallback_fn: Any = None,
 ) -> tuple[RedFinding, ParseRecoveryRecord]:
+    """Parse and return red finding json."""
     return _parse_role_output(
         text, _RED_ALL_KEYS, _RED_REQUIRED_KEYS, RedFinding,
         context=SpecRole.RED, workspace=workspace, retry_fn=retry_fn, fallback_fn=fallback_fn,
@@ -213,6 +218,7 @@ def _parse_referee_decision_json(
     retry_fn: Any = None,
     fallback_fn: Any = None,
 ) -> tuple[RefereeDecision, ParseRecoveryRecord]:
+    """Parse and return referee decision json."""
     return _parse_role_output(
         text, _REFEREE_ALL_KEYS, _REFEREE_REQUIRED_KEYS, RefereeDecision,
         context=SpecRole.REFEREE, workspace=workspace, retry_fn=retry_fn, fallback_fn=fallback_fn,

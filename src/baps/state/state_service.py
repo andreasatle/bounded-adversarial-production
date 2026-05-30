@@ -12,14 +12,19 @@ from baps.state.state_store import StateStore
 
 
 class StateService:
+    """Provides the single authoritative mutation boundary for State via load, validate, and apply_delta."""
+
     def __init__(self, store: StateStore, registry: StateArtifactRegistry):
+        """Initialize with a backing store and an artifact registry for validation."""
         self.store = store
         self.registry = registry
 
     def load_state(self) -> State:
+        """Load and return the current State from the backing store without validation."""
         return self.store.load()
 
     def validate_state(self) -> State:
+        """Load the current State and validate all artifacts through the registry."""
         state = self.store.load()
         return validate_state_artifacts(state, self.registry)
 
@@ -36,5 +41,6 @@ class StateService:
         return validated_updated
 
     def states_differ(self, before: State, after: State) -> bool:
+        """Return True if two States have different fingerprints."""
         return fingerprint_state(before) != fingerprint_state(after)
 

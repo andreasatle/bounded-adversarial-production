@@ -8,9 +8,13 @@ This file orients Claude Code on the `baps` project. Read it before suggesting a
 
 At the start of every session and after every /clear, run:
 
-    uv run python scripts/index_codebase.py > CODEBASE_INDEX.md
+    uv run python scripts/index_codebase.py
 
-Then read CODEBASE_INDEX.md before doing anything else.
+This regenerates `CODEBASE_API_INDEX.md` and `CODEBASE_TEST_INDEX.md`.
+Read `CODEBASE_API_INDEX.md` before doing anything else.
+Use it as the primary architectural reference for the current codebase.
+Consult source files only after locating the relevant entities in the index.
+Read `CODEBASE_TEST_INDEX.md` when working on tests, verification, coverage, regressions, or test architecture.
 
 ---
 

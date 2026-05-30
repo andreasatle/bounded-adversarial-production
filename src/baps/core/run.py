@@ -11,6 +11,7 @@ from baps.core.runtime import create_state
 
 
 def _configure_runtime_logging() -> None:
+    """Configure root logging format and level from the LOG_LEVEL environment variable."""
     log_level = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
     logging.basicConfig(
         level=log_level,
@@ -20,6 +21,7 @@ def _configure_runtime_logging() -> None:
 
 
 def _add_start_args(parser: argparse.ArgumentParser) -> None:
+    """Register all CLI arguments shared by the start subcommand."""
     parser.add_argument("--spec", default=None, help="YAML spec path.")
     parser.add_argument(
         "--workspace", default=None,
@@ -56,6 +58,7 @@ def _add_start_args(parser: argparse.ArgumentParser) -> None:
 
 
 def _build_cli_parser() -> argparse.ArgumentParser:
+    """Build and return the top-level CLI argument parser with start and reset subcommands."""
     from dotenv import load_dotenv
 
     load_dotenv()
@@ -97,6 +100,7 @@ def _build_cli_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    """Entry point: parse CLI args and dispatch to start_project or reset_project."""
     _configure_runtime_logging()
     parser = _build_cli_parser()
     args = parser.parse_args()

@@ -83,10 +83,12 @@ __all__ = [
 
 
 class CodingProjectAdapter:
+    """Implement the CodingProjectAdapter project adapter."""
     project_type = "coding"
     supported_delta_type = "DeltaCodingState"
 
     def create_initial_state(self, config: dict[str, object]) -> State:
+        """Create and return initial state."""
         language = _config_language(config)
         _plugin_for(language)
         return State(
@@ -99,6 +101,7 @@ class CodingProjectAdapter:
         config: dict[str, object],
         summarization_context: SummarizationContext | None = None,
     ) -> StateView:
+        """Build and return create game state view."""
         return build_coding_create_game_state_view(state, config, summarization_context)
 
     def render_create_game_prompt_supplement(
@@ -108,6 +111,7 @@ class CodingProjectAdapter:
         state_view: StateView,
         verification_result: VerificationResult | None,
     ) -> str:
+        """Render and return create game prompt supplement."""
         base = (
             "Coding CreateGame constraints:\n"
             "- Blue can write one or more files per game using write_files (preferred) or write_file.\n"
@@ -145,6 +149,7 @@ class CodingProjectAdapter:
     def normalize_game_spec(
         self, game_spec: GameSpec, state: State, config: dict[str, object]
     ) -> GameSpec:
+        """Normalize and return game spec."""
         del state
         configured_artifact_id = _config_artifact_id(config)
         return GameSpec(
@@ -162,6 +167,7 @@ class CodingProjectAdapter:
         game_spec: GameSpec,
         summarization_context: SummarizationContext | None = None,
     ) -> StateView:
+        """Build and return state view."""
         return build_coding_state_view(state, game_spec, summarization_context=summarization_context)
 
     def render_blue_prompt(
@@ -171,6 +177,7 @@ class CodingProjectAdapter:
         attempt_number: int,
         previous_feedback: PlayGameFeedback | None,
     ) -> str:
+        """Render and return blue prompt."""
         language = require_state_view_metadata(state_view, "language")
         plugin = _plugin_for(language)
         return render_coding_blue_prompt(
@@ -188,6 +195,7 @@ class CodingProjectAdapter:
         delta_state: DeltaState,
         verification_result: VerificationResult | None,
     ) -> str:
+        """Render and return red prompt supplement."""
         del state_view, game_spec, delta_state
         return _render_coding_evaluation_supplement(verification_result)
 
@@ -198,21 +206,26 @@ class CodingProjectAdapter:
         delta_state: DeltaState,
         verification_result: VerificationResult | None,
     ) -> str:
+        """Render and return referee prompt supplement."""
         del state_view, game_spec, delta_state
         return _render_coding_evaluation_supplement(verification_result)
 
     def build_blue_output_format(self) -> str | dict | None:
+        """Build and return blue output format."""
         return None
 
     def supported_filters(self) -> list[str]:
         # Return superset; per-artifact filter list is resolved from the language plugin
+        """Return supported values for ed filters."""
         return ["api", "tests", "full"]
 
     def build_research_tools(self, role: str) -> list[ToolDefinition]:
+        """Build and return research tools."""
         del role
         return []
 
     def build_create_game_research_tools(self, state: State) -> list:
+        """Build and return create game research tools."""
         artifact = next((a for a in state.artifacts if isinstance(a, CodingArtifact)), None)
         if artifact is None:
             return []
@@ -228,6 +241,7 @@ class CodingProjectAdapter:
     def execute_create_game_research_tool(
         self, tool_name: str, tool_input: dict, state: State
     ) -> str:
+        """Execute and return create game research tool."""
         artifact = next((a for a in state.artifacts if isinstance(a, CodingArtifact)), None)
 
         if tool_name == "list_modules":
@@ -309,6 +323,7 @@ class CodingProjectAdapter:
         return f"tool_error: unknown tool {tool_name!r}"
 
     def build_blue_tools(self) -> list[ToolDefinition]:
+        """Build and return blue tools."""
         _file_schema = {
             "type": "object",
             "properties": {
@@ -381,6 +396,7 @@ class CodingProjectAdapter:
         ]
 
     def tool_call_to_delta(self, tool_call: ToolCall) -> DeltaState:
+        """Handle tool call to delta."""
         args = tool_call.arguments
         if tool_call.name == "write_files":
             try:
@@ -447,9 +463,11 @@ class CodingProjectAdapter:
         raise ValueError(f"unexpected tool: {tool_call.name!r}")
 
     def parse_blue_delta(self, text: str) -> DeltaState:
+        """Parse and return blue delta."""
         return parse_coding_delta_json(text)
 
     def export_state(self, state: State, output_path: Path, artifact_id: str) -> bool:
+        """Export and return state."""
         artifact = coding_artifact_from_state(state, artifact_id)
         plugin = _plugin_for(artifact.language)
         changed = plugin.initialize(output_path)
@@ -470,6 +488,7 @@ class CodingProjectAdapter:
         return changed
 
     def commit_export(self, output_path: Path, game_spec: GameSpec) -> bool:
+        """Handle commit export."""
         try:
             if not (output_path / ".git").exists():
                 subprocess.run(
@@ -498,6 +517,7 @@ class CodingProjectAdapter:
     def verify_export(
         self, output_path: Path, state: State, artifact_id: str, sandbox_mode: str = "docker"
     ) -> VerificationResult | None:
+        """Verify and return export."""
         output_path.mkdir(parents=True, exist_ok=True)
         artifact = coding_artifact_from_state(state, artifact_id)
         missing_files = [
@@ -523,6 +543,7 @@ class CodingProjectAdapter:
         artifact_id: str,
         sandbox_mode: str = "docker",
     ) -> VerificationResult | None:
+        """Verify and return candidate."""
         import tempfile
 
         artifact = coding_artifact_from_state(state, artifact_id)

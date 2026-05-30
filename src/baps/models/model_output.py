@@ -23,6 +23,7 @@ class ParseRecoveryRecord(BaseModel):
 
 
 class BlackboardEvent(StrEnum):
+    """Represent the BlackboardEvent type."""
     NORTHSTAR_UPDATE_PROPOSAL = "northstar_update_proposal"
     UNEXPECTED_KEYS_STRIPPED = "unexpected_keys_stripped"
     GAME = "game"
@@ -266,6 +267,7 @@ def wrap_json_prompt(text: str) -> str:
 
 
 def _log_stripped_keys(workspace: Path | None, stripped_keys: list[str], context: str) -> None:
+    """Handle log stripped keys."""
     if workspace is None:
         return
     blackboard_dir = workspace / _BLACKBOARD_DIR

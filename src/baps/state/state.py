@@ -10,12 +10,16 @@ from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, field_validat
 
 
 class Disposition(StrEnum):
+    """Valid disposition values for Red and Referee role decisions."""
+
     accept = "accept"
     revise = "revise"
     reject = "reject"
 
 
 class StopReason(StrEnum):
+    """Identifies why the orchestration loop terminated."""
+
     ITERATION_LIMIT_REACHED = "iteration_limit_reached"
     CREATE_GAME_NO_NEW_GAME = "create_game_no_new_game"
     PLAY_GAME_NO_DELTA = "play_game_no_delta"
@@ -33,12 +37,14 @@ _MAX_CODEFILE_CONTENT_BYTES = 65536
 
 
 def _require_non_empty(value: str) -> str:
+    """Raise ValueError if value normalises to whitespace-only; used as a Pydantic field validator."""
     if not unicodedata.normalize("NFKC", value).strip():
         raise ValueError("must be a non-empty string")
     return value
 
 
 def _coerce_state_artifact(value: object) -> StateArtifact:
+    """Deserialize a raw value into the most specific StateArtifact subtype based on its kind field."""
     if isinstance(value, (DocumentArtifact, CodingArtifact, StateArtifact)):
         return value
     if not isinstance(value, dict):
@@ -52,6 +58,8 @@ def _coerce_state_artifact(value: object) -> StateArtifact:
 
 
 class StateArtifact(BaseModel):
+    """Base class for all artifacts stored in State; identified by id and kind."""
+
     id: str
     kind: str
 
@@ -59,10 +67,13 @@ class StateArtifact(BaseModel):
     _validate_kind = field_validator("kind")(_require_non_empty)
 
     def render_as_text(self) -> str:
+        """Return a text representation of this artifact for prompt consumption."""
         return ""
 
 
 class Section(BaseModel):
+    """A named, bounded body of text that is the structural unit of a DocumentArtifact."""
+
     model_config = ConfigDict(extra="forbid")
     title: Annotated[str, Field(strict=True)]
     body: Annotated[str, Field(strict=True)]
@@ -73,6 +84,7 @@ class Section(BaseModel):
     @field_validator("body")
     @classmethod
     def _validate_body(cls, value: str) -> str:
+        """Validate that body is non-empty and within the byte size limit."""
         _require_non_empty(value)
         if len(value.encode("utf-8")) > _MAX_SECTION_BODY_BYTES:
             raise ValueError(f"section body must not exceed {_MAX_SECTION_BODY_BYTES} bytes")
@@ -80,13 +92,17 @@ class Section(BaseModel):
 
 
 class DocumentArtifact(StateArtifact):
+    """A document-type artifact composed of an ordered sequence of named Sections."""
+
     kind: Literal["document"] = "document"
     sections: tuple[Section, ...] = ()
 
     def render_as_text(self) -> str:
+        """Return all section bodies joined by double newlines."""
         return "\n\n".join(section.body for section in self.sections)
 
     def apply_delta(self, delta: DeltaState) -> DocumentArtifact:
+        """Apply a document delta (append/modify/delete section) and return the updated artifact."""
         if isinstance(delta, DeltaDocumentState):
             return DocumentArtifact(
                 id=self.id,
@@ -123,12 +139,15 @@ class DocumentArtifact(StateArtifact):
 
 
 class CodeFile(BaseModel):
+    """A single file stored inside a CodingArtifact, identified by a relative path."""
+
     path: Annotated[str, Field(strict=True)]
     content: Annotated[str, Field(strict=True)]
 
     @field_validator("path")
     @classmethod
     def _validate_path(cls, value: str) -> str:
+        """Validate that path is non-empty and within the byte limit."""
         _require_non_empty(value)
         if len(value.encode("utf-8")) > _MAX_CODEFILE_PATH_BYTES:
             raise ValueError(f"file path must not exceed {_MAX_CODEFILE_PATH_BYTES} bytes")
@@ -137,17 +156,21 @@ class CodeFile(BaseModel):
     @field_validator("content")
     @classmethod
     def _validate_content_length(cls, value: str) -> str:
+        """Validate that content is within the byte size limit."""
         if len(value.encode("utf-8")) > _MAX_CODEFILE_CONTENT_BYTES:
             raise ValueError(f"file content must not exceed {_MAX_CODEFILE_CONTENT_BYTES} bytes")
         return value
 
 
 class CodingArtifact(StateArtifact):
+    """A coding-type artifact storing a set of source files keyed by relative path."""
+
     kind: Literal["coding"] = "coding"
     language: str = "python"
     files: tuple[CodeFile, ...] = ()
 
     def apply_delta(self, delta: DeltaState) -> CodingArtifact:
+        """Apply a coding delta (write/delete file(s)) and return the updated artifact."""
         if isinstance(delta, DeltaCodingState):
             files_by_path = {f.path: f for f in self.files}
             files_by_path[delta.payload.file.path] = delta.payload.file
@@ -174,11 +197,15 @@ class CodingArtifact(StateArtifact):
 
 
 class AppendSectionDelta(BaseModel):
+    """Payload for the append_section operation: a Section to append to a document."""
+
     model_config = ConfigDict(extra="forbid")
     section: Section
 
 
 class ModifySectionDelta(BaseModel):
+    """Payload for the modify_section operation: identifies the target section and provides the new body."""
+
     model_config = ConfigDict(extra="forbid")
     section_title: str
     new_body: str
@@ -188,6 +215,7 @@ class ModifySectionDelta(BaseModel):
     @field_validator("new_body")
     @classmethod
     def _validate_new_body(cls, value: str) -> str:
+        """Validate that new_body is non-empty and within the byte size limit."""
         _require_non_empty(value)
         if len(value.encode("utf-8")) > _MAX_SECTION_BODY_BYTES:
             raise ValueError(f"section body must not exceed {_MAX_SECTION_BODY_BYTES} bytes")
@@ -195,6 +223,8 @@ class ModifySectionDelta(BaseModel):
 
 
 class DeleteSectionDelta(BaseModel):
+    """Payload for the delete_section operation: identifies the section to remove by title."""
+
     model_config = ConfigDict(extra="forbid")
     section_title: str
 
@@ -202,23 +232,30 @@ class DeleteSectionDelta(BaseModel):
 
 
 class WriteFileDelta(BaseModel):
+    """Payload for the write_file operation: a single CodeFile to write."""
+
     model_config = ConfigDict(extra="forbid")
     file: CodeFile
 
 
 class WriteFilesDelta(BaseModel):
+    """Payload for the write_files operation: one or more CodeFiles to write atomically."""
+
     model_config = ConfigDict(extra="forbid")
     files: tuple[CodeFile, ...]
 
     @field_validator("files")
     @classmethod
     def _validate_non_empty(cls, files: tuple) -> tuple:
+        """Validate that at least one file is present in the write_files payload."""
         if not files:
             raise ValueError("write_files payload must contain at least one file")
         return files
 
 
 class DeleteFileDelta(BaseModel):
+    """Payload for the delete_file operation: the relative path of the file to remove."""
+
     model_config = ConfigDict(extra="forbid")
     path: str
 
@@ -226,42 +263,58 @@ class DeleteFileDelta(BaseModel):
 
 
 class DeltaState(BaseModel):
+    """Base class for all typed delta operations; identifies the target artifact."""
+
     artifact_id: str
 
     _validate_artifact_id = field_validator("artifact_id")(_require_non_empty)
 
 
 class DeltaDocumentState(DeltaState):
+    """Delta that appends a new section to a document artifact."""
+
     operation: Literal["append_section"]
     payload: AppendSectionDelta
 
 
 class DeltaModifyDocumentState(DeltaState):
+    """Delta that replaces the body of an existing named section in a document artifact."""
+
     operation: Literal["modify_section"]
     payload: ModifySectionDelta
 
 
 class DeltaDeleteDocumentState(DeltaState):
+    """Delta that removes a named section from a document artifact."""
+
     operation: Literal["delete_section"]
     payload: DeleteSectionDelta
 
 
 class DeltaCodingState(DeltaState):
+    """Delta that writes (creates or replaces) a single file in a coding artifact."""
+
     operation: Literal["write_file"]
     payload: WriteFileDelta
 
 
 class DeltaCodingBatchState(DeltaState):
+    """Delta that writes (creates or replaces) multiple files in a coding artifact atomically."""
+
     operation: Literal["write_files"]
     payload: WriteFilesDelta
 
 
 class DeltaDeleteCodingState(DeltaState):
+    """Delta that removes a file from a coding artifact."""
+
     operation: Literal["delete_file"]
     payload: DeleteFileDelta
 
 
 class GameSpec(BaseModel):
+    """Describes a single atomic gap-closing task: objective, target, allowed delta, and success condition."""
+
     objective: str
     target_artifact_id: str
     allowed_delta_type: str
@@ -277,17 +330,23 @@ class GameSpec(BaseModel):
 
 
 class SubGapSpec(BaseModel):
+    """A single decomposed sub-gap description within a DecomposeSpec."""
+
     description: str
     _validate_description = field_validator("description")(_require_non_empty)
 
 
 class DecomposeSpec(BaseModel):
+    """Returned by create_game to indicate the gap should be decomposed into ordered sub-gaps."""
+
     rationale: str
     sub_gaps: tuple[SubGapSpec, ...]
     _validate_rationale = field_validator("rationale")(_require_non_empty)
 
 
 class RedFinding(BaseModel):
+    """Structured output from the Red role containing its disposition and adversarial findings."""
+
     disposition: Disposition
     rationale: str
     success_condition_met: bool | None = None
@@ -297,6 +356,8 @@ class RedFinding(BaseModel):
 
 
 class RefereeDecision(BaseModel):
+    """Structured output from the Referee role with the final accept/revise/reject decision."""
+
     disposition: Disposition
     rationale: str
     red_override: bool | None = None
@@ -306,6 +367,8 @@ class RefereeDecision(BaseModel):
 
 
 class PlayGameRuntime(BaseModel):
+    """Tracks the current-best and integration-eligible deltas as play_game attempts progress."""
+
     current_best_delta: SerializeAsAny[DeltaState] | None = None
     integration_eligible_delta: SerializeAsAny[DeltaState] | None = None
 
@@ -315,6 +378,7 @@ def apply_referee_decision_to_runtime(
     candidate_delta: DeltaState,
     decision: RefereeDecision,
 ) -> PlayGameRuntime:
+    """Return an updated PlayGameRuntime reflecting the Referee's accept/revise/reject decision."""
     if decision.disposition == Disposition.accept:
         accepted = candidate_delta.model_copy(deep=True)
         return PlayGameRuntime(
@@ -353,6 +417,8 @@ def apply_referee_decision_to_runtime(
 
 
 class NorthStar(BaseModel):
+    """Immutable NorthStar holding goal artifacts used to scope the automated pipeline."""
+
     artifacts: tuple[SerializeAsAny[StateArtifact], ...]
 
     def render_content(self) -> str:
@@ -365,6 +431,7 @@ class NorthStar(BaseModel):
     def _coerce_artifact_types(
         cls, artifacts: object
     ) -> tuple[SerializeAsAny[StateArtifact], ...]:
+        """Deserialize each artifact entry to the most specific StateArtifact subtype."""
         if not isinstance(artifacts, (list, tuple)):
             raise TypeError("northstar artifacts must be a list or tuple")
         return tuple(_coerce_state_artifact(artifact) for artifact in artifacts)
@@ -374,6 +441,7 @@ class NorthStar(BaseModel):
     def _validate_unique_artifact_ids(
         cls, artifacts: tuple[SerializeAsAny[StateArtifact], ...]
     ) -> tuple[SerializeAsAny[StateArtifact], ...]:
+        """Raise ValueError if any two NorthStar artifacts share an id."""
         ids = [artifact.id for artifact in artifacts]
         if len(ids) != len(set(ids)):
             raise ValueError("northstar artifact ids must be unique")
@@ -381,6 +449,8 @@ class NorthStar(BaseModel):
 
 
 class State(BaseModel):
+    """The authoritative runtime state: a tuple of typed artifacts keyed by unique id."""
+
     artifacts: tuple[SerializeAsAny[StateArtifact], ...] = ()
 
     @field_validator("artifacts", mode="before")
@@ -388,6 +458,7 @@ class State(BaseModel):
     def _coerce_artifact_types(
         cls, artifacts: object
     ) -> tuple[SerializeAsAny[StateArtifact], ...]:
+        """Deserialize each artifact entry to the most specific StateArtifact subtype."""
         if not isinstance(artifacts, (list, tuple)):
             raise TypeError("state artifacts must be a list or tuple")
         return tuple(_coerce_state_artifact(artifact) for artifact in artifacts)
@@ -397,6 +468,7 @@ class State(BaseModel):
     def _validate_unique_artifact_ids(
         cls, artifacts: tuple[SerializeAsAny[StateArtifact], ...]
     ) -> tuple[SerializeAsAny[StateArtifact], ...]:
+        """Raise ValueError if any two State artifacts share an id."""
         ids = [artifact.id for artifact in artifacts]
         if len(ids) != len(set(ids)):
             raise ValueError("state artifact ids must be unique")
@@ -404,10 +476,13 @@ class State(BaseModel):
 
 
 class StateProjection(BaseModel):
+    """A read-only projection of State as ordered text strings, one per artifact."""
+
     artifacts: tuple[str, ...] = ()
 
 
 def fingerprint_state(state: State) -> str:
+    """Return a deterministic SHA-256 hex fingerprint of the canonically serialised State."""
     canonical = json.dumps(
         state.model_dump(mode="json"),
         sort_keys=True,
@@ -417,6 +492,7 @@ def fingerprint_state(state: State) -> str:
 
 
 def find_state_artifact(state: State, artifact_id: str) -> StateArtifact:
+    """Return the artifact with the given id from State, raising ValueError if not found."""
     resolved_artifact_id = _require_non_empty(artifact_id)
     for artifact in state.artifacts:
         if artifact.id == resolved_artifact_id:
@@ -427,6 +503,7 @@ def find_state_artifact(state: State, artifact_id: str) -> StateArtifact:
 def _replace_artifact_in_state(
     state: State, artifact_id: str, replacement: StateArtifact
 ) -> State:
+    """Return a new State with the artifact matching artifact_id replaced by replacement."""
     new_artifacts = tuple(
         replacement if a.id == artifact_id else a
         for a in state.artifacts
@@ -451,6 +528,7 @@ def apply_state_delta(state: State, delta: DeltaState) -> State:
 
 
 def validate_state_artifacts(state: State, registry: StateArtifactRegistry) -> State:
+    """Validate all artifacts in State through their registered adapters and return the validated State."""
     def _validate_one(artifact: StateArtifact) -> StateArtifact:
         if isinstance(artifact, DocumentArtifact):
             return artifact
@@ -477,6 +555,7 @@ def validate_state_artifacts(state: State, registry: StateArtifactRegistry) -> S
 
 
 def project_state(state: State, registry: StateArtifactRegistry) -> StateProjection:
+    """Project each artifact in State to a non-empty text string and return a StateProjection."""
     def _project_one(artifact: StateArtifact) -> str:
         if isinstance(artifact, DocumentArtifact):
             titles = ", ".join(section.title for section in artifact.sections) or "no sections"
@@ -507,20 +586,28 @@ def project_state(state: State, registry: StateArtifactRegistry) -> StateProject
 
 
 class StateArtifactAdapter(Protocol):
+    """Protocol for kind-specific artifact validation and text projection."""
+
     kind: str
 
     def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
+        """Validate the artifact and return it (or a corrected version) unchanged in id/kind."""
         ...
 
     def project_artifact(self, artifact: StateArtifact) -> str:
+        """Return a non-empty text projection of the artifact for StateProjection."""
         ...
 
 
 class StateArtifactRegistry:
+    """Maps artifact kind strings to their StateArtifactAdapter implementations."""
+
     def __init__(self):
+        """Initialize the instance."""
         self._adapters: dict[str, StateArtifactAdapter] = {}
 
     def register(self, adapter: StateArtifactAdapter) -> None:
+        """Register an adapter for its kind, raising ValueError if the kind is already registered."""
         kind = adapter.kind
         if not kind.strip():
             raise ValueError("adapter kind must be a non-empty string")
@@ -529,6 +616,7 @@ class StateArtifactRegistry:
         self._adapters[kind] = adapter
 
     def resolve(self, kind: str) -> StateArtifactAdapter:
+        """Return the adapter for the given kind, raising ValueError if not registered."""
         adapter = self._adapters.get(kind)
         if adapter is None:
             raise ValueError(f"unknown artifact kind: {kind}")
@@ -536,26 +624,35 @@ class StateArtifactRegistry:
 
 
 class DocumentArtifactAdapter:
+    """Adapter for document-kind artifacts; passes through validation and returns a simple projection."""
+
     kind = "document"
 
     def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
+        """Return the artifact unchanged (document artifacts self-validate via Pydantic)."""
         return artifact
 
     def project_artifact(self, artifact: StateArtifact) -> str:
+        """Return a one-line text label for the document artifact."""
         return f"document artifact: {artifact.id}"
 
 
 class CodingArtifactAdapter:
+    """Adapter for coding-kind artifacts; passes through validation and returns a simple projection."""
+
     kind = "coding"
 
     def validate_artifact(self, artifact: StateArtifact) -> StateArtifact:
+        """Return the artifact unchanged (coding artifacts self-validate via Pydantic)."""
         return artifact
 
     def project_artifact(self, artifact: StateArtifact) -> str:
+        """Return a one-line text label for the coding artifact."""
         return f"coding artifact: {artifact.id}"
 
 
 def build_default_state_artifact_registry() -> StateArtifactRegistry:
+    """Create and return a registry pre-loaded with the document and coding adapters."""
     registry = StateArtifactRegistry()
     registry.register(DocumentArtifactAdapter())
     registry.register(CodingArtifactAdapter())

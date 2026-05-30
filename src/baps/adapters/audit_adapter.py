@@ -52,11 +52,13 @@ _FENCE_LANGUAGE: dict[str, str] = {
 
 
 def _fence_lang(path: Path) -> str:
+    """Handle fence lang."""
     return _FENCE_LANGUAGE.get(path.suffix.lower(), "")
 _DEFAULT_MAX_TOTAL_LINES = 3000
 
 
 def _embed_source_path(northstar_markdown: str, source_path: str) -> str:
+    """Handle embed source path."""
     return f"{_SOURCE_PATH_MARKER}{source_path} -->\n\n{northstar_markdown}"
 
 
@@ -71,6 +73,7 @@ def _get_northstar_from_state(state: State) -> str:
 
 
 def _extract_source_path(northstar_markdown: str) -> Path | None:
+    """Extract and return source path."""
     content = northstar_markdown
     if _SOURCE_PATH_MARKER not in content:
         return None
@@ -82,6 +85,7 @@ def _extract_source_path(northstar_markdown: str) -> Path | None:
 
 
 def _compute_source_hash(source_path: Path, patterns: tuple[str, ...]) -> str:
+    """Compute and return source hash."""
     files = _collect_source_files(source_path, patterns)
     h = hashlib.sha256()
     for f in files:
@@ -95,6 +99,7 @@ def _compute_source_hash(source_path: Path, patterns: tuple[str, ...]) -> str:
 def _collect_source_files(
     source_path: Path, patterns: tuple[str, ...]
 ) -> list[Path]:
+    """Collect and return source files."""
     seen: set[Path] = set()
     files: list[Path] = []
     for pattern in patterns:
@@ -106,6 +111,7 @@ def _collect_source_files(
 
 
 def _render_source_listing(files: list[Path], source_path: Path) -> str:
+    """Render and return source listing."""
     if not files:
         return "  (no source files found)"
     lines = []
@@ -125,6 +131,7 @@ def _render_source_content(
     max_file_lines: int,
     max_total_lines: int,
 ) -> str:
+    """Render and return source content."""
     if not files:
         return "(no source files found)"
     parts: list[str] = []
@@ -153,6 +160,7 @@ def _render_source_content(
 
 
 def build_audit_create_game_state_view(state: State, config: dict[str, Any]) -> StateView:
+    """Build and return audit create game state view."""
     artifact_id = _config_artifact_id(config)
     artifact = document_artifact_from_state(state, artifact_id)
     northstar_markdown = _config_northstar_markdown(config)
@@ -221,6 +229,7 @@ def build_audit_create_game_state_view(state: State, config: dict[str, Any]) -> 
 
 
 def build_audit_play_game_state_view(state: State, game_spec: GameSpec) -> StateView:
+    """Build and return audit play game state view."""
     artifact = document_artifact_from_state(state, game_spec.target_artifact_id)
 
     northstar_markdown = _get_northstar_from_state(state)
@@ -335,13 +344,16 @@ _CREATE_GAME_SUPPLEMENT = (
 
 
 class AuditProjectAdapter:
+    """Implement the AuditProjectAdapter project adapter."""
     project_type = "audit"
     supported_delta_type = "DeltaDocumentState"
 
     def __init__(self) -> None:
+        """Initialize the instance."""
         self._current_source_hash: str | None = None
 
     def create_initial_state(self, config: dict[str, object]) -> State:
+        """Create and return initial state."""
         northstar_markdown = _config_northstar_markdown(config)
         source_path = str(config.get("source_path", ""))
         if not source_path.strip():
@@ -365,6 +377,7 @@ class AuditProjectAdapter:
         config: dict[str, object],
         summarization_context: SummarizationContext | None = None,
     ) -> StateView:
+        """Build and return create game state view."""
         del summarization_context
         return build_audit_create_game_state_view(state, config)
 
@@ -375,12 +388,14 @@ class AuditProjectAdapter:
         state_view: StateView,
         verification_result: VerificationResult | None,
     ) -> str:
+        """Render and return create game prompt supplement."""
         del state, config, state_view, verification_result
         return _CREATE_GAME_SUPPLEMENT
 
     def normalize_game_spec(
         self, game_spec: GameSpec, state: State, config: dict[str, object]
     ) -> GameSpec:
+        """Normalize and return game spec."""
         del state, config
         return game_spec
 
@@ -390,6 +405,7 @@ class AuditProjectAdapter:
         game_spec: GameSpec,
         summarization_context: SummarizationContext | None = None,
     ) -> StateView:
+        """Build and return state view."""
         del summarization_context
         source_path = _extract_source_path(_get_northstar_from_state(state))
         if source_path is not None and source_path.exists():
@@ -405,6 +421,7 @@ class AuditProjectAdapter:
         attempt_number: int,
         previous_feedback: PlayGameFeedback | None,
     ) -> str:
+        """Render and return blue prompt."""
         return render_blue_prompt_core(
             state_view=state_view,
             game_spec=game_spec,
@@ -420,6 +437,7 @@ class AuditProjectAdapter:
         delta_state: DeltaState,
         verification_result: VerificationResult | None,
     ) -> str:
+        """Render and return red prompt supplement."""
         del state_view, game_spec, delta_state, verification_result
         return _RED_SUPPLEMENT
 
@@ -430,17 +448,21 @@ class AuditProjectAdapter:
         delta_state: DeltaState,
         verification_result: VerificationResult | None,
     ) -> str:
+        """Render and return referee prompt supplement."""
         del state_view, game_spec, delta_state, verification_result
         return _REFEREE_SUPPLEMENT
 
     def supported_filters(self) -> list[str]:
+        """Return supported values for ed filters."""
         return ["summary", "full"]
 
     def build_research_tools(self, role: str) -> list[ToolDefinition]:
+        """Build and return research tools."""
         del role
         return []
 
     def build_create_game_research_tools(self, state: State) -> list:
+        """Build and return create game research tools."""
         northstar_markdown = _get_northstar_from_state(state)
         source_path = _extract_source_path(northstar_markdown)
         source_tool = ToolDefinition(
@@ -481,6 +503,7 @@ class AuditProjectAdapter:
     def execute_create_game_research_tool(
         self, tool_name: str, tool_input: dict, state: State
     ) -> str:
+        """Execute and return create game research tool."""
         if tool_name == "fetch_source_file":
             northstar_markdown = _get_northstar_from_state(state)
             source_path = _extract_source_path(northstar_markdown)
@@ -554,9 +577,11 @@ class AuditProjectAdapter:
         return f"tool_error: unknown tool {tool_name!r}"
 
     def build_blue_output_format(self) -> str | dict | None:
+        """Build and return blue output format."""
         return None
 
     def build_blue_tools(self) -> list[ToolDefinition]:
+        """Build and return blue tools."""
         return [
             ToolDefinition(
                 name="append_section",
@@ -613,6 +638,7 @@ class AuditProjectAdapter:
         ]
 
     def tool_call_to_delta(self, tool_call: ToolCall) -> DeltaState:
+        """Handle tool call to delta."""
         from baps.state.state import DeltaDocumentState, DeltaModifyDocumentState
         args = tool_call.arguments
         if tool_call.name == "append_section":
@@ -663,6 +689,7 @@ class AuditProjectAdapter:
         raise ValueError(f"unexpected tool: {tool_call.name!r}")
 
     def parse_blue_delta(self, text: str) -> DeltaState:
+        """Parse and return blue delta."""
         from baps.state.state import DeltaDocumentState
         _AUDIT_KEYS = frozenset({"artifact_id", "operation", "file", "rationale", "payload"})
         try:
@@ -683,4 +710,5 @@ class AuditProjectAdapter:
         return parse_document_delta_json(text)
 
     def export_state(self, state: State, output_path: Path, artifact_id: str) -> bool:
+        """Export and return state."""
         return export_document_artifact(document_artifact_from_state(state, artifact_id), output_path)

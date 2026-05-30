@@ -21,6 +21,7 @@ _MAX_SEARCH_BYTES = 100_000
 
 
 def _is_private_host(host: str) -> bool:
+    """Return whether private host."""
     try:
         addr = ipaddress.ip_address(host)
         return addr.is_private or addr.is_loopback or addr.is_link_local
@@ -29,7 +30,9 @@ def _is_private_host(host: str) -> bool:
 
 
 class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Represent the _SafeRedirectHandler type."""
     def redirect_request(self, req, fp, code, msg, headers, newurl):
+        """Handle redirect request."""
         parsed = urllib.parse.urlparse(newurl)
         if parsed.scheme not in ("http", "https"):
             raise urllib.error.URLError(f"redirect to non-http scheme blocked: {newurl}")
@@ -42,6 +45,7 @@ _OPENER = urllib.request.build_opener(_SafeRedirectHandler)
 
 
 def _raw_fetch(url: str, max_bytes: int) -> str:
+    """Handle raw fetch."""
     req = urllib.request.Request(url, headers={"User-Agent": "baps-research/1.0"}, method="GET")
     with _OPENER.open(req, timeout=_FETCH_TIMEOUT) as resp:
         raw = resp.read(max_bytes)
@@ -72,6 +76,7 @@ def _is_js_rendered(raw_html: str, stripped: str) -> bool:
 
 
 def _strip_html(text: str) -> str:
+    """Handle strip html."""
     text = re.sub(r"<script[^>]*>.*?</script>", "", text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r"<[^>]+>", " ", text)
@@ -93,6 +98,7 @@ _INJECTION_PATTERNS = re.compile(
 
 
 def _sanitize_external_content(text: str) -> str:
+    """Sanitize and return external content."""
     normalized = unicodedata.normalize("NFKC", text)
     return _INJECTION_PATTERNS.sub("[content removed]", normalized)
 
@@ -238,17 +244,21 @@ class ToolExecutor:
         self,
         adapter_tools: dict[str, Callable[..., str]] | None = None,
     ) -> None:
+        """Initialize the instance."""
         self._registry: dict[str, tuple[ToolDefinition, Callable[..., str]]] = {}
         self._adapter_tools: dict[str, Callable[..., str]] = dict(adapter_tools) if adapter_tools else {}
 
     def register(self, defn: ToolDefinition, fn: Callable[..., str]) -> "ToolExecutor":
+        """Handle register."""
         self._registry[defn.name] = (defn, fn)
         return self
 
     def definitions(self) -> list[ToolDefinition]:
+        """Handle definitions."""
         return [defn for defn, _ in self._registry.values()]
 
     def execute(self, tool_name: str, arguments: dict[str, Any]) -> str:
+        """Handle execute."""
         entry = self._registry.get(tool_name)
         if entry is not None:
             _, fn = entry
@@ -267,10 +277,12 @@ class ToolExecutor:
         return f"tool_error: unknown tool {tool_name!r}"
 
     def __contains__(self, tool_name: str) -> bool:
+        """Return whether the collection contains the given item."""
         return tool_name in self._registry or tool_name in self._adapter_tools
 
 
 def build_default_tool_executor() -> ToolExecutor:
+    """Build and return default tool executor."""
     executor = ToolExecutor()
     for defn, fn in _DEFAULT_TOOLS.values():
         executor.register(defn, fn)

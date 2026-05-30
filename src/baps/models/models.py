@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class Backend(StrEnum):
+    """Represent the Backend type."""
     ANTHROPIC = "anthropic"
     OPENAI = "openai"
     OLLAMA = "ollama"
@@ -21,6 +22,7 @@ _RETRY_DELAYS = (5.0, 15.0, 30.0)  # seconds to wait on 429, per attempt
 
 @dataclass(frozen=True)
 class ToolDefinition:
+    """Represent the ToolDefinition type."""
     name: str
     description: str
     parameters: dict = field(default_factory=dict)
@@ -28,6 +30,7 @@ class ToolDefinition:
 
 @dataclass(frozen=True)
 class ToolCall:
+    """Represent the ToolCall type."""
     name: str
     arguments: dict
 
@@ -43,10 +46,13 @@ class ToolCallRecord:
 
 
 class ModelClient:
+    """Represent the ModelClient type."""
     def generate(self, prompt: str, format: str | dict | None = None) -> str:
+        """Handle generate."""
         raise NotImplementedError
 
     def generate_with_tools(self, prompt: str, tools: list[ToolDefinition]) -> ToolCall:
+        """Handle generate with tools."""
         raise NotImplementedError
 
     def generate_agentic(
@@ -57,16 +63,19 @@ class ModelClient:
         role_name: str = "",
         max_tool_calls: int = 10,
     ) -> tuple[str, list[ToolCallRecord]]:
+        """Handle generate agentic."""
         raise NotImplementedError
 
 
 class FakeModelClient(ModelClient):
+    """Represent the FakeModelClient type."""
     def __init__(
         self,
         responses: list[str] | None = None,
         tool_responses: list[ToolCall | None] | None = None,
         agentic_sequences: list[list[ToolCall | str]] | None = None,
     ):
+        """Initialize the instance."""
         self.responses = list(responses) if responses is not None else []
         self.tool_responses = list(tool_responses) if tool_responses is not None else []
         self.prompts: list[str] = []
@@ -79,6 +88,7 @@ class FakeModelClient(ModelClient):
         )
 
     def generate(self, prompt: str, format: str | dict | None = None) -> str:
+        """Handle generate."""
         if not prompt.strip():
             raise ValueError("prompt must be a non-empty string")
 
@@ -91,6 +101,7 @@ class FakeModelClient(ModelClient):
         return response
 
     def generate_with_tools(self, prompt: str, tools: list[ToolDefinition]) -> ToolCall:
+        """Handle generate with tools."""
         if not prompt.strip():
             raise ValueError("prompt must be a non-empty string")
 
@@ -112,6 +123,7 @@ class FakeModelClient(ModelClient):
         role_name: str = "",
         max_tool_calls: int = 10,
     ) -> tuple[str, list[ToolCallRecord]]:
+        """Handle generate agentic."""
         if not prompt.strip():
             raise ValueError("prompt must be a non-empty string")
         self.agentic_prompts.append(prompt)
@@ -139,7 +151,9 @@ _ANTHROPIC_MAX_TOKENS = 4096
 
 
 class AnthropicClient(ModelClient):
+    """Represent the AnthropicClient type."""
     def __init__(self, model: str, api_key: str, base_url: str = "https://api.anthropic.com"):
+        """Initialize the instance."""
         if not model.strip():
             raise ValueError("model must be a non-empty string")
         if not api_key.strip():
@@ -151,6 +165,7 @@ class AnthropicClient(ModelClient):
         self.base_url = base_url.rstrip("/")
 
     def _post(self, payload: dict) -> dict:
+        """Handle post."""
         for attempt, delay in enumerate((*_RETRY_DELAYS, None)):
             body = json.dumps(payload).encode("utf-8")
             req = request.Request(
@@ -178,6 +193,7 @@ class AnthropicClient(ModelClient):
         raise RuntimeError("anthropic request failed: rate limit retries exhausted")
 
     def generate(self, prompt: str, format: str | dict | None = None) -> str:
+        """Handle generate."""
         if not prompt.strip():
             raise ValueError("prompt must be a non-empty string")
 
@@ -208,6 +224,7 @@ class AnthropicClient(ModelClient):
         return text
 
     def generate_with_tools(self, prompt: str, tools: list[ToolDefinition]) -> ToolCall:
+        """Handle generate with tools."""
         if not prompt.strip():
             raise ValueError("prompt must be a non-empty string")
 
@@ -235,6 +252,7 @@ class AnthropicClient(ModelClient):
         role_name: str = "",
         max_tool_calls: int = 10,
     ) -> tuple[str, list[ToolCallRecord]]:
+        """Handle generate agentic."""
         import datetime
         if not prompt.strip():
             raise ValueError("prompt must be a non-empty string")
@@ -283,7 +301,9 @@ class AnthropicClient(ModelClient):
 
 
 class OpenAIClient(ModelClient):
+    """Represent the OpenAIClient type."""
     def __init__(self, model: str, api_key: str, base_url: str = "https://api.openai.com/v1"):
+        """Initialize the instance."""
         if not model.strip():
             raise ValueError("model must be a non-empty string")
         if not api_key.strip():
@@ -295,6 +315,7 @@ class OpenAIClient(ModelClient):
         self.base_url = base_url.rstrip("/")
 
     def _post(self, payload: dict) -> dict:
+        """Handle post."""
         for attempt, delay in enumerate((*_RETRY_DELAYS, None)):
             body = json.dumps(payload).encode("utf-8")
             req = request.Request(
@@ -321,6 +342,7 @@ class OpenAIClient(ModelClient):
         raise RuntimeError("openai request failed: rate limit retries exhausted")
 
     def generate(self, prompt: str, format: str | dict | None = None) -> str:
+        """Handle generate."""
         if not prompt.strip():
             raise ValueError("prompt must be a non-empty string")
 
@@ -340,6 +362,7 @@ class OpenAIClient(ModelClient):
         return choices[0].get("message", {}).get("content", "")
 
     def generate_with_tools(self, prompt: str, tools: list[ToolDefinition]) -> ToolCall:
+        """Handle generate with tools."""
         if not prompt.strip():
             raise ValueError("prompt must be a non-empty string")
 
@@ -384,6 +407,7 @@ class OpenAIClient(ModelClient):
         role_name: str = "",
         max_tool_calls: int = 10,
     ) -> tuple[str, list[ToolCallRecord]]:
+        """Handle generate agentic."""
         import datetime
         if not prompt.strip():
             raise ValueError("prompt must be a non-empty string")
@@ -421,7 +445,9 @@ class OpenAIClient(ModelClient):
 
 
 class OllamaClient(ModelClient):
+    """Represent the OllamaClient type."""
     def __init__(self, model: str, base_url: str = "http://localhost:11434"):
+        """Initialize the instance."""
         if not model.strip():
             raise ValueError("model must be a non-empty string")
         if not base_url.strip():
@@ -430,6 +456,7 @@ class OllamaClient(ModelClient):
         self.base_url = base_url.rstrip("/")
 
     def generate(self, prompt: str, format: str | dict | None = None) -> str:
+        """Handle generate."""
         if not prompt.strip():
             raise ValueError("prompt must be a non-empty string")
 
@@ -458,6 +485,7 @@ class OllamaClient(ModelClient):
         return data["response"]
 
     def generate_with_tools(self, prompt: str, tools: list[ToolDefinition]) -> ToolCall:
+        """Handle generate with tools."""
         if not prompt.strip():
             raise ValueError("prompt must be a non-empty string")
 
@@ -513,6 +541,7 @@ class OllamaClient(ModelClient):
         role_name: str = "",
         max_tool_calls: int = 10,
     ) -> tuple[str, list[ToolCallRecord]]:
+        """Handle generate agentic."""
         import datetime
         if not prompt.strip():
             raise ValueError("prompt must be a non-empty string")
@@ -566,11 +595,13 @@ class FallbackClient(ModelClient):
     """
 
     def __init__(self, clients: list[ModelClient]) -> None:
+        """Initialize the instance."""
         if not clients:
             raise ValueError("clients must be non-empty")
         self._clients = list(clients)
 
     def generate(self, prompt: str, format: str | dict | None = None) -> str:
+        """Handle generate."""
         last_exc: Exception | None = None
         for i, client in enumerate(self._clients):
             try:
@@ -583,6 +614,7 @@ class FallbackClient(ModelClient):
         ) from last_exc
 
     def generate_with_tools(self, prompt: str, tools: list[ToolDefinition]) -> ToolCall:
+        """Handle generate with tools."""
         last_exc: Exception | None = None
         for i, client in enumerate(self._clients):
             try:
@@ -602,6 +634,7 @@ class FallbackClient(ModelClient):
         role_name: str = "",
         max_tool_calls: int = 10,
     ) -> tuple[str, list[ToolCallRecord]]:
+        """Handle generate agentic."""
         last_exc: Exception | None = None
         for i, client in enumerate(self._clients):
             try:
@@ -616,16 +649,19 @@ class FallbackClient(ModelClient):
 
 @dataclass(frozen=True)
 class Role:
+    """Represent the Role type."""
     name: str
     client: ModelClient
     schema: str | dict | None = None
     constrained: bool = False
 
     def generate(self, prompt: str) -> str:
+        """Handle generate."""
         from baps.models.model_output import wrap_json_prompt
         return self.client.generate(wrap_json_prompt(prompt), format=self.schema if self.constrained else None)
 
     def generate_with_tools(self, prompt: str, tools: list[ToolDefinition]) -> ToolCall:
+        """Handle generate with tools."""
         return self.client.generate_with_tools(prompt, tools)
 
     def generate_agentic(
@@ -635,6 +671,7 @@ class Role:
         executor: Any,
         max_tool_calls: int = 10,
     ) -> tuple[str, list[ToolCallRecord]]:
+        """Handle generate agentic."""
         return self.client.generate_agentic(
             prompt, tools, executor, role_name=self.name, max_tool_calls=max_tool_calls
         )

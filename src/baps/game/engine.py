@@ -122,6 +122,7 @@ def _verify_export_with_adapter(
     artifact_id: str,
     sandbox_mode: str = "docker",
 ) -> VerificationResult | None:
+    """Verify and return export with adapter."""
     verifier = getattr(adapter, "verify_export", None)
     if verifier is None:
         return None
@@ -135,6 +136,7 @@ def _verify_candidate_with_adapter(
     artifact_id: str,
     sandbox_mode: str = "docker",
 ) -> VerificationResult | None:
+    """Verify and return candidate with adapter."""
     verifier = getattr(adapter, "verify_candidate", None)
     if verifier is None:
         return None
@@ -144,6 +146,7 @@ def _verify_candidate_with_adapter(
 def _commit_export_with_adapter(
     adapter: ProjectTypeAdapter, output_path: Path, game_spec: GameSpec
 ) -> bool:
+    """Handle commit export with adapter."""
     committer = getattr(adapter, "commit_export", None)
     if committer is None:
         return False
@@ -154,6 +157,7 @@ def _commit_export_with_adapter(
 
 
 def _ensure_target_artifact_exists(state: State, artifact_id: str) -> None:
+    """Handle ensure target artifact exists."""
     _ = next((a for a in state.artifacts if a.id == artifact_id), None)
     if _ is None:
         raise ValueError(f"create_game target artifact not found in state: {artifact_id}")
@@ -166,6 +170,7 @@ def _generate_create_game_with_json_retry(
     workspace: Path | None,
     fallback_fn: Any = None,
 ) -> GameSpec | DecomposeSpec:
+    """Handle generate create game with json retry."""
     generated = role.generate(prompt)
     _debug_print_create_game_raw_model_output(generated)
     return _parse_create_game_output(
@@ -178,6 +183,7 @@ def _generate_create_game_with_json_retry(
 
 
 def _validate_game_spec(game_spec: GameSpec) -> None:
+    """Handle validate game spec."""
     debug_event("create_game.validation_input", {
         "objective": game_spec.objective,
         "success_condition": game_spec.success_condition,
@@ -197,6 +203,7 @@ def create_game(
     create_game_red_client: ModelClient | None = None,
     summarization_context: SummarizationContext | None = None,
 ) -> GameSpec | DecomposeSpec:
+    """Create and return game."""
     debug_event("create_game.input", {"state": state.model_dump(mode="json")})
     resolved_adapter = (
         adapter
@@ -405,6 +412,7 @@ def _build_play_game_context(
     verify_candidate_fn: _VerifyCandidateFn,
     summarization_context: SummarizationContext | None = None,
 ) -> PlayGameContext:
+    """Build and return play game context."""
     resolved_adapter = (
         adapter
         if adapter is not None
@@ -469,6 +477,7 @@ def play_game(
     depth: int = 0,
     summarization_context: SummarizationContext | None = None,
 ) -> DeltaState | None:
+    """Handle play game."""
     if max_attempts < 1:
         raise ValueError("max_attempts must be >= 1")
     ctx = _build_play_game_context(

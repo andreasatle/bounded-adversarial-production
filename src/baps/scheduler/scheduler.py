@@ -53,6 +53,7 @@ _FALLBACK_MODEL = "sonnet"
 
 
 def _known_model(name: str) -> ModelConfig:
+    """Return the ModelConfig for the given short name, raising KeyError if unknown."""
     return _KNOWN_MODELS[name]
 
 
@@ -86,6 +87,7 @@ def _default_model_ladder() -> list[ModelConfig]:
 
 
 def _env_for_model(model: ModelConfig) -> dict[str, str]:
+    """Return a copy of os.environ with BAPS_BACKEND and model-specific env vars set for model."""
     env = os.environ.copy()
     env["BAPS_BACKEND"] = model.backend
     if model.backend == Backend.ANTHROPIC:
@@ -104,6 +106,7 @@ async def _run_baps(
     command: str,
     prefix: str,
 ) -> dict:
+    """Run baps-run asynchronously for the given spec and model, returning the run-result dict."""
     proc = await asyncio.create_subprocess_exec(
         "uv", "run", "baps-run", command,
         "--spec", spec,
@@ -134,6 +137,7 @@ async def _run_spec(
     escalation_threshold: float,
     policy_path: Path,
 ) -> None:
+    """Run a single spec through the adaptive escalation loop, updating and saving the policy."""
     async with semaphore:
         spec_name = Path(spec).stem
         prefix = f"[{spec_name}]"
@@ -190,6 +194,7 @@ def _drop_underperformers(policy: ModelPolicy) -> list[str]:
 
 
 def _print_summary(policy: ModelPolicy) -> None:
+    """Log a human-readable summary of current model scores and policy temperature."""
     lines = ["[scheduler] policy state:"]
     for m in policy.models:
         s = policy._stats[m.name]
@@ -199,6 +204,7 @@ def _print_summary(policy: ModelPolicy) -> None:
 
 
 def main() -> None:
+    """CLI entry point for the adaptive baps scheduler: run specs across a model ladder for N rounds."""
     from dotenv import load_dotenv
     load_dotenv()
     _log_level = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)

@@ -47,6 +47,7 @@ def _build_module_research_tools(
     fetch_desc: str,
     entity_desc: str,
 ) -> list[ToolDefinition]:
+    """Build and return module research tools."""
     filter_prop: dict = {
         "type": "string",
         "enum": filters,
@@ -100,6 +101,7 @@ def _build_module_research_tools(
 
 
 def build_northstar_artifact_from_markdown(markdown: str) -> DocumentArtifact:
+    """Build and return northstar artifact from markdown."""
     fingerprint = hashlib.sha256(markdown.encode("utf-8")).hexdigest()[:12]
     return DocumentArtifact(
         id=f"northstar:{fingerprint}",
@@ -108,6 +110,7 @@ def build_northstar_artifact_from_markdown(markdown: str) -> DocumentArtifact:
 
 
 def document_artifact_from_state(state: State, artifact_id: str) -> DocumentArtifact:
+    """Handle document artifact from state."""
     artifact = next((a for a in state.artifacts if a.id == artifact_id), None)
     if artifact is None:
         raise ValueError(f"create_game target artifact not found in state: {artifact_id}")
@@ -117,6 +120,7 @@ def document_artifact_from_state(state: State, artifact_id: str) -> DocumentArti
 
 
 def build_document_create_game_state_view(state: State, config: dict[str, Any]) -> StateView:
+    """Build and return document create game state view."""
     target_artifact = document_artifact_from_state(state, _config_artifact_id(config))
     northstar_content = _config_northstar_markdown(config)
     section_summaries = [
@@ -168,6 +172,7 @@ def build_document_state_view(
     game_spec: GameSpec,
     summarization_context: SummarizationContext | None = None,
 ) -> StateView:
+    """Build and return document state view."""
     target_artifact = next(
         (artifact for artifact in state.artifacts if artifact.id == game_spec.target_artifact_id),
         None,
@@ -241,6 +246,7 @@ def render_document_blue_prompt(
     attempt_number: int,
     previous_feedback: PlayGameFeedback | None,
 ) -> str:
+    """Render and return document blue prompt."""
     document_delta_instructions = (
         "Document delta rules:\n"
         "- section.title and section.body must be non-empty strings.\n"
@@ -287,6 +293,7 @@ _BLUE_DOCUMENT_KEYS = frozenset({"artifact_id", "operation", "payload"})
 
 
 def parse_document_delta_json(text: str, workspace: Path | None = None) -> DeltaDocumentState | DeltaModifyDocumentState:
+    """Parse and return document delta json."""
     parsed, _ = parse_model_output(text, _BLUE_DOCUMENT_KEYS, context="blue:document", workspace=workspace)
     if not _BLUE_DOCUMENT_KEYS.issubset(parsed.keys()):
         raise ValueError(
@@ -319,11 +326,13 @@ def parse_document_delta_json(text: str, workspace: Path | None = None) -> Delta
 
 
 def render_document_artifact_markdown(artifact: DocumentArtifact) -> str:
+    """Render and return document artifact markdown."""
     sections = [f"## {section.title}\n\n{section.body}" for section in artifact.sections]
     return "\n\n".join(sections)
 
 
 def export_document_artifact(artifact: DocumentArtifact, output_path: Path) -> bool:
+    """Export and return document artifact."""
     rendered = render_document_artifact_markdown(artifact)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     before = output_path.read_text(encoding="utf-8") if output_path.exists() else None
@@ -334,10 +343,12 @@ def export_document_artifact(artifact: DocumentArtifact, output_path: Path) -> b
 
 
 class DocumentProjectAdapter:
+    """Implement the DocumentProjectAdapter project adapter."""
     project_type = "document"
     supported_delta_type = "DeltaDocumentState"
 
     def create_initial_state(self, config: dict[str, object]) -> State:
+        """Create and return initial state."""
         return State(
             artifacts=(DocumentArtifact(id=_config_artifact_id(config), sections=()),),
         )
@@ -348,6 +359,7 @@ class DocumentProjectAdapter:
         config: dict[str, object],
         summarization_context: SummarizationContext | None = None,
     ) -> StateView:
+        """Build and return create game state view."""
         del summarization_context
         return build_document_create_game_state_view(state, config)
 
@@ -358,6 +370,7 @@ class DocumentProjectAdapter:
         state_view: StateView,
         verification_result: VerificationResult | None,
     ) -> str:
+        """Render and return create game prompt supplement."""
         del state, config, state_view
         base = (
             "Document CreateGame constraints:\n"
@@ -378,6 +391,7 @@ class DocumentProjectAdapter:
     def normalize_game_spec(
         self, game_spec: GameSpec, state: State, config: dict[str, object]
     ) -> GameSpec:
+        """Normalize and return game spec."""
         del state, config
         return game_spec
 
@@ -387,6 +401,7 @@ class DocumentProjectAdapter:
         game_spec: GameSpec,
         summarization_context: SummarizationContext | None = None,
     ) -> StateView:
+        """Build and return state view."""
         return build_document_state_view(state, game_spec, summarization_context=summarization_context)
 
     def render_blue_prompt(
@@ -396,6 +411,7 @@ class DocumentProjectAdapter:
         attempt_number: int,
         previous_feedback: dict[str, object] | None,
     ) -> str:
+        """Render and return blue prompt."""
         return render_document_blue_prompt(
             state_view=state_view,
             game_spec=game_spec,
@@ -410,6 +426,7 @@ class DocumentProjectAdapter:
         delta_state: DeltaState,
         verification_result: VerificationResult | None,
     ) -> str:
+        """Render and return red prompt supplement."""
         del state_view, game_spec, delta_state, verification_result
         return ""
 
@@ -420,17 +437,21 @@ class DocumentProjectAdapter:
         delta_state: DeltaState,
         verification_result: VerificationResult | None,
     ) -> str:
+        """Render and return referee prompt supplement."""
         del state_view, game_spec, delta_state, verification_result
         return ""
 
     def supported_filters(self) -> list[str]:
+        """Return supported values for ed filters."""
         return ["summary", "full"]
 
     def build_research_tools(self, role: str) -> list[ToolDefinition]:
+        """Build and return research tools."""
         del role
         return []
 
     def build_create_game_research_tools(self, state: State) -> list:
+        """Build and return create game research tools."""
         artifact = next(
             (a for a in state.artifacts if isinstance(a, DocumentArtifact) and a.sections),
             None,
@@ -448,6 +469,7 @@ class DocumentProjectAdapter:
     def execute_create_game_research_tool(
         self, tool_name: str, tool_input: dict, state: State
     ) -> str:
+        """Execute and return create game research tool."""
         artifact = next(
             (a for a in state.artifacts if isinstance(a, DocumentArtifact)),
             None,
@@ -513,9 +535,11 @@ class DocumentProjectAdapter:
     def build_blue_output_format(self) -> str | dict | None:
         # Two valid operation shapes — return None so prompt instructions drive format
         # rather than a single rigid constrained-decoding schema.
+        """Build and return blue output format."""
         return None
 
     def build_blue_tools(self) -> list[ToolDefinition]:
+        """Build and return blue tools."""
         return [
             ToolDefinition(
                 name="append_section",
@@ -582,6 +606,7 @@ class DocumentProjectAdapter:
         ]
 
     def tool_call_to_delta(self, tool_call: ToolCall) -> DeltaState:
+        """Handle tool call to delta."""
         args = tool_call.arguments
         if tool_call.name == "modify_section":
             try:
@@ -642,14 +667,17 @@ class DocumentProjectAdapter:
         raise ValueError(f"unexpected tool: {tool_call.name!r}")
 
     def parse_blue_delta(self, text: str) -> DeltaState:
+        """Parse and return blue delta."""
         return parse_document_delta_json(text)
 
     def export_state(self, state: State, output_path: Path, artifact_id: str) -> bool:
+        """Export and return state."""
         return export_document_artifact(document_artifact_from_state(state, artifact_id), output_path)
 
     def verify_export(
         self, output_path: Path, state: State, artifact_id: str, sandbox_mode: str = "docker"
     ) -> VerificationResult | None:
+        """Verify and return export."""
         command = "document_export_consistency_check"
         cwd = str(output_path.parent)
         if not output_path.exists():

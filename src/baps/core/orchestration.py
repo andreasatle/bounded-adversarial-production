@@ -33,6 +33,7 @@ from baps.tools.tools import build_default_tool_executor
 
 
 class IterationRunResult(BaseModel):
+    """Result returned by _run_project_iterations, summarising outcome fields across all iterations."""
     update_applied: bool
     state_changed: bool
     output_exported: bool
@@ -51,6 +52,7 @@ class _RunContext:
     """Mutable execution context threaded through recursive gap solving."""
 
     def __init__(self, initial_state: State, max_iterations: int) -> None:
+        """Initialize context with the starting state and iteration budget."""
         self.current_state = initial_state
         self.iterations_remaining = max_iterations
         self.iterations_completed = 0
@@ -230,6 +232,7 @@ def _run_project_iterations(
     initial_state: State,
     summarization_context: SummarizationContext | None = None,
 ) -> IterationRunResult:
+    """Drive the outer iteration loop, calling _solve_gap until a stop condition is reached."""
     output_path = config.output_path
     max_iterations = config.max_iterations
     artifact_id = _config_artifact_id(config)

@@ -23,6 +23,7 @@ _VERIFICATION_SUMMARY_CAP = 500
 
 
 def sanitize_feedback_dict(d: dict) -> dict:
+    """Recursively sanitize string values in a dict by stripping prompt-injection patterns."""
     result = {}
     for k, v in d.items():
         if isinstance(v, str):
@@ -37,6 +38,7 @@ def sanitize_feedback_dict(d: dict) -> dict:
 
 
 def summarize_verification_result(result: VerificationResult | None) -> dict | None:
+    """Return a truncated summary dict of a VerificationResult, or None if result is None."""
     if result is None:
         return None
     return {
@@ -48,6 +50,7 @@ def summarize_verification_result(result: VerificationResult | None) -> dict | N
 
 
 def sanitize_game_spec_dict(game_spec: GameSpec) -> dict:
+    """Return a sanitized dict representation of a GameSpec for safe blackboard writing."""
     return {
         "objective": sanitize_model_string(game_spec.objective),
         "target_artifact_id": game_spec.target_artifact_id,
@@ -59,6 +62,7 @@ def sanitize_game_spec_dict(game_spec: GameSpec) -> dict:
 def append_northstar_proposal_to_blackboard(
     workspace: Path, rationale: str, proposed_northstar: str
 ) -> None:
+    """Append a NorthStar update proposal entry to the northstar_proposals.jsonl blackboard file."""
     blackboard_dir = workspace / _BLACKBOARD_DIR
     blackboard_dir.mkdir(parents=True, exist_ok=True)
     entry = {
@@ -83,6 +87,7 @@ def append_game_to_blackboard(
     current_best_delta: DeltaState | None,
     integration_eligible_delta: DeltaState | None,
 ) -> None:
+    """Append a completed play_game record to the games.jsonl blackboard file."""
     blackboard_dir = workspace / _BLACKBOARD_DIR
     blackboard_dir.mkdir(parents=True, exist_ok=True)
     entry = {
@@ -120,6 +125,7 @@ def append_create_game_to_blackboard(
     result: dict | None,
     model_used: str,
 ) -> None:
+    """Append a create_game event record (game_spec, no_new_game, or decompose) to games.jsonl."""
     blackboard_dir = workspace / _BLACKBOARD_DIR
     blackboard_dir.mkdir(parents=True, exist_ok=True)
     entry = {
@@ -145,6 +151,7 @@ def append_integration_to_blackboard(
     state_changed: bool,
     delta_type: str,
 ) -> None:
+    """Append a state-integration event record to the games.jsonl blackboard file."""
     blackboard_dir = workspace / _BLACKBOARD_DIR
     blackboard_dir.mkdir(parents=True, exist_ok=True)
     entry = {
@@ -162,4 +169,5 @@ def append_integration_to_blackboard(
 
 
 def client_model_name(client: ModelClient) -> str:
+    """Return the model name attribute of a client, falling back to the class name."""
     return getattr(client, "model", type(client).__name__)
