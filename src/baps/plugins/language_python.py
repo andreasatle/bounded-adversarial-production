@@ -1,4 +1,4 @@
-"""LanguagePlugin implementation for Python: test execution, API extraction, and file summarization."""
+"""LanguagePlugin implementation for Python: test execution and deterministic structural extraction."""
 
 from __future__ import annotations
 
@@ -155,10 +155,6 @@ class PythonLanguagePlugin:
             p.startswith("tests/") or p.startswith("test_")
             for p in file_paths
         )
-
-    def summarize_file(self, file, objective):
-        """Handle summarize file."""
-        raise NotImplementedError
 
     def supported_filters(self) -> list[str]:
         """Return supported values for ed filters."""

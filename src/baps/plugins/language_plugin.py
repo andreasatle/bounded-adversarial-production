@@ -11,7 +11,11 @@ from baps.state.state import CodeFile
 
 @runtime_checkable
 class LanguagePlugin(Protocol):
-    """Contract for language-specific project setup and test execution."""
+    """Contract for deterministic language-specific setup, verification, and structural extraction.
+
+    Model-based summarization is handled by SummarizationContext + SUMMARIZE role,
+    not by this plugin protocol.
+    """
 
     name: str
     test_command: str
@@ -37,30 +41,20 @@ class LanguagePlugin(Protocol):
         """Return True if any of the given paths look like test files for this language."""
         ...
 
-    def summarize_file(self, file: CodeFile, objective: str | None) -> str:
-        """Return a summary of *file* relative to *objective*.
-
-        When objective is None: structural API surface (signatures, doc comments,
-        test names, line count — no bodies).
-        When objective is provided: objective-aware summary of what the file does
-        relative to that goal.
-        """
-        raise NotImplementedError
-
     def supported_filters(self) -> list[str]:
         """Return filter values supported by this plugin's extract_* methods."""
         raise NotImplementedError
 
     def extract_api(self, file: CodeFile) -> str:
-        """Return the API surface of *file*: signatures and docstring first lines, no bodies."""
+        """Return deterministic API surface of *file*: signatures and doc first lines, no bodies."""
         raise NotImplementedError
 
     def extract_tests(self, file: CodeFile) -> str:
-        """Return test function names from *file* grouped under 'Tests:'."""
+        """Return deterministic test entity listing from *file*."""
         raise NotImplementedError
 
     def extract_entity(self, file: CodeFile, entity_id: str, filter: str | None) -> str:
-        """Return a top-level entity (function or class) from *file* shaped by *filter*.
+        """Return a deterministic top-level entity projection from *file* shaped by *filter*.
 
         filter=None or 'full': complete source body.
         filter='api': signature and docstring first line only.

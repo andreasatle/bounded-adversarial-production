@@ -1,4 +1,4 @@
-"""LanguagePlugin implementation for Zig: test execution, API extraction, and file summarization."""
+"""LanguagePlugin implementation for Zig: test execution and deterministic structural extraction."""
 
 from __future__ import annotations
 
@@ -133,10 +133,6 @@ class ZigLanguagePlugin:
     def has_tests(self, file_paths: Sequence[str]) -> bool:
         """Return whether the object has tests."""
         return any(p.endswith(".zig") for p in file_paths)
-
-    def summarize_file(self, file, objective):
-        """Handle summarize file."""
-        raise NotImplementedError
 
     def supported_filters(self) -> list[str]:
         """Return supported values for extract filters."""
