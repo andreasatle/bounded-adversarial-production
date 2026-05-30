@@ -2,12 +2,12 @@
 """Generate compact markdown indexes for src/baps and tests using AST only."""
 
 import ast
+from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 SRC = ROOT / "src" / "baps"
 TESTS = ROOT / "tests"
-API_INDEX = ROOT / "CODEBASE_API_INDEX.md"
 TEST_INDEX = ROOT / "CODEBASE_TEST_INDEX.md"
 IMPORTANT_FIELD_CLASSES = {
     "GameSpec",
@@ -85,14 +85,21 @@ def _first_doc_line(node: ast.AST) -> str | None:
     return doc.strip().splitlines()[0]
 
 
-def _skip_init(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    if node.name != "__init__":
+def _is_trivial_init_doc(doc: str) -> bool:
+    """Return True if an __init__ docstring is too generic to index."""
+    return doc.strip().splitlines()[0].lower().startswith("initialize")
+
+
+def _skip_method(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Return True if this class method should be excluded from the index."""
+    if not node.name.startswith("_"):
         return False
-    if ast.get_docstring(node):
-        return False
-    args = node.args
-    non_self = [a for a in args.posonlyargs + args.args if a.arg != "self"]
-    return not (non_self or args.vararg or args.kwonlyargs or args.kwarg)
+    if node.name == "__init__":
+        doc = ast.get_docstring(node)
+        if doc and not _is_trivial_init_doc(doc):
+            return False  # meaningful __init__ docstring — include
+        return True
+    return True  # other private/dunder methods — skip
 
 
 def _base_name(base: ast.expr) -> str:
@@ -166,9 +173,11 @@ def _index_source_file(path: Path) -> list[str]:
             if node.module:
                 imports.add(node.module.split(".")[0])
         elif isinstance(node, ast.ClassDef):
-            classes.append(node)
+            if not node.name.startswith("_"):
+                classes.append(node)
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            functions.append(node)
+            if not node.name.startswith("_"):
+                functions.append(node)
 
     module_doc = _first_doc_line(tree)
     header = f"### {rel} ({line_count} lines)"
@@ -196,7 +205,7 @@ def _index_source_file(path: Path) -> list[str]:
             for item in cls.body:
                 if not isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     continue
-                if _skip_init(item):
+                if _skip_method(item):
                     continue
                 sig = f"{item.name}({_fmt_args(item.args)}){_fmt_return(item)}"
                 mentry = append_inline_doc(f"    - {sig}", item)
@@ -324,9 +333,17 @@ def _is_substantive_source_file(path: Path) -> bool:
     return False
 
 
-def _build_api_index_lines(source_files: list[Path]) -> list[str]:
-    lines: list[str] = ["# Codebase API Index — src/baps", ""]
-    protocol_entries: list[tuple[str, str]] = []
+def _package_dir(path: Path) -> str:
+    rel = path.relative_to(SRC)
+    parts = rel.parts
+    if len(parts) == 1:
+        return "root"
+    return parts[0]
+
+
+def _collect_protocols(source_files: list[Path]) -> list[tuple[str, str, str | None]]:
+    """Return (name, rel_path, docstring) for all public Protocol classes."""
+    entries: list[tuple[str, str, str | None]] = []
     for path in source_files:
         if not _is_substantive_source_file(path):
             continue
@@ -335,20 +352,30 @@ def _build_api_index_lines(source_files: list[Path]) -> list[str]:
         except SyntaxError:
             continue
         for node in tree.body:
-            if isinstance(node, ast.ClassDef) and _is_protocol_class(node):
-                protocol_entries.append((node.name, str(path.relative_to(ROOT))))
+            if (isinstance(node, ast.ClassDef)
+                    and not node.name.startswith("_")
+                    and _is_protocol_class(node)):
+                entries.append((node.name, str(path.relative_to(ROOT)), _first_doc_line(node)))
+    return sorted(entries)
 
-    if protocol_entries:
-        lines.append("## Protocols")
-        for name, rel in sorted(protocol_entries):
-            lines.append(f"- {name} — {rel}")
-        lines.append("")
 
-    for path in source_files:
+def _build_dir_index_lines(pkg_name: str, files: list[Path]) -> list[str]:
+    lines: list[str] = [f"# Codebase API Index — src/baps/{pkg_name}", ""]
+    for path in sorted(files):
         if not _is_substantive_source_file(path):
             continue
         lines.extend(_index_source_file(path))
         lines.append("")
+    return lines
+
+
+def _build_protocols_index_lines(protocols: list[tuple[str, str, str | None]]) -> list[str]:
+    lines: list[str] = ["# Protocol Index — src/baps", ""]
+    for name, rel, doc in protocols:
+        entry = f"- **{name}** — `{rel}`"
+        if doc:
+            entry += f" — {doc}"
+        lines.append(entry)
     return lines
 
 
@@ -360,16 +387,75 @@ def _build_test_index_lines(test_files: list[Path]) -> list[str]:
     return lines
 
 
+def _build_master_index_lines(
+    api_entries: list[tuple[str, str]],
+    proto_entry: tuple[str, str],
+    test_entry: tuple[str, str],
+) -> list[str]:
+    lines = [
+        "# Codebase Index",
+        "Generated by scripts/index_codebase.py — run to refresh.",
+        "",
+        "## API Indexes (per package)",
+    ]
+    for filename, description in api_entries:
+        lines.append(f"- {filename} — {description}")
+    lines += [
+        "",
+        "## Protocol Index",
+        f"- {proto_entry[0]} — {proto_entry[1]}",
+        "",
+        "## Test Index",
+        f"- {test_entry[0]} — {test_entry[1]}",
+    ]
+    return lines
+
+
 def main() -> None:
+    stale_patterns = [
+        "CODEBASE_API_*.md",
+        "CODEBASE_INDEX.md",
+        "CODEBASE_TEST_INDEX.md",
+        "CODEBASE_INDEX_*.md",
+    ]
+    for pattern in stale_patterns:
+        for stale in sorted(ROOT.glob(pattern)):
+            stale.unlink()
+            print(f"Deleted {stale.relative_to(ROOT)}")
+
     source_files = sorted(SRC.rglob("*.py"))
     test_files = sorted(TESTS.rglob("*.py")) if TESTS.exists() else []
-    api_lines = _build_api_index_lines(source_files)
-    test_lines = _build_test_index_lines(test_files)
 
-    API_INDEX.write_text("\n".join(api_lines).rstrip() + "\n", encoding="utf-8")
+    by_dir: dict[str, list[Path]] = defaultdict(list)
+    for path in source_files:
+        by_dir[_package_dir(path)].append(path)
+
+    api_entries: list[tuple[str, str]] = []
+    for pkg_name in sorted(by_dir):
+        if pkg_name == "root":
+            continue
+        lines = _build_dir_index_lines(pkg_name, by_dir[pkg_name])
+        out_path = ROOT / f"CODEBASE_API_{pkg_name}.md"
+        out_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+        print(f"Wrote {out_path.relative_to(ROOT)}")
+        api_entries.append((out_path.name, f"public API surface for src/baps/{pkg_name}/"))
+
+    protocols = _collect_protocols(source_files)
+    proto_lines = _build_protocols_index_lines(protocols)
+    proto_path = ROOT / "CODEBASE_API_protocols.md"
+    proto_path.write_text("\n".join(proto_lines).rstrip() + "\n", encoding="utf-8")
+    print(f"Wrote {proto_path.relative_to(ROOT)}")
+    proto_entry = (proto_path.name, "all Protocol classes across the codebase")
+
+    test_lines = _build_test_index_lines(test_files)
     TEST_INDEX.write_text("\n".join(test_lines).rstrip() + "\n", encoding="utf-8")
-    print(f"Wrote {API_INDEX.relative_to(ROOT)}")
     print(f"Wrote {TEST_INDEX.relative_to(ROOT)}")
+    test_entry = (TEST_INDEX.name, "test functions and fixtures across tests/")
+
+    master_lines = _build_master_index_lines(api_entries, proto_entry, test_entry)
+    master_path = ROOT / "CODEBASE_INDEX.md"
+    master_path.write_text("\n".join(master_lines).rstrip() + "\n", encoding="utf-8")
+    print(f"Wrote {master_path.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

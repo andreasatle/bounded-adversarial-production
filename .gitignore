@@ -22,6 +22,4 @@ blackboard/
 .workspace/
 .baps-workspace/
 .DS_Store
-CODEBASE_INDEX.md
-CODEBASE_API_INDEX.md
-CODEBASE_TEST_INDEX.md
+CODEBASE_*.md
