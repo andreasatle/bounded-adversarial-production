@@ -11,7 +11,26 @@ from baps .state .state import GameSpec ,State
 if TYPE_CHECKING :
     from baps .summarizer .summarizer import SummarizationContext 
 
-from .common import coding_artifact_from_state 
+from .common import coding_artifact_from_state ,plugin_for 
+
+
+def _render_api_summary (file ,plugin )->tuple [str ,str ]:
+    """Return (label, content) for deterministic structural summary of a file."""
+    try :
+        api_text =plugin .extract_api (file )
+    except Exception :# noqa: BLE001
+        api_text =""
+    if (
+    isinstance (api_text ,str )
+    and api_text .strip ()
+    and api_text .strip ()!=file .content .strip ()
+    ):
+        return "api",sanitize_model_string (api_text )
+    return (
+    "api-empty",
+    "No structural API signatures were extracted for this file. "
+    "Use research tools (fetch_module/fetch_entity) for deeper inspection.",
+    )
 
 
 def build_coding_create_game_state_view (
@@ -20,11 +39,16 @@ config :dict [str ,Any ],
 summarization_context :SummarizationContext |None =None ,
 )->StateView :
     """Build the CreateGame StateView for a coding project, including NorthStar and current files."""
+    del summarization_context 
     artifact_id =config_artifact_id (config )
     target_artifact =coding_artifact_from_state (state ,artifact_id )
+    language =(
+    str (config .get ("language"))
+    if config .get ("language")
+    else target_artifact .language 
+    )
+    plugin =plugin_for (language )
     northstar_content =config_northstar_markdown (config )
-
-    _MAX_LINES_PER_FILE =30 
 
     file_lines :list [str ]=[]
     if target_artifact .files :
@@ -33,21 +57,10 @@ summarization_context :SummarizationContext |None =None ,
             line_count =len (lines )
             file_lines .append (f"### {sanitize_model_title (file .path )} ({line_count } lines)")
             file_lines .append ("")
-            summary =(
-            summarization_context .summarize (file .content ,objective =None )
-            if summarization_context is not None 
-            else None 
-            )
-            if summary is not None :
-                file_lines .append (summary )
-            else :
-                displayed =lines [:_MAX_LINES_PER_FILE ]if line_count >_MAX_LINES_PER_FILE else lines 
-                fence ="````"if "```"in "\n".join (displayed )else "```"
-                file_lines .append (fence )
-                file_lines .extend (sanitize_model_string (line )for line in displayed )
-                if line_count >_MAX_LINES_PER_FILE :
-                    file_lines .append (f"... ({line_count -_MAX_LINES_PER_FILE } more lines)")
-                file_lines .append (fence )
+            label ,summary =_render_api_summary (file ,plugin )
+            file_lines .append (f"[{label }]")
+            file_lines .append ("")
+            file_lines .append (summary )
             file_lines .append ("")
     else :
         file_lines .append ("No files.")
@@ -86,34 +99,37 @@ game_spec :GameSpec ,
 summarization_context :SummarizationContext |None =None ,
 )->StateView :
     """Build the PlayGame StateView for a coding project, with per-file summaries when a summarizer is available."""
+    del summarization_context 
     artifact =coding_artifact_from_state (state ,game_spec .target_artifact_id )
+    plugin =plugin_for (artifact .language )
     target_entity =game_spec .target_entity 
+    known_paths ={file .path for file in artifact .files }
+    matched_target =target_entity is not None and target_entity in known_paths
     file_lines :list [str ]=[]
+    if target_entity is not None and not matched_target :
+        file_lines .append ("WARNING: target_entity did not match any known file.")
+        file_lines .append (f"target_entity: {sanitize_model_title (target_entity )}")
+        file_lines .append ("No full file was expanded; rendering compact structural views for all files.")
+        file_lines .append ("")
     if artifact .files :
         for file in artifact .files :
             line_count =len (file .content .splitlines ())
-            if target_entity is not None and file .path !=target_entity :
-                summary =(
-                summarization_context .summarize (file .content ,objective =game_spec .objective )
-                if summarization_context is not None 
-                else None 
-                )
-                if summary is not None :
-                    file_lines .append (f"### {sanitize_model_title (file .path )} ({line_count } lines) [summary]")
-                    file_lines .append ("")
-                    file_lines .append (summary )
-                    file_lines .append ("")
-                    continue 
+            if matched_target and file .path ==target_entity :
                 file_lines .append (f"### {sanitize_model_title (file .path )} ({line_count } lines) [full]")
-            elif target_entity is not None :
-                file_lines .append (f"### {sanitize_model_title (file .path )} ({line_count } lines) [full]")
-            else :
-                file_lines .append (f"### {sanitize_model_title (file .path )}")
+                file_lines .append ("")
+                fence ="````"if "```"in file .content else "```"
+                file_lines .append (fence )
+                file_lines .append (sanitize_model_string (file .content ))
+                file_lines .append (fence )
+                file_lines .append ("")
+                continue 
+            file_lines .append (f"### {sanitize_model_title (file .path )} ({line_count } lines) [api]")
             file_lines .append ("")
-            fence ="````"if "```"in file .content else "```"
-            file_lines .append (fence )
-            file_lines .append (sanitize_model_string (file .content ))
-            file_lines .append (fence )
+            label ,summary =_render_api_summary (file ,plugin )
+            if label !="api":
+                file_lines .append (f"[{label }]")
+                file_lines .append ("")
+            file_lines .append (summary )
             file_lines .append ("")
     else :
         file_lines .append ("No files.")

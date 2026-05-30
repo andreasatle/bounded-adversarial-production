@@ -163,7 +163,7 @@ def test_coding_create_game_state_view_is_textual_with_delimiters() -> None:
     assert "No files." in view.content
 
 
-def test_coding_create_game_state_view_includes_file_contents() -> None:
+def test_coding_create_game_state_view_includes_structural_api_summary() -> None:
 
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
@@ -188,9 +188,10 @@ def test_coding_create_game_state_view_includes_file_contents() -> None:
     view = adapter.build_create_game_state_view(state, config)
     assert "src/hello.py" in view.content
     assert "def hello():" in view.content
+    assert "[api]" in view.content
 
 
-def test_coding_create_game_state_view_truncates_long_files() -> None:
+def test_coding_create_game_state_view_does_not_use_first_30_lines_as_primary_path() -> None:
 
     long_content = "\n".join(f"line_{i} = {i}" for i in range(100))
     state = state_module.State(
@@ -212,8 +213,8 @@ def test_coding_create_game_state_view_truncates_long_files() -> None:
     }
     adapter = CodingProjectAdapter()
     view = adapter.build_create_game_state_view(state, config)
-    assert "more lines" in view.content
-    assert "line_0 = 0" in view.content
+    assert "[api-empty]" in view.content
+    assert "more lines" not in view.content
     assert "line_99 = 99" not in view.content
 
 
@@ -238,9 +239,10 @@ def test_coding_create_game_state_view_line_count_in_heading_without_summarizer(
     view = CodingProjectAdapter().build_create_game_state_view(state, config, summarization_context=None)
     assert "src/hello.py (2 lines)" in view.content
     assert "def hello():" in view.content
+    assert "[api]" in view.content
 
 
-def test_coding_create_game_state_view_summarizer_replaces_truncation() -> None:
+def test_coding_create_game_state_view_remains_structural_even_with_summarizer() -> None:
     long_content = "\n".join(f"line_{i} = {i}" for i in range(100))
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
@@ -261,38 +263,9 @@ def test_coding_create_game_state_view_summarizer_replaces_truncation() -> None:
     }
     summarization_context = _make_summarization_context("API summary: assigns integers to variables")
     view = CodingProjectAdapter().build_create_game_state_view(state, config, summarization_context=summarization_context)
-    assert "API summary: assigns integers to variables" in view.content
-    assert "more lines" not in view.content
-    assert "line_0 = 0" not in view.content
+    assert "[api-empty]" in view.content
+    assert "API summary: assigns integers to variables" not in view.content
     assert "src/big.py (100 lines)" in view.content
-
-
-def test_coding_create_game_state_view_summarizer_cache_hit_on_second_call() -> None:
-    content = "x = 1\ny = 2\n"
-    state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
-        artifacts=(state_module.CodingArtifact(
-            id="main-codebase",
-            files=(state_module.CodeFile(path="src/vars.py", content=content),),
-        ),),
-    )
-    config = {
-        "workspace": Path(".baps-workspace"),
-        "project_type": "coding",
-        "artifact_id": "main-codebase",
-        "goal": "Build something",
-        "northstar_markdown": "# Goal",
-        "output_path": Path(".baps-workspace/output"),
-        "max_iterations": 1,
-        "spec_path": None,
-    }
-    # FakeModelClient with one response — a second call would exhaust and raise
-    summarization_context = _make_summarization_context("summary: two int assignments")
-    adapter = CodingProjectAdapter()
-    view1 = adapter.build_create_game_state_view(state, config, summarization_context=summarization_context)
-    view2 = adapter.build_create_game_state_view(state, config, summarization_context=summarization_context)
-    assert "summary: two int assignments" in view1.content
-    assert "summary: two int assignments" in view2.content
 
 
 def test_coding_create_game_state_view_line_count_present_with_summarizer() -> None:
@@ -317,7 +290,8 @@ def test_coding_create_game_state_view_line_count_present_with_summarizer() -> N
     summarization_context = _make_summarization_context("three variable assignments")
     view = CodingProjectAdapter().build_create_game_state_view(state, config, summarization_context=summarization_context)
     assert "src/abc.py (3 lines)" in view.content
-    assert "three variable assignments" in view.content
+    assert "[api-empty]" in view.content
+    assert "three variable assignments" not in view.content
 
 
 # ---------------------------------------------------------------------------
@@ -355,12 +329,12 @@ def test_coding_state_view_target_entity_match_is_full_others_summarized() -> No
     view = CodingProjectAdapter().build_state_view(state, spec, summarization_context=summarization_context)
     assert "src/target.py (1 lines) [full]" in view.content
     assert "def target(): pass" in view.content
-    assert "src/other.py (1 lines) [summary]" in view.content
-    assert "summary of other" in view.content
+    assert "src/other.py (1 lines) [api]" in view.content
+    assert "summary of other" not in view.content
     assert "def other(): pass" not in view.content
 
 
-def test_coding_state_view_target_entity_none_all_full_current_behavior() -> None:
+def test_coding_state_view_target_entity_none_all_compact_api_current_behavior() -> None:
     files = [
         ("src/a.py", "x = 1\n"),
         ("src/b.py", "y = 2\n"),
@@ -369,13 +343,12 @@ def test_coding_state_view_target_entity_none_all_full_current_behavior() -> Non
     spec = _make_coding_spec(target_entity=None)
     summarization_context = _make_summarization_context("should not appear")
     view = CodingProjectAdapter().build_state_view(state, spec, summarization_context=summarization_context)
-    assert "[summary]" not in view.content
     assert "[full]" not in view.content
-    assert "x = 1" in view.content
-    assert "y = 2" in view.content
+    assert "src/a.py (1 lines) [api]" in view.content
+    assert "src/b.py (1 lines) [api]" in view.content
 
 
-def test_coding_state_view_summarizer_none_all_full_regardless_of_target_entity() -> None:
+def test_coding_state_view_summarizer_none_keeps_non_target_compact_when_target_set() -> None:
     files = [
         ("src/target.py", "def t(): pass\n"),
         ("src/other.py", "def o(): pass\n"),
@@ -384,12 +357,13 @@ def test_coding_state_view_summarizer_none_all_full_regardless_of_target_entity(
     spec = _make_coding_spec(target_entity="src/target.py")
     ctx = SummarizationContext(summarizer=None, game_spec=spec)
     view = CodingProjectAdapter().build_state_view(state, spec, summarization_context=ctx)
-    assert "[summary]" not in view.content
+    assert "src/target.py (1 lines) [full]" in view.content
+    assert "src/other.py (1 lines) [api]" in view.content
     assert "def t(): pass" in view.content
-    assert "def o(): pass" in view.content
+    assert "def o(): pass" not in view.content
 
 
-def test_coding_state_view_fallback_to_full_when_summarization_context_none() -> None:
+def test_coding_state_view_target_entity_present_and_no_context_keeps_non_target_compact() -> None:
     files = [
         ("src/target.py", "def t(): pass\n"),
         ("src/other.py", "def o(): pass\n"),
@@ -397,9 +371,25 @@ def test_coding_state_view_fallback_to_full_when_summarization_context_none() ->
     state = _make_coding_state(files)
     spec = _make_coding_spec(target_entity="src/target.py")
     view = CodingProjectAdapter().build_state_view(state, spec, summarization_context=None)
-    assert "[summary]" not in view.content
+    assert "src/target.py (1 lines) [full]" in view.content
+    assert "src/other.py (1 lines) [api]" in view.content
     assert "def t(): pass" in view.content
-    assert "def o(): pass" in view.content
+    assert "def o(): pass" not in view.content
+
+
+def test_coding_state_view_invalid_target_entity_warns_and_stays_compact() -> None:
+    files = [
+        ("src/target.py", "def t(): pass\n"),
+        ("src/other.py", "def o(): pass\n"),
+    ]
+    state = _make_coding_state(files)
+    spec = _make_coding_spec(target_entity="src/missing.py")
+    view = CodingProjectAdapter().build_state_view(state, spec, summarization_context=None)
+    assert "WARNING: target_entity did not match any known file." in view.content
+    assert "No full file was expanded; rendering compact structural views for all files." in view.content
+    assert "[full]" not in view.content
+    assert "src/target.py (1 lines) [api]" in view.content
+    assert "src/other.py (1 lines) [api]" in view.content
 
 
 # ---------------------------------------------------------------------------

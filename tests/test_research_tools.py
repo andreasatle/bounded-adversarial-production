@@ -63,6 +63,11 @@ def test_zig_plugin_supported_filters_includes_tests() -> None:
     assert "tests" in ZigLanguagePlugin().supported_filters()
 
 
+def test_language_plugin_has_no_summarize_file_method() -> None:
+    from baps.plugins.language_plugin import LanguagePlugin
+    assert not hasattr(LanguagePlugin, "summarize_file")
+
+
 # ---------------------------------------------------------------------------
 # supported_filters — adapters
 # ---------------------------------------------------------------------------
