@@ -1,3 +1,5 @@
+"""Single model-output parsing pipeline: fence-strip, JSON extraction, rescue, retry, and fallback."""
+
 from __future__ import annotations
 
 import datetime

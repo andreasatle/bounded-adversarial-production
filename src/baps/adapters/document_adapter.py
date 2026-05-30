@@ -1,3 +1,5 @@
+"""Adapter implementing the full ProjectTypeAdapter contract for document-type projects."""
+
 from __future__ import annotations
 
 import hashlib

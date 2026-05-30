@@ -1,3 +1,5 @@
+"""Emits play_game telemetry (debug events and blackboard records) after all attempts complete."""
+
 from __future__ import annotations
 
 from baps.adapters.project_adapter import VerificationResult

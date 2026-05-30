@@ -1,3 +1,5 @@
+"""Authoritative state types, delta operations, artifact registry, and state mutation helpers."""
+
 from __future__ import annotations
 
 import hashlib

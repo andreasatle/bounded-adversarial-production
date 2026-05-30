@@ -1,3 +1,5 @@
+"""Debug logging helpers that emit structured YAML-like payloads for each lifecycle stage."""
+
 from __future__ import annotations
 
 import argparse

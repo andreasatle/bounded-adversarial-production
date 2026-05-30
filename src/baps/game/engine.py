@@ -1,3 +1,5 @@
+"""Entry points for create_game and play_game: drives model rounds, verification, and export."""
+
 from __future__ import annotations
 
 import logging

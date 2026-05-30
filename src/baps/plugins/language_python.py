@@ -1,3 +1,5 @@
+"""LanguagePlugin implementation for Python: test execution, API extraction, and file summarization."""
+
 from __future__ import annotations
 
 import ast

@@ -1,3 +1,5 @@
+"""Renders create_game, Red, Referee, and research prompts from state views and game specs."""
+
 from __future__ import annotations
 
 import json

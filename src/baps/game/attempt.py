@@ -1,3 +1,5 @@
+"""Executes a single Blue/Red/Referee attempt cycle and applies the Referee decision to runtime."""
+
 from __future__ import annotations
 
 from typing import Any

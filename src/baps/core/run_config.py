@@ -1,3 +1,5 @@
+"""Resolves CLI args, YAML spec, and workspace settings into a validated RunConfig."""
+
 from __future__ import annotations
 
 import argparse

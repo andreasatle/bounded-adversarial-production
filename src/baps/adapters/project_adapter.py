@@ -1,3 +1,5 @@
+"""Defines the ProjectTypeAdapter protocol, shared adapter helpers, and adapter registry."""
+
 from __future__ import annotations
 
 import functools

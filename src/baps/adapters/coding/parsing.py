@@ -1,3 +1,5 @@
+"""Parses and validates Blue model output into typed coding delta objects."""
+
 from __future__ import annotations
 
 import ast

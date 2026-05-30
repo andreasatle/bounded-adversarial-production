@@ -1,3 +1,5 @@
+"""Drives the recursive gap-solving iteration loop, threading state through create_game/play_game cycles."""
+
 from __future__ import annotations
 
 import logging

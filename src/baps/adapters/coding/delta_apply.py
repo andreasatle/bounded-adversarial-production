@@ -1,3 +1,5 @@
+"""Applies coding deltas (write/delete file operations) to an in-memory file list."""
+
 from __future__ import annotations
 
 from baps.state.state import CodeFile, DeltaCodingBatchState, DeltaCodingState, DeltaDeleteCodingState, DeltaState

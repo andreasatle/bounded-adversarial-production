@@ -1,3 +1,5 @@
+"""Runs test commands either bare (no sandbox) or inside an isolated Docker container."""
+
 from __future__ import annotations
 
 import subprocess

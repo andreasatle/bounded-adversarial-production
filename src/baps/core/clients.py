@@ -1,3 +1,5 @@
+"""Builds model clients and fallback chains for each spec role from env vars and spec config."""
+
 from __future__ import annotations
 
 import logging

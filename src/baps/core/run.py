@@ -1,3 +1,5 @@
+"""CLI entry point: parses arguments and dispatches to start or reset lifecycle commands."""
+
 from __future__ import annotations
 
 import argparse

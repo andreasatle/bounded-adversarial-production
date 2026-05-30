@@ -1,3 +1,5 @@
+"""Defines PlayGameContext, feedback types, and resolves Blue/Red/Referee roles for a play_game run."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

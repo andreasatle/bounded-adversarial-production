@@ -1,3 +1,5 @@
+"""Top-level lifecycle orchestration: config resolution, runtime assembly, run loop, and result emission."""
+
 from __future__ import annotations
 
 import argparse

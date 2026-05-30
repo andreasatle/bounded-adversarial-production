@@ -1,3 +1,5 @@
+"""EMA-scored softmax model selection policy with temperature decay for the adaptive scheduler."""
+
 from __future__ import annotations
 
 import json

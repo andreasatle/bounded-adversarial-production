@@ -1,3 +1,5 @@
+"""StateService: the single authoritative mutation boundary for loading, validating, and updating State."""
+
 from __future__ import annotations
 
 from baps.state.state import (

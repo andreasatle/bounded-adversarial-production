@@ -1,3 +1,5 @@
+"""Builds CreateGame and PlayGame StateViews for coding-type projects."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any

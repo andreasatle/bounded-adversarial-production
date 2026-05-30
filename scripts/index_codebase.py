@@ -170,13 +170,16 @@ def _index_source_file(path: Path) -> list[str]:
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             functions.append(node)
 
-    out = [f"### {rel} ({line_count} lines)"]
+    module_doc = _first_doc_line(tree)
+    header = f"### {rel} ({line_count} lines)"
+    header = f"{header} — {module_doc}" if module_doc else f"{header} — MISSING"
+    out = [header]
 
     def append_inline_doc(entry: str, node: ast.AST) -> str:
         doc = _first_doc_line(node)
         if doc is None:
-            return entry
-        return f'{entry} — "{doc}"'
+            return f"{entry} — MISSING"
+        return f"{entry} — {doc}"
 
     if classes:
         out.append("- Classes:")
@@ -253,13 +256,16 @@ def _index_test_module(path: Path) -> list[str]:
             elif node.name.startswith("test_"):
                 test_functions.append(node)
 
-    out = [f"### {rel} ({line_count} lines)"]
+    module_doc = _first_doc_line(tree)
+    header = f"### {rel} ({line_count} lines)"
+    header = f"{header} — {module_doc}" if module_doc else f"{header} — MISSING"
+    out = [header]
 
     def append_inline_doc(entry: str, node: ast.AST) -> str:
         doc = _first_doc_line(node)
         if doc is None:
-            return entry
-        return f'{entry} — "{doc}"'
+            return f"{entry} — MISSING"
+        return f"{entry} — {doc}"
 
     if classes:
         out.append("- Classes:")

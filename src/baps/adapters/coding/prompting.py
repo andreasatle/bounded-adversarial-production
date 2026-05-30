@@ -1,3 +1,5 @@
+"""Renders Blue, Red, and Referee prompts for coding-type projects."""
+
 from __future__ import annotations
 
 from baps.adapters.project_adapter import VerificationResult, render_blue_prompt_core

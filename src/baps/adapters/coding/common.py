@@ -1,3 +1,5 @@
+"""Shared helpers for coding adapter: path validation, language plugin resolution, and artifact access."""
+
 from __future__ import annotations
 
 import re

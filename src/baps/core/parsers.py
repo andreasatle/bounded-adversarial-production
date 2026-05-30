@@ -1,3 +1,5 @@
+"""Parses model output for create_game, Red, and Referee roles into typed domain objects."""
+
 from __future__ import annotations
 
 import logging

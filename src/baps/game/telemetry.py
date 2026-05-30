@@ -1,3 +1,5 @@
+"""Writes create_game, play_game, integration, and NorthStar events to the append-only blackboard."""
+
 from __future__ import annotations
 
 import datetime

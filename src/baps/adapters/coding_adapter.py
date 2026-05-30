@@ -1,3 +1,5 @@
+"""Adapter implementing the full ProjectTypeAdapter contract for coding-type projects."""
+
 from __future__ import annotations
 
 import json

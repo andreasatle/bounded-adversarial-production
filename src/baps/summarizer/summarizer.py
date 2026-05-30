@@ -1,3 +1,5 @@
+"""Provides a caching SummarizationContext that summarizes artifact content via a model role."""
+
 from __future__ import annotations
 
 import hashlib

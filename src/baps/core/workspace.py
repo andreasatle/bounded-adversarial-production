@@ -1,3 +1,5 @@
+"""Workspace I/O helpers: path resolution, config persistence, state reset, and run-result writing."""
+
 from __future__ import annotations
 
 import json

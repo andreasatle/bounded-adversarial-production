@@ -1,3 +1,5 @@
+"""Renders NorthStarProjectionInput into fingerprinted StateView projections for model consumption."""
+
 from __future__ import annotations
 
 import hashlib

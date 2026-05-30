@@ -1,3 +1,5 @@
+"""Adaptive scheduler that runs baps specs across a model ladder and updates selection policy scores."""
+
 from __future__ import annotations
 
 import argparse

@@ -1,3 +1,5 @@
+"""Model client abstractions: Backend enum, tool types, and concrete client implementations."""
+
 from __future__ import annotations
 
 import json

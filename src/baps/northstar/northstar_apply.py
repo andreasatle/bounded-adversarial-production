@@ -1,3 +1,5 @@
+"""CLI tool for reviewing and applying NorthStar update proposals from the blackboard."""
+
 from __future__ import annotations
 
 import argparse

@@ -1,3 +1,5 @@
+"""Tool executor and built-in tools: URL fetch, web search, and file content access."""
+
 from __future__ import annotations
 
 import gzip

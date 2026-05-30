@@ -1,3 +1,5 @@
+"""Defines the StateStore protocol and the JsonStateStore implementation for State persistence."""
+
 from __future__ import annotations
 
 import json

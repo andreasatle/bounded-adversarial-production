@@ -1,3 +1,5 @@
+"""Assembles the RuntimeContext and wires together all runtime dependencies for a baps run."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
