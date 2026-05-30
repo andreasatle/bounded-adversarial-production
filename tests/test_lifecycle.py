@@ -342,8 +342,8 @@ def test_baps_reset_makes_no_model_calls(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr("baps.core.clients._build_model_client", _fail)
     monkeypatch.setattr("baps.core.clients._build_planner_model_client", _fail)
-    monkeypatch.setattr("baps.core.clients._build_role_client", _fail)
-    monkeypatch.setattr("baps.core.clients._build_client_for_role", _fail)
+    monkeypatch.setattr("baps.core.clients.build_role_client", _fail)
+    monkeypatch.setattr("baps.core.clients.build_client_for_role", _fail)
 
     monkeypatch.setattr("sys.argv", [
         "baps-run", "reset",

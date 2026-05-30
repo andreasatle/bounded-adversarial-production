@@ -601,7 +601,7 @@ def test_resolve_run_config_max_sub_gaps_non_integer_raises(tmp_path: Path) -> N
         run_module.resolve_run_config(args)
 
 
-def test_resolve_run_config_language_zig_propagates_to_config(tmp_path: Path) -> None:
+def test_resolve_runconfig_language_zig_propagates_to_config(tmp_path: Path) -> None:
     import argparse
     import yaml
     import baps.core.run as run_module
@@ -631,7 +631,7 @@ def test_resolve_run_config_language_zig_propagates_to_config(tmp_path: Path) ->
     assert config["language"] == "zig"
 
 
-def test_resolve_run_config_language_absent_leaves_empty_string(tmp_path: Path) -> None:
+def test_resolve_runconfig_language_absent_leaves_empty_string(tmp_path: Path) -> None:
     import argparse
     import yaml
     import baps.core.run as run_module

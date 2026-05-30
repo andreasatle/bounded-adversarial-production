@@ -34,7 +34,7 @@ def test_coding_create_state_creates_coding_artifact() -> None:
     assert artifact.files == ()
 
 
-def test_document_adapter_render_create_game_prompt_supplement_includes_delta_guidance() -> None:
+def test_document_adapterrender_create_game_prompt_supplement_includes_delta_guidance() -> None:
 
     adapter = DocumentProjectAdapter()
     state = state_module.State(
@@ -59,7 +59,7 @@ def test_document_adapter_render_create_game_prompt_supplement_includes_delta_gu
     assert "modify_section" in result
 
 
-def test_document_adapter_render_create_game_prompt_supplement_includes_guidance_on_failure() -> None:
+def test_document_adapterrender_create_game_prompt_supplement_includes_guidance_on_failure() -> None:
 
     adapter = DocumentProjectAdapter()
     state = state_module.State(

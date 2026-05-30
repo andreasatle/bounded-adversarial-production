@@ -644,7 +644,7 @@ def test_document_list_modules_no_filter_lists_section_titles() -> None:
     assert "words" in result
 
 
-def test_document_list_modules_summary_filter_includes_first_sentence() -> None:
+def test_document_list_modules_summary_filter_includesfirst_sentence() -> None:
     from baps.adapters.document_adapter import DocumentProjectAdapter
     state = _document_state([("Overview", "First sentence. Second sentence.")])
     result = DocumentProjectAdapter().execute_create_game_research_tool(

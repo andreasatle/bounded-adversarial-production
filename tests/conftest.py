@@ -33,16 +33,16 @@ def _patch_create_game_model_client(monkeypatch):
             tool_responses=[blue_tool_response],
         )
 
-    # Primary patch: _build_client_for_role is the call site used by create_game, play_game,
+    # Primary patch: build_client_for_role is the call site used by create_game, play_game,
     # and _solve_gap.  Route create_game/decompose/create_game_red to the planner fake and all
     # other roles (blue/red/referee) to the play-game fake.
-    def _fake_build_client_for_role(role, config):
+    def _fakebuild_client_for_role(role, config):
         if role in ("create_game", "decompose", "create_game_red"):
             return _fake_create_game_builder()
         return _fake_model_client_builder()
 
-    monkeypatch.setattr("baps.game.engine._build_client_for_role", _fake_build_client_for_role)
-    monkeypatch.setattr("baps.core.orchestration._build_client_for_role", _fake_build_client_for_role)
-    monkeypatch.setattr("baps.game.engine._build_role_client", lambda _role: _fake_model_client_builder())
+    monkeypatch.setattr("baps.game.engine.build_client_for_role", _fakebuild_client_for_role)
+    monkeypatch.setattr("baps.core.orchestration.build_client_for_role", _fakebuild_client_for_role)
+    monkeypatch.setattr("baps.game.engine.build_role_client", lambda _role: _fake_model_client_builder())
     # Fallback resolution returns no chain by default (no fallback configured in tests).
-    monkeypatch.setattr("baps.game.engine._build_fallback_chain_for_role", lambda role, config: [])
+    monkeypatch.setattr("baps.game.engine.build_fallback_chain_for_role", lambda role, config: [])

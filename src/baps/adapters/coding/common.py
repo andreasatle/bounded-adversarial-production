@@ -1,80 +1,80 @@
 """Shared helpers for coding adapter: path validation, language plugin resolution, and artifact access."""
 
-from __future__ import annotations
+from __future__ import annotations 
 
-import re
-from pathlib import Path
+import re 
+from pathlib import Path 
 
-from baps.plugins.language_plugin import LanguagePlugin
-from baps.state.state import CodingArtifact, State
+from baps .plugins .language_plugin import LanguagePlugin 
+from baps .state .state import CodingArtifact ,State 
 
-_UNSAFE_PATH_CHARS_RE = re.compile(r'[;&|`$<>!\x00]')
+_UNSAFE_PATH_CHARS_RE =re .compile (r'[;&|`$<>!\x00]')
 
-_BLUE_CONTENT_FORBIDDEN_MARKERS: tuple[str, ...] = (
-    "Note:",
-    "Correction:",
-    "Correcting",
-    "Re-writing",
-    "Rewriting",
-    "self-contained issue",
-    "Re-reading context",
+BLUE_CONTENT_FORBIDDEN_MARKERS :tuple [str ,...]=(
+"Note:",
+"Correction:",
+"Correcting",
+"Re-writing",
+"Rewriting",
+"self-contained issue",
+"Re-reading context",
 )
 
 
-def _validate_file_path(path: str) -> None:
+def validate_file_path (path :str )->None :
     """Reject file paths that could escape the output directory or inject into shell commands."""
-    if not path or not path.strip():
-        raise ValueError("file path must be non-empty")
-    p = Path(path)
-    if p.is_absolute():
-        raise ValueError(f"file path must be relative, not absolute: {path!r}")
-    if ".." in p.parts:
-        raise ValueError(f"file path must not contain '..' components: {path!r}")
-    if _UNSAFE_PATH_CHARS_RE.search(path):
-        raise ValueError(f"file path contains unsafe characters: {path!r}")
+    if not path or not path .strip ():
+        raise ValueError ("file path must be non-empty")
+    p =Path (path )
+    if p .is_absolute ():
+        raise ValueError (f"file path must be relative, not absolute: {path !r }")
+    if ".."in p .parts :
+        raise ValueError (f"file path must not contain '..' components: {path !r }")
+    if _UNSAFE_PATH_CHARS_RE .search (path ):
+        raise ValueError (f"file path contains unsafe characters: {path !r }")
 
 
-def _build_language_registry() -> dict[str, LanguagePlugin]:
+def _build_language_registry ()->dict [str ,LanguagePlugin ]:
     """Instantiate and return a registry mapping language names to their plugin."""
-    from baps.plugins.language_python import PythonLanguagePlugin
-    from baps.plugins.language_rust import RustLanguagePlugin
-    from baps.plugins.language_zig import ZigLanguagePlugin
+    from baps .plugins .language_python import PythonLanguagePlugin 
+    from baps .plugins .language_rust import RustLanguagePlugin 
+    from baps .plugins .language_zig import ZigLanguagePlugin 
 
     return {
-        "python": PythonLanguagePlugin(),
-        "rust": RustLanguagePlugin(),
-        "zig": ZigLanguagePlugin(),
+    "python":PythonLanguagePlugin (),
+    "rust":RustLanguagePlugin (),
+    "zig":ZigLanguagePlugin (),
     }
 
 
-def _plugin_for(language: str) -> LanguagePlugin:
+def plugin_for (language :str )->LanguagePlugin :
     """Return the LanguagePlugin for the given language name, raising ValueError if unsupported."""
-    registry = _build_language_registry()
-    if language not in registry:
-        available = ", ".join(sorted(registry))
-        raise ValueError(
-            f"Language {language!r} is not supported. Available languages: {available}"
+    registry =_build_language_registry ()
+    if language not in registry :
+        available =", ".join (sorted (registry ))
+        raise ValueError (
+        f"Language {language !r } is not supported. Available languages: {available }"
         )
-    return registry[language]
+    return registry [language ]
 
 
-def _config_language(config: dict[str, object]) -> str:
+def config_language (config :dict [str ,object ])->str :
     """Extract the required 'language' field from a coding project config dict."""
-    language = config.get("language")
-    if not language:
-        registry = _build_language_registry()
-        available = ", ".join(sorted(registry))
-        raise ValueError(
-            f"coding project spec requires a 'language' field. Available languages: {available}"
+    language =config .get ("language")
+    if not language :
+        registry =_build_language_registry ()
+        available =", ".join (sorted (registry ))
+        raise ValueError (
+        f"coding project spec requires a 'language' field. Available languages: {available }"
         )
-    return str(language)
+    return str (language )
 
 
-def coding_artifact_from_state(state: State, artifact_id: str) -> CodingArtifact:
+def coding_artifact_from_state (state :State ,artifact_id :str )->CodingArtifact :
     """Return the CodingArtifact with the given id from state, raising ValueError if missing."""
-    artifact = next((a for a in state.artifacts if a.id == artifact_id), None)
-    if artifact is None:
-        raise ValueError(f"target coding artifact not found in state: {artifact_id}")
-    if not isinstance(artifact, CodingArtifact):
-        raise ValueError(f"target artifact must be CodingArtifact: {artifact_id}")
-    return artifact
+    artifact =next ((a for a in state .artifacts if a .id ==artifact_id ),None )
+    if artifact is None :
+        raise ValueError (f"target coding artifact not found in state: {artifact_id }")
+    if not isinstance (artifact ,CodingArtifact ):
+        raise ValueError (f"target artifact must be CodingArtifact: {artifact_id }")
+    return artifact 

@@ -1,308 +1,308 @@
 """Debug logging helpers that emit structured YAML-like payloads for each lifecycle stage."""
 
-from __future__ import annotations
+from __future__ import annotations 
 
-import argparse
-import logging
-from typing import TYPE_CHECKING, Any
+import argparse 
+import logging 
+from typing import TYPE_CHECKING ,Any 
 
-from baps.core.run_config import RunConfig
+from baps .core .run_config import RunConfig 
 
-if TYPE_CHECKING:
-    from baps.game.roles import PlayGameFeedback
-from baps.northstar.northstar_projection import StateView
-from baps.adapters.project_adapter import (
-    VerificationResult,
-    _config_artifact_id,
-    _config_northstar_markdown,
-    _verification_result_to_dict,
+if TYPE_CHECKING :
+    from baps .game .roles import PlayGameFeedback 
+from baps .northstar .northstar_projection import StateView 
+from baps .adapters .project_adapter import (
+VerificationResult ,
+config_artifact_id ,
+config_northstar_markdown ,
+verification_result_to_dict ,
 )
-from baps.state.state import DeltaState, GameSpec, PlayGameRuntime, RedFinding, RefereeDecision, State
+from baps .state .state import DeltaState ,GameSpec ,PlayGameRuntime ,RedFinding ,RefereeDecision ,State 
 
-logger = logging.getLogger(__name__)
+logger =logging .getLogger (__name__ )
 
 
-def _format_debug_yaml_like(value: Any, indent: int = 0) -> list[str]:
+def _format_debug_yaml_like (value :Any ,indent :int =0 )->list [str ]:
     """Recursively format a value as indented YAML-like lines for human-readable debug output."""
-    prefix = " " * indent
-    if isinstance(value, dict):
-        if not value:
-            return [f"{prefix}{{}}"]
-        lines: list[str] = []
-        for key in sorted(value.keys()):
-            item = value[key]
-            if isinstance(item, dict):
-                if not item:
-                    lines.append(f"{prefix}{key}: {{}}")
-                else:
-                    lines.append(f"{prefix}{key}:")
-                    lines.extend(_format_debug_yaml_like(item, indent + 2))
-            elif isinstance(item, (list, tuple)):
-                if len(item) == 0:
-                    lines.append(f"{prefix}{key}: []")
-                else:
-                    lines.append(f"{prefix}{key}:")
-                    lines.extend(_format_debug_yaml_like(item, indent + 2))
-            else:
-                lines.append(f"{prefix}{key}: {item}")
-        return lines
-    if isinstance(value, (list, tuple)):
-        if len(value) == 0:
-            return [f"{prefix}[]"]
-        lines = []
-        for item in value:
-            if isinstance(item, dict):
-                if not item:
-                    lines.append(f"{prefix}- {{}}")
-                    continue
-                keys = sorted(item.keys())
-                first_key = keys[0]
-                first_value = item[first_key]
-                if isinstance(first_value, (dict, list, tuple)):
-                    lines.append(f"{prefix}- {first_key}:")
-                    lines.extend(_format_debug_yaml_like(first_value, indent + 4))
-                else:
-                    lines.append(f"{prefix}- {first_key}: {first_value}")
-                for key in keys[1:]:
-                    nested = item[key]
-                    if isinstance(nested, (dict, list, tuple)):
-                        if isinstance(nested, dict) and not nested:
-                            lines.append(f"{prefix}  {key}: {{}}")
-                        elif isinstance(nested, (list, tuple)) and len(nested) == 0:
-                            lines.append(f"{prefix}  {key}: []")
-                        else:
-                            lines.append(f"{prefix}  {key}:")
-                            lines.extend(_format_debug_yaml_like(nested, indent + 4))
-                    else:
-                        lines.append(f"{prefix}  {key}: {nested}")
-            elif isinstance(item, (list, tuple)):
-                if len(item) == 0:
-                    lines.append(f"{prefix}- []")
-                else:
-                    lines.append(f"{prefix}-")
-                    lines.extend(_format_debug_yaml_like(item, indent + 2))
-            else:
-                lines.append(f"{prefix}- {item}")
-        return lines
-    return [f"{prefix}{value}"]
+    prefix =" "*indent 
+    if isinstance (value ,dict ):
+        if not value :
+            return [f"{prefix }{{}}"]
+        lines :list [str ]=[]
+        for key in sorted (value .keys ()):
+            item =value [key ]
+            if isinstance (item ,dict ):
+                if not item :
+                    lines .append (f"{prefix }{key }: {{}}")
+                else :
+                    lines .append (f"{prefix }{key }:")
+                    lines .extend (_format_debug_yaml_like (item ,indent +2 ))
+            elif isinstance (item ,(list ,tuple )):
+                if len (item )==0 :
+                    lines .append (f"{prefix }{key }: []")
+                else :
+                    lines .append (f"{prefix }{key }:")
+                    lines .extend (_format_debug_yaml_like (item ,indent +2 ))
+            else :
+                lines .append (f"{prefix }{key }: {item }")
+        return lines 
+    if isinstance (value ,(list ,tuple )):
+        if len (value )==0 :
+            return [f"{prefix }[]"]
+        lines =[]
+        for item in value :
+            if isinstance (item ,dict ):
+                if not item :
+                    lines .append (f"{prefix }- {{}}")
+                    continue 
+                keys =sorted (item .keys ())
+                first_key =keys [0 ]
+                first_value =item [first_key ]
+                if isinstance (first_value ,(dict ,list ,tuple )):
+                    lines .append (f"{prefix }- {first_key }:")
+                    lines .extend (_format_debug_yaml_like (first_value ,indent +4 ))
+                else :
+                    lines .append (f"{prefix }- {first_key }: {first_value }")
+                for key in keys [1 :]:
+                    nested =item [key ]
+                    if isinstance (nested ,(dict ,list ,tuple )):
+                        if isinstance (nested ,dict )and not nested :
+                            lines .append (f"{prefix }  {key }: {{}}")
+                        elif isinstance (nested ,(list ,tuple ))and len (nested )==0 :
+                            lines .append (f"{prefix }  {key }: []")
+                        else :
+                            lines .append (f"{prefix }  {key }:")
+                            lines .extend (_format_debug_yaml_like (nested ,indent +4 ))
+                    else :
+                        lines .append (f"{prefix }  {key }: {nested }")
+            elif isinstance (item ,(list ,tuple )):
+                if len (item )==0 :
+                    lines .append (f"{prefix }- []")
+                else :
+                    lines .append (f"{prefix }-")
+                    lines .extend (_format_debug_yaml_like (item ,indent +2 ))
+            else :
+                lines .append (f"{prefix }- {item }")
+        return lines 
+    return [f"{prefix }{value }"]
 
 
-def _debug_log(key: str, payload: object) -> None:
+def _debug_log (key :str ,payload :object )->None :
     """Log key and YAML-formatted payload at DEBUG level when debug logging is enabled."""
-    if logger.isEnabledFor(logging.DEBUG):
-        logger.debug("%s:\n%s", key, "\n".join(_format_debug_yaml_like(payload, indent=2)))
+    if logger .isEnabledFor (logging .DEBUG ):
+        logger .debug ("%s:\n%s",key ,"\n".join (_format_debug_yaml_like (payload ,indent =2 )))
 
 
-def debug_event(name: str, payload: dict[str, Any]) -> None:
+def debug_event (name :str ,payload :dict [str ,Any ])->None :
     """Log a named debug event with its payload dict."""
-    _debug_log(name, payload)
+    _debug_log (name ,payload )
 
 
-def _debug_print_read_config(args: argparse.Namespace, spec_data: dict[str, Any], config: RunConfig) -> None:
+def debug_print_read_config (args :argparse .Namespace ,spec_data :dict [str ,Any ],config :RunConfig )->None :
     """Log the resolved CLI args, spec data, and resulting RunConfig fields at DEBUG level."""
-    _debug_log("read_config.input", {
-        "cli_args": {
-            "workspace": args.workspace,
-            "artifact_id": args.artifact_id,
-            "goal": args.goal,
-            "output": args.output,
-            "max_iterations": args.max_iterations,
-            "spec": args.spec,
-        },
-        "yaml_values": spec_data,
+    _debug_log ("read_config.input",{
+    "cli_args":{
+    "workspace":args .workspace ,
+    "artifact_id":args .artifact_id ,
+    "goal":args .goal ,
+    "output":args .output ,
+    "max_iterations":args .max_iterations ,
+    "spec":args .spec ,
+    },
+    "yaml_values":spec_data ,
     })
-    _debug_log("read_config.output", {
-        "workspace": str(config.workspace),
-        "artifact_id": config.artifact_id,
-        "northstar_markdown": config.northstar_markdown,
-        "goal": config.goal,
-        "output_path": str(config.output_path),
-        "max_iterations": config.max_iterations,
+    _debug_log ("read_config.output",{
+    "workspace":str (config .workspace ),
+    "artifact_id":config .artifact_id ,
+    "northstar_markdown":config .northstar_markdown ,
+    "goal":config .goal ,
+    "output_path":str (config .output_path ),
+    "max_iterations":config .max_iterations ,
     })
 
 
-def _debug_print_create_state(config: RunConfig, state: State) -> None:
+def debug_print_create_state (config :RunConfig ,state :State )->None :
     """Log the create_state inputs and the resulting State at DEBUG level."""
-    _debug_log("create_state.input", {
-        "project_type": config.project_type,
-        "artifact_id": _config_artifact_id(config),
-        "northstar_markdown": _config_northstar_markdown(config),
-        "workspace": str(config.workspace),
-        "goal": config.goal,
-        "output_path": str(config.output_path),
-        "max_iterations": config.max_iterations,
+    _debug_log ("create_state.input",{
+    "project_type":config .project_type ,
+    "artifact_id":config_artifact_id (config ),
+    "northstar_markdown":config_northstar_markdown (config ),
+    "workspace":str (config .workspace ),
+    "goal":config .goal ,
+    "output_path":str (config .output_path ),
+    "max_iterations":config .max_iterations ,
     })
-    _debug_log("create_state.output", {"state": state.model_dump(mode="json")})
+    _debug_log ("create_state.output",{"state":state .model_dump (mode ="json")})
 
 
-def _debug_print_create_game_input(state: State) -> None:
+def _debug_print_create_game_input (state :State )->None :
     """Log the State passed into create_game at DEBUG level."""
-    _debug_log("create_game.input", {"state": state.model_dump(mode="json")})
+    _debug_log ("create_game.input",{"state":state .model_dump (mode ="json")})
 
 
-def _debug_print_create_game_output(game_spec: GameSpec) -> None:
+def _debug_print_create_game_output (game_spec :GameSpec )->None :
     """Log the GameSpec produced by create_game at DEBUG level."""
-    _debug_log("create_game.output", {"game_spec": game_spec.model_dump(mode="json")})
+    _debug_log ("create_game.output",{"game_spec":game_spec .model_dump (mode ="json")})
 
 
-def _debug_print_create_game_prompt(prompt: str) -> None:
+def debug_print_create_game_prompt (prompt :str )->None :
     """Log the full create_game prompt text at DEBUG level."""
-    if logger.isEnabledFor(logging.DEBUG):
-        indented = "\n".join(f"  {line}" for line in (prompt.splitlines() or [""]))
-        logger.debug("create_game.prompt:\n%s", indented)
+    if logger .isEnabledFor (logging .DEBUG ):
+        indented ="\n".join (f"  {line }"for line in (prompt .splitlines ()or [""]))
+        logger .debug ("create_game.prompt:\n%s",indented )
 
 
-def _debug_print_play_game_input(state: State, game_spec: GameSpec) -> None:
+def _debug_print_play_game_input (state :State ,game_spec :GameSpec )->None :
     """Log the State and GameSpec passed into play_game at DEBUG level."""
-    _debug_log("play_game.input", {
-        "state": state.model_dump(mode="json"),
-        "game_spec": game_spec.model_dump(mode="json"),
+    _debug_log ("play_game.input",{
+    "state":state .model_dump (mode ="json"),
+    "game_spec":game_spec .model_dump (mode ="json"),
     })
 
 
-def _debug_print_play_game_output(runtime: PlayGameRuntime) -> None:
+def _debug_print_play_game_output (runtime :PlayGameRuntime )->None :
     """Log the play_game runtime delta fields at DEBUG level."""
-    _debug_log("play_game.output", {
-        "current_best_delta": (
-            None
-            if runtime.current_best_delta is None
-            else runtime.current_best_delta.model_dump(mode="json")
-        ),
-        "integration_eligible_delta": (
-            None
-            if runtime.integration_eligible_delta is None
-            else runtime.integration_eligible_delta.model_dump(mode="json")
-        ),
+    _debug_log ("play_game.output",{
+    "current_best_delta":(
+    None 
+    if runtime .current_best_delta is None 
+    else runtime .current_best_delta .model_dump (mode ="json")
+    ),
+    "integration_eligible_delta":(
+    None 
+    if runtime .integration_eligible_delta is None 
+    else runtime .integration_eligible_delta .model_dump (mode ="json")
+    ),
     })
 
 
-def _debug_print_play_game_attempt(attempt: int) -> None:
+def _debug_print_play_game_attempt (attempt :int )->None :
     """Log the current play_game attempt number at DEBUG level."""
-    _debug_log("play_game.attempt", {"attempt": attempt})
+    _debug_log ("play_game.attempt",{"attempt":attempt })
 
 
-def _debug_print_blue_failed_tool_call(tool_call: object) -> None:
+def _debug_print_blue_failed_tool_call (tool_call :object )->None :
     """Log a Blue tool call that could not be converted to a DeltaState at DEBUG level."""
-    _debug_log("blue.failed_tool_call", {"tool_call": str(tool_call)})
+    _debug_log ("blue.failed_tool_call",{"tool_call":str (tool_call )})
 
 
-def _debug_print_attempt_rejected(attempt: int, reason: str) -> None:
+def _debug_print_attempt_rejected (attempt :int ,reason :str )->None :
     """Log the rejection of a play_game attempt and its reason at DEBUG level."""
-    _debug_log("play_game.attempt_rejected", {"attempt": attempt, "reason": reason})
+    _debug_log ("play_game.attempt_rejected",{"attempt":attempt ,"reason":reason })
 
 
-def _debug_print_blue_input(
-    state_view: StateView,
-    game_spec: GameSpec,
-    attempt_number: int,
-    previous_feedback: PlayGameFeedback | None,
-) -> None:
+def _debug_print_blue_input (
+state_view :StateView ,
+game_spec :GameSpec ,
+attempt_number :int ,
+previous_feedback :PlayGameFeedback |None ,
+)->None :
     """Log the inputs sent to the Blue role at DEBUG level."""
-    _debug_log("blue.input", {
-        "game_spec": game_spec.model_dump(mode="json"),
-        "state_view": state_view.model_dump(mode="json"),
-        "attempt_number": attempt_number,
-        "previous_feedback": previous_feedback,
+    _debug_log ("blue.input",{
+    "game_spec":game_spec .model_dump (mode ="json"),
+    "state_view":state_view .model_dump (mode ="json"),
+    "attempt_number":attempt_number ,
+    "previous_feedback":previous_feedback ,
     })
 
 
-def _debug_print_blue_output(delta: DeltaState) -> None:
+def _debug_print_blue_output (delta :DeltaState )->None :
     """Log the DeltaState produced by Blue at DEBUG level."""
-    _debug_log("blue.output", {"delta_state": delta.model_dump(mode="json")})
+    _debug_log ("blue.output",{"delta_state":delta .model_dump (mode ="json")})
 
 
-def _debug_print_red_input(
-    state_view: StateView,
-    game_spec: GameSpec,
-    delta_state: DeltaState,
-    verification_result: VerificationResult | None = None,
-) -> None:
+def _debug_print_red_input (
+state_view :StateView ,
+game_spec :GameSpec ,
+delta_state :DeltaState ,
+verification_result :VerificationResult |None =None ,
+)->None :
     """Log the inputs sent to the Red role at DEBUG level."""
-    _debug_log("red.input", {
-        "game_spec": game_spec.model_dump(mode="json"),
-        "state_view": state_view.model_dump(mode="json"),
-        "delta_state": delta_state.model_dump(mode="json"),
-        "verification_result": (
-            None if verification_result is None
-            else _verification_result_to_dict(verification_result)
-        ),
+    _debug_log ("red.input",{
+    "game_spec":game_spec .model_dump (mode ="json"),
+    "state_view":state_view .model_dump (mode ="json"),
+    "delta_state":delta_state .model_dump (mode ="json"),
+    "verification_result":(
+    None if verification_result is None 
+    else verification_result_to_dict (verification_result )
+    ),
     })
 
 
-def _debug_print_red_output(red_finding: RedFinding) -> None:
+def _debug_print_red_output (red_finding :RedFinding )->None :
     """Log the RedFinding produced by the Red role at DEBUG level."""
-    _debug_log("red.output", {"red_finding": red_finding.model_dump(mode="json")})
+    _debug_log ("red.output",{"red_finding":red_finding .model_dump (mode ="json")})
 
 
-def _debug_print_referee_input(
-    state_view: StateView,
-    game_spec: GameSpec,
-    delta_state: DeltaState,
-    red_finding: RedFinding,
-    verification_result: VerificationResult | None = None,
-) -> None:
+def _debug_print_referee_input (
+state_view :StateView ,
+game_spec :GameSpec ,
+delta_state :DeltaState ,
+red_finding :RedFinding ,
+verification_result :VerificationResult |None =None ,
+)->None :
     """Log the inputs sent to the Referee role at DEBUG level."""
-    _debug_log("referee.input", {
-        "game_spec": game_spec.model_dump(mode="json"),
-        "state_view": state_view.model_dump(mode="json"),
-        "delta_state": delta_state.model_dump(mode="json"),
-        "red_finding": red_finding.model_dump(mode="json"),
-        "verification_result": (
-            None if verification_result is None
-            else _verification_result_to_dict(verification_result)
-        ),
+    _debug_log ("referee.input",{
+    "game_spec":game_spec .model_dump (mode ="json"),
+    "state_view":state_view .model_dump (mode ="json"),
+    "delta_state":delta_state .model_dump (mode ="json"),
+    "red_finding":red_finding .model_dump (mode ="json"),
+    "verification_result":(
+    None if verification_result is None 
+    else verification_result_to_dict (verification_result )
+    ),
     })
 
 
-def _debug_print_referee_output(referee_decision: RefereeDecision) -> None:
+def _debug_print_referee_output (referee_decision :RefereeDecision )->None :
     """Log the RefereeDecision at DEBUG level."""
-    _debug_log("referee.output", {"referee_decision": referee_decision.model_dump(mode="json")})
+    _debug_log ("referee.output",{"referee_decision":referee_decision .model_dump (mode ="json")})
 
 
-def _debug_print_northstar_update_proposal(rationale: str, proposed_northstar: str) -> None:
+def debug_print_northstar_update_proposal (rationale :str ,proposed_northstar :str )->None :
     """Log a NorthStar update proposal with its rationale and proposed text at DEBUG level."""
-    _debug_log("create_game.northstar_update_proposal", {
-        "rationale": rationale,
-        "proposed_northstar": proposed_northstar,
+    _debug_log ("create_game.northstar_update_proposal",{
+    "rationale":rationale ,
+    "proposed_northstar":proposed_northstar ,
     })
 
 
-def _debug_print_create_game_raw_model_output(raw_text: str) -> None:
+def debug_print_create_game_raw_model_output (raw_text :str )->None :
     """Log the raw unparsed create_game model response text at DEBUG level."""
-    if logger.isEnabledFor(logging.DEBUG):
-        indented = "\n".join(f"  {line}" for line in (raw_text.splitlines() or [""]))
-        logger.debug("create_game.raw_model_output:\n%s", indented)
+    if logger .isEnabledFor (logging .DEBUG ):
+        indented ="\n".join (f"  {line }"for line in (raw_text .splitlines ()or [""]))
+        logger .debug ("create_game.raw_model_output:\n%s",indented )
 
 
-def _debug_print_create_game_red_input(state_view: StateView, game_spec: GameSpec) -> None:
+def _debug_print_create_game_red_input (state_view :StateView ,game_spec :GameSpec )->None :
     """Log the inputs to the create_game Red challenge step at DEBUG level."""
-    _debug_log("create_game_red.input", {
-        "game_spec": game_spec.model_dump(mode="json"),
-        "state_view_id": state_view.id,
+    _debug_log ("create_game_red.input",{
+    "game_spec":game_spec .model_dump (mode ="json"),
+    "state_view_id":state_view .id ,
     })
 
 
-def _debug_print_create_game_red_output(red_finding: RedFinding) -> None:
+def _debug_print_create_game_red_output (red_finding :RedFinding )->None :
     """Log the RedFinding from the create_game Red challenge at DEBUG level."""
-    _debug_log("create_game_red.output", {"red_finding": red_finding.model_dump(mode="json")})
+    _debug_log ("create_game_red.output",{"red_finding":red_finding .model_dump (mode ="json")})
 
 
-def _debug_print_create_game_validation_input(game_spec: GameSpec) -> None:
+def _debug_print_create_game_validation_input (game_spec :GameSpec )->None :
     """Log the GameSpec fields being structurally validated at DEBUG level."""
-    _debug_log("create_game.validation_input", {
-        "objective": game_spec.objective,
-        "success_condition": game_spec.success_condition,
-        "target_artifact_id": game_spec.target_artifact_id,
-        "allowed_delta_type": game_spec.allowed_delta_type,
+    _debug_log ("create_game.validation_input",{
+    "objective":game_spec .objective ,
+    "success_condition":game_spec .success_condition ,
+    "target_artifact_id":game_spec .target_artifact_id ,
+    "allowed_delta_type":game_spec .allowed_delta_type ,
     })
 
 
-def _debug_print_create_game_validation_failure(message: str) -> None:
+def _debug_print_create_game_validation_failure (message :str )->None :
     """Log a GameSpec validation failure message at DEBUG level."""
-    _debug_log("create_game.validation_failure", {"message": message})
+    _debug_log ("create_game.validation_failure",{"message":message })
 
 
-def _debug_print_verification_result(result: VerificationResult | None) -> None:
+def debug_print_verification_result (result :VerificationResult |None )->None :
     """Log the export verification result at DEBUG level, if one is present."""
-    if result is not None:
-        _debug_log("verify_export.result", {"verification": _verification_result_to_dict(result)})
+    if result is not None :
+        _debug_log ("verify_export.result",{"verification":verification_result_to_dict (result )})

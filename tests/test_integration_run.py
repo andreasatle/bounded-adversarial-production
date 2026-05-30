@@ -386,7 +386,7 @@ def test_coding_create_game_receives_previous_verification_result_second_iterati
 
     monkeypatch.setattr("baps.core.orchestration.create_game", _create_game)
     monkeypatch.setattr("baps.core.orchestration.play_game", _play_game)
-    monkeypatch.setattr("baps.core.orchestration._verify_export_with_adapter", _verify_export)
+    monkeypatch.setattr("baps.core.orchestration.verify_export_with_adapter", _verify_export)
     monkeypatch.setattr(
         "sys.argv",
         [
