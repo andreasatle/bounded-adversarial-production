@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 SRC = ROOT / "src" / "baps"
 TESTS = ROOT / "tests"
-TEST_INDEX = ROOT / "CODEBASE_TEST_INDEX.md"
+TEST_INDEX = ROOT / "CODEBASE_TEST.md"
 IMPORTANT_FIELD_CLASSES = {
     "GameSpec",
     "State",
@@ -415,7 +415,7 @@ def main() -> None:
     stale_patterns = [
         "CODEBASE_API_*.md",
         "CODEBASE_INDEX.md",
-        "CODEBASE_TEST_INDEX.md",
+        "CODEBASE_TEST.md",
         "CODEBASE_INDEX_*.md",
     ]
     for pattern in stale_patterns:
