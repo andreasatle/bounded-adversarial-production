@@ -95,7 +95,7 @@ class VerifyCandidateFn (Protocol ):
         ...
 
 
-@dataclass 
+@dataclass  # internal only — no serialization boundary
 class PlayGameContext :
     """Immutable per-game setup resolved once before the attempt loop."""
     resolved_adapter :ProjectTypeAdapter 

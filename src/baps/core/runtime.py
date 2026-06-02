@@ -24,7 +24,7 @@ from baps .state .state_store import JsonStateStore
 from baps .summarizer .summarizer import SummarizationContext 
 
 
-@dataclass (frozen =True )
+@dataclass (frozen =True )# internal only — no serialization boundary
 class RuntimeContext :
     """Immutable bundle of all resolved runtime dependencies for a single baps run."""
     config :RunConfig 

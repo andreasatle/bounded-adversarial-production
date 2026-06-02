@@ -67,7 +67,7 @@ def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
         spec,
         adapter=adapter,
         model_client=FakeModelClient(
-            tool_responses=[ToolCall("append_section", {"artifact_id": "main-document", "title": "Intro", "body": "Body"})]
+            tool_responses=[ToolCall(name="append_section", arguments={"artifact_id": "main-document", "title": "Intro", "body": "Body"})]
         ),
         red_model_client=FakeModelClient(['{"disposition":"accept","rationale":"ok"}']),
         referee_model_client=FakeModelClient(['{"disposition":"accept","rationale":"ok"}']),

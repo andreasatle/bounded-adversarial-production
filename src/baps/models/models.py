@@ -10,6 +10,8 @@ from enum import StrEnum
 from typing import Any
 from urllib import error, request
 
+from pydantic import BaseModel, ConfigDict
+
 logger = logging.getLogger(__name__)
 
 
@@ -22,7 +24,7 @@ class Backend(StrEnum):
 _RETRY_DELAYS = (5.0, 15.0, 30.0)  # seconds to wait on 429, per attempt
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True)  # internal only — no serialization boundary
 class ToolDefinition:
     """Represent the ToolDefinition type."""
     name: str
@@ -30,16 +32,16 @@ class ToolDefinition:
     parameters: dict = field(default_factory=dict)
 
 
-@dataclass(frozen=True)
-class ToolCall:
+class ToolCall(BaseModel):
     """Represent the ToolCall type."""
+    model_config = ConfigDict(frozen=True)
     name: str
     arguments: dict
 
 
-@dataclass(frozen=True)
-class ToolCallRecord:
+class ToolCallRecord(BaseModel):
     """Immutable record of one tool call made during an agentic role turn."""
+    model_config = ConfigDict(frozen=True)
     role: str
     tool_name: str
     arguments: dict
@@ -649,7 +651,7 @@ class FallbackClient(ModelClient):
         ) from last_exc
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True)  # internal only — no serialization boundary
 class Role:
     """Represent the Role type."""
     name: str

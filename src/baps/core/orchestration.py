@@ -280,8 +280,8 @@ summarization_context :SummarizationContext |None =None ,
             rationale =rationale ,
             proposed_northstar =config_northstar_markdown (config ),
             )
-            ctx .northstar_proposal_written =True 
-            ctx .stop_reason =StopReason .NORTHSTAR_UPDATE_PROPOSED 
+            ctx .northstar_proposal_written =True
+            ctx .stop_reason =StopReason .NORTHSTAR_UPDATE_PROPOSED
 
     if ctx .stop_reason is None :
         ctx .stop_reason =StopReason .ITERATION_LIMIT_REACHED 

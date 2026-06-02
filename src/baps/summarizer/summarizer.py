@@ -28,7 +28,7 @@ def _build_objective_prompt(content: str, objective: str) -> str:
     )
 
 
-@dataclass
+@dataclass  # internal only — no serialization boundary
 class SummarizationContext:
     """Holds a summarizer Role and a per-instance cache for deduplicating model calls."""
     summarizer: Role | None

@@ -22,7 +22,7 @@ from baps.state.state import StopReason
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass  # internal only — no serialization boundary
 class StartRunSummary:
     """Collects outcome fields from a completed baps start lifecycle run for reporting."""
     workspace: Path

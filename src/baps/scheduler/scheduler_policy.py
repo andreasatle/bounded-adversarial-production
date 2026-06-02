@@ -8,11 +8,13 @@ import random
 from dataclasses import dataclass
 from pathlib import Path
 
+from pydantic import BaseModel
+
 from baps.models.models import Backend
 from baps.state.state import StopReason
 
 
-@dataclass
+@dataclass  # internal only — no serialization boundary
 class ModelConfig:
     """Represent the ModelConfig type."""
     name: str       # short display name, used as key in policy state
@@ -46,8 +48,7 @@ def compute_reward(result: dict) -> float:
     return score
 
 
-@dataclass
-class _ModelStats:
+class _ModelStats(BaseModel):
     """Represent the _ModelStats type."""
     score: float = 0.5
     runs: int = 0

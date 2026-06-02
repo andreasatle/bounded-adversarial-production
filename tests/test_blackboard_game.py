@@ -285,7 +285,7 @@ def test_play_game_blackboard_final_disposition_no_delta (tmp_path :Path )->None
     _make_document_game_spec (),
     config =config ,
     model_client =FakeModelClient (
-    tool_responses =[ToolCall ("append_section",{"artifact_id":"main-document","title":"Intro","body":""})]
+    tool_responses =[ToolCall (name ="append_section",arguments ={"artifact_id":"main-document","title":"Intro","body":""})]
     ),
     max_attempts =1 ,
     )
@@ -407,8 +407,8 @@ tmp_path :Path ,monkeypatch
     state =create_state (config )
     blue_client =FakeModelClient (
     tool_responses =[
-    ToolCall ("append_section",{"artifact_id":"main-document","title":"Intro","body":"first"}),
-    ToolCall ("append_section",{"artifact_id":"main-document","title":"Intro2","body":"second"}),
+    ToolCall (name ="append_section",arguments ={"artifact_id":"main-document","title":"Intro","body":"first"}),
+    ToolCall (name ="append_section",arguments ={"artifact_id":"main-document","title":"Intro2","body":"second"}),
     ]
     )
     accept_response ='{"disposition":"accept","rationale":"ok"}'

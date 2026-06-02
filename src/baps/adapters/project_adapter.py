@@ -1,14 +1,15 @@
 """Defines the ProjectTypeAdapter protocol, shared adapter helpers, and adapter registry."""
 
-from __future__ import annotations 
+from __future__ import annotations
 
-import functools 
-import re 
-import types 
-import unicodedata 
-from dataclasses import dataclass 
-from pathlib import Path 
-from typing import TYPE_CHECKING ,Any ,Protocol 
+import functools
+import re
+import types
+import unicodedata
+from pathlib import Path
+from typing import TYPE_CHECKING ,Any ,Protocol
+
+from pydantic import BaseModel ,ConfigDict
 
 if TYPE_CHECKING :
     from baps .game .roles import PlayGameFeedback 
@@ -73,15 +74,15 @@ def config_northstar_markdown (config :dict [str ,Any ]|RunConfig )->str :
 
 
 
-@dataclass (frozen =True )
-class VerificationResult :
+class VerificationResult (BaseModel ):
     """Represent the VerificationResult type."""
-    command :str 
-    cwd :str 
-    exit_code :int 
-    stdout :str 
-    stderr :str 
-    passed :bool 
+    model_config =ConfigDict (frozen =True )
+    command :str
+    cwd :str
+    exit_code :int
+    stdout :str
+    stderr :str
+    passed :bool
 
 
 def verification_result_to_dict (result :VerificationResult )->dict [str ,Any ]:
