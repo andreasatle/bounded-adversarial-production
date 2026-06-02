@@ -204,24 +204,25 @@ context_chain :tuple [str ,...]=(),
 depth :int =0 ,
 create_game_red_client :ModelClient |None =None ,
 summarization_context :SummarizationContext |None =None ,
+planning_role_selector :Callable [[int ],str ]=lambda depth :SpecRole .DECOMPOSE if depth >0 else SpecRole .CREATE_GAME ,
 )->GameSpec |DecomposeSpec :
     """Create and return game."""
     debug_event ("create_game.input",{"state":state .model_dump (mode ="json")})
     resolved_adapter =(
-    adapter 
-    if adapter is not None 
+    adapter
+    if adapter is not None
     else resolve_project_type_adapter (config .project_type )
     )
     state_view =resolved_adapter .build_create_game_state_view (
-    state ,config .to_adapter_config (),summarization_context =summarization_context 
+    state ,config .to_adapter_config (),summarization_context =summarization_context
     )
-    use_planner =model_client is None 
+    use_planner =model_client is None
     if use_planner :
-        role_name_for_client =SpecRole .DECOMPOSE if depth >0 else SpecRole .CREATE_GAME 
+        role_name_for_client =planning_role_selector (depth )
         client =build_client_for_role (role_name_for_client ,config )
     else :
-        client =model_client 
-    role_name =SpecRole .DECOMPOSE if depth >0 else SpecRole .CREATE_GAME 
+        client =model_client
+    role_name =planning_role_selector (depth )
     role =Role (role_name ,client ,_CREATE_GAME_SCHEMA ,constrained =False )
     red_role =(
     Role (SpecRole .CREATE_GAME_RED ,create_game_red_client ,RED_FINDING_SCHEMA ,constrained =True )

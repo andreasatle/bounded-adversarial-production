@@ -20,7 +20,7 @@ resolve_backend_model ,
 from baps .models .models import ModelClient ,Role 
 from baps .adapters .project_adapter import ProjectTypeAdapter ,VerificationResult 
 from baps .northstar .northstar_projection import StateView 
-from baps .state .state import DeltaState ,GameSpec ,RedFinding ,State 
+from baps .state .state import DeltaState ,GameSpec ,RedFinding ,RefereeDecision ,State
 from baps .tools .tools import ToolExecutor 
 
 
@@ -71,6 +71,12 @@ _REFEREE_DECISION_SCHEMA :dict ={
 "required":["disposition","rationale"],
 "additionalProperties":False ,
 }
+
+
+class RoleContract (BaseModel ):
+    """Schema and constrained-decoding flag for a single role."""
+    output_schema :type [BaseModel ]|None
+    constrained :bool
 
 
 class VerifyCandidateFn (Protocol ):
@@ -137,11 +143,24 @@ red_model_client :ModelClient |None ,
 referee_model_client :ModelClient |None ,
 build_client_for_role_fn :Any =build_client_for_role ,
 build_role_client_fn :Any =build_role_client ,
+blue_contract :RoleContract |None =None ,
+red_contract :RoleContract |None =None ,
+referee_contract :RoleContract |None =None ,
 )->tuple [Role ,Role ,Role ]:
     """Resolve and return (blue_role, red_role, referee_role) using explicit clients or config-derived ones."""
+    if blue_contract is None :
+        blue_contract =RoleContract (output_schema =None ,constrained =False )
+    if red_contract is None :
+        red_contract =RoleContract (output_schema =RedFinding ,constrained =True )
+    if referee_contract is None :
+        referee_contract =RoleContract (output_schema =RefereeDecision ,constrained =True )
+
+    def _schema_dict (schema :type [BaseModel ]|None )->dict |None :
+        return schema .model_json_schema ()if schema is not None else None
+
     def _get_client (explicit :ModelClient |None ,role :str )->ModelClient :
         if explicit is not None :
-            return explicit 
+            return explicit
         if config is not None :
             return build_client_for_role_fn (role ,config )
         return build_role_client_fn (role )
@@ -149,22 +168,22 @@ build_role_client_fn :Any =build_role_client ,
     blue_role =Role (
     SpecRole .BLUE ,
     _get_client (model_client ,SpecRole .BLUE ),
-    resolved_adapter .build_blue_output_format (),
-    constrained =False ,
+    _schema_dict (blue_contract .output_schema ),
+    constrained =blue_contract .constrained ,
     )
     red_role =Role (
     SpecRole .RED ,
     _get_client (red_model_client ,SpecRole .RED ),
-    RED_FINDING_SCHEMA ,
-    constrained =True ,
+    _schema_dict (red_contract .output_schema ),
+    constrained =red_contract .constrained ,
     )
     referee_role =Role (
     SpecRole .REFEREE ,
     _get_client (referee_model_client ,SpecRole .REFEREE ),
-    _REFEREE_DECISION_SCHEMA ,
-    constrained =True ,
+    _schema_dict (referee_contract .output_schema ),
+    constrained =referee_contract .constrained ,
     )
-    return blue_role ,red_role ,referee_role 
+    return blue_role ,red_role ,referee_role
 
 
 def build_play_game_fallbacks (

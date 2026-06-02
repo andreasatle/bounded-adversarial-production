@@ -275,7 +275,6 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
     assert "render_create_game_prompt_supplement" in adapter.calls
     assert "build_state_view" in adapter.calls
     assert "render_blue_prompt" in adapter.calls
-    assert "build_blue_output_format" in adapter.calls
     assert "build_blue_tools" in adapter.calls
     assert "tool_call_to_delta" in adapter.calls
     assert "export_state" in adapter.calls
