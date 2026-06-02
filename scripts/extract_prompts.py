@@ -135,9 +135,11 @@ def main() -> None:
     adapter_config = config.to_adapter_config()
 
     prompts: dict[str, str] = {}
+    views: dict[str, str] = {}
 
     # --- create_game ---
     cg_view = adapter.build_create_game_state_view(state, adapter_config)
+    views["create_game"] = cg_view.content
     prompts["create_game"] = render_create_game_prompt(config, state, cg_view)
 
     # --- blue / red / referee require a game_spec ---
@@ -145,6 +147,7 @@ def main() -> None:
     if last_play and last_play.get("game_spec"):
         game_spec = GameSpec.model_validate(last_play["game_spec"])
         play_view = adapter.build_state_view(state, game_spec)
+        views["play_game"] = play_view.content
 
         prompts["blue"] = adapter.render_blue_prompt(
             play_view, game_spec, attempt_number=1, previous_feedback=None
@@ -182,19 +185,29 @@ def main() -> None:
 
     # --- emit ---
     _ROLE_ORDER = ["create_game", "blue", "red", "referee"]
-    ordered = [(r, prompts[r]) for r in _ROLE_ORDER if r in prompts]
+    ordered_prompts = [(r, prompts[r]) for r in _ROLE_ORDER if r in prompts]
+    ordered_views = [(k, views[k]) for k in ["create_game", "play_game"] if k in views]
 
     if args.output:
         args.output.mkdir(parents=True, exist_ok=True)
-        for name, text in ordered:
-            out_path = args.output / f"{name}.txt"
+        for name, text in ordered_prompts:
+            out_path = args.output / f"prompt_{name}.txt"
+            out_path.write_text(text, encoding="utf-8")
+            print(f"wrote {out_path}")
+        for name, text in ordered_views:
+            out_path = args.output / f"view_{name}.txt"
             out_path.write_text(text, encoding="utf-8")
             print(f"wrote {out_path}")
     else:
         sep = "=" * 60
-        for name, text in ordered:
+        for name, text in ordered_prompts:
             print(f"\n{sep}")
-            print(f"  {name.upper()}")
+            print(f"  PROMPT: {name.upper()}")
+            print(f"{sep}\n")
+            print(text)
+        for name, text in ordered_views:
+            print(f"\n{sep}")
+            print(f"  STATE VIEW: {name.upper()}")
             print(f"{sep}\n")
             print(text)
 
