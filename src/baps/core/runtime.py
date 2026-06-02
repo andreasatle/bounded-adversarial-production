@@ -136,12 +136,12 @@ def run_project (runtime :RuntimeContext )->IterationRunResult :
     )
 
 
-def active_model_info (config :RunConfig |None =None )->dict [str ,str ]:
+def active_model_info (config :RunConfig |None =None ,role :SpecRole =SpecRole .BLUE )->dict [str ,str ]:
     """Return a dict with 'backend' and 'model' for the active blue role, or 'unknown' on error."""
     if config is None :
         return {"backend":"unknown","model":"unknown"}
     try :
-        backend ,model =resolve_backend_model (SpecRole .BLUE ,config )
+        backend ,model =resolve_backend_model (role ,config )
         return {"backend":backend ,"model":model }
     except ValueError :
         return {"backend":"unknown","model":"unknown"}

@@ -291,10 +291,9 @@ def test_coding_adapter_render_blue_prompt_requires_language_metadata() -> None:
 # CodingProjectAdapter.build_research_tools / build_create_game_research_tools
 # ---------------------------------------------------------------------------
 
-def test_coding_adapter_build_research_tools_returns_empty_for_all_roles() -> None:
+def test_coding_adapter_build_research_tools_returns_empty() -> None:
     adapter = CodingProjectAdapter()
-    for role in ("create_game", "blue", "red", "referee"):
-        assert adapter.build_research_tools(role) == [], role
+    assert adapter.build_research_tools() == []
 
 
 def test_coding_adapter_build_create_game_research_tools_with_artifact() -> None:

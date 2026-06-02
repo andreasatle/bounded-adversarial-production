@@ -371,12 +371,12 @@ def render_create_game_research_prompt (state_view :StateView ,config :RunConfig
     )
 
 
-def get_research_tools (adapter :ProjectTypeAdapter ,role :str )->list :
+def get_research_tools (adapter :ProjectTypeAdapter )->list :
     """Return research tools."""
     getter =getattr (adapter ,"build_research_tools",None )
     if getter is None :
         return []
-    return getter (role )or []
+    return getter ()or []
 
 
 def render_tool_session_block (sessions :list [tuple [str ,list [ToolCallRecord ],str ]])->str :

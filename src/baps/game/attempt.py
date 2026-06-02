@@ -82,7 +82,7 @@ PlayGameFeedback |None ,
     blue_session :list [ToolCallRecord ]=[]
     blue_summary =""
     if ctx .executor is not None :
-        blue_research_tools =get_research_tools (ctx .resolved_adapter ,SpecRole .BLUE )
+        blue_research_tools =get_research_tools (ctx .resolved_adapter )
         if blue_research_tools :
             research_prompt =render_research_prompt (SpecRole .BLUE ,ctx .state_view ,ctx .game_spec ,[])
             blue_summary ,blue_session =ctx .blue_role .generate_agentic (
@@ -146,7 +146,7 @@ PlayGameFeedback |None ,
     red_session :list [ToolCallRecord ]=[]
     red_summary =""
     if ctx .executor is not None :
-        red_research_tools =get_research_tools (ctx .resolved_adapter ,SpecRole .RED )
+        red_research_tools =get_research_tools (ctx .resolved_adapter )
         if red_research_tools :
             prior =[(SpecRole .BLUE ,blue_session ,blue_summary )]if blue_session or blue_summary else []
             research_prompt =render_research_prompt (SpecRole .RED ,ctx .state_view ,ctx .game_spec ,prior )
@@ -211,7 +211,7 @@ PlayGameFeedback |None ,
     referee_session :list [ToolCallRecord ]=[]
     referee_summary =""
     if ctx .executor is not None :
-        referee_research_tools =get_research_tools (ctx .resolved_adapter ,SpecRole .REFEREE )
+        referee_research_tools =get_research_tools (ctx .resolved_adapter )
         if referee_research_tools :
             prior =[s for s in [
             (SpecRole .BLUE ,blue_session ,blue_summary ),

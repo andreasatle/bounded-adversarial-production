@@ -181,7 +181,7 @@ class ProjectTypeAdapter (Protocol ):
         """Return supported values for ed filters."""
         ...
 
-    def build_research_tools (self ,role :str )->list [ToolDefinition ]:
+    def build_research_tools (self )->list [ToolDefinition ]:
         """Build and return research tools."""
         ...
 

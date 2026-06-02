@@ -437,9 +437,8 @@ class DocumentProjectAdapter :
         """Return supported values for ed filters."""
         return ["summary","full"]
 
-    def build_research_tools (self ,role :str )->list [ToolDefinition ]:
+    def build_research_tools (self )->list [ToolDefinition ]:
         """Build and return research tools."""
-        del role 
         return []
 
     def build_create_game_research_tools (self ,state :State )->list :
