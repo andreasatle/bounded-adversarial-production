@@ -1,0 +1,83 @@
+project_type: coding
+artifact_id: csv-parser
+language: rust
+workspace: .baps-workspace/coding-project-csv-parser
+backend: anthropic
+model: claude-haiku-4-5-20251001
+goal: "Implement a CSV parser library in Rust with a custom error type, record struct, and comprehensive tests."
+output: output/project
+max_iterations: 10
+northstar_markdown: |
+  # Implementation note
+
+  All files may be written in a single game using write_files.
+  Do not decompose beyond creating all files at once.
+
+  # Goal
+
+  Implement a CSV parser library in Rust split across multiple files
+  with comprehensive tests and no external dependencies.
+
+  # Expected file layout
+
+  - `Cargo.toml` — valid Cargo manifest, no external dependencies,
+    name = "csv-parser"
+  - `src/lib.rs` — public API, re-exports all public types and functions
+  - `src/parser.rs` — core parsing logic
+  - `src/record.rs` — Record struct and methods
+  - `src/error.rs` — custom error type
+
+  # src/error.rs
+
+  - `pub enum CsvError` with variants:
+    - `EmptyInput` — input string is empty
+    - `MissingField { row: usize, col: usize }` — expected field not found
+    - `InvalidFormat { message: String }` — general format error
+  - `impl std::fmt::Display for CsvError`
+  - `impl std::error::Error for CsvError`
+  - All variants and impls have doc comments
+
+  # src/record.rs
+
+  - `pub struct Record` containing a `Vec<String>` of fields
+  - `pub fn new(fields: Vec<String>) -> Record`
+  - `pub fn get(&self, index: usize) -> Option<&str>`
+  - `pub fn len(&self) -> usize`
+  - `pub fn is_empty(&self) -> bool`
+  - All public items have doc comments
+  - Tests covering: new, get, len, is_empty
+
+  # src/parser.rs
+
+  - `pub fn parse(input: &str) -> Result<Vec<Record>, CsvError>`
+    - Returns `Err(CsvError::EmptyInput)` for empty input
+    - Splits on newlines, splits each line on commas
+    - Strips leading/trailing whitespace from each field
+    - Returns `Vec<Record>` on success
+  - `pub fn parse_with_header(input: &str) -> Result<(Vec<String>, Vec<Record>), CsvError>`
+    - First row is treated as header, returned separately
+    - Returns `Err(CsvError::EmptyInput)` for empty input
+    - Returns `Err(CsvError::MissingField)` if any row has fewer fields than header
+  - All public functions have doc comments
+  - Tests covering:
+    - empty input returns EmptyInput error
+    - single row parsed correctly
+    - multiple rows parsed correctly
+    - whitespace stripped from fields
+    - parse_with_header separates header correctly
+    - parse_with_header returns MissingField for short rows
+
+  # src/lib.rs
+
+  - Re-exports: `pub use parser::{parse, parse_with_header}`
+  - Re-exports: `pub use record::Record`
+  - Re-exports: `pub use error::CsvError`
+  - Module declarations: `mod parser`, `mod record`, `mod error`
+  - Module-level doc comment describing the library
+
+  # Quality requirements
+
+  - All public items must have doc comments
+  - No external dependencies
+  - All tests use `#[test]` only
+  - `cargo test` must pass with all tests green

@@ -1,4 +1,6 @@
+import json
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from baps.core.run_config import RunConfig
 from baps.models.models import FakeModelClient, Role
@@ -9,6 +11,77 @@ from baps.adapters.document_adapter import DocumentProjectAdapter
 from baps.adapters.coding_adapter import CodingProjectAdapter
 from baps.summarizer.summarizer import SummarizationContext
 import baps.state.state as state_module
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers for Rust / Zig Docker mocking
+# ---------------------------------------------------------------------------
+
+_RUST_SRC = """\
+/// Returns the sum of two integers.
+pub fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
+
+fn _private() {}
+"""
+
+_RUST_INDEX = {
+    "items": [
+        {
+            "kind": "fn", "name": "add", "pub": True,
+            "signature": "pub fn add(a: i32, b: i32) -> i32",
+            "doc": "Returns the sum of two integers.",
+            "is_test": False, "body_start": 2, "body_end": 4,
+        },
+        {
+            "kind": "fn", "name": "_private", "pub": False,
+            "signature": "fn _private()",
+            "doc": None,
+            "is_test": False, "body_start": 6, "body_end": 6,
+        },
+    ]
+}
+
+_ZIG_SRC = """\
+/// Adds two integers.
+pub fn add(a: i32, b: i32) i32 {
+    return a + b;
+}
+
+fn _private() void {}
+"""
+
+_ZIG_INDEX = {
+    "items": [
+        {
+            "kind": "fn", "name": "add", "pub": True,
+            "signature": "pub fn add(a: i32, b: i32) i32",
+            "doc": "Adds two integers.",
+            "is_test": False, "body_start": 2, "body_end": 4,
+        },
+        {
+            "kind": "fn", "name": "_private", "pub": False,
+            "signature": "fn _private() void",
+            "doc": None,
+            "is_test": False, "body_start": 6, "body_end": 6,
+        },
+    ]
+}
+
+
+def _rust_docker_mock():
+    m = MagicMock()
+    m.stdout = json.dumps(_RUST_INDEX)
+    m.returncode = 0
+    return m
+
+
+def _zig_docker_mock():
+    m = MagicMock()
+    m.stdout = json.dumps(_ZIG_INDEX)
+    m.returncode = 0
+    return m
 
 
 def _make_summarization_context(response: str) -> SummarizationContext:
@@ -472,3 +545,213 @@ def test_document_state_view_fallback_to_full_when_summarization_context_none() 
     assert "[summary]" not in view.content
     assert "Target body." in view.content
     assert "Other body." in view.content
+
+
+# ---------------------------------------------------------------------------
+# Python view — create-game and play-game
+# ---------------------------------------------------------------------------
+
+_PY_SRC = """\
+def add(a: int, b: int) -> int:
+    \"\"\"Return the sum of a and b.\"\"\"
+    return a + b
+
+def _private():
+    pass
+"""
+
+
+def _make_python_state() -> state_module.State:
+    return state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(
+            id="lib",
+            language="python",
+            files=(state_module.CodeFile(path="src/math.py", content=_PY_SRC),),
+        ),),
+    )
+
+
+def test_python_create_game_state_view_api_surface() -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "coding",
+        "artifact_id": "lib",
+        "goal": "Build a math library",
+        "northstar_markdown": "# Goal\n\nBuild a math library",
+        "output_path": Path(".baps-workspace/output"),
+        "max_iterations": 1,
+        "spec_path": None,
+    }
+    view = CodingProjectAdapter().build_create_game_state_view(_make_python_state(), config)
+    assert "src/math.py" in view.content
+    assert "def add" in view.content
+    assert "[api]" in view.content
+    assert "return a + b" not in view.content
+
+
+def test_python_play_game_state_view_target_full_other_api() -> None:
+    state = state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(
+            id="lib",
+            language="python",
+            files=(
+                state_module.CodeFile(path="src/math.py", content=_PY_SRC),
+                state_module.CodeFile(path="src/other.py", content="def helper(): pass\n"),
+            ),
+        ),),
+    )
+    spec = GameSpec(
+        objective="Improve add",
+        target_artifact_id="lib",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="add updated",
+        target_entity="src/math.py",
+    )
+    view = CodingProjectAdapter().build_state_view(state, spec)
+    assert "src/math.py" in view.content
+    assert "[full]" in view.content
+    assert "return a + b" in view.content
+    assert "src/other.py" in view.content
+    assert "[api]" in view.content
+
+
+# ---------------------------------------------------------------------------
+# Rust view — create-game and play-game
+# ---------------------------------------------------------------------------
+
+def _make_rust_state() -> state_module.State:
+    return state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(
+            id="lib",
+            language="rust",
+            files=(state_module.CodeFile(path="src/lib.rs", content=_RUST_SRC),),
+        ),),
+    )
+
+
+def test_rust_create_game_state_view_api_surface() -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "coding",
+        "artifact_id": "lib",
+        "goal": "Build a Rust library",
+        "northstar_markdown": "# Goal\n\nBuild a Rust library",
+        "output_path": Path(".baps-workspace/output"),
+        "max_iterations": 1,
+        "spec_path": None,
+    }
+    with patch("baps.plugins.language_rust.subprocess.run", return_value=_rust_docker_mock()):
+        view = CodingProjectAdapter().build_create_game_state_view(_make_rust_state(), config)
+    assert "src/lib.rs" in view.content
+    assert "pub fn add" in view.content
+    assert "_private" not in view.content
+    assert "[api]" in view.content
+    assert "Returns the sum of two integers." in view.content
+
+
+def test_rust_play_game_state_view_target_full_no_extraction() -> None:
+    state = state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(
+            id="lib",
+            language="rust",
+            files=(
+                state_module.CodeFile(path="src/lib.rs", content=_RUST_SRC),
+                state_module.CodeFile(path="src/util.rs", content="pub fn noop() {}\n"),
+            ),
+        ),),
+    )
+    spec = GameSpec(
+        objective="Improve add",
+        target_artifact_id="lib",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="add updated",
+        target_entity="src/lib.rs",
+    )
+    _util_index = {"items": [{"kind": "fn", "name": "noop", "pub": True,
+                               "signature": "pub fn noop()", "doc": None,
+                               "is_test": False, "body_start": 1, "body_end": 1}]}
+    util_mock = MagicMock()
+    util_mock.stdout = json.dumps(_util_index)
+    util_mock.returncode = 0
+    with patch("baps.plugins.language_rust.subprocess.run", return_value=util_mock):
+        view = CodingProjectAdapter().build_state_view(state, spec)
+    assert "src/lib.rs" in view.content
+    assert "[full]" in view.content
+    assert "a + b" in view.content
+    assert "src/util.rs" in view.content
+    assert "[api]" in view.content
+    assert "pub fn noop" in view.content
+
+
+# ---------------------------------------------------------------------------
+# Zig view — create-game and play-game
+# ---------------------------------------------------------------------------
+
+def _make_zig_state() -> state_module.State:
+    return state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(
+            id="lib",
+            language="zig",
+            files=(state_module.CodeFile(path="src/main.zig", content=_ZIG_SRC),),
+        ),),
+    )
+
+
+def test_zig_create_game_state_view_api_surface() -> None:
+    config = {
+        "workspace": Path(".baps-workspace"),
+        "project_type": "coding",
+        "artifact_id": "lib",
+        "goal": "Build a Zig library",
+        "northstar_markdown": "# Goal\n\nBuild a Zig library",
+        "output_path": Path(".baps-workspace/output"),
+        "max_iterations": 1,
+        "spec_path": None,
+    }
+    with patch("baps.plugins.language_zig.subprocess.run", return_value=_zig_docker_mock()):
+        view = CodingProjectAdapter().build_create_game_state_view(_make_zig_state(), config)
+    assert "src/main.zig" in view.content
+    assert "pub fn add" in view.content
+    assert "_private" not in view.content
+    assert "[api]" in view.content
+    assert "Adds two integers." in view.content
+
+
+def test_zig_play_game_state_view_target_full_no_extraction() -> None:
+    state = state_module.State(
+        northstar=state_module.NorthStar(artifacts=()),
+        artifacts=(state_module.CodingArtifact(
+            id="lib",
+            language="zig",
+            files=(
+                state_module.CodeFile(path="src/main.zig", content=_ZIG_SRC),
+                state_module.CodeFile(path="src/util.zig", content="pub fn noop() void {}\n"),
+            ),
+        ),),
+    )
+    spec = GameSpec(
+        objective="Improve add",
+        target_artifact_id="lib",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="add updated",
+        target_entity="src/main.zig",
+    )
+    _util_index = {"items": [{"kind": "fn", "name": "noop", "pub": True,
+                               "signature": "pub fn noop() void", "doc": None,
+                               "is_test": False, "body_start": 1, "body_end": 1}]}
+    util_mock = MagicMock()
+    util_mock.stdout = json.dumps(_util_index)
+    util_mock.returncode = 0
+    with patch("baps.plugins.language_zig.subprocess.run", return_value=util_mock):
+        view = CodingProjectAdapter().build_state_view(state, spec)
+    assert "src/main.zig" in view.content
+    assert "[full]" in view.content
+    assert "return a + b" in view.content
+    assert "src/util.zig" in view.content
+    assert "[api]" in view.content
+    assert "pub fn noop" in view.content

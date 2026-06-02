@@ -1,0 +1,95 @@
+project_type: coding
+artifact_id: task-manager
+language: python
+workspace: .baps-workspace/coding-project-task-manager
+backend: anthropic
+model: claude-haiku-4-5-20251001
+goal: "Implement a task manager library in Python with filtering, sorting, and custom exceptions."
+output: output/project
+max_iterations: 10
+northstar_markdown: |
+  # Goal
+
+  Implement a task manager library in Python split across multiple files
+  with comprehensive tests and no external dependencies.
+
+  # Implementation note
+
+  Each test file must be implemented in a separate game.
+  Do not write tests/test_task.py, tests/test_store.py, and 
+  tests/test_filters.py in a single delta — one file per game.
+
+  # Expected file layout
+
+  - `pyproject.toml` — valid pyproject manifest, no external dependencies,
+    name = "task-manager", requires Python >= 3.12
+  - `src/task_manager/__init__.py` — public API, re-exports all public types
+  - `src/task_manager/task.py` — Task dataclass
+  - `src/task_manager/store.py` — TaskStore class
+  - `src/task_manager/filters.py` — filter functions
+  - `src/task_manager/exceptions.py` — custom exceptions
+
+  # src/task_manager/exceptions.py
+
+  - `class TaskNotFoundError(Exception)` — raised when task ID not found
+  - `class DuplicateTaskError(Exception)` — raised when adding duplicate task ID
+  - All exceptions have doc comments
+
+  # src/task_manager/task.py
+
+  - `from enum import Enum`
+  - `class TaskStatus(Enum)` with values: `PENDING`, `IN_PROGRESS`, `DONE`
+  - `class TaskPriority(Enum)` with values: `LOW`, `MEDIUM`, `HIGH`
+  - `@dataclass class Task`:
+    - `id: str`
+    - `title: str`
+    - `status: TaskStatus = TaskStatus.PENDING`
+    - `priority: TaskPriority = TaskPriority.MEDIUM`
+    - `due_date: str | None = None`
+  - All public items have docstrings
+
+  # src/task_manager/filters.py
+
+  - `def filter_by_status(tasks: list[Task], status: TaskStatus) -> list[Task]`
+  - `def filter_by_priority(tasks: list[Task], priority: TaskPriority) -> list[Task]`
+  - `def filter_by_due_date(tasks: list[Task], due_date: str) -> list[Task]`
+  - `def sort_by_priority(tasks: list[Task], descending: bool = True) -> list[Task]`
+  - All functions have docstrings
+
+  # src/task_manager/store.py
+
+  - `class TaskStore`:
+    - `def add(self, task: Task) -> None` — raises DuplicateTaskError if id exists
+    - `def remove(self, task_id: str) -> None` — raises TaskNotFoundError if not found
+    - `def get(self, task_id: str) -> Task` — raises TaskNotFoundError if not found
+    - `def list_all(self) -> list[Task]`
+    - `def filter(self, **kwargs) -> list[Task]` — delegates to filters module
+  - All methods have docstrings
+
+  # src/task_manager/__init__.py
+
+  - Re-exports: Task, TaskStatus, TaskPriority
+  - Re-exports: TaskStore
+  - Re-exports: TaskNotFoundError, DuplicateTaskError
+  - Re-exports: filter_by_status, filter_by_priority, filter_by_due_date, sort_by_priority
+  - Module-level docstring describing the library
+
+  # Tests
+
+  Tests must be in a `tests/` directory at the project root:
+  - `tests/test_task.py` — tests for Task, TaskStatus, TaskPriority
+  - `tests/test_store.py` — tests for TaskStore including exception cases
+  - `tests/test_filters.py` — tests for all filter and sort functions
+
+  Each test file must cover:
+  - Happy path
+  - Edge cases (empty list, not found, duplicates)
+  - All public functions and methods
+
+  # Quality requirements
+
+  - All public items must have docstrings
+  - No external dependencies
+  - All tests use pytest
+  - `pytest` must pass with all tests green
+  - Use type hints throughout
