@@ -329,6 +329,99 @@ def testparse_create_game_output_correction_prompt_excludes_no_new_game ()->None
     assert "Do not return no_new_game"in _UNRECOGNIZABLE_SHAPE_CORRECTION_PROMPT
 
 
+# ---------------------------------------------------------------------------
+# Ambiguity guard tests (mixed control-plane signals + GameSpec fields)
+# ---------------------------------------------------------------------------
+
+def testparse_create_game_output_no_new_game_with_gamespec_fields_raises ()->None :
+    """A response mixing a terminal signal with GameSpec fields must not be silently resolved."""
+    text =json .dumps ({
+    "no_new_game":True ,
+    "reason":"done",
+    "objective":"Add intro section",
+    "target_artifact_id":"doc-main",
+    "allowed_delta_type":"append_section",
+    "success_condition":"section present",
+    })
+    with pytest .raises (ValueError ):
+        parse_create_game_output (text )
+
+
+def testparse_create_game_output_multiple_terminal_signals_raises ()->None :
+    """A response with two active terminal signals must not be resolved by silent priority."""
+    text =json .dumps ({
+    "no_new_game":True ,
+    "reason":"done",
+    "decompose":True ,
+    "rationale":"too large",
+    "sub_gaps":[{"description":"step one"}],
+    })
+    with pytest .raises (ValueError ):
+        parse_create_game_output (text )
+
+
+def testparse_create_game_output_northstar_and_decompose_signals_raises ()->None :
+    """northstar_update_needed + decompose share the rationale key; mixed response must be rejected."""
+    text =json .dumps ({
+    "northstar_update_needed":True ,
+    "decompose":True ,
+    "rationale":"shared rationale",
+    "proposed_northstar":"new direction",
+    "sub_gaps":[{"description":"step one"}],
+    })
+    with pytest .raises (ValueError ):
+        parse_create_game_output (text )
+
+
+def testparse_create_game_output_ambiguous_retry_recovers_with_valid_gamespec ()->None :
+    """Ambiguous response routes through shape-correction retry; valid GameSpec on retry succeeds."""
+    from baps .state .state import GameSpec
+
+    valid_game_spec =json .dumps ({
+    "objective":"Add intro section",
+    "target_artifact_id":"doc-main",
+    "allowed_delta_type":"append_section",
+    "success_condition":"section present",
+    })
+    retry_calls :list [str ]=[]
+
+    def retry_fn (prompt :str )->str :
+        retry_calls .append (prompt )
+        return valid_game_spec
+
+    text =json .dumps ({
+    "no_new_game":True ,
+    "reason":"done",
+    "objective":"Add intro section",
+    "target_artifact_id":"doc-main",
+    "allowed_delta_type":"append_section",
+    "success_condition":"section present",
+    })
+    result =parse_create_game_output (text ,retry_fn =retry_fn )
+    assert isinstance (result ,GameSpec )
+    assert len (retry_calls )==1
+
+
+def testparse_create_game_output_fallback_returning_terminal_signal_is_blocked ()->None :
+    """Fallback returning a terminal signal in shape-correction context must not propagate as NoNewGameError."""
+    from baps .core .parsers import NoNewGameError
+
+    def fallback_fn (prompt :str )->str :
+        return json .dumps ({"no_new_game":True ,"reason":"nothing to do"})
+
+    text =json .dumps ({"something_unexpected":"value"})
+    with pytest .raises (ValueError ):
+        parse_create_game_output (text ,fallback_fn =fallback_fn )
+    # Specifically: NoNewGameError must not escape (it is a subclass of ValueError,
+    # but the raised error must come from the shape-failure path, not the terminal path).
+    try :
+        parse_create_game_output (text ,fallback_fn =fallback_fn )
+    except NoNewGameError :
+        pytest .fail ("NoNewGameError must not escape from shape-correction fallback context")
+    except ValueError :
+        pass  # expected: shape failure, not terminal signal
+
+
 def testparse_create_game_output_empty_dict_with_fallback_escalates ()->None :
     from baps .state .state import GameSpec 
 

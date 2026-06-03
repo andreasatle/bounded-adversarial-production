@@ -85,13 +85,26 @@ fallback_fn :Any =None ,
     fallback_fn =fallback_fn ,
     )
 
-    if parsed .get ("no_new_game")is True :
+    _active_signals =[k for k in ("no_new_game","northstar_update_needed","decompose")
+    if parsed .get (k )is True ]
+    _gamespec_keys_present =bool (
+    {"objective","target_artifact_id","allowed_delta_type","success_condition"}&set (parsed .keys ())
+    )
+    _ambiguous =len (_active_signals )>1 or (bool (_active_signals )and _gamespec_keys_present )
+    if _ambiguous :
+        logger .warning (
+        "[create_game] ambiguous response: active_signals=%s, gamespec_keys_present=%s; "
+        "treating as unrecognizable shape",
+        _active_signals ,_gamespec_keys_present ,
+        )
+
+    if not _ambiguous and parsed .get ("no_new_game")is True :
         reason =str (parsed .get ("reason","")).strip ()
         if not reason :
             raise ValueError ("create_game no-game response reason must be non-empty")
         raise NoNewGameError (reason )
 
-    if parsed .get ("northstar_update_needed")is True :
+    if not _ambiguous and parsed .get ("northstar_update_needed")is True :
         rationale =str (parsed .get ("rationale","")).strip ()
         if not rationale :
             raise ValueError (
@@ -104,7 +117,7 @@ fallback_fn :Any =None ,
             )
         raise NorthStarUpdateNeededError (rationale =rationale ,proposed_northstar =proposed_northstar )
 
-    if parsed .get ("decompose")is True :
+    if not _ambiguous and parsed .get ("decompose")is True :
         rationale =str (parsed .get ("rationale","")).strip ()
         if not rationale :
             raise ValueError ("create_game decompose response rationale must be non-empty")
@@ -146,7 +159,7 @@ fallback_fn :Any =None ,
         # GameSpec branch
     _game_spec_required ={"objective","target_artifact_id","allowed_delta_type","success_condition"}
     missing =_game_spec_required -parsed .keys ()
-    if missing :
+    if missing or _ambiguous :
         if retry_fn is not None :
             logger .warning (
             "[create_game] unrecognizable response shape (keys: %s); retrying with correction prompt",
@@ -170,7 +183,18 @@ fallback_fn :Any =None ,
             sorted (parsed .keys ()),
             )
             raw =fallback_fn (_UNRECOGNIZABLE_SHAPE_CORRECTION_PROMPT )
-            return parse_create_game_output (raw ,max_sub_gaps =max_sub_gaps ,workspace =workspace )
+            try :
+                return parse_create_game_output (raw ,max_sub_gaps =max_sub_gaps ,workspace =workspace )
+            except (NoNewGameError ,NorthStarUpdateNeededError ):
+                logger .warning (
+                "[create_game] fallback returned terminal signal without StateView context; "
+                "treating as shape failure"
+                )
+        if _ambiguous :
+            raise ValueError (
+            f"create_game response contains ambiguous signals {_active_signals } "
+            "with GameSpec keys present; return exactly one response shape"
+            )
         raise ValueError (
         f"create_game model output missing required keys: {', '.join (sorted (missing ))}"
         )
