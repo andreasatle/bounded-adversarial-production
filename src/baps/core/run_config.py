@@ -207,7 +207,7 @@ def resolve_run_config(args: argparse.Namespace) -> RunConfig:
     output_path = resolve_output_path(workspace, output_str)
 
     try:
-        max_iterations = int(max_iterations_raw)
+        max_iterations = int(str(max_iterations_raw))
     except (TypeError, ValueError) as exc:
         raise ValueError("max_iterations must be an integer >= 1") from exc
 
@@ -244,7 +244,7 @@ def resolve_run_config(args: argparse.Namespace) -> RunConfig:
 
     max_sub_gaps_raw = _resolve(None, "max_sub_gaps", 5)
     try:
-        max_sub_gaps = int(max_sub_gaps_raw)
+        max_sub_gaps = int(str(max_sub_gaps_raw))
     except (TypeError, ValueError) as exc:
         raise ValueError("max_sub_gaps must be an integer >= 1") from exc
     if max_sub_gaps < 1:

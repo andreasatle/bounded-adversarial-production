@@ -72,6 +72,10 @@ class StateArtifact(BaseModel):
         """Return a text representation of this artifact for prompt consumption."""
         return ""
 
+    def apply_delta(self, delta: DeltaState) -> StateArtifact:
+        """Apply a delta and return the updated artifact; subclasses must override."""
+        raise ValueError(f"artifact kind {self.kind!r} does not implement apply_delta")
+
 
 class Section(BaseModel):
     """A named, bounded body of text that is the structural unit of a DocumentArtifact."""
@@ -96,8 +100,16 @@ class Section(BaseModel):
 class DocumentArtifact(StateArtifact):
     """A document-type artifact composed of an ordered sequence of named Sections."""
 
-    kind: Literal["document"] = "document"
+    kind: str = "document"
     sections: tuple[Section, ...] = ()
+
+    @field_validator("kind")
+    @classmethod
+    def _validate_kind_is_document(cls, v: str) -> str:
+        """Reject any kind value that isn't 'document'."""
+        if v != "document":
+            raise ValueError(f"DocumentArtifact.kind must be 'document', got {v!r}")
+        return v
 
     def render_as_text(self) -> str:
         """Return all section bodies joined by double newlines."""
@@ -159,9 +171,17 @@ class CodeFile(BaseModel):
 class CodingArtifact(StateArtifact):
     """A coding-type artifact storing a set of source files keyed by relative path."""
 
-    kind: Literal["coding"] = "coding"
+    kind: str = "coding"
     language: str = "python"
     files: tuple[CodeFile, ...] = ()
+
+    @field_validator("kind")
+    @classmethod
+    def _validate_kind_is_coding(cls, v: str) -> str:
+        """Reject any kind value that isn't 'coding'."""
+        if v != "coding":
+            raise ValueError(f"CodingArtifact.kind must be 'coding', got {v!r}")
+        return v
 
     def apply_delta(self, delta: DeltaState) -> CodingArtifact:
         """Apply a coding delta (write/delete file(s)) and return the updated artifact."""
@@ -483,8 +503,6 @@ def apply_state_delta(state: State, delta: DeltaState) -> State:
     artifact = next((a for a in state.artifacts if a.id == artifact_id), None)
     if artifact is None:
         raise ValueError(f"mutable artifact not found in state: {artifact_id!r}")
-    if not hasattr(artifact, "apply_delta"):
-        raise ValueError(f"artifact kind {artifact.kind!r} does not implement apply_delta")
     updated = artifact.apply_delta(delta)
     return State(
         artifacts=tuple(updated if a.id == artifact_id else a for a in state.artifacts),
