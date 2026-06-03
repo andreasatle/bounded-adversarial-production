@@ -260,7 +260,7 @@ verification_result :VerificationResult |None =None ,
 prompt_supplement :str ="",
 )->str :
     """Render and return red prompt."""
-    state_view_json =json .dumps (state_view .model_dump (mode ="json"),sort_keys =True )
+    state_view_json =json .dumps ({"id":state_view .id ,"content":state_view .content ,"input_fingerprint":state_view .input_fingerprint },sort_keys =True )
     delta_state_json =json .dumps (delta_state .model_dump (mode ="json"),sort_keys =True )
     _red_guidance =(
     "Verification guidance:\n"
@@ -320,7 +320,7 @@ verification_result :VerificationResult |None =None ,
 prompt_supplement :str ="",
 )->str :
     """Render and return referee prompt."""
-    state_view_json =json .dumps (state_view .model_dump (mode ="json"),sort_keys =True )
+    state_view_json =json .dumps ({"id":state_view .id ,"content":state_view .content ,"input_fingerprint":state_view .input_fingerprint },sort_keys =True )
     delta_state_json =json .dumps (delta_state .model_dump (mode ="json"),sort_keys =True )
     red_finding_json =json .dumps (red_finding .model_dump (mode ="json"),sort_keys =True )
     _referee_guidance =(

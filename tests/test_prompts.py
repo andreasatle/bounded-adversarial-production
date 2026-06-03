@@ -893,6 +893,69 @@ def test_coding_referee_prompt_includes_failing_verification_evidence ()->None :
     assert "If verification failed, reason from exit_code/stdout/stderr evidence."in prompt 
 
 
+def test_red_prompt_state_view_json_excludes_metadata_and_file_content ()->None :
+    spec =GameSpec (
+    objective ="Write tests",
+    target_artifact_id ="main-codebase",
+    allowed_delta_type ="DeltaCodingState",
+    success_condition ="tests exist",
+    )
+    state =state_module .State (
+    northstar =state_module .NorthStar (artifacts =()),
+    artifacts =(state_module .CodingArtifact (
+    id ="main-codebase",
+    files =(state_module .CodeFile (path ="src/main.py",content ="SECRET_RED_FILE_CONTENT"),),
+    ),),
+    )
+    state_view =CodingProjectAdapter ().build_state_view (state ,spec )
+    delta =state_module .DeltaCodingState (
+    artifact_id ="main-codebase",
+    operation ="write_file",
+    payload =state_module .WriteFileDelta (
+    file =state_module .CodeFile (path ="tests/test_main.py",content ="assert True")
+    ),
+    )
+    prompt =render_red_prompt (state_view ,spec ,delta )
+    assert "state_view_json:"in prompt
+    assert state_view .id in prompt
+    assert state_view .input_fingerprint in prompt
+    assert "SECRET_RED_FILE_CONTENT"not in prompt
+    assert '"metadata"'not in prompt
+    assert '"projection_type"'not in prompt
+
+
+def test_referee_prompt_state_view_json_excludes_metadata_and_file_content ()->None :
+    spec =GameSpec (
+    objective ="Write tests",
+    target_artifact_id ="main-codebase",
+    allowed_delta_type ="DeltaCodingState",
+    success_condition ="tests exist",
+    )
+    state =state_module .State (
+    northstar =state_module .NorthStar (artifacts =()),
+    artifacts =(state_module .CodingArtifact (
+    id ="main-codebase",
+    files =(state_module .CodeFile (path ="src/main.py",content ="SECRET_REFEREE_FILE_CONTENT"),),
+    ),),
+    )
+    state_view =CodingProjectAdapter ().build_state_view (state ,spec )
+    delta =state_module .DeltaCodingState (
+    artifact_id ="main-codebase",
+    operation ="write_file",
+    payload =state_module .WriteFileDelta (
+    file =state_module .CodeFile (path ="tests/test_main.py",content ="assert True")
+    ),
+    )
+    red =RedFinding (disposition ="accept",rationale ="ok")
+    prompt =render_referee_prompt (state_view ,spec ,delta ,red )
+    assert "state_view_json:"in prompt
+    assert state_view .id in prompt
+    assert state_view .input_fingerprint in prompt
+    assert "SECRET_REFEREE_FILE_CONTENT"not in prompt
+    assert '"metadata"'not in prompt
+    assert '"projection_type"'not in prompt
+
+
 def test_red_referee_prompts_forbid_goalpost_drift_language ()->None :
     spec =GameSpec (
     objective ="Write tests/test_example.py with non-empty pytest tests.",
