@@ -52,9 +52,7 @@ def plugin_for(language: str) -> LanguagePlugin:
     registry = _build_language_registry()
     if language not in registry:
         available = ", ".join(sorted(registry))
-        raise ValueError(
-            f"Language {language!r} is not supported. Available languages: {available}"
-        )
+        raise ValueError(f"Language {language!r} is not supported. Available languages: {available}")
     return registry[language]
 
 
@@ -64,9 +62,7 @@ def config_language(config: dict[str, object]) -> str:
     if not language:
         registry = _build_language_registry()
         available = ", ".join(sorted(registry))
-        raise ValueError(
-            f"coding project spec requires a 'language' field. Available languages: {available}"
-        )
+        raise ValueError(f"coding project spec requires a 'language' field. Available languages: {available}")
     return str(language)
 
 

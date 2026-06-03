@@ -81,13 +81,9 @@ def _default_model_ladder() -> list[ModelConfig]:
         if name in _KNOWN_MODELS:
             ladder.append(_known_model(name))
         else:
-            print(
-                f"[scheduler] warning: unknown model name {name!r} in BAPS_MODEL_LADDER, skipping"
-            )
+            print(f"[scheduler] warning: unknown model name {name!r} in BAPS_MODEL_LADDER, skipping")
     if not ladder:
-        print(
-            "[scheduler] warning: BAPS_MODEL_LADDER produced no valid models, using auto-detect"
-        )
+        print("[scheduler] warning: BAPS_MODEL_LADDER produced no valid models, using auto-detect")
         return _auto_ladder()
     return ladder
 
@@ -185,9 +181,7 @@ async def _run_spec(
             command = "run"
 
 
-_SCORE_FLOOR = (
-    0.2  # models scoring below this after min_runs are dropped from the ladder
-)
+_SCORE_FLOOR = 0.2  # models scoring below this after min_runs are dropped from the ladder
 _FLOOR_MIN_RUNS = 5  # minimum runs before a model is eligible for floor-dropping
 
 
@@ -212,9 +206,7 @@ def _print_summary(policy: ModelPolicy) -> None:
     for m in policy.models:
         s = policy._stats[m.name]
         lines.append(f"  {m.name:16s}  score={s.score:.3f}  runs={s.runs}")
-    lines.append(
-        f"  temperature={policy.temperature:.3f}  total_runs={policy.total_runs}"
-    )
+    lines.append(f"  temperature={policy.temperature:.3f}  total_runs={policy.total_runs}")
     logger.info("\n".join(lines))
 
 
@@ -231,9 +223,7 @@ def main() -> None:
     )
 
     parser = argparse.ArgumentParser(description="Adaptive baps scheduler.")
-    parser.add_argument(
-        "specs", nargs="*", help="YAML spec paths (default: examples/*.yaml)."
-    )
+    parser.add_argument("specs", nargs="*", help="YAML spec paths (default: examples/*.yaml).")
     parser.add_argument(
         "--concurrency",
         type=int,
@@ -299,9 +289,7 @@ def main() -> None:
             models = _default_model_ladder()
             policy = ModelPolicy(models)
             policy.load_stats(policy_path)
-            print(
-                f"\n[scheduler] round {round_num}/{args.rounds}  ladder={[m.name for m in policy.models]}"
-            )
+            print(f"\n[scheduler] round {round_num}/{args.rounds}  ladder={[m.name for m in policy.models]}")
         else:
             print(f"\n[scheduler] round 1/1  ladder={[m.name for m in policy.models]}")
 

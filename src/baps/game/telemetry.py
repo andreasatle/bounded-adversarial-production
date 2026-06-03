@@ -35,12 +35,8 @@ def summarize_verification_result(result: VerificationResult | None) -> dict | N
     return {
         "passed": result.passed,
         "exit_code": result.exit_code,
-        "stdout_summary": result.stdout[:VERIFICATION_SUMMARY_CAP]
-        if result.stdout
-        else None,
-        "stderr_summary": result.stderr[:VERIFICATION_SUMMARY_CAP]
-        if result.stderr
-        else None,
+        "stdout_summary": result.stdout[:VERIFICATION_SUMMARY_CAP] if result.stdout else None,
+        "stderr_summary": result.stderr[:VERIFICATION_SUMMARY_CAP] if result.stderr else None,
     }
 
 
@@ -53,16 +49,12 @@ def sanitize_game_spec_dict(game_spec: GameSpec) -> dict:
         "success_condition": sanitize_model_string(game_spec.success_condition),
         "max_words": game_spec.max_words,
         "target_entity": (
-            sanitize_model_string(game_spec.target_entity)
-            if game_spec.target_entity is not None
-            else None
+            sanitize_model_string(game_spec.target_entity) if game_spec.target_entity is not None else None
         ),
     }
 
 
-def append_northstar_proposal_to_blackboard(
-    workspace: Path, rationale: str, proposed_northstar: str
-) -> None:
+def append_northstar_proposal_to_blackboard(workspace: Path, rationale: str, proposed_northstar: str) -> None:
     """Append a NorthStar update proposal entry to the northstar_proposals.jsonl blackboard file."""
     blackboard_dir = workspace / _BLACKBOARD_DIR
     blackboard_dir.mkdir(parents=True, exist_ok=True)
@@ -102,16 +94,12 @@ def append_game_to_blackboard(
         "final_disposition": final_disposition,
         "verification_result": summarize_verification_result(verification_result),
         "current_best_delta": (
-            None
-            if current_best_delta is None
-            else sanitize_feedback_dict(current_best_delta.model_dump(mode="json"))
+            None if current_best_delta is None else sanitize_feedback_dict(current_best_delta.model_dump(mode="json"))
         ),
         "integration_eligible_delta": (
             None
             if integration_eligible_delta is None
-            else sanitize_feedback_dict(
-                integration_eligible_delta.model_dump(mode="json")
-            )
+            else sanitize_feedback_dict(integration_eligible_delta.model_dump(mode="json"))
         ),
     }
     games_path = blackboard_dir / _GAMES_FILE

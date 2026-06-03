@@ -54,9 +54,7 @@ def sanitize_feedback_dict(d: dict) -> dict:
         if isinstance(v, str):
             result[k] = sanitize_model_string(v)
         elif isinstance(v, list):
-            result[k] = [
-                sanitize_model_string(i) if isinstance(i, str) else i for i in v
-            ]
+            result[k] = [sanitize_model_string(i) if isinstance(i, str) else i for i in v]
         elif isinstance(v, dict):
             result[k] = sanitize_feedback_dict(v)
         else:
@@ -141,9 +139,7 @@ class ProjectTypeAdapter(Protocol):
         """Render and return create game prompt supplement."""
         ...
 
-    def normalize_game_spec(
-        self, game_spec: GameSpec, state: State, config: dict[str, object]
-    ) -> GameSpec:
+    def normalize_game_spec(self, game_spec: GameSpec, state: State, config: dict[str, object]) -> GameSpec:
         """Normalize and return game spec."""
         ...
 
@@ -206,9 +202,7 @@ class ProjectTypeAdapter(Protocol):
         """Build and return create game research tools."""
         ...
 
-    def execute_create_game_research_tool(
-        self, tool_name: str, tool_input: dict, state: State
-    ) -> str:
+    def execute_create_game_research_tool(self, tool_name: str, tool_input: dict, state: State) -> str:
         """Execute and return create game research tool."""
         ...
 
@@ -285,9 +279,7 @@ def render_blue_prompt_core(
     import json
 
     feedback_dict = (
-        sanitize_feedback_dict(
-            previous_feedback.model_dump(mode="json", exclude_none=True)
-        )
+        sanitize_feedback_dict(previous_feedback.model_dump(mode="json", exclude_none=True))
         if previous_feedback is not None
         else None
     )
@@ -298,9 +290,7 @@ def render_blue_prompt_core(
         for i, desc in enumerate(game_spec.context_chain):
             lines.append(f"  [{i + 1}] {desc}")
         context_block = "\n".join(lines) + "\n\n"
-    max_words_input = (
-        f"- max_words: {game_spec.max_words}\n" if game_spec.max_words else ""
-    )
+    max_words_input = f"- max_words: {game_spec.max_words}\n" if game_spec.max_words else ""
     max_words_rule = (
         "- Hard word budget: your output must not exceed max_words words. Cut, do not pad.\n"
         if game_spec.max_words

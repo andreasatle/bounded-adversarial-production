@@ -34,8 +34,7 @@ def _render_verification_feedback_section(
         failures = plugin.parse_test_failures(stdout)
         if failures:
             lines = "\n".join(
-                f"  - {sanitize_model_string(f['test_id'])}: {sanitize_model_string(f['reason'])}"
-                for f in failures
+                f"  - {sanitize_model_string(f['test_id'])}: {sanitize_model_string(f['reason'])}" for f in failures
             )
             section += (
                 f"\nPrevious export verification failed (exit_code={exit_code}):\n"
@@ -48,8 +47,7 @@ def _render_verification_feedback_section(
                 "- Inspect prior_export_verification in previous_feedback_json and repair the cause.\n"
             )
     elif (
-        isinstance(previous_feedback, AttemptRejectionFeedback)
-        and previous_feedback.candidate_verification is not None
+        isinstance(previous_feedback, AttemptRejectionFeedback) and previous_feedback.candidate_verification is not None
     ):
         cv = previous_feedback.candidate_verification
         exit_code = cv.exit_code
@@ -57,8 +55,7 @@ def _render_verification_feedback_section(
         failures = plugin.parse_test_failures(stdout)
         if failures:
             lines = "\n".join(
-                f"  - {sanitize_model_string(f['test_id'])}: {sanitize_model_string(f['reason'])}"
-                for f in failures
+                f"  - {sanitize_model_string(f['test_id'])}: {sanitize_model_string(f['reason'])}" for f in failures
             )
             section += (
                 f"\nCandidate verification failed (exit_code={exit_code}) — your last delta did not pass tests:\n"
@@ -81,9 +78,7 @@ def render_coding_blue_prompt(
     plugin: LanguagePlugin,
 ) -> str:
     """Render the full Blue prompt for a coding project, including delta shape rules and verification context."""
-    verification_section = _render_verification_feedback_section(
-        previous_feedback, plugin
-    )
+    verification_section = _render_verification_feedback_section(previous_feedback, plugin)
     coding_delta_instructions = (
         "Coding delta rules:\n"
         "- Use write_files (plural) to write one or more files in a single delta — preferred.\n"
@@ -164,7 +159,5 @@ def render_coding_evaluation_supplement(
         "- If verification evidence exists, reason from exit_code/stdout/stderr.\n"
     )
     if verification_result is not None:
-        return (
-            base + "- If pytest discovered tests, do not claim test files are empty.\n"
-        )
+        return base + "- If pytest discovered tests, do not claim test files are empty.\n"
     return base

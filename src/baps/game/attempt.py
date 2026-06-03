@@ -83,9 +83,7 @@ def run_play_game_attempt(
     if ctx.executor is not None:
         blue_research_tools = get_research_tools(ctx.resolved_adapter)
         if blue_research_tools:
-            research_prompt = render_research_prompt(
-                SpecRole.BLUE, ctx.state_view, ctx.game_spec, []
-            )
+            research_prompt = render_research_prompt(SpecRole.BLUE, ctx.state_view, ctx.game_spec, [])
             blue_summary, blue_session = ctx.blue_role.generate_agentic(
                 research_prompt, blue_research_tools, ctx.executor
             )
@@ -97,21 +95,13 @@ def run_play_game_attempt(
             "state_view": ctx.state_view.model_dump(mode="json"),
             "attempt_number": attempt,
             "previous_feedback": (
-                previous_feedback.model_dump(mode="json", exclude_none=True)
-                if previous_feedback is not None
-                else None
+                previous_feedback.model_dump(mode="json", exclude_none=True) if previous_feedback is not None else None
             ),
         },
     )
-    blue_prompt = ctx.resolved_adapter.render_blue_prompt(
-        ctx.state_view, ctx.game_spec, attempt, previous_feedback
-    )
+    blue_prompt = ctx.resolved_adapter.render_blue_prompt(ctx.state_view, ctx.game_spec, attempt, previous_feedback)
     if blue_session or blue_summary:
-        blue_prompt = (
-            render_tool_session_block([(SpecRole.BLUE, blue_session, blue_summary)])
-            + "\n\n"
-            + blue_prompt
-        )
+        blue_prompt = render_tool_session_block([(SpecRole.BLUE, blue_session, blue_summary)]) + "\n\n" + blue_prompt
     blue_tools = ctx.resolved_adapter.build_blue_tools()
     blue_tool_call = None
     if blue_tools:
@@ -123,13 +113,9 @@ def run_play_game_attempt(
         try:
             candidate_delta = ctx.resolved_adapter.tool_call_to_delta(blue_tool_call)
         except ValueError as exc:
-            ctx.debug_event_fn(
-                "blue.failed_tool_call", {"tool_call": str(blue_tool_call)}
-            )
+            ctx.debug_event_fn("blue.failed_tool_call", {"tool_call": str(blue_tool_call)})
             reason = f"blue output failed DeltaState validation: {exc}"
-            ctx.debug_event_fn(
-                "play_game.attempt_rejected", {"attempt": attempt, "reason": reason}
-            )
+            ctx.debug_event_fn("play_game.attempt_rejected", {"attempt": attempt, "reason": reason})
             updated_feedback = BlueValidationFeedback(
                 attempt_rejection=AttemptRejection(
                     stage=SpecRole.BLUE,
@@ -144,9 +130,7 @@ def run_play_game_attempt(
             candidate_delta = ctx.resolved_adapter.parse_blue_delta(blue_generated)
         except ValueError as exc:
             reason = f"blue output failed DeltaState validation: {exc}"
-            ctx.debug_event_fn(
-                "play_game.attempt_rejected", {"attempt": attempt, "reason": reason}
-            )
+            ctx.debug_event_fn("play_game.attempt_rejected", {"attempt": attempt, "reason": reason})
             updated_feedback = BlueValidationFeedback(
                 attempt_rejection=AttemptRejection(
                     stage=SpecRole.BLUE,
@@ -155,9 +139,7 @@ def run_play_game_attempt(
                 )
             )
             return attempt_rec, None, None, None, updated_feedback
-    ctx.debug_event_fn(
-        "blue.output", {"delta_state": candidate_delta.model_dump(mode="json")}
-    )
+    ctx.debug_event_fn("blue.output", {"delta_state": candidate_delta.model_dump(mode="json")})
     attempt_rec.blue_delta = candidate_delta
 
     red_session: list[ToolCallRecord] = []
@@ -165,17 +147,9 @@ def run_play_game_attempt(
     if ctx.executor is not None:
         red_research_tools = get_research_tools(ctx.resolved_adapter)
         if red_research_tools:
-            prior = (
-                [(SpecRole.BLUE, blue_session, blue_summary)]
-                if blue_session or blue_summary
-                else []
-            )
-            research_prompt = render_research_prompt(
-                SpecRole.RED, ctx.state_view, ctx.game_spec, prior
-            )
-            red_summary, red_session = ctx.red_role.generate_agentic(
-                research_prompt, red_research_tools, ctx.executor
-            )
+            prior = [(SpecRole.BLUE, blue_session, blue_summary)] if blue_session or blue_summary else []
+            research_prompt = render_research_prompt(SpecRole.RED, ctx.state_view, ctx.game_spec, prior)
+            red_summary, red_session = ctx.red_role.generate_agentic(research_prompt, red_research_tools, ctx.executor)
 
     if verification_result is None:
         ctx.debug_event_fn(
@@ -223,8 +197,7 @@ def run_play_game_attempt(
     )
     red_supplement_with_tools = (
         (
-            tool_context
-            + "\n\nTool-use enforcement: treat any claim referencing external "
+            tool_context + "\n\nTool-use enforcement: treat any claim referencing external "
             "information not supported by the tool call log above as unverified. "
             "If Blue claims to have verified something externally but has no tool calls to show it, "
             "flag that as a finding.\n\n"
@@ -246,9 +219,7 @@ def run_play_game_attempt(
         retry_fn=ctx.red_role.generate,
         fallback_fn=ctx.red_fallback_fn,
     )
-    ctx.debug_event_fn(
-        "red.output", {"red_finding": red_finding.model_dump(mode="json")}
-    )
+    ctx.debug_event_fn("red.output", {"red_finding": red_finding.model_dump(mode="json")})
     attempt_rec.red_finding = red_finding
 
     referee_session: list[ToolCallRecord] = []
@@ -264,9 +235,7 @@ def run_play_game_attempt(
                 ]
                 if s[1] or s[2]
             ]
-            research_prompt = render_research_prompt(
-                SpecRole.REFEREE, ctx.state_view, ctx.game_spec, prior
-            )
+            research_prompt = render_research_prompt(SpecRole.REFEREE, ctx.state_view, ctx.game_spec, prior)
             referee_summary, referee_session = ctx.referee_role.generate_agentic(
                 research_prompt, referee_research_tools, ctx.executor
             )
@@ -319,8 +288,7 @@ def run_play_game_attempt(
     referee_tool_context = render_tool_session_block(all_sessions)
     referee_supplement_with_tools = (
         (
-            referee_tool_context
-            + "\n\nTool-use enforcement: any claim referencing external "
+            referee_tool_context + "\n\nTool-use enforcement: any claim referencing external "
             "information not supported by the tool call logs above must be treated as unverified "
             "and rejected.\n\n"
         )
@@ -342,13 +310,9 @@ def run_play_game_attempt(
         retry_fn=ctx.referee_role.generate,
         fallback_fn=ctx.referee_fallback_fn,
     )
-    ctx.debug_event_fn(
-        "referee.output", {"referee_decision": referee_decision.model_dump(mode="json")}
-    )
+    ctx.debug_event_fn("referee.output", {"referee_decision": referee_decision.model_dump(mode="json")})
     attempt_rec.referee_decision = referee_decision
-    attempt_rec.parse_recovery = _aggregate_parse_recovery(
-        [red_recovery, referee_recovery]
-    )
+    attempt_rec.parse_recovery = _aggregate_parse_recovery([red_recovery, referee_recovery])
     return (
         attempt_rec,
         candidate_delta,
@@ -367,9 +331,7 @@ def apply_play_game_attempt_decision(
     candidate_delta: DeltaState,
     red_finding: RedFinding,
     referee_decision: RefereeDecision,
-) -> tuple[
-    PlayGameRuntime, AttemptRejectionFeedback | None, VerificationResult | None, bool
-]:
+) -> tuple[PlayGameRuntime, AttemptRejectionFeedback | None, VerificationResult | None, bool]:
     """Apply the Referee decision to runtime, optionally verify the candidate, and return updated state."""
     runtime = apply_referee_decision_to_runtime(
         runtime=runtime,
@@ -385,11 +347,7 @@ def apply_play_game_attempt_decision(
             sandbox_mode=ctx.sandbox_mode,
         )
         attempt_rec.candidate_verification = candidate_result
-        if (
-            candidate_result is not None
-            and not candidate_result.passed
-            and attempt < ctx.max_attempts
-        ):
+        if candidate_result is not None and not candidate_result.passed and attempt < ctx.max_attempts:
             previous_feedback = AttemptRejectionFeedback(
                 red_finding=red_finding,
                 referee_decision=referee_decision,

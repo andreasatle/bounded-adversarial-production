@@ -22,9 +22,7 @@ from baps.state.state import GameSpec, RedFinding
 
 
 def create_state(config: RunConfig | dict) -> state_module.State:
-    return _create_state(
-        config if isinstance(config, RunConfig) else RunConfig(**config)
-    )
+    return _create_state(config if isinstance(config, RunConfig) else RunConfig(**config))
 
 
 def _make_doc_config(
@@ -93,10 +91,7 @@ def test_create_game_prompt_forbids_markdown_fences_and_lists_required_shape() -
     assert '"allowed_delta_type"' in prompt
     assert '"success_condition"' in prompt
     assert "Do not artificially split a coherent gap into multiple games" in prompt
-    assert (
-        "All files or sections that must change together to close a gap belong in one game"
-        in prompt
-    )
+    assert "All files or sections that must change together to close a gap belong in one game" in prompt
     assert "decompose" in prompt
 
 
@@ -337,26 +332,14 @@ def test_blue_prompt_includes_state_view_and_gamespec() -> None:
     assert "target_artifact_id:" in prompt
     assert "allowed_delta_type:" in prompt
     assert "success_condition:" in prompt
-    assert (
-        "Produce exactly one delta JSON object allowed by GameSpec.allowed_delta_type."
-        in prompt
-    )
+    assert "Produce exactly one delta JSON object allowed by GameSpec.allowed_delta_type." in prompt
     assert "Use StateView as the current artifact context." in prompt
     assert "Do not duplicate existing artifact content." in prompt
     assert "Do not rewrite unrelated existing state." in prompt
     assert "Do not emit placeholder or filler content." in prompt
-    assert (
-        "If previous_feedback_json contains validation errors, repair those exact errors in this attempt."
-        in prompt
-    )
-    assert (
-        "Do not repeat outputs that fail previously reported validation constraints."
-        in prompt
-    )
-    assert (
-        "When attempt_number > 1, treat previous_feedback_json as mandatory correction requirements."
-        in prompt
-    )
+    assert "If previous_feedback_json contains validation errors, repair those exact errors in this attempt." in prompt
+    assert "Do not repeat outputs that fail previously reported validation constraints." in prompt
+    assert "When attempt_number > 1, treat previous_feedback_json as mandatory correction requirements." in prompt
     assert "Document delta rules:" not in prompt
     assert "append_section" not in prompt
     assert "Introduction" not in prompt
@@ -546,9 +529,7 @@ def test_red_prompt_includes_success_condition(monkeypatch) -> None:
     assert success_condition in str(captured["prompt"])
 
 
-def test_red_prompt_intro_only_guides_revise_for_intro_and_conclusion_success_condition() -> (
-    None
-):
+def test_red_prompt_intro_only_guides_revise_for_intro_and_conclusion_success_condition() -> None:
     spec = GameSpec(
         objective="Write a short report.",
         target_artifact_id="main-document",
@@ -560,24 +541,13 @@ def test_red_prompt_intro_only_guides_revise_for_intro_and_conclusion_success_co
     delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
-        payload=state_module.AppendSectionDelta(
-            section=state_module.Section(title="Introduction", body="Intro only")
-        ),
+        payload=state_module.AppendSectionDelta(section=state_module.Section(title="Introduction", body="Intro only")),
     )
     prompt = render_red_prompt(state_view, spec, delta)
     assert "success_condition:" in prompt
-    assert (
-        "Document must include both an Introduction section and a Conclusion section."
-        in prompt
-    )
-    assert (
-        "Use revise only when the candidate is promising but needs improvement"
-        in prompt
-    )
-    assert (
-        "Do NOT reject or revise merely because state differs from the original state."
-        in prompt
-    )
+    assert "Document must include both an Introduction section and a Conclusion section." in prompt
+    assert "Use revise only when the candidate is promising but needs improvement" in prompt
+    assert "Do NOT reject or revise merely because state differs from the original state." in prompt
 
 
 def test_coding_red_prompt_includes_verification_evidence_when_provided() -> None:
@@ -623,9 +593,7 @@ def test_coding_red_prompt_includes_verification_evidence_when_provided() -> Non
         passed=True,
     )
     adapter = CodingProjectAdapter()
-    supplement = adapter.render_red_prompt_supplement(
-        state_view, spec, delta, verification
-    )
+    supplement = adapter.render_red_prompt_supplement(state_view, spec, delta, verification)
     prompt = render_red_prompt(
         state_view,
         spec,
@@ -636,9 +604,7 @@ def test_coding_red_prompt_includes_verification_evidence_when_provided() -> Non
     assert "verification_result_json:" in prompt
     assert '"exit_code": 0' in prompt
     assert '"passed": true' in prompt
-    assert (
-        "If verification passed, treat that as strong evidence toward accept." in prompt
-    )
+    assert "If verification passed, treat that as strong evidence toward accept." in prompt
     assert "If pytest discovered tests, do not claim test files are empty." in prompt
 
 
@@ -657,9 +623,7 @@ def test_document_prompts_do_not_include_verification_evidence_by_default() -> N
     delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
-        payload=state_module.AppendSectionDelta(
-            section=state_module.Section(title="Intro", body="Body")
-        ),
+        payload=state_module.AppendSectionDelta(section=state_module.Section(title="Intro", body="Body")),
     )
     red = RedFinding(disposition="accept", rationale="ok")
     red_prompt = render_red_prompt(state_view, spec, delta)
@@ -683,9 +647,7 @@ def test_document_red_referee_prompts_do_not_include_coding_guidance() -> None:
     delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
-        payload=state_module.AppendSectionDelta(
-            section=state_module.Section(title="Intro", body="Body")
-        ),
+        payload=state_module.AppendSectionDelta(section=state_module.Section(title="Intro", body="Body")),
     )
     red = RedFinding(disposition="accept", rationale="ok")
     red_prompt = render_red_prompt(state_view, spec, delta)
@@ -713,31 +675,20 @@ def test_coding_red_referee_prompts_include_coding_guidance() -> None:
         artifact_id="main-codebase",
         operation="write_file",
         payload=state_module.WriteFileDelta(
-            file=state_module.CodeFile(
-                path="tests/test_fibonacci.py", content="assert True"
-            )
+            file=state_module.CodeFile(path="tests/test_fibonacci.py", content="assert True")
         ),
     )
     red = RedFinding(disposition="accept", rationale="ok")
-    red_supplement = adapter.render_red_prompt_supplement(
-        state_view, spec, delta, verification_result=None
-    )
-    referee_supplement = adapter.render_referee_prompt_supplement(
-        state_view, spec, delta, verification_result=None
-    )
-    red_prompt = render_red_prompt(
-        state_view, spec, delta, prompt_supplement=red_supplement
-    )
-    referee_prompt = render_referee_prompt(
-        state_view, spec, delta, red, prompt_supplement=referee_supplement
-    )
+    red_supplement = adapter.render_red_prompt_supplement(state_view, spec, delta, verification_result=None)
+    referee_supplement = adapter.render_referee_prompt_supplement(state_view, spec, delta, verification_result=None)
+    red_prompt = render_red_prompt(state_view, spec, delta, prompt_supplement=red_supplement)
+    referee_prompt = render_referee_prompt(state_view, spec, delta, red, prompt_supplement=referee_supplement)
     for prompt in (red_prompt, referee_prompt):
         assert "target_artifact_id is the artifact id, not a file path." in prompt
         assert "Pytest tests containing assert statements are not empty." in prompt
         assert "Do not reject tests as empty if assertions are present." in prompt
         assert (
-            "If success_condition only requires non-empty tests, basic asserted tests satisfy that condition."
-            in prompt
+            "If success_condition only requires non-empty tests, basic asserted tests satisfy that condition." in prompt
         )
 
 
@@ -753,9 +704,7 @@ def test_red_and_referee_prompts_do_not_treat_state_mutation_alone_as_failure() 
     delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
-        payload=state_module.AppendSectionDelta(
-            section=state_module.Section(title="Introduction", body="Body")
-        ),
+        payload=state_module.AppendSectionDelta(section=state_module.Section(title="Introduction", body="Body")),
     )
     red_prompt = render_red_prompt(state_view, spec, delta)
     referee_prompt = render_referee_prompt(
@@ -764,10 +713,7 @@ def test_red_and_referee_prompts_do_not_treat_state_mutation_alone_as_failure() 
         delta,
         RedFinding(disposition="accept", rationale="ok"),
     )
-    assert (
-        "Do NOT reject or revise merely because state differs from the original state."
-        in red_prompt
-    )
+    assert "Do NOT reject or revise merely because state differs from the original state." in red_prompt
     assert "Do NOT choose revise merely because state changed." in referee_prompt
     assert "candidate DeltaDocumentState" not in red_prompt
     assert "pytest discovered tests" not in red_prompt
@@ -817,18 +763,14 @@ def test_referee_prompt_includes_success_condition_and_red_rationale(
         return result
 
     monkeypatch.setattr("baps.game.engine.render_referee_prompt", _capture)
-    success_condition = (
-        "Unique success_condition string for referee prompt contract test."
-    )
+    success_condition = "Unique success_condition string for referee prompt contract test."
     spec, state = _make_document_spec_and_state(success_condition)
     red_rationale = "Unique red rationale for referee prompt test."
     play_game(
         state,
         spec,
         model_client=_make_blue_client("Introduction"),
-        red_model_client=FakeModelClient(
-            [f'{{"disposition":"accept","rationale":"{red_rationale}"}}']
-        ),
+        red_model_client=FakeModelClient([f'{{"disposition":"accept","rationale":"{red_rationale}"}}']),
     )
     prompt = str(captured["prompt"])
     assert success_condition in prompt
@@ -864,16 +806,11 @@ def test_referee_prompt_intro_and_conclusion_guides_accept_policy() -> None:
         "revise: objective/success_condition are only partially satisfied OR Red has unresolved improvements that should be addressed."
         in prompt
     )
-    assert (
-        "reject: candidate is invalid, harmful, incoherent, or wrong direction."
-        in prompt
-    )
+    assert "reject: candidate is invalid, harmful, incoherent, or wrong direction." in prompt
     assert "Do NOT choose revise merely because state changed." in prompt
 
 
-def test_referee_prompt_declares_game_local_authority_and_not_final_integration() -> (
-    None
-):
+def test_referee_prompt_declares_game_local_authority_and_not_final_integration() -> None:
     spec = GameSpec(
         objective="Any objective",
         target_artifact_id="main-document",
@@ -885,17 +822,12 @@ def test_referee_prompt_declares_game_local_authority_and_not_final_integration(
     delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
-        payload=state_module.AppendSectionDelta(
-            section=state_module.Section(title="Introduction", body="Body")
-        ),
+        payload=state_module.AppendSectionDelta(section=state_module.Section(title="Introduction", body="Body")),
     )
     red = RedFinding(disposition="accept", rationale="ok")
     prompt = render_referee_prompt(state_view, spec, delta, red)
     assert "You are the game-local authority for this PlayGame decision." in prompt
-    assert (
-        "You do NOT decide final State integration; integration is decided later by Integrator."
-        in prompt
-    )
+    assert "You do NOT decide final State integration; integration is decided later by Integrator." in prompt
 
 
 def test_referee_prompt_uses_red_material_findings_in_decision_policy() -> None:
@@ -910,9 +842,7 @@ def test_referee_prompt_uses_red_material_findings_in_decision_policy() -> None:
     delta = state_module.DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
-        payload=state_module.AppendSectionDelta(
-            section=state_module.Section(title="Introduction", body="Body")
-        ),
+        payload=state_module.AppendSectionDelta(section=state_module.Section(title="Introduction", body="Body")),
     )
     red = RedFinding(disposition="revise", rationale="missing conclusion")
     prompt = render_referee_prompt(state_view, spec, delta, red)
@@ -953,17 +883,12 @@ def test_coding_referee_prompt_includes_failing_verification_evidence() -> None:
         stderr="traceback",
         passed=False,
     )
-    prompt = render_referee_prompt(
-        state_view, spec, delta, red, verification_result=verification
-    )
+    prompt = render_referee_prompt(state_view, spec, delta, red, verification_result=verification)
     assert "verification_result_json:" in prompt
     assert '"exit_code": 1' in prompt
     assert '"stdout": "1 failed"' in prompt
     assert '"stderr": "traceback"' in prompt
-    assert (
-        "If verification failed, reason from exit_code/stdout/stderr evidence."
-        in prompt
-    )
+    assert "If verification failed, reason from exit_code/stdout/stderr evidence." in prompt
 
 
 def test_red_prompt_state_view_json_excludes_metadata_and_file_content() -> None:
@@ -978,11 +903,7 @@ def test_red_prompt_state_view_json_excludes_metadata_and_file_content() -> None
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",
-                files=(
-                    state_module.CodeFile(
-                        path="src/main.py", content="SECRET_RED_FILE_CONTENT"
-                    ),
-                ),
+                files=(state_module.CodeFile(path="src/main.py", content="SECRET_RED_FILE_CONTENT"),),
             ),
         ),
     )
@@ -1015,11 +936,7 @@ def test_referee_prompt_state_view_json_excludes_metadata_and_file_content() -> 
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",
-                files=(
-                    state_module.CodeFile(
-                        path="src/main.py", content="SECRET_REFEREE_FILE_CONTENT"
-                    ),
-                ),
+                files=(state_module.CodeFile(path="src/main.py", content="SECRET_REFEREE_FILE_CONTENT"),),
             ),
         ),
     )
@@ -1067,14 +984,8 @@ def test_red_referee_prompts_forbid_goalpost_drift_language() -> None:
     red_prompt = render_red_prompt(state_view, spec, delta)
     referee_prompt = render_referee_prompt(state_view, spec, delta, red)
     for prompt in (red_prompt, referee_prompt):
-        assert (
-            "Treat GameSpec.success_condition as authoritative acceptance contract."
-            in prompt
-        )
-        assert (
-            "Do not invent stronger requirements than objective/success_condition."
-            in prompt
-        )
+        assert "Treat GameSpec.success_condition as authoritative acceptance contract." in prompt
+        assert "Do not invent stronger requirements than objective/success_condition." in prompt
         assert (
             "Do not add stricter standards such as 'more comprehensive', 'better coverage', "
             "'stronger tests', or 'more complete' unless those words (or equivalent requirements) "

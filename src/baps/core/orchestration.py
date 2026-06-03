@@ -98,9 +98,7 @@ def _solve_gap(
             verification_result=ctx.verification_result,
             context_chain=context_chain,
             depth=depth,
-            create_game_red_client=build_client_for_role(
-                SpecRole.CREATE_GAME_RED, config
-            ),
+            create_game_red_client=build_client_for_role(SpecRole.CREATE_GAME_RED, config),
             summarization_context=summarization_context,
         )
     except NoNewGameError:
@@ -184,9 +182,7 @@ def _solve_gap(
 
         # Leaf: GameSpec — inject full context chain and execute
     game_spec = result.model_copy(update={"context_chain": context_chain})
-    logger.info(
-        "[solve_gap] depth=%d playing leaf game: %s", depth, game_spec.objective
-    )
+    logger.info("[solve_gap] depth=%d playing leaf game: %s", depth, game_spec.objective)
 
     sandbox_mode = config.sandbox
     delta_state = play_game(

@@ -51,9 +51,7 @@ def save_workspace_settings(run_config: "RunConfig", workspace: Path) -> None:
         "goal": run_config.goal,
         "output": output_str,
     }
-    workspace_config_path(workspace).write_text(
-        json.dumps(saved, indent=2, sort_keys=True), encoding="utf-8"
-    )
+    workspace_config_path(workspace).write_text(json.dumps(saved, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def load_workspace_settings(workspace: Path) -> dict[str, object]:
@@ -90,6 +88,4 @@ def wipe_workspace_state(workspace: Path, output_path: Path | None = None) -> No
 def write_run_result(workspace: Path, result_data: dict[str, object]) -> None:
     """Write result_data as JSON to run-result.json in the workspace directory."""
     workspace.mkdir(parents=True, exist_ok=True)
-    (workspace / "run-result.json").write_text(
-        json.dumps(result_data, indent=2), encoding="utf-8"
-    )
+    (workspace / "run-result.json").write_text(json.dumps(result_data, indent=2), encoding="utf-8")

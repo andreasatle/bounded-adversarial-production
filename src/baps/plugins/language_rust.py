@@ -11,9 +11,7 @@ from baps.adapters.project_adapter import VerificationResult
 from baps.tools.sandbox import DOCKER_DAEMON_ERROR, is_docker_unavailable_error
 
 DOCKER_IMAGE = "baps-rust-indexer:latest"
-BUILD_CMD = (
-    "docker build -t baps-rust-indexer:latest -f docker/rust-indexer/Dockerfile ."
-)
+BUILD_CMD = "docker build -t baps-rust-indexer:latest -f docker/rust-indexer/Dockerfile ."
 
 
 _CARGO_TOML_CONTENT = """\
@@ -63,11 +61,7 @@ class RustLanguagePlugin:
             changed = True
 
         gitignore_path = project_path / ".gitignore"
-        gitignore_before = (
-            gitignore_path.read_text(encoding="utf-8")
-            if gitignore_path.exists()
-            else None
-        )
+        gitignore_before = gitignore_path.read_text(encoding="utf-8") if gitignore_path.exists() else None
         if gitignore_before != _GITIGNORE_CONTENT:
             gitignore_path.write_text(_GITIGNORE_CONTENT, encoding="utf-8")
             changed = True
@@ -81,9 +75,7 @@ class RustLanguagePlugin:
         else:
             from baps.tools.sandbox import run_sandboxed
 
-            command, completed = run_sandboxed(
-                project_path, sandbox_mode, self.test_command, self.docker_image
-            )
+            command, completed = run_sandboxed(project_path, sandbox_mode, self.test_command, self.docker_image)
         return VerificationResult(
             command=command,
             cwd=str(project_path),
@@ -114,9 +106,7 @@ class RustLanguagePlugin:
             check=False,
         )
         if result.returncode != 0:
-            raise RuntimeError(
-                f"cargo build failed (exit {result.returncode}):\n{result.stderr}"
-            )
+            raise RuntimeError(f"cargo build failed (exit {result.returncode}):\n{result.stderr}")
 
     def parse_test_failures(self, stdout: str) -> list[dict[str, str]]:
         """Parse and return test failures."""
@@ -139,11 +129,7 @@ class RustLanguagePlugin:
     def extract_api(self, file, filter=None) -> str:
         """Return public API surface: signatures and first doc lines, no bodies."""
         items = self._run_indexer(file)
-        pub_items = [
-            it
-            for it in items
-            if it["pub"] and it["kind"] in ("fn", "struct", "trait", "enum", "type")
-        ]
+        pub_items = [it for it in items if it["pub"] and it["kind"] in ("fn", "struct", "trait", "enum", "type")]
         line_count = len(file.content.splitlines())
         parts = [f"// {file.path} ({line_count} lines)"]
         for it in pub_items:
@@ -167,10 +153,7 @@ class RustLanguagePlugin:
         matches = [it for it in items if it["name"] == entity_id]
         if not matches:
             available = ", ".join(it["name"] for it in items)
-            return (
-                f"Entity {entity_id!r} not found in {file.path}.\n"
-                f"Available: {available}"
-            )
+            return f"Entity {entity_id!r} not found in {file.path}.\nAvailable: {available}"
         it = matches[0]
         if filter == "api":
             return f"{it['signature']}\n  /// {it['doc'] or 'MISSING'}"
@@ -194,19 +177,13 @@ class RustLanguagePlugin:
             stderr = exc.stderr or ""
             if is_docker_unavailable_error(stderr):
                 raise RuntimeError(DOCKER_DAEMON_ERROR) from exc
-            if (
-                "Unable to find image" in stderr
-                or "No such image" in stderr
-                or "pull access denied" in stderr
-            ):
+            if "Unable to find image" in stderr or "No such image" in stderr or "pull access denied" in stderr:
                 raise RuntimeError(
-                    f"RustLanguagePlugin: Docker image '{DOCKER_IMAGE}' not found.\n"
-                    f"Build it with: {BUILD_CMD}"
+                    f"RustLanguagePlugin: Docker image '{DOCKER_IMAGE}' not found.\nBuild it with: {BUILD_CMD}"
                 ) from exc
             raise
         except FileNotFoundError:
             raise RuntimeError(
-                f"RustLanguagePlugin: Docker image '{DOCKER_IMAGE}' not found.\n"
-                f"Build it with: {BUILD_CMD}"
+                f"RustLanguagePlugin: Docker image '{DOCKER_IMAGE}' not found.\nBuild it with: {BUILD_CMD}"
             )
         return json.loads(result.stdout)["items"]

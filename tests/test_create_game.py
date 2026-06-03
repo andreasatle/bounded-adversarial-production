@@ -82,9 +82,7 @@ def test_create_game_target_artifact_exists_in_state() -> None:
             ]
         ),
     )
-    assert any(
-        artifact.id == game_spec.target_artifact_id for artifact in state.artifacts
-    )
+    assert any(artifact.id == game_spec.target_artifact_id for artifact in state.artifacts)
 
 
 def test_create_game_invalid_json_fails_cleanly() -> None:
@@ -107,9 +105,7 @@ def test_create_game_invalid_json_fails_cleanly() -> None:
         )
 
 
-def test_create_game_invalid_json_with_debug_prints_raw_model_output(
-    monkeypatch, caplog
-) -> None:
+def test_create_game_invalid_json_with_debug_prints_raw_model_output(monkeypatch, caplog) -> None:
     config = RunConfig(
         workspace=Path(".baps-workspace"),
         project_type="document",
@@ -128,9 +124,7 @@ def test_create_game_invalid_json_with_debug_prints_raw_model_output(
         create_game(
             config,
             state,
-            model_client=FakeModelClient(
-                ["not-json-output", "not-json-output", "not-json-output"]
-            ),
+            model_client=FakeModelClient(["not-json-output", "not-json-output", "not-json-output"]),
         )
     assert "create_game.prompt:" in caplog.text
     assert "create_game.raw_model_output:" in caplog.text
@@ -159,9 +153,7 @@ def test_create_game_invalid_json_without_debug_does_not_print_raw_model_output(
         create_game(
             config,
             state,
-            model_client=FakeModelClient(
-                ["not-json-output", "not-json-output", "not-json-output"]
-            ),
+            model_client=FakeModelClient(["not-json-output", "not-json-output", "not-json-output"]),
         )
     assert "create_game.prompt:" not in caplog.text
     assert "create_game.raw_model_output:" not in caplog.text
@@ -185,9 +177,7 @@ def test_create_game_json_retry_with_correction_prompt_succeeds() -> None:
     state = create_state(config)
 
     # First response is invalid JSON; the retry with the correction prompt returns valid JSON.
-    game_spec = create_game(
-        config, state, model_client=FakeModelClient(["not-json", valid_response])
-    )
+    game_spec = create_game(config, state, model_client=FakeModelClient(["not-json", valid_response]))
 
     assert game_spec.target_artifact_id == "main-document"
 
@@ -213,9 +203,7 @@ def test_create_game_explicit_model_client_retries_on_invalid_json() -> None:
         )
 
 
-def test_create_game_structural_validation_failure_debug_prints_raw_output(
-    monkeypatch, caplog
-) -> None:
+def test_create_game_structural_validation_failure_debug_prints_raw_output(monkeypatch, caplog) -> None:
     config = RunConfig(
         workspace=Path(".baps-workspace"),
         project_type="document",
@@ -233,9 +221,7 @@ def test_create_game_structural_validation_failure_debug_prints_raw_output(
     )
     with (
         caplog.at_level(logging.DEBUG),
-        pytest.raises(
-            ValueError, match="create_game model output failed GameSpec validation"
-        ),
+        pytest.raises(ValueError, match="create_game model output failed GameSpec validation"),
     ):
         create_game(config, state, model_client=FakeModelClient([payload]))
     assert "create_game.prompt:" in caplog.text
@@ -271,10 +257,7 @@ def test_create_game_validation_input_debug_enabled(caplog) -> None:
         )
     assert "create_game.validation_input:" in caplog.text
     assert "objective: Advance report objective" in caplog.text
-    assert (
-        "success_condition: PlayGame must return a valid DeltaDocumentState targeting main-document."
-        in caplog.text
-    )
+    assert "success_condition: PlayGame must return a valid DeltaDocumentState targeting main-document." in caplog.text
     assert "target_artifact_id: main-document" in caplog.text
     assert "allowed_delta_type: DeltaDocumentState" in caplog.text
 
@@ -308,9 +291,7 @@ def test_create_game_semantic_refinement_objective_is_accepted(caplog) -> None:
     assert "create_game.validation_input:" in caplog.text
 
 
-def test_create_game_objective_with_multiple_tasks_is_accepted_by_structural_validation() -> (
-    None
-):
+def test_create_game_objective_with_multiple_tasks_is_accepted_by_structural_validation() -> None:
     config = RunConfig(
         workspace=Path(".baps-workspace"),
         project_type="document",
@@ -542,9 +523,7 @@ def test_create_game_missing_gamespec_fields_fails_cleanly() -> None:
         create_game(
             config,
             state,
-            model_client=FakeModelClient(
-                ['{"kind":"game_spec","objective":"only-objective"}']
-            ),
+            model_client=FakeModelClient(['{"kind":"game_spec","objective":"only-objective"}']),
         )
 
 
@@ -559,9 +538,7 @@ def test_create_game_target_artifact_not_in_state_fails_cleanly() -> None:
         max_iterations=2,
     )
     state = create_state(config)
-    with pytest.raises(
-        ValueError, match="target artifact must match configured artifact_id"
-    ):
+    with pytest.raises(ValueError, match="target artifact must match configured artifact_id"):
         create_game(
             config,
             state,
@@ -582,13 +559,9 @@ def test_create_game_uses_adapter_build_create_game_state_view(monkeypatch) -> N
             super().__init__()
             self.called = False
 
-        def build_create_game_state_view(
-            self, state, config, summarization_context=None
-        ):
+        def build_create_game_state_view(self, state, config, summarization_context=None):
             self.called = True
-            return super().build_create_game_state_view(
-                state, config, summarization_context=summarization_context
-            )
+            return super().build_create_game_state_view(state, config, summarization_context=summarization_context)
 
     config = RunConfig(
         workspace=Path(".baps-workspace"),
@@ -652,10 +625,7 @@ def test_create_game_prompt_forbids_markdown_fences_and_lists_required_shape() -
     assert '"allowed_delta_type"' in prompt
     assert '"success_condition"' in prompt
     assert "Do not artificially split a coherent gap into multiple games" in prompt
-    assert (
-        "All files or sections that must change together to close a gap belong in one game"
-        in prompt
-    )
+    assert "All files or sections that must change together to close a gap belong in one game" in prompt
     assert "decompose" in prompt
 
 
@@ -683,14 +653,10 @@ def test_create_game_broad_goal_accepts_decomposed_atomic_gamespec() -> None:
         ),
     )
     assert game_spec.objective == "add introduction section"
-    assert (
-        game_spec.success_condition == "Introduction section exists in main-document."
-    )
+    assert game_spec.success_condition == "Introduction section exists in main-document."
 
 
-def test_create_game_bundled_objective_and_success_condition_are_structurally_valid() -> (
-    None
-):
+def test_create_game_bundled_objective_and_success_condition_are_structurally_valid() -> None:
     config = RunConfig(
         workspace=Path(".baps-workspace"),
         project_type="document",
@@ -792,8 +758,7 @@ def test_create_game_red_feedback_appears_in_retry_prompt() -> None:
         '"allowed_delta_type":"DeltaDocumentState","success_condition":"All done."}'
     )
     red_reject = (
-        '{"disposition":"reject","rationale":"Too broad.","success_condition_met":null,'
-        '"findings":["Scope too wide"]}'
+        '{"disposition":"reject","rationale":"Too broad.","success_condition_met":null,"findings":["Scope too wide"]}'
     )
     prompts_seen: list[str] = []
 

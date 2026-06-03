@@ -26,9 +26,7 @@ from baps.state.state_service import StateService
 from baps.state.state_store import JsonStateStore
 
 
-def test_main_calls_play_game_with_gamespec_from_create_game(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_main_calls_play_game_with_gamespec_from_create_game(monkeypatch, tmp_path: Path) -> None:
 
     captured: dict[str, object] = {}
     expected = GameSpec(
@@ -40,14 +38,10 @@ def test_main_calls_play_game_with_gamespec_from_create_game(
 
     monkeypatch.setattr(
         "baps.core.orchestration.create_game",
-        lambda config, state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs: (
-            expected
-        ),
+        lambda config, state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs: expected,
     )
 
-    def _capture_play_game(
-        state, spec, adapter=None, verification_result=None, **_kwargs
-    ):
+    def _capture_play_game(state, spec, adapter=None, verification_result=None, **_kwargs):
         captured["state"] = state
         captured["spec"] = spec
         return state_module.DeltaDocumentState(
@@ -83,9 +77,7 @@ def test_main_calls_play_game_with_gamespec_from_create_game(
     assert captured["state"] is not None
 
 
-def test_main_exits_cleanly_if_play_game_returns_none(
-    monkeypatch, capsys, tmp_path: Path
-) -> None:
+def test_main_exits_cleanly_if_play_game_returns_none(monkeypatch, capsys, tmp_path: Path) -> None:
     # play_game returns None → PLAY_GAME_NO_DELTA → outer loop retries.
     # On retry, create_game raises NoNewGameError → loop stops cleanly.
     _cg_calls: dict[str, int] = {"n": 0}
@@ -149,9 +141,7 @@ def test_orchestration_does_not_apply_delta_when_play_game_has_no_integration_el
 
     monkeypatch.setattr("baps.core.orchestration.play_game", lambda *_a, **_k: None)
     monkeypatch.setattr("baps.core.orchestration.create_game", _mock_create_game2)
-    monkeypatch.setattr(
-        "baps.core.orchestration.StateService.apply_delta", _count_apply_delta
-    )
+    monkeypatch.setattr("baps.core.orchestration.StateService.apply_delta", _count_apply_delta)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -173,9 +163,7 @@ def test_orchestration_does_not_apply_delta_when_play_game_has_no_integration_el
     assert called["apply_delta"] == 0
 
 
-def test_orchestration_runtime_integration_calls_apply_delta(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_orchestration_runtime_integration_calls_apply_delta(monkeypatch, tmp_path: Path) -> None:
     calls = {"apply_delta": 0}
 
     original_apply_delta = StateService.apply_delta
@@ -184,9 +172,7 @@ def test_orchestration_runtime_integration_calls_apply_delta(
         calls["apply_delta"] += 1
         return original_apply_delta(self, delta)
 
-    monkeypatch.setattr(
-        "baps.core.orchestration.StateService.apply_delta", _capture_apply_delta
-    )
+    monkeypatch.setattr("baps.core.orchestration.StateService.apply_delta", _capture_apply_delta)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -241,15 +227,11 @@ def test_main_max_iterations_two_runs_two_iterations_with_state_carry_forward(
         )
 
     def _play_game(_state, spec, adapter=None, verification_result=None, **_kwargs):
-        title = (
-            "Introduction" if "introduction" in spec.objective.lower() else "Conclusion"
-        )
+        title = "Introduction" if "introduction" in spec.objective.lower() else "Conclusion"
         return state_module.DeltaDocumentState(
             artifact_id="main-document",
             operation="append_section",
-            payload=state_module.AppendSectionDelta(
-                section=state_module.Section(title=title, body=f"{title} body")
-            ),
+            payload=state_module.AppendSectionDelta(section=state_module.Section(title=title, body=f"{title} body")),
         )
 
     monkeypatch.setattr("baps.core.orchestration.create_game", _create_game)
@@ -283,16 +265,12 @@ def test_main_max_iterations_two_runs_two_iterations_with_state_carry_forward(
     assert "update_applied=True" in out
     assert "state_changed=True" in out
     assert "output_exported=True" in out
-    persisted = JsonStateStore(
-        tmp_path / "ws-multi-iter" / "state" / "state.json"
-    ).load()
+    persisted = JsonStateStore(tmp_path / "ws-multi-iter" / "state" / "state.json").load()
     doc = next(a for a in persisted.artifacts if a.id == "main-document")
     assert [section.title for section in doc.sections] == ["Introduction", "Conclusion"]
 
 
-def test_main_create_state_called_once_for_multi_iteration(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_main_create_state_called_once_for_multi_iteration(monkeypatch, tmp_path: Path) -> None:
 
     calls = {"count": 0}
     original_initialize_project = _initialize_project
@@ -301,9 +279,7 @@ def test_main_create_state_called_once_for_multi_iteration(
         calls["count"] += 1
         return original_initialize_project(config, create_state_fn=create_state_fn)
 
-    monkeypatch.setattr(
-        "baps.core.runtime._initialize_project", _capture_initialize_project
-    )
+    monkeypatch.setattr("baps.core.runtime._initialize_project", _capture_initialize_project)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -328,9 +304,7 @@ def test_main_create_state_called_once_for_multi_iteration(
     assert calls["count"] == 1
 
 
-def test_main_stops_when_create_game_cannot_produce_new_game(
-    monkeypatch, capsys, tmp_path: Path
-) -> None:
+def test_main_stops_when_create_game_cannot_produce_new_game(monkeypatch, capsys, tmp_path: Path) -> None:
 
     calls = {"count": 0}
 
@@ -380,15 +354,13 @@ def test_main_stops_when_create_game_cannot_produce_new_game(
     assert "stop_reason=create_game_no_new_game" in out
 
 
-def test_no_new_game_accepted_when_no_verification_has_run(
-    monkeypatch, capsys, tmp_path: Path
-) -> None:
+def test_no_new_game_accepted_when_no_verification_has_run(monkeypatch, capsys, tmp_path: Path) -> None:
     """no_new_game is a valid stop when verification has never run (non-coding)."""
 
     monkeypatch.setattr(
         "baps.core.orchestration.create_game",
-        lambda _c, _s, adapter=None, verification_result=None, context_chain=(), depth=0, **_kw: (
-            (_ for _ in ()).throw(NoNewGameError("done"))
+        lambda _c, _s, adapter=None, verification_result=None, context_chain=(), depth=0, **_kw: (_ for _ in ()).throw(
+            NoNewGameError("done")
         ),
     )
     monkeypatch.setattr(
@@ -413,9 +385,7 @@ def test_no_new_game_accepted_when_no_verification_has_run(
     assert "stop_reason=create_game_no_new_game" in out
 
 
-def test_no_new_game_accepted_when_verification_passed(
-    monkeypatch, capsys, tmp_path: Path
-) -> None:
+def test_no_new_game_accepted_when_verification_passed(monkeypatch, capsys, tmp_path: Path) -> None:
     """no_new_game is a valid stop when the last verification passed."""
 
     create_calls = {"n": 0}
@@ -445,9 +415,7 @@ def test_no_new_game_accepted_when_verification_passed(
         return state_module.DeltaCodingState(
             artifact_id="main-codebase",
             operation="write_file",
-            payload=state_module.WriteFileDelta(
-                file=state_module.CodeFile(path="main.py", content="x=1\n")
-            ),
+            payload=state_module.WriteFileDelta(file=state_module.CodeFile(path="main.py", content="x=1\n")),
         )
 
     monkeypatch.setattr("baps.core.orchestration.create_game", _create_game)
@@ -487,9 +455,7 @@ def test_no_new_game_accepted_when_verification_passed(
     assert "stop_reason=create_game_no_new_game" in out
 
 
-def test_no_new_game_rejected_when_verification_failed(
-    monkeypatch, capsys, tmp_path: Path
-) -> None:
+def test_no_new_game_rejected_when_verification_failed(monkeypatch, capsys, tmp_path: Path) -> None:
     """no_new_game is NOT accepted when the last verification failed.
     The runtime retries once, then escalates if still stuck."""
 
@@ -531,9 +497,7 @@ def test_no_new_game_rejected_when_verification_failed(
         return state_module.DeltaCodingState(
             artifact_id="main-codebase",
             operation="write_file",
-            payload=state_module.WriteFileDelta(
-                file=state_module.CodeFile(path="main.py", content="x=1\n")
-            ),
+            payload=state_module.WriteFileDelta(file=state_module.CodeFile(path="main.py", content="x=1\n")),
         )
 
     monkeypatch.setattr("baps.core.orchestration.create_game", _create_game)
@@ -579,9 +543,7 @@ def test_no_new_game_rejected_when_verification_failed(
     assert verification_results_seen[2].passed is False
 
 
-def test_no_new_game_override_resets_after_leaf_game(
-    monkeypatch, capsys, tmp_path: Path
-) -> None:
+def test_no_new_game_override_resets_after_leaf_game(monkeypatch, capsys, tmp_path: Path) -> None:
     """After a leaf game runs, the override flag resets so another retry is allowed."""
 
     # Sequence: GameSpec → (leaf runs, verification fails) → no_new_game (override 1)
@@ -627,9 +589,7 @@ def test_no_new_game_override_resets_after_leaf_game(
             artifact_id="main-codebase",
             operation="write_file",
             payload=state_module.WriteFileDelta(
-                file=state_module.CodeFile(
-                    path=f"file_{play_calls['n']}.py", content="x=1\n"
-                )
+                file=state_module.CodeFile(path=f"file_{play_calls['n']}.py", content="x=1\n")
             ),
         )
 
@@ -717,15 +677,11 @@ def test_main_stop_reason_iteration_limit_reached_after_all_iterations_used(
     assert create_game_calls["n"] == 2
 
 
-def test_main_stop_reason_no_state_change_when_applied_delta_has_no_effect(
-    monkeypatch, capsys, tmp_path: Path
-) -> None:
+def test_main_stop_reason_no_state_change_when_applied_delta_has_no_effect(monkeypatch, capsys, tmp_path: Path) -> None:
 
     import baps.state.state_service as ss_module
 
-    monkeypatch.setattr(
-        ss_module.StateService, "states_differ", lambda self, _b, _a: False
-    )
+    monkeypatch.setattr(ss_module.StateService, "states_differ", lambda self, _b, _a: False)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -753,9 +709,7 @@ def test_main_stop_reason_no_state_change_when_applied_delta_has_no_effect(
     assert "update_applied=True" in out
 
 
-def test_main_no_state_change_stops_loop_before_max_iterations(
-    monkeypatch, capsys, tmp_path: Path
-) -> None:
+def test_main_no_state_change_stops_loop_before_max_iterations(monkeypatch, capsys, tmp_path: Path) -> None:
 
     create_game_calls = {"n": 0}
 
@@ -779,9 +733,7 @@ def test_main_no_state_change_stops_loop_before_max_iterations(
     import baps.state.state_service as ss_module
 
     monkeypatch.setattr("baps.core.orchestration.create_game", _create_game)
-    monkeypatch.setattr(
-        ss_module.StateService, "states_differ", lambda self, _b, _a: False
-    )
+    monkeypatch.setattr(ss_module.StateService, "states_differ", lambda self, _b, _a: False)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -848,9 +800,7 @@ def test_main_no_state_change_after_prior_state_change_reports_state_changed_tru
     assert "state_changed=True" in out
 
 
-def test_play_game_no_delta_retries_then_stops_on_no_new_game(
-    monkeypatch, tmp_path: Path, capsys
-) -> None:
+def test_play_game_no_delta_retries_then_stops_on_no_new_game(monkeypatch, tmp_path: Path, capsys) -> None:
     # PLAY_GAME_NO_DELTA now causes the outer loop to retry rather than escalate
     # to a NorthStar proposal.  After one retry, create_game signals no_new_game
     # and the loop stops with CREATE_GAME_NO_NEW_GAME.
@@ -892,15 +842,11 @@ def test_play_game_no_delta_retries_then_stops_on_no_new_game(
     assert "stop_reason=create_game_no_new_game" in out
 
 
-def test_no_state_change_escalates_to_northstar_proposal(
-    monkeypatch, tmp_path: Path, capsys
-) -> None:
+def test_no_state_change_escalates_to_northstar_proposal(monkeypatch, tmp_path: Path, capsys) -> None:
     import baps.state.state_service as ss_module
 
     workspace = tmp_path / "ws-no-change-proposal"
-    monkeypatch.setattr(
-        ss_module.StateService, "states_differ", lambda self, _b, _a: False
-    )
+    monkeypatch.setattr(ss_module.StateService, "states_differ", lambda self, _b, _a: False)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -933,9 +879,7 @@ def test_no_state_change_escalates_to_northstar_proposal(
     assert "created_at" in entry
 
 
-def test_main_create_game_parse_error_is_not_swallowed_as_no_game(
-    monkeypatch, capsys, caplog, tmp_path: Path
-) -> None:
+def test_main_create_game_parse_error_is_not_swallowed_as_no_game(monkeypatch, capsys, caplog, tmp_path: Path) -> None:
 
     def _broken_create_game(
         _config,
@@ -1031,9 +975,7 @@ def test_run_iterations_northstar_update_proposed_writes_blackboard_and_stops(
     assert "created_at" in entry
 
 
-def test_run_iterations_northstar_update_proposed_does_not_apply_state_update(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_run_iterations_northstar_update_proposed_does_not_apply_state_update(monkeypatch, tmp_path: Path) -> None:
 
     workspace = tmp_path / "ws-northstar-no-update"
 
@@ -1075,17 +1017,13 @@ def test_run_iterations_northstar_update_proposed_does_not_apply_state_update(
     main()
 
     state_path = workspace / "state" / "state.json"
-    initial_state = State.model_validate(
-        json.loads(state_path.read_text(encoding="utf-8"))
-    )
+    initial_state = State.model_validate(json.loads(state_path.read_text(encoding="utf-8")))
     assert len(initial_state.artifacts) == 1
     artifact = initial_state.artifacts[0]
     assert hasattr(artifact, "sections") or artifact.kind == "document"
 
 
-def test_run_iterations_northstar_proposal_appends_on_multiple_signals(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_run_iterations_northstar_proposal_appends_on_multiple_signals(monkeypatch, tmp_path: Path) -> None:
 
     workspace = tmp_path / "ws-northstar-append"
 
@@ -1141,11 +1079,7 @@ def test_run_iterations_northstar_proposal_appends_on_multiple_signals(
 
     main()
 
-    lines = [
-        line
-        for line in proposals_path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    lines = [line for line in proposals_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert len(lines) == 2
     first = json.loads(lines[0])
     second = json.loads(lines[1])
@@ -1222,9 +1156,7 @@ def test_solve_gap_decompose_then_play(monkeypatch, tmp_path: Path) -> None:
     assert result.iterations_completed == 2
 
 
-def test_solve_gap_context_chain_injected_into_game_spec(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_solve_gap_context_chain_injected_into_game_spec(monkeypatch, tmp_path: Path) -> None:
     """The context chain accumulated through decomposition reaches Blue's GameSpec."""
     import baps.state.state as state_module
 

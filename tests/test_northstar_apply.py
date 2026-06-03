@@ -25,8 +25,7 @@ def test_load_proposals_parses_valid_jsonl(tmp_path: Path) -> None:
     bb = tmp_path / "blackboard"
     bb.mkdir()
     (bb / "northstar_proposals.jsonl").write_text(
-        '{"rationale": "r1", "proposed_northstar": "ns1"}\n'
-        '{"rationale": "r2", "proposed_northstar": "ns2"}\n',
+        '{"rationale": "r1", "proposed_northstar": "ns1"}\n{"rationale": "r2", "proposed_northstar": "ns2"}\n',
         encoding="utf-8",
     )
     proposals = _load_proposals(tmp_path)
@@ -138,7 +137,5 @@ def test_apply_proposal_writes_northstar_to_config(tmp_path: Path) -> None:
 
 def test_apply_proposal_exits_when_config_missing(tmp_path: Path) -> None:
     with pytest.raises(SystemExit) as exc_info:
-        _apply_proposal(
-            tmp_path, {"proposed_northstar": "ns", "rationale": "r"}, dry_run=False
-        )
+        _apply_proposal(tmp_path, {"proposed_northstar": "ns", "rationale": "r"}, dry_run=False)
     assert exc_info.value.code == 1

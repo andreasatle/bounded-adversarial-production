@@ -97,9 +97,7 @@ class FakeModelClient(ModelClient):
         self._response_index = 0
         self._tool_response_index = 0
         self._agentic_sequences: list[list[ToolCall | str]] = (
-            [list(seq) for seq in agentic_sequences]
-            if agentic_sequences is not None
-            else []
+            [list(seq) for seq in agentic_sequences] if agentic_sequences is not None else []
         )
 
     def generate(self, prompt: str, format: str | dict | None = None) -> str:
@@ -170,9 +168,7 @@ _ANTHROPIC_MAX_TOKENS = 4096
 class AnthropicClient(ModelClient):
     """Represent the AnthropicClient type."""
 
-    def __init__(
-        self, model: str, api_key: str, base_url: str = "https://api.anthropic.com"
-    ):
+    def __init__(self, model: str, api_key: str, base_url: str = "https://api.anthropic.com"):
         """Initialize the instance."""
         if not model.strip():
             raise ValueError("model must be a non-empty string")
@@ -211,9 +207,7 @@ class AnthropicClient(ModelClient):
                     time.sleep(delay)
                     continue
                 body_text = exc.read().decode("utf-8", errors="replace")
-                raise RuntimeError(
-                    f"anthropic request failed [{exc.code}]: {body_text}"
-                ) from exc
+                raise RuntimeError(f"anthropic request failed [{exc.code}]: {body_text}") from exc
             except error.URLError as exc:
                 raise RuntimeError(f"anthropic request failed: {exc}") from exc
         raise RuntimeError("anthropic request failed: rate limit retries exhausted")
@@ -242,9 +236,7 @@ class AnthropicClient(ModelClient):
             for block in data.get("content", []):
                 if block.get("type") == "tool_use" and block.get("name") == "output":
                     return json.dumps(block["input"])
-            raise RuntimeError(
-                "anthropic structured response missing tool_use content block"
-            )
+            raise RuntimeError("anthropic structured response missing tool_use content block")
 
         data = self._post(
             {
@@ -266,10 +258,7 @@ class AnthropicClient(ModelClient):
         if not prompt.strip():
             raise ValueError("prompt must be a non-empty string")
 
-        tool_schemas = [
-            {"name": t.name, "description": t.description, "input_schema": t.parameters}
-            for t in tools
-        ]
+        tool_schemas = [{"name": t.name, "description": t.description, "input_schema": t.parameters} for t in tools]
         data = self._post(
             {
                 "model": self.model,
@@ -297,10 +286,7 @@ class AnthropicClient(ModelClient):
 
         if not prompt.strip():
             raise ValueError("prompt must be a non-empty string")
-        tool_schemas = [
-            {"name": t.name, "description": t.description, "input_schema": t.parameters}
-            for t in tools
-        ]
+        tool_schemas = [{"name": t.name, "description": t.description, "input_schema": t.parameters} for t in tools]
         messages: list[dict] = [{"role": "user", "content": prompt}]
         records: list[ToolCallRecord] = []
         for _ in range(max_tool_calls + 1):
@@ -320,9 +306,7 @@ class AnthropicClient(ModelClient):
                 if text_blocks:
                     text = text_blocks[0].get("text")
                     if text is None:
-                        raise RuntimeError(
-                            "anthropic agentic response text block missing 'text' field"
-                        )
+                        raise RuntimeError("anthropic agentic response text block missing 'text' field")
                 else:
                     text = ""
                 return (text, records)
@@ -341,9 +325,7 @@ class AnthropicClient(ModelClient):
                         created_at=datetime.datetime.now(datetime.UTC).isoformat(),
                     )
                 )
-                tool_results.append(
-                    {"type": "tool_result", "tool_use_id": tool_id, "content": result}
-                )
+                tool_results.append({"type": "tool_result", "tool_use_id": tool_id, "content": result})
             messages.append({"role": "assistant", "content": content})
             messages.append({"role": "user", "content": tool_results})
         return ("", records)
@@ -352,9 +334,7 @@ class AnthropicClient(ModelClient):
 class OpenAIClient(ModelClient):
     """Represent the OpenAIClient type."""
 
-    def __init__(
-        self, model: str, api_key: str, base_url: str = "https://api.openai.com/v1"
-    ):
+    def __init__(self, model: str, api_key: str, base_url: str = "https://api.openai.com/v1"):
         """Initialize the instance."""
         if not model.strip():
             raise ValueError("model must be a non-empty string")
@@ -392,9 +372,7 @@ class OpenAIClient(ModelClient):
                     time.sleep(delay)
                     continue
                 body_text = exc.read().decode("utf-8", errors="replace")
-                raise RuntimeError(
-                    f"openai request failed [{exc.code}]: {body_text}"
-                ) from exc
+                raise RuntimeError(f"openai request failed [{exc.code}]: {body_text}") from exc
             except error.URLError as exc:
                 raise RuntimeError(f"openai request failed: {exc}") from exc
         raise RuntimeError("openai request failed: rate limit retries exhausted")
@@ -500,17 +478,13 @@ class OpenAIClient(ModelClient):
             tool_calls = msg.get("tool_calls") or []
             if not tool_calls or finish_reason == "stop":
                 return (msg.get("content", "") or "", records)
-            messages.append(
-                {"role": "assistant", "content": None, "tool_calls": tool_calls}
-            )
+            messages.append({"role": "assistant", "content": None, "tool_calls": tool_calls})
             for tc in tool_calls:
                 call_id = tc.get("id", "")
                 fn = tc.get("function", {})
                 name = fn.get("name", "")
                 raw_args = fn.get("arguments", {})
-                arguments = (
-                    json.loads(raw_args) if isinstance(raw_args, str) else raw_args
-                )
+                arguments = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
                 result = executor.execute(name, arguments)
                 records.append(
                     ToolCallRecord(
@@ -521,9 +495,7 @@ class OpenAIClient(ModelClient):
                         created_at=datetime.datetime.now(datetime.UTC).isoformat(),
                     )
                 )
-                messages.append(
-                    {"role": "tool", "tool_call_id": call_id, "content": result}
-                )
+                messages.append({"role": "tool", "tool_call_id": call_id, "content": result})
         return ("", records)
 
 
@@ -686,9 +658,7 @@ class OllamaClient(ModelClient):
                         created_at=datetime.datetime.now(datetime.UTC).isoformat(),
                     )
                 )
-            messages.append(
-                {"role": "assistant", "content": "", "tool_calls": tool_calls}
-            )
+            messages.append({"role": "assistant", "content": "", "tool_calls": tool_calls})
             messages.append(
                 {
                     "role": "tool",
@@ -725,9 +695,7 @@ class FallbackClient(ModelClient):
                     exc,
                 )
                 last_exc = exc
-        raise RuntimeError(
-            f"all {len(self._clients)} fallback clients failed; last: {last_exc}"
-        ) from last_exc
+        raise RuntimeError(f"all {len(self._clients)} fallback clients failed; last: {last_exc}") from last_exc
 
     def generate_with_tools(self, prompt: str, tools: list[ToolDefinition]) -> ToolCall:
         """Handle generate with tools."""
@@ -743,9 +711,7 @@ class FallbackClient(ModelClient):
                     exc,
                 )
                 last_exc = exc
-        raise RuntimeError(
-            f"all {len(self._clients)} fallback clients failed; last: {last_exc}"
-        ) from last_exc
+        raise RuntimeError(f"all {len(self._clients)} fallback clients failed; last: {last_exc}") from last_exc
 
     def generate_agentic(
         self,
@@ -774,9 +740,7 @@ class FallbackClient(ModelClient):
                     exc,
                 )
                 last_exc = exc
-        raise RuntimeError(
-            f"all {len(self._clients)} fallback clients failed; last: {last_exc}"
-        ) from last_exc
+        raise RuntimeError(f"all {len(self._clients)} fallback clients failed; last: {last_exc}") from last_exc
 
 
 @dataclass(frozen=True)  # internal only — no serialization boundary
@@ -792,9 +756,7 @@ class Role:
         """Handle generate."""
         from baps.models.model_output import wrap_json_prompt
 
-        return self.client.generate(
-            wrap_json_prompt(prompt), format=self.schema if self.constrained else None
-        )
+        return self.client.generate(wrap_json_prompt(prompt), format=self.schema if self.constrained else None)
 
     def generate_with_tools(self, prompt: str, tools: list[ToolDefinition]) -> ToolCall:
         """Handle generate with tools."""
@@ -808,6 +770,4 @@ class Role:
         max_tool_calls: int = 10,
     ) -> tuple[str, list[ToolCallRecord]]:
         """Handle generate agentic."""
-        return self.client.generate_agentic(
-            prompt, tools, executor, role_name=self.name, max_tool_calls=max_tool_calls
-        )
+        return self.client.generate_agentic(prompt, tools, executor, role_name=self.name, max_tool_calls=max_tool_calls)

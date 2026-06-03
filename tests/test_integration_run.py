@@ -6,9 +6,7 @@ from baps.core.parsers import NoNewGameError
 from baps.state.state import GameSpec
 
 
-def test_coding_run_no_files_keeps_output_exported_false(
-    monkeypatch, tmp_path: Path, capsys
-) -> None:
+def test_coding_run_no_files_keeps_output_exported_false(monkeypatch, tmp_path: Path, capsys) -> None:
     import baps.core.run as run_module
 
     workspace = tmp_path / "coding-empty-export"
@@ -27,9 +25,7 @@ def test_coding_run_no_files_keeps_output_exported_false(
         return _cg_spec
 
     monkeypatch.setattr("baps.core.orchestration.create_game", _mock_cg)
-    monkeypatch.setattr(
-        "baps.core.orchestration.play_game", lambda *_args, **_kwargs: None
-    )
+    monkeypatch.setattr("baps.core.orchestration.play_game", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -58,9 +54,7 @@ def test_coding_run_no_files_keeps_output_exported_false(
     assert "verification_run=False" in out
 
 
-def test_coding_run_summary_includes_verification_status(
-    monkeypatch, tmp_path: Path, capsys
-) -> None:
+def test_coding_run_summary_includes_verification_status(monkeypatch, tmp_path: Path, capsys) -> None:
     import baps.core.run as run_module
 
     workspace = tmp_path / "coding-verify-summary"
@@ -150,9 +144,7 @@ def test_document_run_runs_verification(monkeypatch, tmp_path: Path, capsys) -> 
     assert "verification_command=document_export_consistency_check" in out
 
 
-def test_coding_init_and_run_exports_fibonacci_files(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_coding_init_and_run_exports_fibonacci_files(monkeypatch, tmp_path: Path) -> None:
     import baps.core.run as run_module
 
     workspace = tmp_path / "coding-workspace"
@@ -170,9 +162,7 @@ def test_coding_init_and_run_exports_fibonacci_files(
 
     call_counter = {"count": 0}
 
-    def _play_game(
-        _state, _game_spec, adapter=None, verification_result=None, **_kwargs
-    ):
+    def _play_game(_state, _game_spec, adapter=None, verification_result=None, **_kwargs):
         call_counter["count"] += 1
         if call_counter["count"] == 1:
             return state_module.DeltaCodingState(
@@ -245,9 +235,7 @@ def test_coding_init_and_run_exports_fibonacci_files(
     assert (output_dir / "tests" / "test_fibonacci.py").exists()
 
 
-def test_coding_iteration_two_does_not_receive_stale_verification_result(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_coding_iteration_two_does_not_receive_stale_verification_result(monkeypatch, tmp_path: Path) -> None:
     import baps.core.run as run_module
 
     workspace = tmp_path / "coding-no-stale-verification"
@@ -342,14 +330,10 @@ def test_coding_iteration_two_does_not_receive_stale_verification_result(
     )
     run_module.main()
     assert verification_seen[0] is None  # first iteration: no prior export yet
-    assert isinstance(
-        verification_seen[1], VerificationResult
-    )  # second iteration: receives prior export result
+    assert isinstance(verification_seen[1], VerificationResult)  # second iteration: receives prior export result
 
 
-def test_coding_create_game_receives_previous_verification_result_second_iteration(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_coding_create_game_receives_previous_verification_result_second_iteration(monkeypatch, tmp_path: Path) -> None:
     import baps.core.run as run_module
 
     workspace = tmp_path / "coding-create-game-verification-input"
@@ -440,9 +424,7 @@ def test_coding_create_game_receives_previous_verification_result_second_iterati
 
     monkeypatch.setattr("baps.core.orchestration.create_game", _create_game)
     monkeypatch.setattr("baps.core.orchestration.play_game", _play_game)
-    monkeypatch.setattr(
-        "baps.core.orchestration.verify_export_with_adapter", _verify_export
-    )
+    monkeypatch.setattr("baps.core.orchestration.verify_export_with_adapter", _verify_export)
     monkeypatch.setattr(
         "sys.argv",
         [

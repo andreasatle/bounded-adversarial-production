@@ -103,9 +103,7 @@ def fixture_file():
 
 @pytest.fixture(autouse=True)
 def mock_docker(monkeypatch):
-    with patch(
-        "baps.plugins.language_rust.subprocess.run", return_value=_make_docker_mock()
-    ) as m:
+    with patch("baps.plugins.language_rust.subprocess.run", return_value=_make_docker_mock()) as m:
         yield m
 
 

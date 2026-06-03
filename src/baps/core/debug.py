@@ -86,9 +86,7 @@ def _format_debug_yaml_like(value: Any, indent: int = 0) -> list[str]:
 def _debug_log(key: str, payload: object) -> None:
     """Log key and YAML-formatted payload at DEBUG level when debug logging is enabled."""
     if logger.isEnabledFor(logging.DEBUG):
-        logger.debug(
-            "%s:\n%s", key, "\n".join(_format_debug_yaml_like(payload, indent=2))
-        )
+        logger.debug("%s:\n%s", key, "\n".join(_format_debug_yaml_like(payload, indent=2)))
 
 
 def debug_event(name: str, payload: dict[str, Any]) -> None:
@@ -96,9 +94,7 @@ def debug_event(name: str, payload: dict[str, Any]) -> None:
     _debug_log(name, payload)
 
 
-def debug_print_read_config(
-    args: argparse.Namespace, spec_data: dict[str, Any], config: RunConfig
-) -> None:
+def debug_print_read_config(args: argparse.Namespace, spec_data: dict[str, Any], config: RunConfig) -> None:
     """Log the resolved CLI args, spec data, and resulting RunConfig fields at DEBUG level."""
     _debug_log(
         "read_config.input",
@@ -151,9 +147,7 @@ def debug_print_create_game_prompt(prompt: str) -> None:
         logger.debug("create_game.prompt:\n%s", indented)
 
 
-def debug_print_northstar_update_proposal(
-    rationale: str, proposed_northstar: str
-) -> None:
+def debug_print_northstar_update_proposal(rationale: str, proposed_northstar: str) -> None:
     """Log a NorthStar update proposal with its rationale and proposed text at DEBUG level."""
     _debug_log(
         "create_game.northstar_update_proposal",

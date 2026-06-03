@@ -74,9 +74,7 @@ def test_resolve_summarize_role_returns_none_when_no_role_configured(
     assert role is None
 
 
-def test_resolve_summarize_role_returns_role_when_configured(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_resolve_summarize_role_returns_role_when_configured(monkeypatch, tmp_path: Path) -> None:
     fake_client = FakeModelClient(["summary"])
     monkeypatch.setattr(
         "baps.core.runtime.build_client_for_role",
@@ -90,11 +88,7 @@ def test_resolve_summarize_role_returns_role_when_configured(
         goal="Write a report.",
         output_path=tmp_path / "output" / "report.md",
         max_iterations=1,
-        spec_roles={
-            "summarize": RoleConfig(
-                backend=Backend.ANTHROPIC, model="claude-haiku-4-5-20251001"
-            )
-        },
+        spec_roles={"summarize": RoleConfig(backend=Backend.ANTHROPIC, model="claude-haiku-4-5-20251001")},
     )
     role = _resolve_summarize_role(config)
     assert role is not None
@@ -110,9 +104,7 @@ def test_build_runtime_summarization_context_has_none_summarizer_without_role(
     assert rt.summarization_context.summarizer is None
 
 
-def test_build_runtime_summarization_context_has_summarizer_when_role_configured(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_build_runtime_summarization_context_has_summarizer_when_role_configured(monkeypatch, tmp_path: Path) -> None:
     fake_client = FakeModelClient(["s"])
     monkeypatch.setattr(
         "baps.core.runtime.build_client_for_role",
@@ -126,11 +118,7 @@ def test_build_runtime_summarization_context_has_summarizer_when_role_configured
         goal="Write a report.",
         output_path=tmp_path / "output" / "report.md",
         max_iterations=1,
-        spec_roles={
-            "summarize": RoleConfig(
-                backend=Backend.ANTHROPIC, model="claude-haiku-4-5-20251001"
-            )
-        },
+        spec_roles={"summarize": RoleConfig(backend=Backend.ANTHROPIC, model="claude-haiku-4-5-20251001")},
     )
     rt = build_runtime(config)
     assert rt.summarization_context.summarizer is not None
@@ -163,9 +151,7 @@ def test_two_build_runtime_calls_produce_independent_summarization_contexts(
     # ---------------------------------------------------------------------------
 
 
-def test_summarization_context_is_passed_to_play_game(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_summarization_context_is_passed_to_play_game(monkeypatch, tmp_path: Path) -> None:
     """run_project_iterations must forward summarization_context to play_game."""
     captured: dict[str, object] = {}
 
@@ -218,9 +204,7 @@ def test_summarization_context_is_passed_to_play_game(
     assert captured["summarization_context"] is ctx
 
 
-def test_summarization_context_none_is_passed_to_play_game_when_not_provided(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_summarization_context_none_is_passed_to_play_game_when_not_provided(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
     _cg2: dict[str, int] = {"n": 0}
@@ -267,9 +251,7 @@ def test_summarization_context_none_is_passed_to_play_game_when_not_provided(
     # ---------------------------------------------------------------------------
 
 
-def test_stop_reason_same_with_and_without_summarizer(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_stop_reason_same_with_and_without_summarizer(monkeypatch, tmp_path: Path) -> None:
     """Summarizer is transparent to orchestration stop logic."""
 
     def _no_new_game(*_args, **_kwargs):
@@ -339,9 +321,7 @@ def test_summaries_appear_in_state_view_when_summarizer_configured() -> None:
         game_spec=spec,
     )
 
-    view = DocumentProjectAdapter().build_state_view(
-        state, spec, summarization_context=ctx
-    )
+    view = DocumentProjectAdapter().build_state_view(state, spec, summarization_context=ctx)
 
     assert "### Target [full]" in view.content
     assert "Target section body." in view.content
@@ -375,9 +355,7 @@ def test_no_summaries_when_summarizer_is_none_even_with_target_entity() -> None:
     )
     ctx = SummarizationContext(summarizer=None, game_spec=spec)
 
-    view = DocumentProjectAdapter().build_state_view(
-        state, spec, summarization_context=ctx
-    )
+    view = DocumentProjectAdapter().build_state_view(state, spec, summarization_context=ctx)
 
     assert "[summary]" not in view.content
     assert "Target body." in view.content

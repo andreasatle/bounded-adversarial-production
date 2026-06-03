@@ -119,9 +119,7 @@ def _write_start_result(config: RunConfig, summary: StartRunSummary) -> None:
     model_info = active_model_info(config)
     result_data: dict[str, object] = {
         "stop_reason": summary.stop_reason,
-        "verification_passed": summary.verification_passed
-        if summary.verification_run
-        else None,
+        "verification_passed": summary.verification_passed if summary.verification_run else None,
         "verification_exit_code": summary.verification_exit_code,
         "iterations_completed": summary.iterations_completed,
         "backend": model_info["backend"],

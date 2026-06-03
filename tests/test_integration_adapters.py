@@ -34,9 +34,7 @@ def test_coding_create_state_creates_coding_artifact() -> None:
     assert artifact.files == ()
 
 
-def test_document_adapterrender_create_game_prompt_supplement_includes_delta_guidance() -> (
-    None
-):
+def test_document_adapterrender_create_game_prompt_supplement_includes_delta_guidance() -> None:
 
     adapter = DocumentProjectAdapter()
     state = state_module.State(
@@ -62,9 +60,7 @@ def test_document_adapterrender_create_game_prompt_supplement_includes_delta_gui
     assert "modify_section" in result
 
 
-def test_document_adapterrender_create_game_prompt_supplement_includes_guidance_on_failure() -> (
-    None
-):
+def test_document_adapterrender_create_game_prompt_supplement_includes_guidance_on_failure() -> None:
 
     adapter = DocumentProjectAdapter()
     state = state_module.State(
@@ -289,9 +285,7 @@ def test_coding_adapter_render_blue_prompt_requires_language_metadata() -> None:
         success_condition="code written",
     )
 
-    with pytest.raises(
-        ValueError, match="state_view.metadata missing required key: language"
-    ):
+    with pytest.raises(ValueError, match="state_view.metadata missing required key: language"):
         adapter.render_blue_prompt(
             state_view=state_view,
             game_spec=game_spec,
@@ -318,11 +312,7 @@ def test_coding_adapter_build_create_game_research_tools_with_artifact() -> None
             state_module.CodingArtifact(
                 id="art",
                 language="python",
-                files=(
-                    state_module.CodeFile(
-                        path="src/main.py", content="def main(): pass"
-                    ),
-                ),
+                files=(state_module.CodeFile(path="src/main.py", content="def main(): pass"),),
             ),
         ),
     )
@@ -334,9 +324,7 @@ def test_coding_adapter_build_create_game_research_tools_with_artifact() -> None
     assert len(tools) == 3
 
 
-def test_coding_adapter_build_create_game_research_tools_no_artifact_returns_empty() -> (
-    None
-):
+def test_coding_adapter_build_create_game_research_tools_no_artifact_returns_empty() -> None:
     adapter = CodingProjectAdapter()
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
@@ -353,17 +341,11 @@ def test_coding_adapter_execute_create_game_research_tool_returns_content() -> N
             state_module.CodingArtifact(
                 id="art",
                 language="python",
-                files=(
-                    state_module.CodeFile(
-                        path="src/main.py", content="def main(): pass"
-                    ),
-                ),
+                files=(state_module.CodeFile(path="src/main.py", content="def main(): pass"),),
             ),
         ),
     )
-    result = adapter.execute_create_game_research_tool(
-        "fetch_file", {"path": "src/main.py"}, state
-    )
+    result = adapter.execute_create_game_research_tool("fetch_file", {"path": "src/main.py"}, state)
     assert "def main" in result
 
 
@@ -379,9 +361,7 @@ def test_coding_adapter_execute_create_game_research_tool_unknown_path() -> None
             ),
         ),
     )
-    result = adapter.execute_create_game_research_tool(
-        "fetch_file", {"path": "missing.py"}, state
-    )
+    result = adapter.execute_create_game_research_tool("fetch_file", {"path": "missing.py"}, state)
     assert "not found" in result
     assert "src/main.py" in result
 
@@ -408,9 +388,7 @@ def test_document_adapter_build_create_game_research_tools_with_sections() -> No
         artifacts=(
             state_module.DocumentArtifact(
                 id="doc",
-                sections=(
-                    state_module.Section(title="Intro", body="Introduction body."),
-                ),
+                sections=(state_module.Section(title="Intro", body="Introduction body."),),
             ),
         ),
     )
@@ -422,9 +400,7 @@ def test_document_adapter_build_create_game_research_tools_with_sections() -> No
     assert len(tools) == 3
 
 
-def test_document_adapter_build_create_game_research_tools_no_sections_returns_empty() -> (
-    None
-):
+def test_document_adapter_build_create_game_research_tools_no_sections_returns_empty() -> None:
     adapter = DocumentProjectAdapter()
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
@@ -440,15 +416,11 @@ def test_document_adapter_execute_create_game_research_tool_returns_body() -> No
         artifacts=(
             state_module.DocumentArtifact(
                 id="doc",
-                sections=(
-                    state_module.Section(title="Intro", body="Introduction body."),
-                ),
+                sections=(state_module.Section(title="Intro", body="Introduction body."),),
             ),
         ),
     )
-    result = adapter.execute_create_game_research_tool(
-        "fetch_section", {"title": "Intro"}, state
-    )
+    result = adapter.execute_create_game_research_tool("fetch_section", {"title": "Intro"}, state)
     assert result == "Introduction body."
 
 
@@ -463,9 +435,7 @@ def test_document_adapter_execute_create_game_research_tool_unknown_title() -> N
             ),
         ),
     )
-    result = adapter.execute_create_game_research_tool(
-        "fetch_section", {"title": "Missing"}, state
-    )
+    result = adapter.execute_create_game_research_tool("fetch_section", {"title": "Missing"}, state)
     assert "not found" in result
     assert "Intro" in result
 

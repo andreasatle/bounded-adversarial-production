@@ -161,10 +161,7 @@ def main() -> None:
         marker = "SUSPICIOUS" if suspicious else "OK"
 
         print("=" * 100)
-        print(
-            f"{marker} | {entity.kind} | {entity.qualname} | "
-            f"{entity.path}:{entity.line} | rg_count={count}"
-        )
+        print(f"{marker} | {entity.kind} | {entity.qualname} | {entity.path}:{entity.line} | rg_count={count}")
 
         if args.show_matches:
             print(output)

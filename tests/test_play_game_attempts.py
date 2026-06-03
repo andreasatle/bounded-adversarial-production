@@ -14,9 +14,7 @@ from baps.state.state import GameSpec
 
 
 def create_state(config: RunConfig | dict) -> state_module.State:
-    return _create_state(
-        config if isinstance(config, RunConfig) else RunConfig(**config)
-    )
+    return _create_state(config if isinstance(config, RunConfig) else RunConfig(**config))
 
 
 def _make_document_spec_and_state(success_condition: str = "A section exists."):
@@ -132,12 +130,8 @@ def test_play_game_referee_revise_only_returns_none() -> None:
                 )
             ]
         ),
-        red_model_client=FakeModelClient(
-            ['{"disposition":"accept","rationale":"deterministic test path"}']
-        ),
-        referee_model_client=FakeModelClient(
-            ['{"disposition":"revise","rationale":"needs changes"}']
-        ),
+        red_model_client=FakeModelClient(['{"disposition":"accept","rationale":"deterministic test path"}']),
+        referee_model_client=FakeModelClient(['{"disposition":"revise","rationale":"needs changes"}']),
         max_attempts=1,
     )
     assert delta is None
@@ -178,12 +172,8 @@ def test_play_game_referee_accept_sets_current_best_delta() -> None:
                 )
             ]
         ),
-        red_model_client=FakeModelClient(
-            ['{"disposition":"accept","rationale":"deterministic test path"}']
-        ),
-        referee_model_client=FakeModelClient(
-            ['{"disposition":"accept","rationale":"approved"}']
-        ),
+        red_model_client=FakeModelClient(['{"disposition":"accept","rationale":"deterministic test path"}']),
+        referee_model_client=FakeModelClient(['{"disposition":"accept","rationale":"approved"}']),
     )
     assert delta is not None
 
@@ -258,18 +248,14 @@ def test_referee_prompt_includes_success_condition_and_red_rationale(
         return result
 
     monkeypatch.setattr("baps.game.engine.render_referee_prompt", _capture)
-    success_condition = (
-        "Unique success_condition string for referee prompt contract test."
-    )
+    success_condition = "Unique success_condition string for referee prompt contract test."
     spec, state = _make_document_spec_and_state(success_condition)
     red_rationale = "Unique red rationale for referee prompt test."
     play_game(
         state,
         spec,
         model_client=_make_blue_client("Introduction"),
-        red_model_client=FakeModelClient(
-            [f'{{"disposition":"accept","rationale":"{red_rationale}"}}']
-        ),
+        red_model_client=FakeModelClient([f'{{"disposition":"accept","rationale":"{red_rationale}"}}']),
     )
     prompt = str(captured["prompt"])
     assert success_condition in prompt
@@ -400,10 +386,7 @@ def test_play_game_previous_feedback_on_retry_contains_red_and_referee(
     assert "red_finding" in feedback
     assert "referee_decision" in feedback
     assert feedback["red_finding"]["rationale"] == "red rationale for feedback test"
-    assert (
-        feedback["referee_decision"]["rationale"]
-        == "referee rationale for feedback test"
-    )
+    assert feedback["referee_decision"]["rationale"] == "referee rationale for feedback test"
     assert feedback["referee_decision"]["disposition"] == "revise"
 
 
@@ -414,12 +397,8 @@ def test_play_game_red_reject_with_referee_accept_returns_delta() -> None:
         state,
         spec,
         model_client=_make_blue_client("Introduction"),
-        red_model_client=FakeModelClient(
-            ['{"disposition":"reject","rationale":"red says no"}']
-        ),
-        referee_model_client=FakeModelClient(
-            ['{"disposition":"accept","rationale":"referee overrides"}']
-        ),
+        red_model_client=FakeModelClient(['{"disposition":"reject","rationale":"red says no"}']),
+        referee_model_client=FakeModelClient(['{"disposition":"accept","rationale":"referee overrides"}']),
     )
     assert delta is not None
     assert delta.artifact_id == "main-document"

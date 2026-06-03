@@ -29,11 +29,7 @@ def _render_api_summary(file, plugin) -> tuple[str, str]:
         api_text = plugin.extract_api(file)
     except Exception:  # noqa: BLE001
         api_text = ""
-    if (
-        isinstance(api_text, str)
-        and api_text.strip()
-        and api_text.strip() != file.content.strip()
-    ):
+    if isinstance(api_text, str) and api_text.strip() and api_text.strip() != file.content.strip():
         return "api", sanitize_model_string(api_text)
     return (
         "api-empty",
@@ -51,11 +47,7 @@ def build_coding_create_game_state_view(
     del summarization_context
     artifact_id = config_artifact_id(config)
     target_artifact = coding_artifact_from_state(state, artifact_id)
-    language = (
-        str(config.get("language"))
-        if config.get("language")
-        else target_artifact.language
-    )
+    language = str(config.get("language")) if config.get("language") else target_artifact.language
     plugin = plugin_for(language)
     northstar_content = config_northstar_markdown(config)
 
@@ -64,9 +56,7 @@ def build_coding_create_game_state_view(
         for file in target_artifact.files:
             lines = file.content.splitlines()
             line_count = len(lines)
-            file_lines.append(
-                f"### {sanitize_model_title(file.path)} ({line_count} lines)"
-            )
+            file_lines.append(f"### {sanitize_model_title(file.path)} ({line_count} lines)")
             file_lines.append("")
             label, summary = _render_api_summary(file, plugin)
             file_lines.append(f"[{label}]")
@@ -120,17 +110,13 @@ def build_coding_state_view(
     if target_entity is not None and not matched_target:
         file_lines.append("WARNING: target_entity did not match any known file.")
         file_lines.append(f"target_entity: {sanitize_model_title(target_entity)}")
-        file_lines.append(
-            "No full file was expanded; rendering compact structural views for all files."
-        )
+        file_lines.append("No full file was expanded; rendering compact structural views for all files.")
         file_lines.append("")
     if artifact.files:
         for file in artifact.files:
             line_count = len(file.content.splitlines())
             if matched_target and file.path == target_entity:
-                file_lines.append(
-                    f"### {sanitize_model_title(file.path)} ({line_count} lines) [full]"
-                )
+                file_lines.append(f"### {sanitize_model_title(file.path)} ({line_count} lines) [full]")
                 file_lines.append("")
                 fence = "````" if "```" in file.content else "```"
                 file_lines.append(fence)
@@ -138,9 +124,7 @@ def build_coding_state_view(
                 file_lines.append(fence)
                 file_lines.append("")
                 continue
-            file_lines.append(
-                f"### {sanitize_model_title(file.path)} ({line_count} lines) [api]"
-            )
+            file_lines.append(f"### {sanitize_model_title(file.path)} ({line_count} lines) [api]")
             file_lines.append("")
             label, summary = _render_api_summary(file, plugin)
             if label != "api":

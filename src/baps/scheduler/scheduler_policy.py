@@ -118,10 +118,7 @@ class ModelPolicy:
 
     def snapshot(self) -> dict[str, dict]:
         """Handle snapshot."""
-        return {
-            name: {"score": round(s.score, 4), "runs": s.runs}
-            for name, s in self._stats.items()
-        }
+        return {name: {"score": round(s.score, 4), "runs": s.runs} for name, s in self._stats.items()}
 
     def save(self, path: Path) -> None:
         """Handle save."""

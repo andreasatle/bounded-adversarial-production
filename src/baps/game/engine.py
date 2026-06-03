@@ -146,9 +146,7 @@ def _verify_candidate_with_adapter(
     return verifier(delta_state, state, artifact_id, sandbox_mode=sandbox_mode)
 
 
-def commit_export_with_adapter(
-    adapter: ProjectTypeAdapter, output_path: Path, game_spec: GameSpec
-) -> bool:
+def commit_export_with_adapter(adapter: ProjectTypeAdapter, output_path: Path, game_spec: GameSpec) -> bool:
     """Handle commit export with adapter."""
     committer = getattr(adapter, "commit_export", None)
     if committer is None:
@@ -163,9 +161,7 @@ def _ensure_target_artifact_exists(state: State, artifact_id: str) -> None:
     """Handle ensure target artifact exists."""
     _ = next((a for a in state.artifacts if a.id == artifact_id), None)
     if _ is None:
-        raise ValueError(
-            f"create_game target artifact not found in state: {artifact_id}"
-        )
+        raise ValueError(f"create_game target artifact not found in state: {artifact_id}")
 
 
 def _generate_create_game_with_json_retry(
@@ -216,11 +212,7 @@ def create_game(
 ) -> GameSpec | DecomposeSpec:
     """Create and return game."""
     debug_event("create_game.input", {"state": state.model_dump(mode="json")})
-    resolved_adapter = (
-        adapter
-        if adapter is not None
-        else resolve_project_type_adapter(config.project_type)
-    )
+    resolved_adapter = adapter if adapter is not None else resolve_project_type_adapter(config.project_type)
     state_view = resolved_adapter.build_create_game_state_view(
         state, config.to_adapter_config(), summarization_context=summarization_context
     )
@@ -250,9 +242,7 @@ def create_game(
 
     # Build fallback chains once — they don't change across attempts.
     try:
-        _cg_primary_model = (
-            resolve_backend_model(role_name, config)[1] if use_planner else "(provided)"
-        )
+        _cg_primary_model = resolve_backend_model(role_name, config)[1] if use_planner else "(provided)"
     except ValueError:
         _cg_primary_model = "(unknown)"
     _create_game_fallback_fn = make_fallback_chain_fn(
@@ -260,9 +250,7 @@ def create_game(
     )
     if red_role is not None:
         try:
-            _red_cg_primary_model = resolve_backend_model(
-                SpecRole.CREATE_GAME_RED, config
-            )[1]
+            _red_cg_primary_model = resolve_backend_model(SpecRole.CREATE_GAME_RED, config)[1]
         except ValueError:
             _red_cg_primary_model = "(unknown)"
         _red_cg_fallback_fn = make_fallback_chain_fn(
@@ -279,23 +267,17 @@ def create_game(
     _bb_model_used = client_model_name(role.client)
 
     # One-shot research phase before the attempt loop.
-    _cg_research_fn = getattr(
-        resolved_adapter, "build_create_game_research_tools", None
-    )
+    _cg_research_fn = getattr(resolved_adapter, "build_create_game_research_tools", None)
     _cg_research_tools = _cg_research_fn(state) if _cg_research_fn is not None else []
     _cg_research_summary = ""
     _cg_research_session: list = []
     if _cg_research_tools:
-        _cg_exec_fn = getattr(
-            resolved_adapter, "execute_create_game_research_tool", None
-        )
+        _cg_exec_fn = getattr(resolved_adapter, "execute_create_game_research_tool", None)
         _cg_adapter_tools: dict = {}
         if _cg_exec_fn is not None:
             for tool_defn in _cg_research_tools:
                 _tool_name = tool_defn.name
-                _cg_adapter_tools[_tool_name] = lambda tool_input, _tn=_tool_name: (
-                    _cg_exec_fn(_tn, tool_input, state)
-                )
+                _cg_adapter_tools[_tool_name] = lambda tool_input, _tn=_tool_name: _cg_exec_fn(_tn, tool_input, state)
         _cg_executor = ToolExecutor(adapter_tools=_cg_adapter_tools)
         _cg_research_prompt = render_create_game_research_prompt(state_view, config)
         _cg_research_summary, _cg_research_session = role.generate_agentic(
@@ -337,22 +319,15 @@ def create_game(
             )
 
             if isinstance(result, DecomposeSpec):
-                debug_event(
-                    "create_game.output", {"game_spec": result.model_dump(mode="json")}
-                )
+                debug_event("create_game.output", {"game_spec": result.model_dump(mode="json")})
                 _bb_result_type = "decompose_spec"
                 _bb_result = {
                     "rationale": sanitize_model_string(result.rationale),
-                    "sub_gaps": [
-                        {"description": sanitize_model_string(sg.description)}
-                        for sg in result.sub_gaps
-                    ],
+                    "sub_gaps": [{"description": sanitize_model_string(sg.description)} for sg in result.sub_gaps],
                 }
                 return result
 
-            game_spec = normalize_game_spec_with_adapter(
-                resolved_adapter, result, state, config
-            )
+            game_spec = normalize_game_spec_with_adapter(resolved_adapter, result, state, config)
             try:
                 _validate_game_spec(game_spec)
             except ValueError as exc:
@@ -374,9 +349,7 @@ def create_game(
 
             # Red challenge — only when a Red client is wired and this is not the final attempt
             if red_role is not None and attempt < max_create_game_attempts:
-                red_prompt = render_create_game_red_prompt(
-                    state_view, game_spec, config
-                )
+                red_prompt = render_create_game_red_prompt(state_view, game_spec, config)
                 debug_event(
                     "create_game_red.input",
                     {
@@ -417,9 +390,7 @@ def create_game(
                 red_feedback = red_finding.model_dump(mode="json")
                 continue
 
-            debug_event(
-                "create_game.output", {"game_spec": game_spec.model_dump(mode="json")}
-            )
+            debug_event("create_game.output", {"game_spec": game_spec.model_dump(mode="json")})
             _bb_result_type = "game_spec"
             _bb_result = sanitize_game_spec_dict(game_spec)
             return game_spec
@@ -433,9 +404,7 @@ def create_game(
             _bb_result_type = "game_spec"
             _bb_result = sanitize_game_spec_dict(last_valid_game_spec)
             return last_valid_game_spec
-        raise ValueError(
-            "create_game failed to produce a valid GameSpec after all attempts"
-        )
+        raise ValueError("create_game failed to produce a valid GameSpec after all attempts")
 
     except NoNewGameError:
         _bb_result_type = "no_new_game"
@@ -469,9 +438,7 @@ def _build_play_game_context(
     depth: int,
     max_attempts: int,
     debug_event_fn: Callable[[str, dict[str, Any]], None],
-    render_red_prompt_fn: Callable[
-        [StateView, GameSpec, DeltaState, VerificationResult | None, str], str
-    ],
+    render_red_prompt_fn: Callable[[StateView, GameSpec, DeltaState, VerificationResult | None, str], str],
     render_referee_prompt_fn: Callable[
         [StateView, GameSpec, DeltaState, RedFinding, VerificationResult | None, str],
         str,
@@ -481,9 +448,7 @@ def _build_play_game_context(
 ) -> PlayGameContext:
     """Build and return play game context."""
     resolved_adapter = (
-        adapter
-        if adapter is not None
-        else resolve_adapter_for_allowed_delta_type(game_spec.allowed_delta_type)
+        adapter if adapter is not None else resolve_adapter_for_allowed_delta_type(game_spec.allowed_delta_type)
     )
     debug_event_fn(
         "play_game.input",
@@ -492,9 +457,7 @@ def _build_play_game_context(
             "game_spec": game_spec.model_dump(mode="json"),
         },
     )
-    state_view = resolved_adapter.build_state_view(
-        state, game_spec, summarization_context=summarization_context
-    )
+    state_view = resolved_adapter.build_state_view(state, game_spec, summarization_context=summarization_context)
     game_id = str(uuid.uuid4())
     blue_role, red_role, referee_role = resolve_play_game_roles(
         resolved_adapter,
@@ -571,9 +534,7 @@ def play_game(
         summarization_context=summarization_context,
     )
     runtime = PlayGameRuntime()
-    previous_feedback: PlayGameFeedback | None = initial_play_game_feedback(
-        verification_result
-    )
+    previous_feedback: PlayGameFeedback | None = initial_play_game_feedback(verification_result)
     attempt_records: list[PlayAttemptRecord] = []
     last_candidate_result: VerificationResult | None = None
 
@@ -595,16 +556,14 @@ def play_game(
             previous_feedback = updated_feedback
             attempt_records.append(attempt_rec)
             continue
-        runtime, previous_feedback, candidate_result, stop_attempts = (
-            apply_play_game_attempt_decision(
-                ctx=ctx,
-                runtime=runtime,
-                attempt=attempt,
-                attempt_rec=attempt_rec,
-                candidate_delta=candidate_delta,
-                red_finding=red_finding,
-                referee_decision=referee_decision,
-            )
+        runtime, previous_feedback, candidate_result, stop_attempts = apply_play_game_attempt_decision(
+            ctx=ctx,
+            runtime=runtime,
+            attempt=attempt,
+            attempt_rec=attempt_rec,
+            candidate_delta=candidate_delta,
+            red_finding=red_finding,
+            referee_decision=referee_decision,
         )
         if candidate_result is not None:
             last_candidate_result = candidate_result

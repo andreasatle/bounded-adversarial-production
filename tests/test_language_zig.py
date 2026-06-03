@@ -98,9 +98,7 @@ def fixture_file():
 
 @pytest.fixture(autouse=True)
 def mock_docker(monkeypatch):
-    with patch(
-        "baps.plugins.language_zig.subprocess.run", return_value=_make_mock()
-    ) as m:
+    with patch("baps.plugins.language_zig.subprocess.run", return_value=_make_mock()) as m:
         yield m
 
 
@@ -116,9 +114,7 @@ def test_extract_api_missing_doc(plugin, fixture_file):
     lines = result.splitlines()
     struct_idx = next(i for i, line in enumerate(lines) if "WordPair" in line)
     assert "MISSING" in lines[struct_idx + 1]
-    fn_idx = next(
-        i for i, line in enumerate(lines) if "wordCount" in line and "test" not in line
-    )
+    fn_idx = next(i for i, line in enumerate(lines) if "wordCount" in line and "test" not in line)
     assert "Counts words" in lines[fn_idx + 1]
 
 

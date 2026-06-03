@@ -208,9 +208,7 @@ def test_policy_save_and_load_roundtrip(tmp_path: Path) -> None:
     assert policy2.total_runs == 2
     assert policy2._stats["cheap"].runs == 1
     snap = policy2.snapshot()
-    assert snap["cheap"]["score"] == pytest.approx(
-        policy._stats["cheap"].score, abs=1e-4
-    )
+    assert snap["cheap"]["score"] == pytest.approx(policy._stats["cheap"].score, abs=1e-4)
 
 
 def test_policy_load_stats_no_op_when_file_missing(tmp_path: Path) -> None:

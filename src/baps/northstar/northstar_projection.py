@@ -78,9 +78,7 @@ class StateView(BaseModel):
     _validate_id = field_validator("id")(_require_non_empty)
     _validate_projection_type = field_validator("projection_type")(_require_non_empty)
     _validate_content = field_validator("content")(_require_non_empty)
-    _validate_input_fingerprint = field_validator("input_fingerprint")(
-        _require_non_empty
-    )
+    _validate_input_fingerprint = field_validator("input_fingerprint")(_require_non_empty)
 
 
 def require_state_view_metadata(state_view: StateView, key: str) -> str:

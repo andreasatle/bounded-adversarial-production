@@ -141,9 +141,7 @@ def test_initialize_returns_true_when_conftest_differs(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _make_completed(
-    returncode: int, stdout: str = "", stderr: str = ""
-) -> subprocess.CompletedProcess:
+def _make_completed(returncode: int, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess:
     result: subprocess.CompletedProcess = MagicMock(spec=subprocess.CompletedProcess)
     result.returncode = returncode
     result.stdout = stdout
@@ -155,9 +153,7 @@ def test_run_tests_bare_uses_uv(tmp_path: Path) -> None:
     from baps.plugins.language_python import PythonLanguagePlugin
 
     completed = _make_completed(returncode=0, stdout="1 passed")
-    with patch(
-        "baps.plugins.language_python.subprocess.run", return_value=completed
-    ) as mock_run:
+    with patch("baps.plugins.language_python.subprocess.run", return_value=completed) as mock_run:
         result = PythonLanguagePlugin().run_tests(tmp_path, "none")
 
     assert result.passed is True
@@ -189,9 +185,7 @@ def test_run_tests_bare_sets_cwd(tmp_path: Path) -> None:
     from baps.plugins.language_python import PythonLanguagePlugin
 
     completed = _make_completed(returncode=0)
-    with patch(
-        "baps.plugins.language_python.subprocess.run", return_value=completed
-    ) as mock_run:
+    with patch("baps.plugins.language_python.subprocess.run", return_value=completed) as mock_run:
         result = PythonLanguagePlugin().run_tests(tmp_path, "none")
 
     assert result.cwd == str(tmp_path)
@@ -353,25 +347,17 @@ def test_coding_adapter_create_initial_state_missing_language_raises() -> None:
     from baps.adapters.coding_adapter import CodingProjectAdapter
 
     with pytest.raises(ValueError, match="requires a 'language' field"):
-        CodingProjectAdapter().create_initial_state(
-            {"artifact_id": "art", "northstar_markdown": "x"}
-        )
+        CodingProjectAdapter().create_initial_state({"artifact_id": "art", "northstar_markdown": "x"})
 
 
-def test_coding_adapter_create_initial_state_missing_language_error_lists_available() -> (
-    None
-):
+def test_coding_adapter_create_initial_state_missing_language_error_lists_available() -> None:
     from baps.adapters.coding_adapter import CodingProjectAdapter
 
     with pytest.raises(ValueError, match="python"):
-        CodingProjectAdapter().create_initial_state(
-            {"artifact_id": "art", "northstar_markdown": "x"}
-        )
+        CodingProjectAdapter().create_initial_state({"artifact_id": "art", "northstar_markdown": "x"})
 
     with pytest.raises(ValueError, match="zig"):
-        CodingProjectAdapter().create_initial_state(
-            {"artifact_id": "art", "northstar_markdown": "x"}
-        )
+        CodingProjectAdapter().create_initial_state({"artifact_id": "art", "northstar_markdown": "x"})
 
 
 def test_coding_adapter_create_initial_state_accepts_python() -> None:
@@ -528,9 +514,7 @@ def test_zig_plugin_run_tests_bare_uses_zig_build_test(tmp_path: Path) -> None:
     from baps.plugins.language_zig import ZigLanguagePlugin
 
     completed = _make_completed(returncode=0, stdout="All tests passed")
-    with patch(
-        "baps.plugins.language_zig.subprocess.run", return_value=completed
-    ) as mock_run:
+    with patch("baps.plugins.language_zig.subprocess.run", return_value=completed) as mock_run:
         result = ZigLanguagePlugin().run_tests(tmp_path, "none")
 
     assert result.passed is True
@@ -572,9 +556,7 @@ def test_coding_adapter_verify_export_zig_uses_zig_docker_image(tmp_path: Path) 
 
     completed = _make_completed(returncode=0)
     with patch("baps.tools.sandbox.subprocess.run", return_value=completed) as mock_run:
-        CodingProjectAdapter().verify_export(
-            output_path, state, "art", sandbox_mode="docker"
-        )
+        CodingProjectAdapter().verify_export(output_path, state, "art", sandbox_mode="docker")
 
     docker_args = mock_run.call_args[0][0]
     assert "baps-zig:latest" in docker_args
@@ -596,9 +578,7 @@ def test_coding_adapter_verify_export_zig_uses_zig_test_command(tmp_path: Path) 
 
     completed = _make_completed(returncode=0)
     with patch("baps.tools.sandbox.subprocess.run", return_value=completed) as mock_run:
-        CodingProjectAdapter().verify_export(
-            output_path, state, "art", sandbox_mode="docker"
-        )
+        CodingProjectAdapter().verify_export(output_path, state, "art", sandbox_mode="docker")
 
     docker_args = mock_run.call_args[0][0]
     assert "zig build test" in docker_args
@@ -622,9 +602,7 @@ def test_coding_adapter_verify_export_zig_does_not_use_python_image(
 
     completed = _make_completed(returncode=0)
     with patch("baps.tools.sandbox.subprocess.run", return_value=completed) as mock_run:
-        CodingProjectAdapter().verify_export(
-            output_path, state, "art", sandbox_mode="docker"
-        )
+        CodingProjectAdapter().verify_export(output_path, state, "art", sandbox_mode="docker")
 
     docker_args = mock_run.call_args[0][0]
     assert "python:3.12-slim" not in docker_args
@@ -652,9 +630,7 @@ def test_coding_adapter_verify_candidate_zig_uses_zig_docker_image(
 
     completed = _make_completed(returncode=0)
     with patch("baps.tools.sandbox.subprocess.run", return_value=completed) as mock_run:
-        result = CodingProjectAdapter().verify_candidate(
-            delta, state, "art", sandbox_mode="docker"
-        )
+        result = CodingProjectAdapter().verify_candidate(delta, state, "art", sandbox_mode="docker")
 
     assert result is not None
     docker_args = mock_run.call_args[0][0]
@@ -678,9 +654,7 @@ def test_coding_adapter_verify_candidate_zig_uses_zig_test_command(
 
     completed = _make_completed(returncode=0)
     with patch("baps.tools.sandbox.subprocess.run", return_value=completed) as mock_run:
-        result = CodingProjectAdapter().verify_candidate(
-            delta, state, "art", sandbox_mode="docker"
-        )
+        result = CodingProjectAdapter().verify_candidate(delta, state, "art", sandbox_mode="docker")
 
     assert result is not None
     docker_args = mock_run.call_args[0][0]
@@ -704,9 +678,7 @@ def test_coding_adapter_verify_candidate_zig_does_not_use_python_image(
 
     completed = _make_completed(returncode=0)
     with patch("baps.tools.sandbox.subprocess.run", return_value=completed) as mock_run:
-        result = CodingProjectAdapter().verify_candidate(
-            delta, state, "art", sandbox_mode="docker"
-        )
+        result = CodingProjectAdapter().verify_candidate(delta, state, "art", sandbox_mode="docker")
 
     assert result is not None
     docker_args = mock_run.call_args[0][0]
@@ -846,9 +818,7 @@ def test_rust_plugin_parse_test_failures_no_failures() -> None:
 def test_rust_plugin_parse_test_failures_detects_failed_lines() -> None:
     from baps.plugins.language_rust import RustLanguagePlugin
 
-    stdout = (
-        "test tests::it_fails ... FAILED\ntest result: FAILED. 0 passed; 1 failed\n"
-    )
+    stdout = "test tests::it_fails ... FAILED\ntest result: FAILED. 0 passed; 1 failed\n"
     result = RustLanguagePlugin().parse_test_failures(stdout)
     assert len(result) == 1
     assert result[0]["test_id"] == "tests::it_fails"
@@ -857,11 +827,7 @@ def test_rust_plugin_parse_test_failures_detects_failed_lines() -> None:
 def test_rust_plugin_parse_test_failures_multiple() -> None:
     from baps.plugins.language_rust import RustLanguagePlugin
 
-    stdout = (
-        "test tests::first ... FAILED\n"
-        "test tests::second ... ok\n"
-        "test tests::third ... FAILED\n"
-    )
+    stdout = "test tests::first ... FAILED\ntest tests::second ... ok\ntest tests::third ... FAILED\n"
     result = RustLanguagePlugin().parse_test_failures(stdout)
     assert len(result) == 2
     assert result[0]["test_id"] == "tests::first"
@@ -872,9 +838,7 @@ def test_rust_plugin_run_tests_bare_uses_cargo_test(tmp_path: Path) -> None:
     from baps.plugins.language_rust import RustLanguagePlugin
 
     completed = _make_completed(returncode=0, stdout="test result: ok.")
-    with patch(
-        "baps.plugins.language_rust.subprocess.run", return_value=completed
-    ) as mock_run:
+    with patch("baps.plugins.language_rust.subprocess.run", return_value=completed) as mock_run:
         result = RustLanguagePlugin().run_tests(tmp_path, "none")
 
     assert result.passed is True
@@ -885,9 +849,7 @@ def test_rust_plugin_run_tests_bare_uses_cargo_test(tmp_path: Path) -> None:
 def test_rust_plugin_run_tests_bare_wraps_failure(tmp_path: Path) -> None:
     from baps.plugins.language_rust import RustLanguagePlugin
 
-    completed = _make_completed(
-        returncode=101, stdout="test tests::bad ... FAILED", stderr="err"
-    )
+    completed = _make_completed(returncode=101, stdout="test tests::bad ... FAILED", stderr="err")
     with patch("baps.plugins.language_rust.subprocess.run", return_value=completed):
         result = RustLanguagePlugin().run_tests(tmp_path, "none")
 

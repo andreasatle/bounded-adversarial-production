@@ -19,9 +19,7 @@ from baps.state.state import GameSpec
 
 
 def create_state(config: RunConfig | dict):
-    return _create_state(
-        config if isinstance(config, RunConfig) else RunConfig(**config)
-    )
+    return _create_state(config if isinstance(config, RunConfig) else RunConfig(**config))
 
 
 def _make_document_spec_and_state(success_condition: str = "A section exists."):
@@ -233,9 +231,7 @@ def test_play_game_valid_red_json_parses() -> None:
 
 def test_play_game_fenced_red_json_accepted() -> None:
 
-    red, _ = parse_red_finding_json(
-        '```json\n{"disposition":"revise","rationale":"tighten section body"}\n```'
-    )
+    red, _ = parse_red_finding_json('```json\n{"disposition":"revise","rationale":"tighten section body"}\n```')
     assert red.disposition == "revise"
 
 
@@ -281,9 +277,7 @@ def test_play_game_invalid_red_json_rejected() -> None:
 
 def test_play_game_valid_referee_json_parses() -> None:
 
-    decision, _ = parse_referee_decision_json(
-        '{"disposition":"accept","rationale":"looks good"}'
-    )
+    decision, _ = parse_referee_decision_json('{"disposition":"accept","rationale":"looks good"}')
     assert decision.disposition == "accept"
     assert decision.rationale == "looks good"
 
@@ -291,9 +285,7 @@ def test_play_game_valid_referee_json_parses() -> None:
 def test_play_game_fenced_referee_json_accepted() -> None:
 
     decision, _ = parse_referee_decision_json(
-        "```json\n"
-        '{"disposition":"revise","rationale":"tighten acceptance criteria"}\n'
-        "```"
+        '```json\n{"disposition":"revise","rationale":"tighten acceptance criteria"}\n```'
     )
     assert decision.disposition == "revise"
 
@@ -334,9 +326,7 @@ def test_play_game_invalid_referee_json_rejected() -> None:
                     )
                 ]
             ),
-            red_model_client=FakeModelClient(
-                ['{"disposition":"accept","rationale":"deterministic test path"}']
-            ),
+            red_model_client=FakeModelClient(['{"disposition":"accept","rationale":"deterministic test path"}']),
             referee_model_client=FakeModelClient(["not-json"]),
         )
 
@@ -365,9 +355,7 @@ def test_red_finding_defaults_when_optional_fields_absent() -> None:
 
 def test_red_finding_unexpected_key_stripped() -> None:
 
-    red, _ = parse_red_finding_json(
-        '{"disposition":"accept","rationale":"ok","confidence":0.9}'
-    )
+    red, _ = parse_red_finding_json('{"disposition":"accept","rationale":"ok","confidence":0.9}')
     assert red.disposition == "accept"
     assert not hasattr(red, "confidence")
 
@@ -395,18 +383,14 @@ def test_referee_decision_optional_fields_parse_when_present() -> None:
 
 def test_referee_decision_defaults_when_optional_fields_absent() -> None:
 
-    decision, _ = parse_referee_decision_json(
-        '{"disposition":"accept","rationale":"approved"}'
-    )
+    decision, _ = parse_referee_decision_json('{"disposition":"accept","rationale":"approved"}')
     assert decision.red_override is None
     assert decision.improvement_hints == ()
 
 
 def test_referee_decision_unexpected_key_stripped() -> None:
 
-    decision, _ = parse_referee_decision_json(
-        '{"disposition":"accept","rationale":"ok","confidence":0.9}'
-    )
+    decision, _ = parse_referee_decision_json('{"disposition":"accept","rationale":"ok","confidence":0.9}')
     assert decision.disposition == "accept"
     assert not hasattr(decision, "confidence")
 

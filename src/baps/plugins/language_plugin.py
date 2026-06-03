@@ -76,7 +76,5 @@ def get_language_plugin(name: str) -> LanguagePlugin:
     }
     if name not in _registry:
         available = ", ".join(sorted(_registry))
-        raise ValueError(
-            f"Language {name!r} is not supported. Available languages: {available}"
-        )
+        raise ValueError(f"Language {name!r} is not supported. Available languages: {available}")
     return _registry[name]

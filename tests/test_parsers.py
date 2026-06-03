@@ -31,16 +31,11 @@ def testparse_create_game_output_northstar_update_needed_raises_signal() -> None
     with pytest.raises(NorthStarUpdateNeededError) as exc_info:
         parse_create_game_output(raw)
 
-    assert (
-        exc_info.value.rationale
-        == "Accumulated state has drifted from NorthStar intent."
-    )
+    assert exc_info.value.rationale == "Accumulated state has drifted from NorthStar intent."
     assert exc_info.value.proposed_northstar == "# Updated Goal\n\nNew direction."
 
 
-def testparse_create_game_output_northstar_update_needed_flag_false_falls_through_to_game_spec() -> (
-    None
-):
+def testparse_create_game_output_northstar_update_needed_flag_false_falls_through_to_game_spec() -> None:
     # false marker → not classified as northstar response; falls through to GameSpec missing-keys error
     raw = json.dumps(
         {
@@ -53,9 +48,7 @@ def testparse_create_game_output_northstar_update_needed_flag_false_falls_throug
         parse_create_game_output(raw)
 
 
-def testparse_create_game_output_northstar_update_needed_empty_rationale_raises() -> (
-    None
-):
+def testparse_create_game_output_northstar_update_needed_empty_rationale_raises() -> None:
     raw = json.dumps(
         {
             "kind": "northstar_update_needed",
@@ -67,9 +60,7 @@ def testparse_create_game_output_northstar_update_needed_empty_rationale_raises(
         parse_create_game_output(raw)
 
 
-def testparse_create_game_output_northstar_update_needed_empty_proposed_northstar_raises() -> (
-    None
-):
+def testparse_create_game_output_northstar_update_needed_empty_proposed_northstar_raises() -> None:
     raw = json.dumps(
         {
             "kind": "northstar_update_needed",
@@ -134,9 +125,7 @@ def testparse_create_game_output_truncates_sub_gaps_when_over_max() -> None:
     from baps.state.state import DecomposeSpec
 
     sub_gaps = [{"description": f"Gap {i}"} for i in range(7)]
-    text = json.dumps(
-        {"kind": "decompose", "rationale": "Too large", "sub_gaps": sub_gaps}
-    )
+    text = json.dumps({"kind": "decompose", "rationale": "Too large", "sub_gaps": sub_gaps})
     result = parse_create_game_output(text, max_sub_gaps=5)
     assert isinstance(result, DecomposeSpec)
     assert len(result.sub_gaps) == 5
@@ -148,9 +137,7 @@ def testparse_create_game_output_does_not_truncate_at_exactly_max() -> None:
     from baps.state.state import DecomposeSpec
 
     sub_gaps = [{"description": f"Gap {i}"} for i in range(5)]
-    text = json.dumps(
-        {"kind": "decompose", "rationale": "Decomposing", "sub_gaps": sub_gaps}
-    )
+    text = json.dumps({"kind": "decompose", "rationale": "Decomposing", "sub_gaps": sub_gaps})
     result = parse_create_game_output(text, max_sub_gaps=5)
     assert isinstance(result, DecomposeSpec)
     assert len(result.sub_gaps) == 5
@@ -160,9 +147,7 @@ def testparse_create_game_output_max_sub_gaps_1_allows_only_one() -> None:
     from baps.state.state import DecomposeSpec
 
     sub_gaps = [{"description": "First"}, {"description": "Second"}]
-    text = json.dumps(
-        {"kind": "decompose", "rationale": "Big gap", "sub_gaps": sub_gaps}
-    )
+    text = json.dumps({"kind": "decompose", "rationale": "Big gap", "sub_gaps": sub_gaps})
     result = parse_create_game_output(text, max_sub_gaps=1)
     assert isinstance(result, DecomposeSpec)
     assert len(result.sub_gaps) == 1
@@ -179,9 +164,7 @@ def testparse_create_game_output_strips_empty_sub_gaps_and_logs_warning(
         {"description": ""},
         {"description": "   "},
     ]
-    text = json.dumps(
-        {"kind": "decompose", "rationale": "gap is large", "sub_gaps": sub_gaps}
-    )
+    text = json.dumps({"kind": "decompose", "rationale": "gap is large", "sub_gaps": sub_gaps})
     with caplog.at_level(logging.WARNING):
         result = parse_create_game_output(text, max_sub_gaps=5)
     assert isinstance(result, DecomposeSpec)
@@ -335,9 +318,7 @@ def testparse_create_game_output_unexpected_status_key_triggers_retry() -> None:
     assert len(retry_calls) == 1
 
 
-def testparse_create_game_output_correction_retry_no_new_game_escalates_to_fallback() -> (
-    None
-):
+def testparse_create_game_output_correction_retry_no_new_game_escalates_to_fallback() -> None:
     """Correction retry returning no_new_game must not be accepted — fall through to fallback."""
     from baps.state.state import GameSpec
 
@@ -365,9 +346,7 @@ def testparse_create_game_output_correction_retry_no_new_game_escalates_to_fallb
     assert len(fallback_calls) == 1
 
 
-def testparse_create_game_output_correction_retry_no_new_game_no_fallback_raises() -> (
-    None
-):
+def testparse_create_game_output_correction_retry_no_new_game_no_fallback_raises() -> None:
     """Correction retry returning no_new_game with no fallback raises ValueError, not NoNewGameError."""
 
     def retry_fn(prompt: str) -> str:
@@ -391,9 +370,7 @@ def testparse_create_game_output_correction_prompt_excludes_no_new_game() -> Non
 # ---------------------------------------------------------------------------
 
 
-def testparse_create_game_output_old_style_no_new_game_with_gamespec_fields_rejected() -> (
-    None
-):
+def testparse_create_game_output_old_style_no_new_game_with_gamespec_fields_rejected() -> None:
     """Old-style response mixing no_new_game with GameSpec fields must be rejected (kind missing)."""
     text = json.dumps(
         {
@@ -424,9 +401,7 @@ def testparse_create_game_output_old_style_multiple_terminal_signals_rejected() 
         parse_create_game_output(text)
 
 
-def testparse_create_game_output_old_style_northstar_and_decompose_signals_rejected() -> (
-    None
-):
+def testparse_create_game_output_old_style_northstar_and_decompose_signals_rejected() -> None:
     """Old-style mixed northstar_update_needed + decompose must be rejected (kind missing)."""
     text = json.dumps(
         {
@@ -489,9 +464,7 @@ def testparse_create_game_output_missing_kind_triggers_correction_retry() -> Non
     assert len(retry_calls) == 1
 
 
-def testparse_create_game_output_fallback_returning_terminal_signal_is_blocked() -> (
-    None
-):
+def testparse_create_game_output_fallback_returning_terminal_signal_is_blocked() -> None:
     """Fallback returning a terminal signal in shape-correction context must not propagate as NoNewGameError."""
     from baps.core.parsers import NoNewGameError
 
@@ -506,9 +479,7 @@ def testparse_create_game_output_fallback_returning_terminal_signal_is_blocked()
     try:
         parse_create_game_output(text, fallback_fn=fallback_fn)
     except NoNewGameError:
-        pytest.fail(
-            "NoNewGameError must not escape from shape-correction fallback context"
-        )
+        pytest.fail("NoNewGameError must not escape from shape-correction fallback context")
     except ValueError:
         pass  # expected: shape failure, not terminal signal
 
@@ -646,9 +617,7 @@ def testparse_create_game_output_invalid_kind_triggers_shape_failure() -> None:
     assert len(retry_calls) == 1
 
 
-def testparse_create_game_output_correction_retry_kind_terminal_signal_blocked() -> (
-    None
-):
+def testparse_create_game_output_correction_retry_kind_terminal_signal_blocked() -> None:
     """Correction retry returning kind=no_new_game must not escape as NoNewGameError."""
     from baps.state.state import GameSpec
 
@@ -676,9 +645,7 @@ def testparse_create_game_output_correction_retry_kind_terminal_signal_blocked()
     assert len(fallback_calls) == 1
 
 
-def testparse_create_game_output_correction_fallback_kind_terminal_signal_blocked() -> (
-    None
-):
+def testparse_create_game_output_correction_fallback_kind_terminal_signal_blocked() -> None:
     """Correction fallback returning kind=no_new_game must not escape as NoNewGameError."""
     from baps.core.parsers import NoNewGameError
 
@@ -691,9 +658,7 @@ def testparse_create_game_output_correction_fallback_kind_terminal_signal_blocke
     try:
         parse_create_game_output(raw, fallback_fn=fallback_fn)
     except NoNewGameError:
-        pytest.fail(
-            "NoNewGameError must not escape from shape-correction fallback path"
-        )
+        pytest.fail("NoNewGameError must not escape from shape-correction fallback path")
     except ValueError:
         pass
 
@@ -723,9 +688,7 @@ def test_red_finding_defaults_when_optional_fields_absent() -> None:
 
 
 def test_red_finding_unexpected_key_stripped() -> None:
-    red, recovery = parse_red_finding_json(
-        '{"disposition":"accept","rationale":"ok","confidence":0.9}'
-    )
+    red, recovery = parse_red_finding_json('{"disposition":"accept","rationale":"ok","confidence":0.9}')
     assert red.disposition == "accept"
     assert not hasattr(red, "confidence")
     assert "confidence" in recovery.unexpected_keys_stripped
@@ -755,17 +718,13 @@ def test_referee_decision_optional_fields_parse_when_present() -> None:
 
 
 def test_referee_decision_defaults_when_optional_fields_absent() -> None:
-    decision, _ = parse_referee_decision_json(
-        '{"disposition":"accept","rationale":"approved"}'
-    )
+    decision, _ = parse_referee_decision_json('{"disposition":"accept","rationale":"approved"}')
     assert decision.red_override is None
     assert decision.improvement_hints == ()
 
 
 def test_referee_decision_unexpected_key_stripped() -> None:
-    decision, recovery = parse_referee_decision_json(
-        '{"disposition":"accept","rationale":"ok","confidence":0.9}'
-    )
+    decision, recovery = parse_referee_decision_json('{"disposition":"accept","rationale":"ok","confidence":0.9}')
     assert decision.disposition == "accept"
     assert not hasattr(decision, "confidence")
     assert "confidence" in recovery.unexpected_keys_stripped
@@ -989,16 +948,12 @@ def test_coding_parse_fixes_double_escaped_quotes_in_single_line_content() -> No
 
     # Model double-escaped quotes: after json.loads, content contains \" (backslash + quote)
     # instead of the intended ". Use json.dumps to build valid JSON with that content.
-    content_with_escape = (
-        'def greet(): return \\"hello\\"'  # literal: def greet(): return \"hello\"
-    )
+    content_with_escape = 'def greet(): return \\"hello\\"'  # literal: def greet(): return \"hello\"
     raw = json.dumps(
         {
             "artifact_id": "main-codebase",
             "operation": "write_file",
-            "payload": {
-                "file": {"path": "src/util.py", "content": content_with_escape}
-            },
+            "payload": {"file": {"path": "src/util.py", "content": content_with_escape}},
         }
     )
     delta = coding_module.parse_coding_delta_json(raw)
@@ -1014,9 +969,7 @@ def test_coding_parse_fixes_double_escaped_quotes_in_multiline_python() -> None:
         {
             "artifact_id": "main-codebase",
             "operation": "write_file",
-            "payload": {
-                "file": {"path": "tests/test_util.py", "content": content_with_escape}
-            },
+            "payload": {"file": {"path": "tests/test_util.py", "content": content_with_escape}},
         }
     )
     delta = coding_module.parse_coding_delta_json(raw)
@@ -1040,9 +993,7 @@ def test_coding_parse_leaves_valid_multiline_python_unchanged() -> None:
     assert delta.payload.file.content == content
 
 
-def test_coding_parse_does_not_fix_backslash_quotes_in_multiline_non_python_files() -> (
-    None
-):
+def test_coding_parse_does_not_fix_backslash_quotes_in_multiline_non_python_files() -> None:
     import baps.adapters.coding_adapter as coding_module
 
     # Multi-line non-.py file: the fix only applies to .py files for multi-line content.

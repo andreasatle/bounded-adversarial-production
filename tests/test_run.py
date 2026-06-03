@@ -191,9 +191,7 @@ def test_create_game_explicit_no_new_game_signal() -> None:
             config,
             state,
             model_client=FakeModelClient(
-                [
-                    '{"kind": "no_new_game", "reason": "all required sections already present"}'
-                ]
+                ['{"kind": "no_new_game", "reason": "all required sections already present"}']
             ),
         )
 
@@ -216,9 +214,7 @@ def test_create_game_extra_key_on_no_new_game_response_is_stripped() -> None:
             config,
             state,
             model_client=FakeModelClient(
-                [
-                    '{"kind": "no_new_game", "reason": "all required sections already present", "confidence": 0.9}'
-                ]
+                ['{"kind": "no_new_game", "reason": "all required sections already present", "confidence": 0.9}']
             ),
         )
 
@@ -412,9 +408,7 @@ def test_coding_create_game_accepts_test_file_task_second_iteration() -> None:
     assert game_spec.allowed_delta_type == "DeltaCodingState"
 
 
-def test_coding_normalize_passes_through_model_objective_and_success_condition() -> (
-    None
-):
+def test_coding_normalize_passes_through_model_objective_and_success_condition() -> None:
     import baps.core.run as run_module
 
     config = RunConfig(
@@ -424,9 +418,7 @@ def test_coding_normalize_passes_through_model_objective_and_success_condition()
         language="python",
         goal="Implement a text similarity utility",
         northstar_markdown=(
-            "# Goal\n\nImplement a text similarity utility.\n"
-            "- src/similarity.py\n"
-            "- tests/test_similarity.py\n"
+            "# Goal\n\nImplement a text similarity utility.\n- src/similarity.py\n- tests/test_similarity.py\n"
         ),
         output_path=Path(".baps-workspace/output/project"),
         max_iterations=2,
@@ -444,14 +436,8 @@ def test_coding_normalize_passes_through_model_objective_and_success_condition()
             ]
         ),
     )
-    assert (
-        game_spec.objective
-        == "Write src/similarity.py with normalize and token_overlap"
-    )
-    assert (
-        game_spec.success_condition
-        == "Artifact contains src/similarity.py with all required functions."
-    )
+    assert game_spec.objective == "Write src/similarity.py with normalize and token_overlap"
+    assert game_spec.success_condition == "Artifact contains src/similarity.py with all required functions."
     assert game_spec.target_artifact_id == "main-codebase"
 
 
@@ -540,9 +526,7 @@ def test_document_adapter_normalize_game_spec_is_identity() -> None:
     assert normalized == original
 
 
-def test_active_main_and_play_game_orchestration_have_no_direct_document_mechanics() -> (
-    None
-):
+def test_active_main_and_play_game_orchestration_have_no_direct_document_mechanics() -> None:
     import baps.core.run as run_module
 
     main_src = inspect.getsource(run_module.main)

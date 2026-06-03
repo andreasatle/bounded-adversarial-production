@@ -48,9 +48,7 @@ def _make_run_config(**overrides) -> RunConfig:
 
 
 def create_state(config: RunConfig | dict):
-    return _create_state(
-        config if isinstance(config, RunConfig) else RunConfig(**config)
-    )
+    return _create_state(config if isinstance(config, RunConfig) else RunConfig(**config))
 
     # ---------------------------------------------------------------------------
     # Backend dispatch tests
@@ -138,9 +136,7 @@ def testbuild_role_client_falls_back_to_global_when_no_role_vars(monkeypatch) ->
     monkeypatch.setenv("BAPS_OLLAMA_MODEL", "llama3.2")
     # Restore the real _build_model_client so the fallback path exercises it,
     # not the FakeModelClient injected by the autouse fixture.
-    monkeypatch.setattr(
-        "baps.core.clients._build_model_client", _real_build_model_client
-    )
+    monkeypatch.setattr("baps.core.clients._build_model_client", _real_build_model_client)
     client = _realbuild_role_client("red")
     assert isinstance(client, OllamaClient)
     assert client.model == "llama3.2"
@@ -217,9 +213,7 @@ def testbuild_role_client_uses_global_anthropic_model_when_only_backend_set(
 def testresolve_backend_model_spec_global_overrides_env(monkeypatch) -> None:
     monkeypatch.setenv("BAPS_BACKEND", "ollama")
     monkeypatch.setenv("BAPS_OLLAMA_MODEL", "env-model")
-    config = _make_run_config(
-        spec_backend="ollama", spec_model="spec-model", spec_roles={}
-    )
+    config = _make_run_config(spec_backend="ollama", spec_model="spec-model", spec_roles={})
     backend, model = _clients_module.resolve_backend_model("blue", config)
     assert backend == "ollama"
     assert model == "spec-model"
@@ -272,9 +266,7 @@ def testresolve_backend_model_raises_when_nothing_configured(monkeypatch) -> Non
 
 def testresolve_backend_model_raises_on_unknown_backend(monkeypatch) -> None:
     del monkeypatch
-    with pytest.raises(
-        ValueError, match="Input should be 'anthropic', 'openai' or 'ollama'"
-    ):
+    with pytest.raises(ValueError, match="Input should be 'anthropic', 'openai' or 'ollama'"):
         _make_run_config(spec_backend="bogus", spec_model="some-model", spec_roles={})
 
 
@@ -552,16 +544,12 @@ def test_spec_role_fallback_non_mapping_raises(tmp_path: Path) -> None:
     )
     import baps.core.run as run_module
 
-    with pytest.raises(
-        ValueError, match="roles.create_game.fallback.*must be a mapping"
-    ):
+    with pytest.raises(ValueError, match="roles.create_game.fallback.*must be a mapping"):
         run_module.resolve_run_config(args)
 
 
 def test_build_fallback_client_for_role_returns_none_when_no_fallback() -> None:
-    config = _make_run_config(
-        spec_roles={"create_game": {"backend": "ollama", "model": "gemma4:e4b"}}
-    )
+    config = _make_run_config(spec_roles={"create_game": {"backend": "ollama", "model": "gemma4:e4b"}})
     result = _real_build_fallback_client_for_role("create_game", config)
     assert result is None
 
@@ -837,9 +825,7 @@ def test_spec_role_deep_fallback_invalid_backend_raises(tmp_path: Path) -> None:
 
 
 def testbuild_fallback_chain_for_role_returns_empty_when_no_fallback() -> None:
-    config = _make_run_config(
-        spec_roles={"create_game": {"backend": "ollama", "model": "gemma4:e4b"}}
-    )
+    config = _make_run_config(spec_roles={"create_game": {"backend": "ollama", "model": "gemma4:e4b"}})
     chain = _realbuild_fallback_chain_for_role("create_game", config)
     assert chain == []
 
@@ -899,11 +885,7 @@ def test_create_game_fallback_chain_escalates_through_all_links(monkeypatch) -> 
 
     def _chain(role, cfg):
         del cfg
-        return (
-            [("gemma4:26b", fail_client), ("gemma4:72b", success_client)]
-            if role == "create_game"
-            else []
-        )
+        return [("gemma4:26b", fail_client), ("gemma4:72b", success_client)] if role == "create_game" else []
 
     monkeypatch.setattr("baps.game.engine.build_fallback_chain_for_role", _chain)
     monkeypatch.setattr("baps.game.engine.build_fallback_chain_for_role", _chain)
@@ -934,11 +916,7 @@ def test_create_game_chain_exhaustion_raises_runtime_error(monkeypatch) -> None:
 
     def _chain(role, cfg):
         del cfg
-        return (
-            [("gemma4:26b", fail_client1), ("gemma4:72b", fail_client2)]
-            if role == "create_game"
-            else []
-        )
+        return [("gemma4:26b", fail_client1), ("gemma4:72b", fail_client2)] if role == "create_game" else []
 
     monkeypatch.setattr("baps.game.engine.build_fallback_chain_for_role", _chain)
     monkeypatch.setattr("baps.game.engine.build_fallback_chain_for_role", _chain)

@@ -92,12 +92,7 @@ def _recover_malformed_coding_delta_json(text: str) -> dict[str, object] | None:
     operation_match = re.search(r'"operation"\s*:\s*"([^"]+)"', text)
     path_match = re.search(r'"path"\s*:\s*"([^"]+)"', text)
     content_start_match = re.search(r'"content"\s*:\s*"', text)
-    if (
-        artifact_match is None
-        or operation_match is None
-        or path_match is None
-        or content_start_match is None
-    ):
+    if artifact_match is None or operation_match is None or path_match is None or content_start_match is None:
         return None
 
     start = content_start_match.end()
@@ -143,14 +138,10 @@ def _recover_malformed_coding_delta_json(text: str) -> dict[str, object] | None:
     return parsed
 
 
-def parse_coding_delta_json(
-    text: str, workspace: Path | None = None
-) -> DeltaCodingState | DeltaCodingBatchState:
+def parse_coding_delta_json(text: str, workspace: Path | None = None) -> DeltaCodingState | DeltaCodingBatchState:
     """Parse Blue model text output into a validated coding delta, with malformed-JSON recovery."""
     try:
-        parsed, _ = parse_model_output(
-            text, _BLUE_CODING_KEYS, context="blue:coding", workspace=workspace
-        )
+        parsed, _ = parse_model_output(text, _BLUE_CODING_KEYS, context="blue:coding", workspace=workspace)
     except ValueError as exc:
         if "must be valid JSON" not in str(exc):
             raise
@@ -158,9 +149,7 @@ def parse_coding_delta_json(
         if parsed is None:
             raise
     if not _BLUE_CODING_KEYS.issubset(parsed.keys()):
-        raise ValueError(
-            "blue model output must contain keys: artifact_id, operation, payload"
-        )
+        raise ValueError("blue model output must contain keys: artifact_id, operation, payload")
 
     _fix_delta_file_content_quotes(parsed)
 
@@ -169,9 +158,7 @@ def parse_coding_delta_json(
         try:
             delta = DeltaCodingBatchState.model_validate(parsed)
         except Exception as exc:
-            raise ValueError(
-                f"blue model output failed DeltaCodingBatchState validation: {exc}"
-            ) from exc
+            raise ValueError(f"blue model output failed DeltaCodingBatchState validation: {exc}") from exc
         validate_coding_write_files_purity(delta)
         return delta
 
@@ -179,17 +166,13 @@ def parse_coding_delta_json(
         try:
             delta_delete = DeltaDeleteCodingState.model_validate(parsed)
         except Exception as exc:
-            raise ValueError(
-                f"blue model output failed DeltaDeleteCodingState validation: {exc}"
-            ) from exc
+            raise ValueError(f"blue model output failed DeltaDeleteCodingState validation: {exc}") from exc
         validate_file_path(delta_delete.payload.path)
         return delta_delete
 
     try:
         delta = DeltaCodingState.model_validate(parsed)
     except Exception as exc:
-        raise ValueError(
-            f"blue model output failed DeltaCodingState validation: {exc}"
-        ) from exc
+        raise ValueError(f"blue model output failed DeltaCodingState validation: {exc}") from exc
     validate_coding_write_file_artifact_purity(delta)
     return delta

@@ -14,27 +14,12 @@ if TYPE_CHECKING:
     from baps.state.state import CodeFile
 
 
-_CONFTEST_CONTENT = (
-    "import sys, os\n"
-    'sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))\n'
-)
+_CONFTEST_CONTENT = 'import sys, os\nsys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))\n'
 
-_GITIGNORE_CONTENT = (
-    "__pycache__/\n"
-    "*.pyc\n"
-    "*.pyo\n"
-    ".pytest_cache/\n"
-    "*.egg-info/\n"
-    "dist/\n"
-    "build/\n"
-    ".venv/\n"
-    "uv.lock\n"
-)
+_GITIGNORE_CONTENT = "__pycache__/\n*.pyc\n*.pyo\n.pytest_cache/\n*.egg-info/\ndist/\nbuild/\n.venv/\nuv.lock\n"
 
 
-def _format_function_sig(
-    node: ast.FunctionDef | ast.AsyncFunctionDef, indent: str
-) -> list[str]:
+def _format_function_sig(node: ast.FunctionDef | ast.AsyncFunctionDef, indent: str) -> list[str]:
     """Return lines for a function/method signature + optional docstring first line."""
     result: list[str] = []
     for dec in node.decorator_list:
@@ -89,21 +74,13 @@ class PythonLanguagePlugin:
         changed = False
 
         conftest_path = project_path / "conftest.py"
-        conftest_before = (
-            conftest_path.read_text(encoding="utf-8")
-            if conftest_path.exists()
-            else None
-        )
+        conftest_before = conftest_path.read_text(encoding="utf-8") if conftest_path.exists() else None
         if conftest_before != _CONFTEST_CONTENT:
             conftest_path.write_text(_CONFTEST_CONTENT, encoding="utf-8")
             changed = True
 
         gitignore_path = project_path / ".gitignore"
-        gitignore_before = (
-            gitignore_path.read_text(encoding="utf-8")
-            if gitignore_path.exists()
-            else None
-        )
+        gitignore_before = gitignore_path.read_text(encoding="utf-8") if gitignore_path.exists() else None
         if gitignore_before != _GITIGNORE_CONTENT:
             gitignore_path.write_text(_GITIGNORE_CONTENT, encoding="utf-8")
             changed = True
@@ -117,9 +94,7 @@ class PythonLanguagePlugin:
         else:
             from baps.tools.sandbox import run_sandboxed
 
-            command, completed = run_sandboxed(
-                project_path, sandbox_mode, self.test_command, self.docker_image
-            )
+            command, completed = run_sandboxed(project_path, sandbox_mode, self.test_command, self.docker_image)
         return VerificationResult(
             command=command,
             cwd=str(project_path),
@@ -183,11 +158,7 @@ class PythonLanguagePlugin:
             lines.append(f'"""{module_doc.splitlines()[0].strip()}"""')
             lines.append("")
 
-        import_lines = [
-            ast.unparse(n)
-            for n in tree.body
-            if isinstance(n, (ast.Import, ast.ImportFrom))
-        ]
+        import_lines = [ast.unparse(n) for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom))]
         if import_lines:
             lines.extend(import_lines)
             lines.append("")
@@ -195,9 +166,7 @@ class PythonLanguagePlugin:
         for node in tree.body:
             if isinstance(node, ast.ClassDef):
                 bases = ", ".join(ast.unparse(b) for b in node.bases)
-                lines.append(
-                    "class " + node.name + (f"({bases})" if bases else "") + ":"
-                )
+                lines.append("class " + node.name + (f"({bases})" if bases else "") + ":")
                 cls_doc = ast.get_docstring(node)
                 if cls_doc is not None:
                     lines.append(f'    """{cls_doc.splitlines()[0].strip()}"""')
@@ -248,16 +217,10 @@ class PythonLanguagePlugin:
 
         if target is None:
             available = [
-                n.name
-                for n in tree.body
-                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                n.name for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
             ]
-            available_str = (
-                ", ".join(f"'{n}'" for n in available) if available else "(none)"
-            )
-            return (
-                f"Entity '{entity_id}' not found. Available entities: {available_str}"
-            )
+            available_str = ", ".join(f"'{n}'" for n in available) if available else "(none)"
+            return f"Entity '{entity_id}' not found. Available entities: {available_str}"
 
         if filter in (None, "full"):
             src_lines = file.content.splitlines()

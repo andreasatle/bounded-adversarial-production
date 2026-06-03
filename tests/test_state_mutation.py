@@ -153,20 +153,14 @@ def test_build_default_registry_adapters_validate_artifacts_unchanged() -> None:
     registry = build_default_state_artifact_registry()
     document_artifact = StateArtifact(id="doc-1", kind="document")
 
-    assert (
-        registry.resolve("document").validate_artifact(document_artifact)
-        is document_artifact
-    )
+    assert registry.resolve("document").validate_artifact(document_artifact) is document_artifact
 
 
 def test_build_default_registry_adapters_project_deterministic_strings() -> None:
     registry = build_default_state_artifact_registry()
     document_artifact = StateArtifact(id="doc-1", kind="document")
 
-    assert (
-        registry.resolve("document").project_artifact(document_artifact)
-        == "document artifact: doc-1"
-    )
+    assert registry.resolve("document").project_artifact(document_artifact) == "document artifact: doc-1"
 
 
 def test_build_default_registry_returns_independent_instances() -> None:
@@ -189,10 +183,7 @@ def test_modifying_one_default_registry_does_not_affect_another() -> None:
     second = build_default_state_artifact_registry()
     first.register(CustomAdapter())
 
-    assert (
-        first.resolve("custom").project_artifact(StateArtifact(id="x", kind="custom"))
-        == "custom artifact: x"
-    )
+    assert first.resolve("custom").project_artifact(StateArtifact(id="x", kind="custom")) == "custom artifact: x"
     with pytest.raises(ValueError, match="unknown artifact kind"):
         second.resolve("custom")
 

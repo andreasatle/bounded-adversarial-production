@@ -9,9 +9,7 @@ def testapply_delta_to_files_write_file() -> None:
     delta = state_module.DeltaCodingState(
         artifact_id="art",
         operation="write_file",
-        payload=state_module.WriteFileDelta(
-            file=state_module.CodeFile(path="src/a.py", content="new")
-        ),
+        payload=state_module.WriteFileDelta(file=state_module.CodeFile(path="src/a.py", content="new")),
     )
     result = apply_delta_to_files(existing, delta)
     assert len(result) == 1
@@ -70,9 +68,7 @@ def test_verify_candidate_returns_none_when_no_test_files() -> None:
     delta = state_module.DeltaCodingState(
         artifact_id="art",
         operation="write_file",
-        payload=state_module.WriteFileDelta(
-            file=state_module.CodeFile(path="src/bar.py", content="y = 2")
-        ),
+        payload=state_module.WriteFileDelta(file=state_module.CodeFile(path="src/bar.py", content="y = 2")),
     )
     result = CodingProjectAdapter().verify_candidate(delta, state, "art")
     assert result is None
@@ -85,11 +81,7 @@ def test_verify_candidate_passes_when_tests_pass(tmp_path) -> None:
         artifacts=(
             state_module.CodingArtifact(
                 id="art",
-                files=(
-                    state_module.CodeFile(
-                        path="src/calc.py", content="def add(a, b):\n    return a + b\n"
-                    ),
-                ),
+                files=(state_module.CodeFile(path="src/calc.py", content="def add(a, b):\n    return a + b\n"),),
             ),
         ),
     )
@@ -109,9 +101,7 @@ def test_verify_candidate_passes_when_tests_pass(tmp_path) -> None:
             )
         ),
     )
-    result = CodingProjectAdapter().verify_candidate(
-        delta, state, "art", sandbox_mode="none"
-    )
+    result = CodingProjectAdapter().verify_candidate(delta, state, "art", sandbox_mode="none")
     assert result is not None
     assert result.passed is True
     assert result.exit_code == 0
@@ -124,11 +114,7 @@ def test_verify_candidate_fails_when_tests_fail() -> None:
         artifacts=(
             state_module.CodingArtifact(
                 id="art",
-                files=(
-                    state_module.CodeFile(
-                        path="src/calc.py", content="def add(a, b):\n    return 99\n"
-                    ),
-                ),
+                files=(state_module.CodeFile(path="src/calc.py", content="def add(a, b):\n    return 99\n"),),
             ),
         ),
     )
@@ -148,9 +134,7 @@ def test_verify_candidate_fails_when_tests_fail() -> None:
             )
         ),
     )
-    result = CodingProjectAdapter().verify_candidate(
-        delta, state, "art", sandbox_mode="none"
-    )
+    result = CodingProjectAdapter().verify_candidate(delta, state, "art", sandbox_mode="none")
     assert result is not None
     assert result.passed is False
     assert result.exit_code == 1

@@ -27,6 +27,4 @@ def test_main_runtime_path_avoids_dict_style_runtime_config_access() -> None:
                 line = text.count("\n", 0, match.start()) + 1
                 violations.append(f"{rel}:{line}: {pattern}")
 
-    assert violations == [], (
-        "Found forbidden dict-style runtime config access:\n" + "\n".join(violations)
-    )
+    assert violations == [], "Found forbidden dict-style runtime config access:\n" + "\n".join(violations)

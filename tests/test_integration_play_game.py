@@ -30,9 +30,7 @@ def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
                 metadata={},
             )
 
-        def render_blue_prompt(
-            self, _state_view, _game_spec, _attempt_number, _previous_feedback
-        ):
+        def render_blue_prompt(self, _state_view, _game_spec, _attempt_number, _previous_feedback):
             self.calls.append("render_blue_prompt")
             return "blue-prompt"
 
@@ -41,20 +39,14 @@ def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
 
         def build_blue_tools(self):
             self.calls.append("build_blue_tools")
-            return [
-                ToolDefinition(
-                    name="append_section", description="Append", parameters={}
-                )
-            ]
+            return [ToolDefinition(name="append_section", description="Append", parameters={})]
 
         def tool_call_to_delta(self, _tool_call):
             self.calls.append("tool_call_to_delta")
             return state_module.DeltaDocumentState(
                 artifact_id="main-document",
                 operation="append_section",
-                payload=state_module.AppendSectionDelta(
-                    section=state_module.Section(title="Intro", body="Body")
-                ),
+                payload=state_module.AppendSectionDelta(section=state_module.Section(title="Intro", body="Body")),
             )
 
     adapter = _PlayAdapter()
@@ -85,9 +77,7 @@ def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
             ]
         ),
         red_model_client=FakeModelClient(['{"disposition":"accept","rationale":"ok"}']),
-        referee_model_client=FakeModelClient(
-            ['{"disposition":"accept","rationale":"ok"}']
-        ),
+        referee_model_client=FakeModelClient(['{"disposition":"accept","rationale":"ok"}']),
     )
     assert isinstance(delta, state_module.DeltaDocumentState)
     assert adapter.calls == [
@@ -119,9 +109,7 @@ def test_play_game_pre_seeds_verification_result_as_previous_feedback(
                 metadata={},
             )
 
-        def render_blue_prompt(
-            self, state_view, game_spec, attempt_number, previous_feedback
-        ):
+        def render_blue_prompt(self, state_view, game_spec, attempt_number, previous_feedback):
             captured_feedback.append(previous_feedback)
             return "blue prompt"
 
@@ -165,9 +153,7 @@ def test_play_game_pre_seeds_verification_result_as_previous_feedback(
         state,
         game_spec,
         adapter=_CapturingAdapter(),
-        model_client=FakeModelClient(
-            tool_responses=[None], responses=["not valid json"]
-        ),
+        model_client=FakeModelClient(tool_responses=[None], responses=["not valid json"]),
         red_model_client=FakeModelClient(responses=[]),
         referee_model_client=FakeModelClient(responses=[]),
         verification_result=vr,

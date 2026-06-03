@@ -97,9 +97,7 @@ def test_render_source_content_includes_file_content(tmp_path: Path) -> None:
     f = tmp_path / "mod.py"
     f.write_text("def foo():\n    return 42\n")
     files = [f]
-    content = _render_source_content(
-        files, tmp_path, max_file_lines=50, max_total_lines=500
-    )
+    content = _render_source_content(files, tmp_path, max_file_lines=50, max_total_lines=500)
     assert "mod.py" in content
     assert "def foo()" in content
     assert "return 42" in content
@@ -109,9 +107,7 @@ def test_render_source_content_truncates_long_files(tmp_path: Path) -> None:
     f = tmp_path / "big.py"
     f.write_text("\n".join(f"line{i}" for i in range(200)))
     files = [f]
-    content = _render_source_content(
-        files, tmp_path, max_file_lines=10, max_total_lines=500
-    )
+    content = _render_source_content(files, tmp_path, max_file_lines=10, max_total_lines=500)
     assert "more lines" in content
     assert "line0" in content
     assert "line199" not in content
@@ -121,9 +117,7 @@ def test_render_source_content_stops_at_total_budget(tmp_path: Path) -> None:
     for i in range(5):
         (tmp_path / f"mod{i}.py").write_text("\n".join(f"x{i}_{j}" for j in range(100)))
     files = _collect_source_files(tmp_path, ("*.py",))
-    content = _render_source_content(
-        files, tmp_path, max_file_lines=100, max_total_lines=250
-    )
+    content = _render_source_content(files, tmp_path, max_file_lines=100, max_total_lines=250)
     assert "total line budget reached" in content
 
 
@@ -352,9 +346,7 @@ def test_audit_red_prompt_supplement_is_security_focused(tmp_path: Path) -> None
     delta = state_module.DeltaDocumentState(
         artifact_id="report",
         operation="append_section",
-        payload=state_module.AppendSectionDelta(
-            section=state_module.Section(title="Finding", body="body")
-        ),
+        payload=state_module.AppendSectionDelta(section=state_module.Section(title="Finding", body="body")),
     )
     supplement = adapter.render_red_prompt_supplement(view, game_spec, delta, None)
     assert "exploitable" in supplement
@@ -383,9 +375,7 @@ def test_audit_referee_prompt_supplement_has_accept_reject_criteria(
     delta = state_module.DeltaDocumentState(
         artifact_id="report",
         operation="append_section",
-        payload=state_module.AppendSectionDelta(
-            section=state_module.Section(title="Finding", body="body")
-        ),
+        payload=state_module.AppendSectionDelta(section=state_module.Section(title="Finding", body="body")),
     )
     supplement = adapter.render_referee_prompt_supplement(view, game_spec, delta, None)
     assert "Accept" in supplement
@@ -440,9 +430,7 @@ def test_audit_tool_call_modify_section() -> None:
 
 def test_audit_tool_call_unexpected_tool_raises() -> None:
     adapter = AuditProjectAdapter()
-    tool_call = ToolCall(
-        name="write_file", arguments={"path": "evil.py", "content": "rm -rf"}
-    )
+    tool_call = ToolCall(name="write_file", arguments={"path": "evil.py", "content": "rm -rf"})
     with pytest.raises(ValueError, match="unexpected tool"):
         adapter.tool_call_to_delta(tool_call)
 
@@ -547,9 +535,7 @@ def test_audit_export_writes_markdown(tmp_path: Path) -> None:
             "source_path": str(tmp_path),
         }
     )
-    state = _append_finding(
-        state, "report", "Buffer Overflow", "Found in parser.c line 99."
-    )
+    state = _append_finding(state, "report", "Buffer Overflow", "Found in parser.c line 99.")
     out = tmp_path / "report.md"
     changed = adapter.export_state(state, out, "report")
     assert changed is True
@@ -591,17 +577,13 @@ def test_audit_adapter_registered_in_default_adapters() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _append_finding(
-    state: state_module.State, artifact_id: str, title: str, body: str
-) -> state_module.State:
+def _append_finding(state: state_module.State, artifact_id: str, title: str, body: str) -> state_module.State:
     from baps.state.state import apply_state_delta
 
     delta = state_module.DeltaDocumentState(
         artifact_id=artifact_id,
         operation="append_section",
-        payload=state_module.AppendSectionDelta(
-            section=state_module.Section(title=title, body=body)
-        ),
+        payload=state_module.AppendSectionDelta(section=state_module.Section(title=title, body=body)),
     )
     return apply_state_delta(state, delta)
 
@@ -631,18 +613,14 @@ def test_fence_lang_unknown_extension_returns_empty() -> None:
 def test_render_source_content_uses_correct_fence_for_yaml(tmp_path: Path) -> None:
     f = tmp_path / "config.yaml"
     f.write_text("key: value\n")
-    content = _render_source_content(
-        [f], tmp_path, max_file_lines=50, max_total_lines=500
-    )
+    content = _render_source_content([f], tmp_path, max_file_lines=50, max_total_lines=500)
     assert "```yaml" in content
 
 
 def test_render_source_content_uses_correct_fence_for_python(tmp_path: Path) -> None:
     f = tmp_path / "mod.py"
     f.write_text("x = 1\n")
-    content = _render_source_content(
-        [f], tmp_path, max_file_lines=50, max_total_lines=500
-    )
+    content = _render_source_content([f], tmp_path, max_file_lines=50, max_total_lines=500)
     assert "```python" in content
 
 
@@ -651,9 +629,7 @@ def test_render_source_content_unknown_extension_uses_empty_fence(
 ) -> None:
     f = tmp_path / "Makefile"
     f.write_text("all:\n\techo done\n")
-    content = _render_source_content(
-        [f], tmp_path, max_file_lines=50, max_total_lines=500
-    )
+    content = _render_source_content([f], tmp_path, max_file_lines=50, max_total_lines=500)
     assert "```\n" in content
 
 

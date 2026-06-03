@@ -45,10 +45,7 @@ _JSON_ONLY_INSTRUCTION = (
 )
 
 _MAX_RETRIES = 2
-_CORRECTION_PROMPT = (
-    "Your previous response was not valid JSON. "
-    "Respond with only a JSON object and nothing else."
-)
+_CORRECTION_PROMPT = "Your previous response was not valid JSON. Respond with only a JSON object and nothing else."
 _OBJECT_CORRECTION_PROMPT = (
     "Your previous response was valid JSON but not an object. "
     "Respond with only a JSON object (starting with { and ending with }) and nothing else."
@@ -83,9 +80,7 @@ def extract_json_candidate(text: str) -> str:
        recover JSON embedded in prose.
     """
     if len(text.encode("utf-8")) > _MAX_DELTA_BYTES:
-        raise ValueError(
-            f"model response exceeds maximum allowed size ({_MAX_DELTA_BYTES} bytes)"
-        )
+        raise ValueError(f"model response exceeds maximum allowed size ({_MAX_DELTA_BYTES} bytes)")
     normalized = text.strip()
     fence_match = _FENCE_RE.match(normalized)
     if fence_match is not None:
@@ -226,13 +221,11 @@ def parse_model_output(
         try:
             raw = retry_fn(next_prompt)
         except Exception as exc:  # noqa: BLE001
-            logger.debug(
-                "%s: retry_fn raised on attempt %d: %s", context, attempt + 1, exc
-            )
+            logger.debug("%s: retry_fn raised on attempt %d: %s", context, attempt + 1, exc)
             break
         normalized = extract_json_candidate(raw)
-        result, next_prompt, failure_kind, stripped_keys, react_rescued = (
-            _try_normalize(normalized, expected_keys, context, workspace)
+        result, next_prompt, failure_kind, stripped_keys, react_rescued = _try_normalize(
+            normalized, expected_keys, context, workspace
         )
         last_failure_kind = failure_kind
         if result is not None:
@@ -276,11 +269,7 @@ def parse_model_output(
 def render_output_schema_hint(model: type[BaseModel]) -> str:
     """Return a prompt block describing the exact JSON keys and types expected."""
     fields = {
-        name: (
-            info.annotation.__name__
-            if hasattr(info.annotation, "__name__")
-            else str(info.annotation)
-        )
+        name: (info.annotation.__name__ if hasattr(info.annotation, "__name__") else str(info.annotation))
         for name, info in model.model_fields.items()
     }
     return (
@@ -295,9 +284,7 @@ def wrap_json_prompt(text: str) -> str:
     return f"{_JSON_ONLY_INSTRUCTION}\n\n{text}\n\n{_JSON_ONLY_INSTRUCTION}"
 
 
-def _log_stripped_keys(
-    workspace: Path | None, stripped_keys: list[str], context: str
-) -> None:
+def _log_stripped_keys(workspace: Path | None, stripped_keys: list[str], context: str) -> None:
     """Handle log stripped keys."""
     if workspace is None:
         return

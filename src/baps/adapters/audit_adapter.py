@@ -99,9 +99,7 @@ def _embed_source_path(northstar_markdown: str, source_path: str) -> str:
 def _get_northstar_from_state(state: State) -> str:
     """Extract the northstar markdown content stored in the audit meta artifact."""
     for artifact in state.artifacts:
-        if isinstance(artifact, DocumentArtifact) and artifact.id.startswith(
-            _AUDIT_META_ARTIFACT_ID_PREFIX
-        ):
+        if isinstance(artifact, DocumentArtifact) and artifact.id.startswith(_AUDIT_META_ARTIFACT_ID_PREFIX):
             for section in artifact.sections:
                 if section.title == "northstar":
                     return section.body
@@ -152,9 +150,7 @@ def _render_source_listing(files: list[Path], source_path: Path) -> str:
     for f in files:
         rel = f.relative_to(source_path)
         try:
-            line_count = len(
-                f.read_text(encoding="utf-8", errors="replace").splitlines()
-            )
+            line_count = len(f.read_text(encoding="utf-8", errors="replace").splitlines())
         except OSError:
             line_count = 0
         lines.append(f"  {rel} ({line_count} lines)")
@@ -195,9 +191,7 @@ def _render_source_content(
     return "\n\n".join(parts)
 
 
-def build_audit_create_game_state_view(
-    state: State, config: dict[str, Any]
-) -> StateView:
+def build_audit_create_game_state_view(state: State, config: dict[str, Any]) -> StateView:
     """Build and return audit create game state view."""
     artifact_id = config_artifact_id(config)
     artifact = document_artifact_from_state(state, artifact_id)
@@ -222,19 +216,13 @@ def build_audit_create_game_state_view(
     if artifact.sections:
         for section in artifact.sections:
             is_stale = (
-                current_hash is not None
-                and section.source_hash is not None
-                and section.source_hash != current_hash
+                current_hash is not None and section.source_hash is not None and section.source_hash != current_hash
             )
             if is_stale:
                 stale_count += 1
             stale_marker = " [STALE — source changed]" if is_stale else ""
-            section_lines.append(
-                f"### {sanitize_model_title(section.title)}{stale_marker}"
-            )
-            body_preview = section.body[:300] + (
-                "..." if len(section.body) > 300 else ""
-            )
+            section_lines.append(f"### {sanitize_model_title(section.title)}{stale_marker}")
+            body_preview = section.body[:300] + ("..." if len(section.body) > 300 else "")
             section_lines.append(sanitize_model_string(body_preview))
             section_lines.append("")
     else:
@@ -278,9 +266,7 @@ def build_audit_play_game_state_view(state: State, game_spec: GameSpec) -> State
     source_path = _extract_source_path(northstar_markdown)
     if source_path is not None and source_path.exists():
         files = _collect_source_files(source_path, _DEFAULT_SOURCE_PATTERNS)
-        source_content = _render_source_content(
-            files, source_path, _DEFAULT_MAX_FILE_LINES, _DEFAULT_MAX_TOTAL_LINES
-        )
+        source_content = _render_source_content(files, source_path, _DEFAULT_MAX_FILE_LINES, _DEFAULT_MAX_TOTAL_LINES)
         source_header = f"Source root: {source_path}"
     else:
         source_content = "(source_path not configured or does not exist)"
@@ -402,9 +388,7 @@ class AuditProjectAdapter:
         if not source_path.strip():
             raise ValueError("source_path must be non-empty for audit project type")
         northstar_with_meta = _embed_source_path(northstar_markdown, source_path)
-        fingerprint = hashlib.sha256(northstar_with_meta.encode("utf-8")).hexdigest()[
-            :12
-        ]
+        fingerprint = hashlib.sha256(northstar_with_meta.encode("utf-8")).hexdigest()[:12]
         meta_artifact = DocumentArtifact(
             id=f"{_AUDIT_META_ARTIFACT_ID_PREFIX}{fingerprint}",
             sections=(Section(title="northstar", body=northstar_with_meta),),
@@ -437,9 +421,7 @@ class AuditProjectAdapter:
         del state, config, state_view, verification_result
         return _CREATE_GAME_SUPPLEMENT
 
-    def normalize_game_spec(
-        self, game_spec: GameSpec, state: State, config: dict[str, object]
-    ) -> GameSpec:
+    def normalize_game_spec(self, game_spec: GameSpec, state: State, config: dict[str, object]) -> GameSpec:
         """Normalize and return game spec."""
         del state, config
         return game_spec
@@ -454,9 +436,7 @@ class AuditProjectAdapter:
         del summarization_context
         source_path = _extract_source_path(_get_northstar_from_state(state))
         if source_path is not None and source_path.exists():
-            self._current_source_hash = _compute_source_hash(
-                source_path, _DEFAULT_SOURCE_PATTERNS
-            )
+            self._current_source_hash = _compute_source_hash(source_path, _DEFAULT_SOURCE_PATTERNS)
         else:
             self._current_source_hash = None
         return build_audit_play_game_state_view(state, game_spec)
@@ -530,12 +510,7 @@ class AuditProjectAdapter:
         )
         finding_tools = []
         artifact = next(
-            (
-                a
-                for a in state.artifacts
-                if isinstance(a, DocumentArtifact)
-                and not a.id.startswith("audit:meta:")
-            ),
+            (a for a in state.artifacts if isinstance(a, DocumentArtifact) and not a.id.startswith("audit:meta:")),
             None,
         )
         if artifact is not None and artifact.sections:
@@ -550,9 +525,7 @@ class AuditProjectAdapter:
             return finding_tools
         return [source_tool] + finding_tools
 
-    def execute_create_game_research_tool(
-        self, tool_name: str, tool_input: dict, state: State
-    ) -> str:
+    def execute_create_game_research_tool(self, tool_name: str, tool_input: dict, state: State) -> str:
         """Execute and return create game research tool."""
         if tool_name == "fetch_source_file":
             northstar_markdown = _get_northstar_from_state(state)
@@ -561,9 +534,7 @@ class AuditProjectAdapter:
                 return "tool_error: source_path not configured or does not exist"
             rel_path = tool_input.get("path", "")
             if not isinstance(rel_path, str) or not rel_path:
-                return (
-                    "tool_error: fetch_source_file requires a non-empty 'path' string"
-                )
+                return "tool_error: fetch_source_file requires a non-empty 'path' string"
             target = (source_path / rel_path).resolve()
             if not target.is_relative_to(source_path.resolve()):
                 return f"tool_error: path '{rel_path}' escapes source root"
@@ -571,11 +542,7 @@ class AuditProjectAdapter:
                 patterns = _DEFAULT_SOURCE_PATTERNS
                 files = _collect_source_files(source_path, patterns)
                 available = sorted(str(f.relative_to(source_path)) for f in files)
-                available_str = (
-                    ", ".join(f"'{p}'" for p in available[:20])
-                    if available
-                    else "(none)"
-                )
+                available_str = ", ".join(f"'{p}'" for p in available[:20]) if available else "(none)"
                 return f"File '{rel_path}' not found in source tree. Available files: {available_str}"
             try:
                 return target.read_text(encoding="utf-8", errors="replace")
@@ -583,12 +550,7 @@ class AuditProjectAdapter:
                 return f"tool_error: could not read '{rel_path}': {exc}"
 
         artifact = next(
-            (
-                a
-                for a in state.artifacts
-                if isinstance(a, DocumentArtifact)
-                and not a.id.startswith("audit:meta:")
-            ),
+            (a for a in state.artifacts if isinstance(a, DocumentArtifact) and not a.id.startswith("audit:meta:")),
             None,
         )
 
@@ -610,17 +572,13 @@ class AuditProjectAdapter:
         if tool_name == "fetch_module":
             module_id = tool_input.get("module_id", "")
             if not isinstance(module_id, str) or not module_id:
-                return (
-                    "tool_error: fetch_module requires a non-empty 'module_id' string"
-                )
+                return "tool_error: fetch_module requires a non-empty 'module_id' string"
             if artifact is None:
                 return "tool_error: no audit findings artifact found in state"
             section = next((s for s in artifact.sections if s.title == module_id), None)
             if section is None:
                 available = sorted(s.title for s in artifact.sections)
-                available_str = (
-                    ", ".join(f"'{t}'" for t in available) if available else "(none)"
-                )
+                available_str = ", ".join(f"'{t}'" for t in available) if available else "(none)"
                 return f"Finding '{module_id}' not found. Available findings: {available_str}"
             filter_val = tool_input.get("filter")
             if filter_val is not None and filter_val not in self.supported_filters():
@@ -749,9 +707,7 @@ class AuditProjectAdapter:
                     }
                 )
             except Exception as exc:
-                raise ValueError(
-                    f"tool call failed DeltaDocumentState validation: {exc}"
-                ) from exc
+                raise ValueError(f"tool call failed DeltaDocumentState validation: {exc}") from exc
         if tool_call.name == "modify_section":
             try:
                 artifact_id = str(args["artifact_id"])
@@ -771,9 +727,7 @@ class AuditProjectAdapter:
                     }
                 )
             except Exception as exc:
-                raise ValueError(
-                    f"tool call failed DeltaModifyDocumentState validation: {exc}"
-                ) from exc
+                raise ValueError(f"tool call failed DeltaModifyDocumentState validation: {exc}") from exc
         if tool_call.name == "no_finding":
             try:
                 artifact_id = str(args["artifact_id"])
@@ -796,18 +750,14 @@ class AuditProjectAdapter:
                     }
                 )
             except Exception as exc:
-                raise ValueError(
-                    f"tool call failed DeltaDocumentState validation: {exc}"
-                ) from exc
+                raise ValueError(f"tool call failed DeltaDocumentState validation: {exc}") from exc
         raise ValueError(f"unexpected tool: {tool_call.name!r}")
 
     def parse_blue_delta(self, text: str) -> DeltaState:
         """Parse and return blue delta."""
         from baps.state.state import DeltaDocumentState
 
-        _AUDIT_KEYS = frozenset(
-            {"artifact_id", "operation", "file", "rationale", "payload"}
-        )
+        _AUDIT_KEYS = frozenset({"artifact_id", "operation", "file", "rationale", "payload"})
         try:
             raw, _ = parse_model_output(text, _AUDIT_KEYS, context="blue:audit")
         except ValueError:
@@ -817,9 +767,7 @@ class AuditProjectAdapter:
             rationale = str(raw.get("rationale", ""))
             artifact_id = str(raw.get("artifact_id", ""))
             if not file or not rationale or not artifact_id:
-                raise ValueError(
-                    "no_finding delta missing required field (artifact_id, file, rationale)"
-                )
+                raise ValueError("no_finding delta missing required field (artifact_id, file, rationale)")
             return DeltaDocumentState.model_validate(
                 {
                     "artifact_id": artifact_id,
@@ -837,6 +785,4 @@ class AuditProjectAdapter:
 
     def export_state(self, state: State, output_path: Path, artifact_id: str) -> bool:
         """Export and return state."""
-        return export_document_artifact(
-            document_artifact_from_state(state, artifact_id), output_path
-        )
+        return export_document_artifact(document_artifact_from_state(state, artifact_id), output_path)

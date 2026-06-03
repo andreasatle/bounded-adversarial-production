@@ -99,9 +99,7 @@ def main() -> None:
         description="Render agent prompts from a baps workspace.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument(
-        "workspace", type=Path, help="Workspace directory (contains baps-config.json)"
-    )
+    parser.add_argument("workspace", type=Path, help="Workspace directory (contains baps-config.json)")
     parser.add_argument(
         "--output",
         "-o",
@@ -158,18 +156,12 @@ def main() -> None:
         play_view = adapter.build_state_view(state, game_spec)
         views["play_game"] = play_view.content
 
-        prompts["blue"] = adapter.render_blue_prompt(
-            play_view, game_spec, attempt_number=1, previous_feedback=None
-        )
+        prompts["blue"] = adapter.render_blue_prompt(play_view, game_spec, attempt_number=1, previous_feedback=None)
 
         delta = _find_delta(last_play, project_type)
         if delta is not None:
-            red_supplement = render_red_prompt_supplement_with_adapter(
-                adapter, play_view, game_spec, delta, None
-            )
-            prompts["red"] = render_red_prompt(
-                play_view, game_spec, delta, prompt_supplement=red_supplement
-            )
+            red_supplement = render_red_prompt_supplement_with_adapter(adapter, play_view, game_spec, delta, None)
+            prompts["red"] = render_red_prompt(play_view, game_spec, delta, prompt_supplement=red_supplement)
 
             red_finding = None
             for attempt in reversed(last_play.get("attempts", [])):

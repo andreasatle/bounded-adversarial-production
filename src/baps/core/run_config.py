@@ -149,11 +149,7 @@ def resolve_run_config(args: argparse.Namespace) -> RunConfig:
     else:
         spec_path = None
 
-    workspace_raw = (
-        args.workspace
-        if args.workspace is not None
-        else spec_data.get("workspace", _DEFAULT_WORKSPACE)
-    )
+    workspace_raw = args.workspace if args.workspace is not None else spec_data.get("workspace", _DEFAULT_WORKSPACE)
 
     workspace_settings: dict[str, object] = {}
     if getattr(args, "command", None) == "start":
@@ -171,13 +167,9 @@ def resolve_run_config(args: argparse.Namespace) -> RunConfig:
     project_type_raw = _resolve(args.project_type, "project_type")
     artifact_id_raw = _resolve(args.artifact_id, "artifact_id")
     if "required_sections" in spec_data:
-        raise ValueError(
-            "required_sections is no longer supported; declare required structure in northstar_markdown"
-        )
+        raise ValueError("required_sections is no longer supported; declare required structure in northstar_markdown")
     if spec_data:
-        unknown_keys = sorted(
-            set(spec_data.keys()) - _KNOWN_SPEC_KEYS - {"required_sections"}
-        )
+        unknown_keys = sorted(set(spec_data.keys()) - _KNOWN_SPEC_KEYS - {"required_sections"})
         if unknown_keys:
             raise ValueError(f"spec file contains unknown keys: {unknown_keys}")
     northstar_markdown_raw = _resolve(None, "northstar_markdown")
@@ -191,11 +183,7 @@ def resolve_run_config(args: argparse.Namespace) -> RunConfig:
         northstar_markdown_raw = northstar_path.read_text(encoding="utf-8")
     goal_raw = _resolve(args.goal, "goal")
     output_raw = _resolve(args.output, "output")
-    max_iterations_raw = (
-        args.max_iterations
-        if args.max_iterations is not None
-        else spec_data.get("max_iterations", 2)
-    )
+    max_iterations_raw = args.max_iterations if args.max_iterations is not None else spec_data.get("max_iterations", 2)
 
     workspace_str = _require_non_empty(str(workspace_raw), "workspace")
     if project_type_raw is None:
@@ -203,15 +191,9 @@ def resolve_run_config(args: argparse.Namespace) -> RunConfig:
     project_type = _require_non_empty(str(project_type_raw), "project_type")
     if project_type in {"document", "coding"} and artifact_id_raw is None:
         raise ValueError("artifact_id must be non-empty")
-    artifact_id = (
-        _require_non_empty(str(artifact_id_raw), "artifact_id")
-        if artifact_id_raw is not None
-        else ""
-    )
+    artifact_id = _require_non_empty(str(artifact_id_raw), "artifact_id") if artifact_id_raw is not None else ""
     if goal_raw is None:
-        raise ValueError(
-            "goal is required: provide --goal, or set 'goal' in the spec/workspace config"
-        )
+        raise ValueError("goal is required: provide --goal, or set 'goal' in the spec/workspace config")
     goal = _require_non_empty(str(goal_raw), "goal")
     northstar_markdown = _require_non_empty(
         str(northstar_markdown_raw) if northstar_markdown_raw is not None else goal,
@@ -220,9 +202,7 @@ def resolve_run_config(args: argparse.Namespace) -> RunConfig:
     workspace = Path(workspace_str)
 
     if output_raw is None:
-        raise ValueError(
-            "output is required: provide --output, or set 'output' in the spec/workspace config"
-        )
+        raise ValueError("output is required: provide --output, or set 'output' in the spec/workspace config")
     output_str = _require_non_empty(str(output_raw), "output")
     output_path = resolve_output_path(workspace, output_str)
 
@@ -237,9 +217,7 @@ def resolve_run_config(args: argparse.Namespace) -> RunConfig:
     source_path_raw = _resolve(None, "source_path")
     source_path = str(source_path_raw) if source_path_raw is not None else None
     source_include_raw = spec_data.get("source_include")
-    source_include = (
-        list(source_include_raw) if isinstance(source_include_raw, list) else None
-    )
+    source_include = list(source_include_raw) if isinstance(source_include_raw, list) else None
 
     language_raw = _resolve(getattr(args, "language", None), "language")
     language = str(language_raw) if language_raw is not None else ""
@@ -255,15 +233,11 @@ def resolve_run_config(args: argparse.Namespace) -> RunConfig:
     if spec_backend_raw is not None:
         spec_backend_value = str(spec_backend_raw).strip().lower()
         if spec_backend_value not in VALID_BACKENDS:
-            raise ValueError(
-                f"spec 'backend' must be one of {sorted(VALID_BACKENDS)}, got {spec_backend_value!r}"
-            )
+            raise ValueError(f"spec 'backend' must be one of {sorted(VALID_BACKENDS)}, got {spec_backend_value!r}")
         spec_backend = Backend(spec_backend_value)
 
     spec_model_raw = spec_data.get("model")
-    spec_model: str | None = (
-        str(spec_model_raw).strip() if spec_model_raw is not None else None
-    )
+    spec_model: str | None = str(spec_model_raw).strip() if spec_model_raw is not None else None
 
     roles_raw = spec_data.get("roles")
     spec_roles = parse_spec_roles(roles_raw) if roles_raw is not None else {}
@@ -304,19 +278,11 @@ def resolve_reset_targets(args: argparse.Namespace) -> tuple[Path, Path | None]:
     if args.spec:
         spec_data = _load_spec(Path(args.spec))
 
-    workspace_raw = (
-        args.workspace
-        if args.workspace is not None
-        else spec_data.get("workspace", _DEFAULT_WORKSPACE)
-    )
+    workspace_raw = args.workspace if args.workspace is not None else spec_data.get("workspace", _DEFAULT_WORKSPACE)
     workspace = Path(str(workspace_raw))
     workspace_settings = load_workspace_settings(workspace)
 
-    output_raw = (
-        args.output
-        if args.output is not None
-        else spec_data.get("output") or workspace_settings.get("output")
-    )
+    output_raw = args.output if args.output is not None else spec_data.get("output") or workspace_settings.get("output")
     if not output_raw or not str(output_raw).strip():
         return workspace, None
     return workspace, resolve_output_path(workspace, str(output_raw))

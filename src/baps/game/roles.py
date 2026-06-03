@@ -52,9 +52,7 @@ class AttemptRejectionFeedback(BaseModel):
     candidate_verification: VerificationResult | None = None
 
 
-PlayGameFeedback = (
-    PriorExportFeedback | BlueValidationFeedback | AttemptRejectionFeedback
-)
+PlayGameFeedback = PriorExportFeedback | BlueValidationFeedback | AttemptRejectionFeedback
 
 
 # Keep schemas colocated with role wiring to avoid duplicating literals.
@@ -129,9 +127,7 @@ class PlayGameContext:
     depth: int
     max_attempts: int
     debug_event_fn: Callable[[str, dict[str, Any]], None]
-    render_red_prompt_fn: Callable[
-        [StateView, GameSpec, DeltaState, VerificationResult | None, str], str
-    ]
+    render_red_prompt_fn: Callable[[StateView, GameSpec, DeltaState, VerificationResult | None, str], str]
     render_referee_prompt_fn: Callable[
         [StateView, GameSpec, DeltaState, RedFinding, VerificationResult | None, str],
         str,
@@ -210,18 +206,12 @@ def build_play_game_fallbacks(
     if config is None:
         return workspace, None, None
     try:
-        red_primary = (
-            resolve_backend_model(SpecRole.RED, config)[1]
-            if red_model_client is None
-            else "(provided)"
-        )
+        red_primary = resolve_backend_model(SpecRole.RED, config)[1] if red_model_client is None else "(provided)"
     except ValueError:
         red_primary = "(unknown)"
     try:
         referee_primary = (
-            resolve_backend_model(SpecRole.REFEREE, config)[1]
-            if referee_model_client is None
-            else "(provided)"
+            resolve_backend_model(SpecRole.REFEREE, config)[1] if referee_model_client is None else "(provided)"
         )
     except ValueError:
         referee_primary = "(unknown)"

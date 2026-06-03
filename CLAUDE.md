@@ -5,7 +5,16 @@ CODEBASE_INDEX.md, CODEBASE_API_*.md and CODEBASE_TEST.md are always current.
 Read CODEBASE_INDEX.md first, then only the relevant module index.
 Consult source files only after locating entities in the index.
 
+## Ruff (automatic)
+A PostToolUse hook runs after every Python file edit:
+  uv run ruff check --fix .
+  uv run ruff format .
+  uv run ruff check .
+Do not consider a Python-editing task complete until Ruff passes.
+If Ruff reports errors after the hook runs, fix them before finishing.
+
 ## Testing
+After Ruff passes, run the relevant pytest commands manually for the task.
 Run all tests: uv run pytest
 Use FakeModelClient for deterministic sequences.
 Never couple tests to live model output.

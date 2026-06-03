@@ -10,9 +10,7 @@ _TEST_COMMAND = "my_test_runner --verbose"
 _DOCKER_IMAGE = "example:1.0"
 
 
-def _make_completed(
-    returncode: int = 0, stdout: str = "", stderr: str = ""
-) -> subprocess.CompletedProcess:
+def _make_completed(returncode: int = 0, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess:
     result: subprocess.CompletedProcess = MagicMock(spec=subprocess.CompletedProcess)
     result.returncode = returncode
     result.stdout = stdout
@@ -27,10 +25,7 @@ def test_sandbox_none_warning_contains_expected_text() -> None:
     from baps.tools.sandbox import SANDBOX_NONE_WARNING
 
     assert "sandbox=none" in SANDBOX_NONE_WARNING
-    assert (
-        "unsafe" in SANDBOX_NONE_WARNING.lower()
-        or "unsandboxed" in SANDBOX_NONE_WARNING.lower()
-    )
+    assert "unsafe" in SANDBOX_NONE_WARNING.lower() or "unsandboxed" in SANDBOX_NONE_WARNING.lower()
     assert "production" in SANDBOX_NONE_WARNING.lower()
 
 
@@ -210,9 +205,7 @@ def test_run_sandboxed_docker_mode_calls_docker(tmp_path: Path) -> None:
 
     completed = _make_completed(returncode=0)
     with patch("baps.tools.sandbox.subprocess.run", return_value=completed) as mock_run:
-        command, result = run_sandboxed(
-            tmp_path, "docker", _TEST_COMMAND, _DOCKER_IMAGE
-        )
+        command, result = run_sandboxed(tmp_path, "docker", _TEST_COMMAND, _DOCKER_IMAGE)
 
     docker_args = mock_run.call_args[0][0]
     assert docker_args[0] == "docker"
@@ -302,13 +295,8 @@ def test_is_docker_unavailable_error_docker_desktop_string() -> None:
 def test_is_docker_unavailable_error_unrelated_error() -> None:
     from baps.tools.sandbox import is_docker_unavailable_error
 
-    assert (
-        is_docker_unavailable_error("OCI runtime error: container not found") is False
-    )
-    assert (
-        is_docker_unavailable_error("Error response from daemon: No such image")
-        is False
-    )
+    assert is_docker_unavailable_error("OCI runtime error: container not found") is False
+    assert is_docker_unavailable_error("Error response from daemon: No such image") is False
     assert is_docker_unavailable_error("") is False
 
 
@@ -317,9 +305,7 @@ def test_run_docker_raises_runtime_error_on_daemon_error(tmp_path: Path) -> None
 
     from baps.tools.sandbox import _run_docker
 
-    daemon_stderr = (
-        "Cannot connect to the Docker daemon at unix:///var/run/docker.sock."
-    )
+    daemon_stderr = "Cannot connect to the Docker daemon at unix:///var/run/docker.sock."
     completed = _make_completed(returncode=1, stderr=daemon_stderr)
     with patch("baps.tools.sandbox.subprocess.run", return_value=completed):
         with pytest.raises(RuntimeError, match="colima start"):

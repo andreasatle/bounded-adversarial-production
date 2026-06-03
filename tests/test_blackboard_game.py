@@ -93,9 +93,7 @@ def test_create_game_writes_no_new_game_event(tmp_path: Path) -> None:
         create_game(
             config,
             state,
-            model_client=FakeModelClient(
-                ['{"kind": "no_new_game", "reason": "All gaps closed."}']
-            ),
+            model_client=FakeModelClient(['{"kind": "no_new_game", "reason": "All gaps closed."}']),
         )
 
     games_path = config["workspace"] / "blackboard" / "games.jsonl"
@@ -182,9 +180,7 @@ def test_play_game_writes_play_game_blackboard_event(tmp_path: Path) -> None:
     assert "integration_eligible_delta" in entry
 
 
-def test_integration_writes_integration_blackboard_event(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_integration_writes_integration_blackboard_event(monkeypatch, tmp_path: Path) -> None:
     workspace = tmp_path / "ws-int-bb"
     monkeypatch.setattr(
         "sys.argv",
@@ -212,14 +208,9 @@ def test_integration_writes_integration_blackboard_event(
     games_path = workspace / "blackboard" / "games.jsonl"
     assert games_path.exists(), "games.jsonl must exist after a successful run"
 
-    lines = [
-        json.loads(line)
-        for line in games_path.read_text(encoding="utf-8").strip().splitlines()
-    ]
+    lines = [json.loads(line) for line in games_path.read_text(encoding="utf-8").strip().splitlines()]
     integration_events = [e for e in lines if e["event"] == "integration"]
-    assert len(integration_events) >= 1, (
-        "at least one integration event must be written"
-    )
+    assert len(integration_events) >= 1, "at least one integration event must be written"
 
     evt = integration_events[0]
     assert "created_at" in evt
@@ -238,9 +229,7 @@ def test_play_game_blackboard_final_disposition_accepted(tmp_path: Path) -> None
     state = create_state(config)
     play_game(state, _make_document_game_spec(), config=config)
 
-    entry = json.loads(
-        (workspace / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip()
-    )
+    entry = json.loads((workspace / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip())
     assert entry["final_disposition"] == "accepted"
     attempt = entry["attempts"][0]
     assert attempt["blue_delta"] is not None
@@ -256,15 +245,11 @@ def test_play_game_blackboard_final_disposition_rejected(tmp_path: Path) -> None
         state,
         _make_document_game_spec(),
         config=config,
-        referee_model_client=FakeModelClient(
-            ['{"disposition":"reject","rationale":"not good enough"}']
-        ),
+        referee_model_client=FakeModelClient(['{"disposition":"reject","rationale":"not good enough"}']),
         max_attempts=1,
     )
 
-    entry = json.loads(
-        (workspace / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip()
-    )
+    entry = json.loads((workspace / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip())
     assert entry["final_disposition"] == "rejected"
     attempt = entry["attempts"][0]
     assert attempt["blue_delta"] is not None
@@ -282,15 +267,11 @@ def test_play_game_blackboard_revise_only_is_not_integration_eligible(
         state,
         _make_document_game_spec(),
         config=config,
-        referee_model_client=FakeModelClient(
-            ['{"disposition":"revise","rationale":"needs changes"}']
-        ),
+        referee_model_client=FakeModelClient(['{"disposition":"revise","rationale":"needs changes"}']),
         max_attempts=1,
     )
 
-    entry = json.loads(
-        (workspace / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip()
-    )
+    entry = json.loads((workspace / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip())
     assert entry["final_disposition"] == "rejected"
     assert entry["current_best_delta"] is None
     assert entry["integration_eligible_delta"] is None
@@ -320,9 +301,7 @@ def test_play_game_blackboard_final_disposition_no_delta(tmp_path: Path) -> None
         max_attempts=1,
     )
 
-    entry = json.loads(
-        (workspace / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip()
-    )
+    entry = json.loads((workspace / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip())
     assert entry["final_disposition"] == "no_delta"
     assert all(r["blue_delta"] is None for r in entry["attempts"])
 
@@ -355,11 +334,7 @@ def test_create_game_blackboard_captures_depth_and_context_chain(
         ),
     )
 
-    entry = json.loads(
-        (config["workspace"] / "blackboard" / "games.jsonl")
-        .read_text(encoding="utf-8")
-        .strip()
-    )
+    entry = json.loads((config["workspace"] / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip())
     assert entry["depth"] == 2
     assert entry["context_chain"] == list(chain)
 
@@ -372,16 +347,12 @@ def test_play_game_blackboard_captures_depth_and_context_chain(tmp_path: Path) -
     game_spec = _make_document_game_spec(context_chain=chain)
     play_game(state, game_spec, config=config, depth=1)
 
-    entry = json.loads(
-        (workspace / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip()
-    )
+    entry = json.loads((workspace / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip())
     assert entry["depth"] == 1
     assert entry["context_chain"] == list(chain)
 
 
-def test_blackboard_verification_summary_truncated_to_cap(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_blackboard_verification_summary_truncated_to_cap(tmp_path: Path, monkeypatch) -> None:
 
     long_stdout = "O" * 700
     long_stderr = "E" * 600
@@ -393,18 +364,14 @@ def test_blackboard_verification_summary_truncated_to_cap(
         stderr=long_stderr,
         passed=True,
     )
-    monkeypatch.setattr(
-        "baps.game.engine._verify_candidate_with_adapter", lambda *a, **kw: mock_vr
-    )
+    monkeypatch.setattr("baps.game.engine._verify_candidate_with_adapter", lambda *a, **kw: mock_vr)
 
     workspace = tmp_path / "ws-trunc"
     config = _make_play_game_config(workspace)
     state = create_state(config)
     play_game(state, _make_document_game_spec(), config=config)
 
-    entry = json.loads(
-        (workspace / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip()
-    )
+    entry = json.loads((workspace / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip())
     cap = VERIFICATION_SUMMARY_CAP
     vr_summary = entry["verification_result"]
     assert vr_summary["stdout_summary"] == "O" * cap
@@ -421,9 +388,7 @@ def test_blackboard_verification_summary_truncated_to_cap(
     assert mock_vr.stderr == long_stderr
 
 
-def test_blackboard_verification_feedback_loop_uses_full_text(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_blackboard_verification_feedback_loop_uses_full_text(tmp_path: Path, monkeypatch) -> None:
     """When candidate verification fails and Blue retries, the full stdout/stderr
     must appear in Blue's next prompt — only the blackboard summary is truncated."""
 
@@ -492,9 +457,7 @@ def test_blackboard_verification_feedback_loop_uses_full_text(
     assert long_stdout in second_prompt
 
 
-def test_integration_event_all_required_fields_with_correct_types(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_integration_event_all_required_fields_with_correct_types(monkeypatch, tmp_path: Path) -> None:
     workspace = tmp_path / "ws-int-fields"
     monkeypatch.setattr(
         "sys.argv",
@@ -521,10 +484,7 @@ def test_integration_event_all_required_fields_with_correct_types(
 
     lines = [
         json.loads(line)
-        for line in (workspace / "blackboard" / "games.jsonl")
-        .read_text(encoding="utf-8")
-        .strip()
-        .splitlines()
+        for line in (workspace / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip().splitlines()
     ]
     evt = next(e for e in lines if e["event"] == "integration")
 
@@ -571,9 +531,7 @@ def test_create_game_blackboard_no_new_game_with_failing_verification(
             config,
             state,
             verification_result=failing_vr,
-            model_client=FakeModelClient(
-                ['{"kind": "no_new_game", "reason": "No gap identified."}']
-            ),
+            model_client=FakeModelClient(['{"kind": "no_new_game", "reason": "No gap identified."}']),
         )
 
     games_path = config["workspace"] / "blackboard" / "games.jsonl"

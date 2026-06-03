@@ -116,18 +116,14 @@ def build_runtime(
     if create_state_fn is None:
         create_state_fn = create_state
     adapter = _resolve_project_type_adapter(config.project_type)
-    state_service, current_state = prepare_workspace(
-        config, create_state_fn=create_state_fn
-    )
+    state_service, current_state = prepare_workspace(config, create_state_fn=create_state_fn)
     summarizer = _resolve_summarize_role(config)
     return RuntimeContext(
         config=config,
         adapter=adapter,
         state_service=state_service,
         initial_state=current_state,
-        summarization_context=SummarizationContext(
-            summarizer=summarizer, game_spec=None
-        ),
+        summarization_context=SummarizationContext(summarizer=summarizer, game_spec=None),
     )
 
 
@@ -142,9 +138,7 @@ def run_project(runtime: RuntimeContext) -> IterationRunResult:
     )
 
 
-def active_model_info(
-    config: RunConfig | None = None, role: SpecRole = SpecRole.BLUE
-) -> dict[str, str]:
+def active_model_info(config: RunConfig | None = None, role: SpecRole = SpecRole.BLUE) -> dict[str, str]:
     """Return a dict with 'backend' and 'model' for the active blue role, or 'unknown' on error."""
     if config is None:
         return {"backend": "unknown", "model": "unknown"}

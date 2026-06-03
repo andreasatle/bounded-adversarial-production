@@ -46,11 +46,7 @@ class SummarizationContext:
             cache_key = f"objective:{objective_hash}:{content_hash}"
         if cache_key in self._cache:
             return self._cache[cache_key]
-        prompt = (
-            _build_api_prompt(content)
-            if objective is None
-            else _build_objective_prompt(content, objective)
-        )
+        prompt = _build_api_prompt(content) if objective is None else _build_objective_prompt(content, objective)
         result = self.summarizer.generate(prompt)
         self._cache[cache_key] = result
         return result

@@ -106,19 +106,13 @@ def document_artifact_from_state(state: State, artifact_id: str) -> DocumentArti
     """Handle document artifact from state."""
     artifact = next((a for a in state.artifacts if a.id == artifact_id), None)
     if artifact is None:
-        raise ValueError(
-            f"create_game target artifact not found in state: {artifact_id}"
-        )
+        raise ValueError(f"create_game target artifact not found in state: {artifact_id}")
     if not isinstance(artifact, DocumentArtifact):
-        raise ValueError(
-            f"create_game target artifact must be DocumentArtifact: {artifact_id}"
-        )
+        raise ValueError(f"create_game target artifact must be DocumentArtifact: {artifact_id}")
     return artifact
 
 
-def build_document_create_game_state_view(
-    state: State, config: dict[str, Any]
-) -> StateView:
+def build_document_create_game_state_view(state: State, config: dict[str, Any]) -> StateView:
     """Build and return document create game state view."""
     target_artifact = document_artifact_from_state(state, config_artifact_id(config))
     northstar_content = config_northstar_markdown(config)
@@ -176,22 +170,13 @@ def build_document_state_view(
 ) -> StateView:
     """Build and return document state view."""
     target_artifact = next(
-        (
-            artifact
-            for artifact in state.artifacts
-            if artifact.id == game_spec.target_artifact_id
-        ),
+        (artifact for artifact in state.artifacts if artifact.id == game_spec.target_artifact_id),
         None,
     )
     if target_artifact is None:
-        raise ValueError(
-            f"state_view target artifact not found in state: {game_spec.target_artifact_id}"
-        )
+        raise ValueError(f"state_view target artifact not found in state: {game_spec.target_artifact_id}")
     if not isinstance(target_artifact, DocumentArtifact):
-        raise ValueError(
-            "state_view only supports document artifact targets; "
-            f"got: {target_artifact.kind}"
-        )
+        raise ValueError(f"state_view only supports document artifact targets; got: {target_artifact.kind}")
     sections = [
         {
             "title": sanitize_model_title(section.title),
@@ -209,27 +194,19 @@ def build_document_state_view(
         for section in target_artifact.sections:
             if target_entity is not None and section.title != target_entity:
                 summary = (
-                    summarization_context.summarize(
-                        section.body, objective=game_spec.objective
-                    )
+                    summarization_context.summarize(section.body, objective=game_spec.objective)
                     if summarization_context is not None
                     else None
                 )
                 if summary is not None:
-                    section_lines.append(
-                        f"### {sanitize_model_title(section.title)} [summary]"
-                    )
+                    section_lines.append(f"### {sanitize_model_title(section.title)} [summary]")
                     section_lines.append("")
                     section_lines.append(sanitize_model_string(summary))
                     section_lines.append("")
                     continue
-                section_lines.append(
-                    f"### {sanitize_model_title(section.title)} [full]"
-                )
+                section_lines.append(f"### {sanitize_model_title(section.title)} [full]")
             elif target_entity is not None:
-                section_lines.append(
-                    f"### {sanitize_model_title(section.title)} [full]"
-                )
+                section_lines.append(f"### {sanitize_model_title(section.title)} [full]")
             else:
                 section_lines.append(f"### {sanitize_model_title(section.title)}")
             section_lines.append("")
@@ -313,44 +290,32 @@ def parse_document_delta_json(
     text: str, workspace: Path | None = None
 ) -> DeltaDocumentState | DeltaModifyDocumentState:
     """Parse and return document delta json."""
-    parsed, _ = parse_model_output(
-        text, _BLUE_DOCUMENT_KEYS, context="blue:document", workspace=workspace
-    )
+    parsed, _ = parse_model_output(text, _BLUE_DOCUMENT_KEYS, context="blue:document", workspace=workspace)
     if not _BLUE_DOCUMENT_KEYS.issubset(parsed.keys()):
-        raise ValueError(
-            "blue model output must contain keys: artifact_id, operation, payload"
-        )
+        raise ValueError("blue model output must contain keys: artifact_id, operation, payload")
 
     operation = parsed.get("operation")
     if operation == "modify_section":
         try:
             return DeltaModifyDocumentState.model_validate(parsed)
         except Exception as exc:
-            raise ValueError(
-                f"blue model output failed DeltaModifyDocumentState validation: {exc}"
-            ) from exc
+            raise ValueError(f"blue model output failed DeltaModifyDocumentState validation: {exc}") from exc
 
     if operation == "delete_section":
         try:
             return DeltaDeleteDocumentState.model_validate(parsed)
         except Exception as exc:
-            raise ValueError(
-                f"blue model output failed DeltaDeleteDocumentState validation: {exc}"
-            ) from exc
+            raise ValueError(f"blue model output failed DeltaDeleteDocumentState validation: {exc}") from exc
 
     try:
         return DeltaDocumentState.model_validate(parsed)
     except Exception as exc:
-        raise ValueError(
-            f"blue model output failed DeltaDocumentState validation: {exc}"
-        ) from exc
+        raise ValueError(f"blue model output failed DeltaDocumentState validation: {exc}") from exc
 
 
 def render_document_artifact_markdown(artifact: DocumentArtifact) -> str:
     """Render and return document artifact markdown."""
-    sections = [
-        f"## {section.title}\n\n{section.body}" for section in artifact.sections
-    ]
+    sections = [f"## {section.title}\n\n{section.body}" for section in artifact.sections]
     return "\n\n".join(sections)
 
 
@@ -412,9 +377,7 @@ class DocumentProjectAdapter:
             "- If evidence shows stale or incorrect content, prefer a game that modifies the relevant section.\n"
         )
 
-    def normalize_game_spec(
-        self, game_spec: GameSpec, state: State, config: dict[str, object]
-    ) -> GameSpec:
+    def normalize_game_spec(self, game_spec: GameSpec, state: State, config: dict[str, object]) -> GameSpec:
         """Normalize and return game spec."""
         del state, config
         return game_spec
@@ -426,9 +389,7 @@ class DocumentProjectAdapter:
         summarization_context: SummarizationContext | None = None,
     ) -> StateView:
         """Build and return state view."""
-        return build_document_state_view(
-            state, game_spec, summarization_context=summarization_context
-        )
+        return build_document_state_view(state, game_spec, summarization_context=summarization_context)
 
     def render_blue_prompt(
         self,
@@ -478,11 +439,7 @@ class DocumentProjectAdapter:
     def build_create_game_research_tools(self, state: State) -> list:
         """Build and return create game research tools."""
         artifact = next(
-            (
-                a
-                for a in state.artifacts
-                if isinstance(a, DocumentArtifact) and a.sections
-            ),
+            (a for a in state.artifacts if isinstance(a, DocumentArtifact) and a.sections),
             None,
         )
         if artifact is None:
@@ -495,9 +452,7 @@ class DocumentProjectAdapter:
             entity_desc="Not supported for document artifacts.",
         )
 
-    def execute_create_game_research_tool(
-        self, tool_name: str, tool_input: dict, state: State
-    ) -> str:
+    def execute_create_game_research_tool(self, tool_name: str, tool_input: dict, state: State) -> str:
         """Execute and return create game research tool."""
         artifact = next(
             (a for a in state.artifacts if isinstance(a, DocumentArtifact)),
@@ -522,17 +477,13 @@ class DocumentProjectAdapter:
         if tool_name == "fetch_module":
             module_id = tool_input.get("module_id", "")
             if not isinstance(module_id, str) or not module_id:
-                return (
-                    "tool_error: fetch_module requires a non-empty 'module_id' string"
-                )
+                return "tool_error: fetch_module requires a non-empty 'module_id' string"
             if artifact is None:
                 return "tool_error: no document artifact found in state"
             section = next((s for s in artifact.sections if s.title == module_id), None)
             if section is None:
                 available = sorted(s.title for s in artifact.sections)
-                available_str = (
-                    ", ".join(f"'{t}'" for t in available) if available else "(none)"
-                )
+                available_str = ", ".join(f"'{t}'" for t in available) if available else "(none)"
                 return f"Section '{module_id}' not found. Available sections: {available_str}"
             filter_val = tool_input.get("filter")
             if filter_val is not None and filter_val not in self.supported_filters():
@@ -559,9 +510,7 @@ class DocumentProjectAdapter:
             section = next((s for s in artifact.sections if s.title == title), None)
             if section is None:
                 available = sorted(s.title for s in artifact.sections)
-                available_str = (
-                    ", ".join(f"'{t}'" for t in available) if available else "(none)"
-                )
+                available_str = ", ".join(f"'{t}'" for t in available) if available else "(none)"
                 return f"Section '{title}' not found in artifact. Available sections: {available_str}"
             return section.body
 
@@ -662,9 +611,7 @@ class DocumentProjectAdapter:
                     }
                 )
             except Exception as exc:
-                raise ValueError(
-                    f"tool call arguments failed DeltaModifyDocumentState validation: {exc}"
-                ) from exc
+                raise ValueError(f"tool call arguments failed DeltaModifyDocumentState validation: {exc}") from exc
         if tool_call.name == "append_section":
             try:
                 artifact_id = str(args["artifact_id"])
@@ -681,9 +628,7 @@ class DocumentProjectAdapter:
                     }
                 )
             except Exception as exc:
-                raise ValueError(
-                    f"tool call arguments failed DeltaDocumentState validation: {exc}"
-                ) from exc
+                raise ValueError(f"tool call arguments failed DeltaDocumentState validation: {exc}") from exc
         if tool_call.name == "delete_section":
             try:
                 artifact_id = str(args["artifact_id"])
@@ -699,9 +644,7 @@ class DocumentProjectAdapter:
                     }
                 )
             except Exception as exc:
-                raise ValueError(
-                    f"tool call arguments failed DeltaDeleteDocumentState validation: {exc}"
-                ) from exc
+                raise ValueError(f"tool call arguments failed DeltaDeleteDocumentState validation: {exc}") from exc
         raise ValueError(f"unexpected tool: {tool_call.name!r}")
 
     def parse_blue_delta(self, text: str) -> DeltaState:
@@ -710,9 +653,7 @@ class DocumentProjectAdapter:
 
     def export_state(self, state: State, output_path: Path, artifact_id: str) -> bool:
         """Export and return state."""
-        return export_document_artifact(
-            document_artifact_from_state(state, artifact_id), output_path
-        )
+        return export_document_artifact(document_artifact_from_state(state, artifact_id), output_path)
 
     def verify_export(
         self,

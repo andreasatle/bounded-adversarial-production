@@ -21,9 +21,7 @@ def record_play_game_telemetry(
         "play_game.output",
         {
             "current_best_delta": (
-                None
-                if runtime.current_best_delta is None
-                else runtime.current_best_delta.model_dump(mode="json")
+                None if runtime.current_best_delta is None else runtime.current_best_delta.model_dump(mode="json")
             ),
             "integration_eligible_delta": (
                 None

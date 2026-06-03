@@ -37,9 +37,7 @@ def _build_client(backend: str | Backend, model: str) -> ModelClient:
     if backend == Backend.ANTHROPIC:
         api_key = os.getenv("ANTHROPIC_API_KEY", "")
         if not api_key.strip():
-            raise ValueError(
-                "ANTHROPIC_API_KEY must be set when using anthropic backend"
-            )
+            raise ValueError("ANTHROPIC_API_KEY must be set when using anthropic backend")
         return AnthropicClient(
             model=model,
             api_key=api_key,
@@ -63,16 +61,10 @@ def _build_client(backend: str | Backend, model: str) -> ModelClient:
 def _build_client_for_backend(backend: str | Backend) -> ModelClient:
     """Build a client for the given backend using its default model env var."""
     if backend == Backend.ANTHROPIC:
-        return _build_client(
-            backend, os.getenv("BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL)
-        )
+        return _build_client(backend, os.getenv("BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL))
     if backend == Backend.OPENAI:
-        return _build_client(
-            backend, os.getenv("BAPS_OPENAI_MODEL", _DEFAULT_OPENAI_MODEL)
-        )
-    return _build_client(
-        Backend.OLLAMA, os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL)
-    )
+        return _build_client(backend, os.getenv("BAPS_OPENAI_MODEL", _DEFAULT_OPENAI_MODEL))
+    return _build_client(Backend.OLLAMA, os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL))
 
 
 def _build_multi_backend_client() -> ModelClient | None:
@@ -102,16 +94,10 @@ def _build_planner_model_client() -> ModelClient:
         return client
     backend = os.getenv("BAPS_BACKEND", "ollama").lower()
     if backend == Backend.ANTHROPIC:
-        return _build_client(
-            backend, os.getenv("BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL)
-        )
+        return _build_client(backend, os.getenv("BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL))
     if backend == Backend.OPENAI:
-        return _build_client(
-            backend, os.getenv("BAPS_OPENAI_MODEL", _DEFAULT_OPENAI_MODEL)
-        )
-    model = os.getenv("BAPS_OLLAMA_PLANNER_MODEL") or os.getenv(
-        "BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL
-    )
+        return _build_client(backend, os.getenv("BAPS_OPENAI_MODEL", _DEFAULT_OPENAI_MODEL))
+    model = os.getenv("BAPS_OLLAMA_PLANNER_MODEL") or os.getenv("BAPS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL)
     return _build_client(Backend.OLLAMA, model)
 
 
@@ -130,9 +116,7 @@ def build_role_client(role: str) -> ModelClient:
 
     backend = role_backend or os.getenv("BAPS_BACKEND", "ollama").lower()
     if backend == Backend.ANTHROPIC:
-        model = role_model or os.getenv(
-            "BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL
-        )
+        model = role_model or os.getenv("BAPS_ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL)
     elif backend == Backend.OPENAI:
         model = role_model or os.getenv("BAPS_OPENAI_MODEL", _DEFAULT_OPENAI_MODEL)
     else:
@@ -149,10 +133,7 @@ def _parse_role_backend_model(cfg: dict, path: str) -> dict[str, str]:
             if field == "backend":
                 val = val.lower()
                 if val not in VALID_BACKENDS:
-                    raise ValueError(
-                        f"spec '{path}.backend' must be one of "
-                        f"{sorted(VALID_BACKENDS)}, got {val!r}"
-                    )
+                    raise ValueError(f"spec '{path}.backend' must be one of {sorted(VALID_BACKENDS)}, got {val!r}")
             parsed[field] = val
     return parsed
 
@@ -175,9 +156,7 @@ def parse_spec_roles(roles_raw: object) -> dict[str, RoleConfig]:
     result: dict[str, RoleConfig] = {}
     for role, role_cfg in roles_raw.items():
         if role not in _VALID_SPEC_ROLES:
-            raise ValueError(
-                f"Unknown role {role!r} in spec 'roles'. Valid roles: {sorted(_VALID_SPEC_ROLES)}"
-            )
+            raise ValueError(f"Unknown role {role!r} in spec 'roles'. Valid roles: {sorted(_VALID_SPEC_ROLES)}")
         if not isinstance(role_cfg, dict):
             raise ValueError(f"spec 'roles.{role}' must be a mapping")
         result[role] = _parse_role_config(role_cfg, f"roles.{role}")
@@ -195,9 +174,7 @@ def resolve_backend_model(role: str, config: RunConfig) -> tuple[str, str]:
     role_upper = role.upper()
 
     backend = (
-        (role_cfg.backend.value if role_cfg and role_cfg.backend else "")
-        .strip()
-        .lower()
+        (role_cfg.backend.value if role_cfg and role_cfg.backend else "").strip().lower()
         or (config.spec_backend.value if config.spec_backend else "").strip().lower()
         or os.getenv(f"BAPS_{role_upper}_BACKEND", "").strip().lower()
         or os.getenv("BAPS_BACKEND", "").strip().lower()
@@ -219,14 +196,10 @@ def resolve_backend_model(role: str, config: RunConfig) -> tuple[str, str]:
     )
 
     if not backend or not model:
-        raise ValueError(
-            "No model configured. Set backend and model in your spec file or via environment variables."
-        )
+        raise ValueError("No model configured. Set backend and model in your spec file or via environment variables.")
 
     if backend not in VALID_BACKENDS:
-        raise ValueError(
-            f"Unknown backend {backend!r}. Valid options: {sorted(VALID_BACKENDS)}"
-        )
+        raise ValueError(f"Unknown backend {backend!r}. Valid options: {sorted(VALID_BACKENDS)}")
 
     return backend, model
 
@@ -237,9 +210,7 @@ def build_client_for_role(role: str, config: RunConfig) -> ModelClient:
     return _build_client(backend, model)
 
 
-def build_fallback_chain_for_role(
-    role: str, config: RunConfig
-) -> list[tuple[str, ModelClient]]:
+def build_fallback_chain_for_role(role: str, config: RunConfig) -> list[tuple[str, ModelClient]]:
     """Build the ordered fallback chain for a role.
 
     Returns a list of (model_label, client) pairs from the spec's fallback chain,
@@ -295,9 +266,7 @@ def make_fallback_chain_fn(
             try:
                 return client.generate(wrap_json_prompt(prompt))
             except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "%s: fallback model %s failed: %s", role_name, model_label, exc
-                )
+                logger.warning("%s: fallback model %s failed: %s", role_name, model_label, exc)
                 prev = model_label
         raise RuntimeError(f"{role_name}: all models in fallback chain exhausted")
 

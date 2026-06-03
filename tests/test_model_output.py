@@ -103,17 +103,13 @@ class TestIsReactFormat:
         assert _is_react_format({"action": "respond", "action_input": {"a": 1}})
 
     def test_thought_and_action(self) -> None:
-        assert _is_react_format(
-            {"thought": "...", "action": "write", "action_input": {}}
-        )
+        assert _is_react_format({"thought": "...", "action": "write", "action_input": {}})
 
     def test_thought_action_without_action_input(self) -> None:
         assert _is_react_format({"thought": "...", "action": "X"})
 
     def test_tool_use_type_with_input(self) -> None:
-        assert _is_react_format(
-            {"type": "tool_use", "name": "output", "input": {"a": 1}}
-        )
+        assert _is_react_format({"type": "tool_use", "name": "output", "input": {"a": 1}})
 
     def test_normal_dict_not_react(self) -> None:
         assert not _is_react_format({"objective": "do X", "target_artifact_id": "doc"})
@@ -196,17 +192,13 @@ class TestCleanPassthrough:
 
 class TestExtraKeysStripped:
     def test_extra_keys_stripped(self) -> None:
-        text = json.dumps(
-            {"a": 1, "b": 2, "reasoning": "step by step", "confidence": 0.9}
-        )
+        text = json.dumps({"a": 1, "b": 2, "reasoning": "step by step", "confidence": 0.9})
         result, _ = parse_model_output(text, _KEYS, context="test")
         assert result == {"a": 1, "b": 2}
         assert "reasoning" not in result
         assert "confidence" not in result
 
-    def test_extra_keys_logged_as_warning(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_extra_keys_logged_as_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         text = json.dumps({"a": 1, "thoughts": "hmm"})
         with caplog.at_level(logging.WARNING, logger="baps.models.model_output"):
             parse_model_output(text, _KEYS, context="myctx")
@@ -283,9 +275,7 @@ class TestReactRescue:
             return valid
 
         payload = {"action": "respond", "action_input": "not a dict"}
-        result, _ = parse_model_output(
-            json.dumps(payload), _KEYS, context="test", retry_fn=retry_fn
-        )
+        result, _ = parse_model_output(json.dumps(payload), _KEYS, context="test", retry_fn=retry_fn)
         assert result == {"a": 1}
         assert len(calls) == 1
         assert calls[0] == _REACT_CORRECTION_PROMPT
@@ -304,9 +294,7 @@ class TestReactRescue:
 
         payload = {"action": "X", "action_input": "string"}
         with pytest.raises(ValueError):
-            parse_model_output(
-                json.dumps(payload), _KEYS, context="test", retry_fn=retry_fn
-            )
+            parse_model_output(json.dumps(payload), _KEYS, context="test", retry_fn=retry_fn)
         assert calls[0] == _REACT_CORRECTION_PROMPT
 
     def test_react_format_in_prose_wrapper_rescued(self) -> None:
@@ -334,9 +322,7 @@ class TestInvalidJsonRetry:
             calls.append(prompt)
             return valid
 
-        result, _ = parse_model_output(
-            "not-json", _KEYS, context="test", retry_fn=retry_fn
-        )
+        result, _ = parse_model_output("not-json", _KEYS, context="test", retry_fn=retry_fn)
         assert result == {"a": 1}
         assert len(calls) == 1
 
@@ -424,9 +410,7 @@ class TestNonDictJson:
         def retry_fn(prompt: str) -> str:
             return valid
 
-        result, _ = parse_model_output(
-            "[1, 2]", _KEYS, context="test", retry_fn=retry_fn
-        )
+        result, _ = parse_model_output("[1, 2]", _KEYS, context="test", retry_fn=retry_fn)
         assert result == {"a": 1}
 
         # ---------------------------------------------------------------------------
@@ -436,15 +420,11 @@ class TestNonDictJson:
 
 class TestContextPrefixInErrors:
     def test_context_prefix_in_json_error(self) -> None:
-        with pytest.raises(
-            ValueError, match="mycontext: model output must be valid JSON"
-        ):
+        with pytest.raises(ValueError, match="mycontext: model output must be valid JSON"):
             parse_model_output("bad", _KEYS, context="mycontext")
 
     def test_context_prefix_in_object_error(self) -> None:
-        with pytest.raises(
-            ValueError, match="mycontext: model output must be a JSON object"
-        ):
+        with pytest.raises(ValueError, match="mycontext: model output must be a JSON object"):
             parse_model_output("[1]", _KEYS, context="mycontext")
 
             # ---------------------------------------------------------------------------
@@ -464,9 +444,7 @@ class TestFallbackEscalation:
             fallback_calls.append(prompt)
             return valid
 
-        result, _ = parse_model_output(
-            "bad", _KEYS, context="test", retry_fn=retry_fn, fallback_fn=fallback_fn
-        )
+        result, _ = parse_model_output("bad", _KEYS, context="test", retry_fn=retry_fn, fallback_fn=fallback_fn)
         assert result == {"a": 1}
         assert len(fallback_calls) == 1
 
@@ -480,9 +458,7 @@ class TestFallbackEscalation:
             prompts.append(prompt)
             return json.dumps({"a": 1})
 
-        parse_model_output(
-            "bad", _KEYS, context="test", retry_fn=retry_fn, fallback_fn=fallback_fn
-        )
+        parse_model_output("bad", _KEYS, context="test", retry_fn=retry_fn, fallback_fn=fallback_fn)
         assert prompts[0] == _FALLBACK_CORRECTION_PROMPT
 
     def test_fallback_not_called_when_primary_succeeds(self) -> None:
@@ -492,9 +468,7 @@ class TestFallbackEscalation:
             fallback_calls.append(prompt)
             return json.dumps({"a": 1})
 
-        parse_model_output(
-            json.dumps({"a": 1}), _KEYS, context="test", fallback_fn=fallback_fn
-        )
+        parse_model_output(json.dumps({"a": 1}), _KEYS, context="test", fallback_fn=fallback_fn)
         assert len(fallback_calls) == 0
 
     def test_fallback_not_called_when_retry_succeeds(self) -> None:
@@ -509,9 +483,7 @@ class TestFallbackEscalation:
             fallback_calls.append(prompt)
             return "irrelevant"
 
-        parse_model_output(
-            "bad", _KEYS, context="test", retry_fn=retry_fn, fallback_fn=fallback_fn
-        )
+        parse_model_output("bad", _KEYS, context="test", retry_fn=retry_fn, fallback_fn=fallback_fn)
         assert len(fallback_calls) == 0
 
     def test_fallback_exhausted_raises(self) -> None:
@@ -522,9 +494,7 @@ class TestFallbackEscalation:
             return "also-bad"
 
         with pytest.raises(ValueError, match="must be valid JSON"):
-            parse_model_output(
-                "bad", _KEYS, context="test", retry_fn=retry_fn, fallback_fn=fallback_fn
-            )
+            parse_model_output("bad", _KEYS, context="test", retry_fn=retry_fn, fallback_fn=fallback_fn)
 
     def test_fallback_called_exactly_once(self) -> None:
         call_count = [0]
@@ -537,9 +507,7 @@ class TestFallbackEscalation:
             return "bad-too"
 
         with pytest.raises(ValueError):
-            parse_model_output(
-                "bad", _KEYS, context="test", retry_fn=retry_fn, fallback_fn=fallback_fn
-            )
+            parse_model_output("bad", _KEYS, context="test", retry_fn=retry_fn, fallback_fn=fallback_fn)
         assert call_count[0] == 1
 
     def test_fallback_runtime_error_propagates(self) -> None:
@@ -550,9 +518,7 @@ class TestFallbackEscalation:
             raise RuntimeError("fallback client is down")
 
         with pytest.raises(RuntimeError, match="fallback client is down"):
-            parse_model_output(
-                "bad", _KEYS, context="test", retry_fn=retry_fn, fallback_fn=fallback_fn
-            )
+            parse_model_output("bad", _KEYS, context="test", retry_fn=retry_fn, fallback_fn=fallback_fn)
 
     def test_fallback_without_retry_called_after_first_failure(self) -> None:
         fallback_calls: list[str] = []
@@ -561,15 +527,11 @@ class TestFallbackEscalation:
             fallback_calls.append(prompt)
             return json.dumps({"a": 1})
 
-        result, _ = parse_model_output(
-            "bad", _KEYS, context="test", fallback_fn=fallback_fn
-        )
+        result, _ = parse_model_output("bad", _KEYS, context="test", fallback_fn=fallback_fn)
         assert result == {"a": 1}
         assert len(fallback_calls) == 1
 
-    def test_fallback_logs_warning_on_escalation(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_fallback_logs_warning_on_escalation(self, caplog: pytest.LogCaptureFixture) -> None:
         def retry_fn(prompt: str) -> str:
             return "bad"
 
@@ -670,9 +632,7 @@ class TestParseRecoveryRecord:
         assert not recovery.retry_used
 
     def test_no_recovery_needed_fields_all_false(self) -> None:
-        _, recovery = parse_model_output(
-            json.dumps({"a": 1, "b": 2}), _KEYS, context="test"
-        )
+        _, recovery = parse_model_output(json.dumps({"a": 1, "b": 2}), _KEYS, context="test")
         assert recovery == ParseRecoveryRecord()
 
 

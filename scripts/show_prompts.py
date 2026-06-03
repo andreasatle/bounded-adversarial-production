@@ -66,9 +66,7 @@ def _make_delta():
     return DeltaDocumentState(
         artifact_id=_ARTIFACT_ID,
         operation="append_section",
-        payload=AppendSectionDelta(
-            section=Section(title=_SECTION_TITLE, body=_SECTION_BODY)
-        ),
+        payload=AppendSectionDelta(section=Section(title=_SECTION_TITLE, body=_SECTION_BODY)),
     )
 
 
@@ -110,27 +108,15 @@ def build_prompts() -> dict[str, str]:
     cg_view = adapter.build_create_game_state_view(state, adapter_config)
     play_view = adapter.build_state_view(state, spec)
 
-    red_supplement = render_red_prompt_supplement_with_adapter(
-        adapter, play_view, spec, delta, None
-    )
-    ref_supplement = render_referee_prompt_supplement_with_adapter(
-        adapter, play_view, spec, delta, None
-    )
+    red_supplement = render_red_prompt_supplement_with_adapter(adapter, play_view, spec, delta, None)
+    ref_supplement = render_referee_prompt_supplement_with_adapter(adapter, play_view, spec, delta, None)
 
     return {
-        "create_game": render_create_game_prompt(
-            config, state, cg_view, adapter=adapter
-        ),
+        "create_game": render_create_game_prompt(config, state, cg_view, adapter=adapter),
         "create_game_red": render_create_game_red_prompt(cg_view, spec, config),
-        "blue": adapter.render_blue_prompt(
-            play_view, spec, attempt_number=1, previous_feedback=None
-        ),
-        "red": render_red_prompt(
-            play_view, spec, delta, prompt_supplement=red_supplement
-        ),
-        "referee": render_referee_prompt(
-            play_view, spec, delta, red_finding, prompt_supplement=ref_supplement
-        ),
+        "blue": adapter.render_blue_prompt(play_view, spec, attempt_number=1, previous_feedback=None),
+        "red": render_red_prompt(play_view, spec, delta, prompt_supplement=red_supplement),
+        "referee": render_referee_prompt(play_view, spec, delta, red_finding, prompt_supplement=ref_supplement),
     }
 
 
@@ -142,9 +128,7 @@ _ROLE_ORDER = ["create_game", "create_game_red", "blue", "red", "referee"]
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
         "--output",
         "-o",

@@ -12,8 +12,7 @@ SANDBOX_NONE_WARNING = (
 )
 
 DOCKER_DAEMON_ERROR = (
-    "Docker daemon is not running. Start it with: colima start\n"
-    "(or 'open -a Docker' if using Docker Desktop)"
+    "Docker daemon is not running. Start it with: colima start\n(or 'open -a Docker' if using Docker Desktop)"
 )
 
 _DOCKER_UNAVAILABLE_HINTS = (
@@ -57,22 +56,16 @@ def run_sandboxed(
         return _run_bare(cwd, test_command)
     if sandbox_mode == "docker":
         return _run_docker(cwd, test_command, docker_image)
-    raise ValueError(
-        f"unknown sandbox_mode: {sandbox_mode!r}; expected 'docker' or 'none'"
-    )
+    raise ValueError(f"unknown sandbox_mode: {sandbox_mode!r}; expected 'docker' or 'none'")
 
 
 def _run_bare(cwd: Path, test_command: str) -> tuple[str, subprocess.CompletedProcess]:
     """Run test_command directly in cwd via the shell without any sandboxing."""
-    completed = subprocess.run(
-        test_command, cwd=cwd, capture_output=True, text=True, check=False, shell=True
-    )
+    completed = subprocess.run(test_command, cwd=cwd, capture_output=True, text=True, check=False, shell=True)
     return test_command, completed
 
 
-def _run_docker(
-    cwd: Path, test_command: str, docker_image: str
-) -> tuple[str, subprocess.CompletedProcess]:
+def _run_docker(cwd: Path, test_command: str, docker_image: str) -> tuple[str, subprocess.CompletedProcess]:
     """Run test_command inside a Docker container with cwd bind-mounted at /work."""
     resolved = cwd.resolve()
     docker_args = [
@@ -88,10 +81,7 @@ def _run_docker(
         "-c",
         test_command,
     ]
-    command = (
-        f"docker run --rm -v {resolved}:/work:rw --workdir /work"
-        f" {docker_image} sh -c '{test_command}'"
-    )
+    command = f"docker run --rm -v {resolved}:/work:rw --workdir /work {docker_image} sh -c '{test_command}'"
     completed = subprocess.run(docker_args, capture_output=True, text=True, check=False)
     if is_docker_unavailable_error(completed.stderr):
         raise RuntimeError(DOCKER_DAEMON_ERROR)

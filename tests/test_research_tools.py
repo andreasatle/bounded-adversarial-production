@@ -611,9 +611,7 @@ def test_coding_list_modules_no_filter_returns_paths_and_line_counts() -> None:
     from baps.adapters.coding_adapter import CodingProjectAdapter
 
     state = _coding_state([("src/foo.py", "x = 1\ny = 2\n")])
-    result = CodingProjectAdapter().execute_create_game_research_tool(
-        "list_modules", {}, state
-    )
+    result = CodingProjectAdapter().execute_create_game_research_tool("list_modules", {}, state)
     assert "src/foo.py" in result
     assert "2 lines" in result
 
@@ -625,9 +623,7 @@ def test_coding_list_modules_no_artifact_returns_no_files() -> None:
         northstar=NorthStar(artifacts=()),
         artifacts=(DocumentArtifact(id="doc", sections=()),),
     )
-    result = CodingProjectAdapter().execute_create_game_research_tool(
-        "list_modules", {}, state
-    )
+    result = CodingProjectAdapter().execute_create_game_research_tool("list_modules", {}, state)
     assert "no files" in result.lower() or result == "(no files)"
 
 
@@ -636,9 +632,7 @@ def test_coding_list_modules_filter_api_includes_signature_stats() -> None:
 
     src = "def foo():\n    pass\n"
     state = _coding_state([("src/a.py", src)])
-    result = CodingProjectAdapter().execute_create_game_research_tool(
-        "list_modules", {"filter": "api"}, state
-    )
+    result = CodingProjectAdapter().execute_create_game_research_tool("list_modules", {"filter": "api"}, state)
     assert "src/a.py" in result
     assert "signature" in result
 
@@ -648,9 +642,7 @@ def test_coding_list_modules_filter_tests_includes_test_count() -> None:
 
     src = "def test_one(): pass\ndef test_two(): pass\n"
     state = _coding_state([("tests/test_a.py", src)])
-    result = CodingProjectAdapter().execute_create_game_research_tool(
-        "list_modules", {"filter": "tests"}, state
-    )
+    result = CodingProjectAdapter().execute_create_game_research_tool("list_modules", {"filter": "tests"}, state)
     assert "tests/test_a.py" in result
     assert "tests" in result
 
@@ -660,9 +652,7 @@ def test_coding_list_modules_filter_full_still_returns_listing() -> None:
 
     src = "x = 1\n"
     state = _coding_state([("src/a.py", src)])
-    result = CodingProjectAdapter().execute_create_game_research_tool(
-        "list_modules", {"filter": "full"}, state
-    )
+    result = CodingProjectAdapter().execute_create_game_research_tool("list_modules", {"filter": "full"}, state)
     assert "src/a.py" in result
 
 
@@ -670,9 +660,7 @@ def test_coding_list_modules_unknown_filter_returns_error() -> None:
     from baps.adapters.coding_adapter import CodingProjectAdapter
 
     state = _coding_state([("src/a.py", "x = 1\n")])
-    result = CodingProjectAdapter().execute_create_game_research_tool(
-        "list_modules", {"filter": "bogus"}, state
-    )
+    result = CodingProjectAdapter().execute_create_game_research_tool("list_modules", {"filter": "bogus"}, state)
     assert "Unknown filter" in result
     assert "bogus" in result
     assert "api" in result
@@ -687,9 +675,7 @@ def test_coding_fetch_module_no_filter_returns_path_and_count() -> None:
     from baps.adapters.coding_adapter import CodingProjectAdapter
 
     state = _coding_state([("src/a.py", "x = 1\ny = 2\n")])
-    result = CodingProjectAdapter().execute_create_game_research_tool(
-        "fetch_module", {"module_id": "src/a.py"}, state
-    )
+    result = CodingProjectAdapter().execute_create_game_research_tool("fetch_module", {"module_id": "src/a.py"}, state)
     assert "src/a.py" in result
     assert "2 lines" in result
 
@@ -811,9 +797,7 @@ def test_document_list_modules_no_filter_lists_section_titles() -> None:
     from baps.adapters.document_adapter import DocumentProjectAdapter
 
     state = _document_state([("Intro", "Hello world. More text.")])
-    result = DocumentProjectAdapter().execute_create_game_research_tool(
-        "list_modules", {}, state
-    )
+    result = DocumentProjectAdapter().execute_create_game_research_tool("list_modules", {}, state)
     assert "Intro" in result
     assert "words" in result
 
@@ -822,9 +806,7 @@ def test_document_list_modules_summary_filter_includesfirst_sentence() -> None:
     from baps.adapters.document_adapter import DocumentProjectAdapter
 
     state = _document_state([("Overview", "First sentence. Second sentence.")])
-    result = DocumentProjectAdapter().execute_create_game_research_tool(
-        "list_modules", {"filter": "summary"}, state
-    )
+    result = DocumentProjectAdapter().execute_create_game_research_tool("list_modules", {"filter": "summary"}, state)
     assert "Overview" in result
     assert "First sentence." in result
 
@@ -833,9 +815,7 @@ def test_document_list_modules_unknown_filter_returns_error() -> None:
     from baps.adapters.document_adapter import DocumentProjectAdapter
 
     state = _document_state([("Intro", "Body.")])
-    result = DocumentProjectAdapter().execute_create_game_research_tool(
-        "list_modules", {"filter": "bogus"}, state
-    )
+    result = DocumentProjectAdapter().execute_create_game_research_tool("list_modules", {"filter": "bogus"}, state)
     assert "Unknown filter" in result
     assert "bogus" in result
 
@@ -844,9 +824,7 @@ def test_document_list_modules_no_sections_returns_empty_message() -> None:
     from baps.adapters.document_adapter import DocumentProjectAdapter
 
     state = _document_state([])
-    result = DocumentProjectAdapter().execute_create_game_research_tool(
-        "list_modules", {}, state
-    )
+    result = DocumentProjectAdapter().execute_create_game_research_tool("list_modules", {}, state)
     assert "no sections" in result.lower() or result == "(no sections)"
 
 
@@ -859,9 +837,7 @@ def test_document_fetch_module_no_filter_returns_title_and_word_count() -> None:
     from baps.adapters.document_adapter import DocumentProjectAdapter
 
     state = _document_state([("Intro", "Hello world today.")])
-    result = DocumentProjectAdapter().execute_create_game_research_tool(
-        "fetch_module", {"module_id": "Intro"}, state
-    )
+    result = DocumentProjectAdapter().execute_create_game_research_tool("fetch_module", {"module_id": "Intro"}, state)
     assert "Intro" in result
     assert "words" in result
 
@@ -891,9 +867,7 @@ def test_document_fetch_module_not_found_lists_available() -> None:
     from baps.adapters.document_adapter import DocumentProjectAdapter
 
     state = _document_state([("Intro", "Body.")])
-    result = DocumentProjectAdapter().execute_create_game_research_tool(
-        "fetch_module", {"module_id": "Missing"}, state
-    )
+    result = DocumentProjectAdapter().execute_create_game_research_tool("fetch_module", {"module_id": "Missing"}, state)
     assert "not found" in result.lower()
     assert "Intro" in result
 
@@ -933,9 +907,7 @@ def test_unknown_filter_message_includes_available_filters() -> None:
     from baps.adapters.document_adapter import DocumentProjectAdapter
 
     state = _document_state([("Intro", "Body.")])
-    result = DocumentProjectAdapter().execute_create_game_research_tool(
-        "list_modules", {"filter": "xyz"}, state
-    )
+    result = DocumentProjectAdapter().execute_create_game_research_tool("list_modules", {"filter": "xyz"}, state)
     assert "summary" in result
     assert "full" in result
 
@@ -944,9 +916,7 @@ def test_coding_unknown_filter_message_includes_available_filters() -> None:
     from baps.adapters.coding_adapter import CodingProjectAdapter
 
     state = _coding_state([("src/a.py", "x = 1\n")])
-    result = CodingProjectAdapter().execute_create_game_research_tool(
-        "list_modules", {"filter": "xyz"}, state
-    )
+    result = CodingProjectAdapter().execute_create_game_research_tool("list_modules", {"filter": "xyz"}, state)
     assert "api" in result
     assert "full" in result
 
@@ -962,9 +932,7 @@ def test_coding_adapter_zig_build_tools_filter_enum_includes_tests() -> None:
     state = _coding_state([("src/main.zig", "// code\n")], language="zig")
     tools = CodingProjectAdapter().build_create_game_research_tools(state)
     list_tool = next(t for t in tools if t.name == "list_modules")
-    filter_enum = (
-        list_tool.parameters.get("properties", {}).get("filter", {}).get("enum", [])
-    )
+    filter_enum = list_tool.parameters.get("properties", {}).get("filter", {}).get("enum", [])
     assert "tests" in filter_enum
     assert "api" in filter_enum
     assert "full" in filter_enum
@@ -979,9 +947,7 @@ def test_coding_execute_fetch_file_still_works() -> None:
     from baps.adapters.coding_adapter import CodingProjectAdapter
 
     state = _coding_state([("src/a.py", "def fn(): pass\n")])
-    result = CodingProjectAdapter().execute_create_game_research_tool(
-        "fetch_file", {"path": "src/a.py"}, state
-    )
+    result = CodingProjectAdapter().execute_create_game_research_tool("fetch_file", {"path": "src/a.py"}, state)
     assert "def fn" in result
 
 
@@ -989,7 +955,5 @@ def test_document_execute_fetch_section_still_works() -> None:
     from baps.adapters.document_adapter import DocumentProjectAdapter
 
     state = _document_state([("Intro", "Original body.")])
-    result = DocumentProjectAdapter().execute_create_game_research_tool(
-        "fetch_section", {"title": "Intro"}, state
-    )
+    result = DocumentProjectAdapter().execute_create_game_research_tool("fetch_section", {"title": "Intro"}, state)
     assert result == "Original body."

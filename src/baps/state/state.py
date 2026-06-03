@@ -89,9 +89,7 @@ class Section(BaseModel):
         """Validate that body is non-empty and within the byte size limit."""
         _require_non_empty(value)
         if len(value.encode("utf-8")) > _MAX_SECTION_BODY_BYTES:
-            raise ValueError(
-                f"section body must not exceed {_MAX_SECTION_BODY_BYTES} bytes"
-            )
+            raise ValueError(f"section body must not exceed {_MAX_SECTION_BODY_BYTES} bytes")
         return value
 
 
@@ -115,31 +113,23 @@ class DocumentArtifact(StateArtifact):
         if isinstance(delta, DeltaModifyDocumentState):
             title = delta.payload.section_title
             if not any(s.title == title for s in self.sections):
-                raise ValueError(
-                    f"modify_section: no section with title {title!r} in artifact {self.id!r}"
-                )
+                raise ValueError(f"modify_section: no section with title {title!r} in artifact {self.id!r}")
             return DocumentArtifact(
                 id=self.id,
                 sections=tuple(
-                    Section(title=s.title, body=delta.payload.new_body)
-                    if s.title == title
-                    else s
+                    Section(title=s.title, body=delta.payload.new_body) if s.title == title else s
                     for s in self.sections
                 ),
             )
         if isinstance(delta, DeltaDeleteDocumentState):
             title = delta.payload.section_title
             if not any(s.title == title for s in self.sections):
-                raise ValueError(
-                    f"delete_section: no section with title {title!r} in artifact {self.id!r}"
-                )
+                raise ValueError(f"delete_section: no section with title {title!r} in artifact {self.id!r}")
             return DocumentArtifact(
                 id=self.id,
                 sections=tuple(s for s in self.sections if s.title != title),
             )
-        raise ValueError(
-            f"DocumentArtifact does not support delta type: {type(delta).__name__}"
-        )
+        raise ValueError(f"DocumentArtifact does not support delta type: {type(delta).__name__}")
 
 
 class CodeFile(BaseModel):
@@ -154,9 +144,7 @@ class CodeFile(BaseModel):
         """Validate that path is non-empty and within the byte limit."""
         _require_non_empty(value)
         if len(value.encode("utf-8")) > _MAX_CODEFILE_PATH_BYTES:
-            raise ValueError(
-                f"file path must not exceed {_MAX_CODEFILE_PATH_BYTES} bytes"
-            )
+            raise ValueError(f"file path must not exceed {_MAX_CODEFILE_PATH_BYTES} bytes")
         return value
 
     @field_validator("content")
@@ -164,9 +152,7 @@ class CodeFile(BaseModel):
     def _validate_content_length(cls, value: str) -> str:
         """Validate that content is within the byte size limit."""
         if len(value.encode("utf-8")) > _MAX_CODEFILE_CONTENT_BYTES:
-            raise ValueError(
-                f"file content must not exceed {_MAX_CODEFILE_CONTENT_BYTES} bytes"
-            )
+            raise ValueError(f"file content must not exceed {_MAX_CODEFILE_CONTENT_BYTES} bytes")
         return value
 
 
@@ -182,30 +168,22 @@ class CodingArtifact(StateArtifact):
         if isinstance(delta, DeltaCodingState):
             files_by_path = {f.path: f for f in self.files}
             files_by_path[delta.payload.file.path] = delta.payload.file
-            return CodingArtifact(
-                id=self.id, language=self.language, files=tuple(files_by_path.values())
-            )
+            return CodingArtifact(id=self.id, language=self.language, files=tuple(files_by_path.values()))
         if isinstance(delta, DeltaCodingBatchState):
             files_by_path = {f.path: f for f in self.files}
             for incoming in delta.payload.files:
                 files_by_path[incoming.path] = incoming
-            return CodingArtifact(
-                id=self.id, language=self.language, files=tuple(files_by_path.values())
-            )
+            return CodingArtifact(id=self.id, language=self.language, files=tuple(files_by_path.values()))
         if isinstance(delta, DeltaDeleteCodingState):
             path = delta.payload.path
             if not any(f.path == path for f in self.files):
-                raise ValueError(
-                    f"delete_file: no file with path {path!r} in artifact {self.id!r}"
-                )
+                raise ValueError(f"delete_file: no file with path {path!r} in artifact {self.id!r}")
             return CodingArtifact(
                 id=self.id,
                 language=self.language,
                 files=tuple(f for f in self.files if f.path != path),
             )
-        raise ValueError(
-            f"CodingArtifact does not support delta type: {type(delta).__name__}"
-        )
+        raise ValueError(f"CodingArtifact does not support delta type: {type(delta).__name__}")
 
 
 class AppendSectionDelta(BaseModel):
@@ -230,9 +208,7 @@ class ModifySectionDelta(BaseModel):
         """Validate that new_body is non-empty and within the byte size limit."""
         _require_non_empty(value)
         if len(value.encode("utf-8")) > _MAX_SECTION_BODY_BYTES:
-            raise ValueError(
-                f"section body must not exceed {_MAX_SECTION_BODY_BYTES} bytes"
-            )
+            raise ValueError(f"section body must not exceed {_MAX_SECTION_BODY_BYTES} bytes")
         return value
 
 
@@ -338,15 +314,9 @@ class GameSpec(BaseModel):
     target_entity: str | None = None
 
     _validate_objective = field_validator("objective")(_require_non_empty)
-    _validate_target_artifact_id = field_validator("target_artifact_id")(
-        _require_non_empty
-    )
-    _validate_allowed_delta_type = field_validator("allowed_delta_type")(
-        _require_non_empty
-    )
-    _validate_success_condition = field_validator("success_condition")(
-        _require_non_empty
-    )
+    _validate_target_artifact_id = field_validator("target_artifact_id")(_require_non_empty)
+    _validate_allowed_delta_type = field_validator("allowed_delta_type")(_require_non_empty)
+    _validate_success_condition = field_validator("success_condition")(_require_non_empty)
 
 
 class SubGapSpec(BaseModel):
@@ -411,9 +381,7 @@ def apply_referee_decision_to_runtime(
         # unchanged so current_best_delta only ever holds an accepted candidate.
         return PlayGameRuntime(
             current_best_delta=(
-                runtime.current_best_delta.model_copy(deep=True)
-                if runtime.current_best_delta is not None
-                else None
+                runtime.current_best_delta.model_copy(deep=True) if runtime.current_best_delta is not None else None
             ),
             integration_eligible_delta=(
                 runtime.integration_eligible_delta.model_copy(deep=True)
@@ -424,9 +392,7 @@ def apply_referee_decision_to_runtime(
     # Reject: wrong direction — discard candidate, keep previous progress state.
     return PlayGameRuntime(
         current_best_delta=(
-            runtime.current_best_delta.model_copy(deep=True)
-            if runtime.current_best_delta is not None
-            else None
+            runtime.current_best_delta.model_copy(deep=True) if runtime.current_best_delta is not None else None
         ),
         integration_eligible_delta=(
             runtime.integration_eligible_delta.model_copy(deep=True)
@@ -443,9 +409,7 @@ class NorthStar(BaseModel):
 
     @field_validator("artifacts", mode="before")
     @classmethod
-    def _coerce_artifact_types(
-        cls, artifacts: object
-    ) -> tuple[SerializeAsAny[StateArtifact], ...]:
+    def _coerce_artifact_types(cls, artifacts: object) -> tuple[SerializeAsAny[StateArtifact], ...]:
         """Deserialize each artifact entry to the most specific StateArtifact subtype."""
         if not isinstance(artifacts, (list, tuple)):
             raise TypeError("northstar artifacts must be a list or tuple")
@@ -470,9 +434,7 @@ class State(BaseModel):
 
     @field_validator("artifacts", mode="before")
     @classmethod
-    def _coerce_artifact_types(
-        cls, artifacts: object
-    ) -> tuple[SerializeAsAny[StateArtifact], ...]:
+    def _coerce_artifact_types(cls, artifacts: object) -> tuple[SerializeAsAny[StateArtifact], ...]:
         """Deserialize each artifact entry to the most specific StateArtifact subtype."""
         if not isinstance(artifacts, (list, tuple)):
             raise TypeError("state artifacts must be a list or tuple")
@@ -522,9 +484,7 @@ def apply_state_delta(state: State, delta: DeltaState) -> State:
     if artifact is None:
         raise ValueError(f"mutable artifact not found in state: {artifact_id!r}")
     if not hasattr(artifact, "apply_delta"):
-        raise ValueError(
-            f"artifact kind {artifact.kind!r} does not implement apply_delta"
-        )
+        raise ValueError(f"artifact kind {artifact.kind!r} does not implement apply_delta")
     updated = artifact.apply_delta(delta)
     return State(
         artifacts=tuple(updated if a.id == artifact_id else a for a in state.artifacts),
@@ -542,19 +502,12 @@ def validate_state_artifacts(state: State, registry: StateArtifactRegistry) -> S
         adapter = registry.resolve(artifact.kind)
         validated = adapter.validate_artifact(artifact)
         if validated.id != artifact.id:
-            raise ValueError(
-                f"adapter must not change artifact id: expected {artifact.id}, got {validated.id}"
-            )
+            raise ValueError(f"adapter must not change artifact id: expected {artifact.id}, got {validated.id}")
         if validated.kind != artifact.kind:
-            raise ValueError(
-                "adapter must not change artifact kind: "
-                f"expected {artifact.kind}, got {validated.kind}"
-            )
+            raise ValueError(f"adapter must not change artifact kind: expected {artifact.kind}, got {validated.kind}")
         return validated
 
-    validated_state_artifacts = tuple(
-        _validate_one(artifact) for artifact in state.artifacts
-    )
+    validated_state_artifacts = tuple(_validate_one(artifact) for artifact in state.artifacts)
 
     return State(
         artifacts=validated_state_artifacts,
@@ -566,30 +519,21 @@ def project_state(state: State, registry: StateArtifactRegistry) -> StateProject
 
     def _project_one(artifact: StateArtifact) -> str:
         if isinstance(artifact, DocumentArtifact):
-            titles = (
-                ", ".join(section.title for section in artifact.sections)
-                or "no sections"
-            )
+            titles = ", ".join(section.title for section in artifact.sections) or "no sections"
             projection = f"document artifact: {artifact.id} ({titles})"
             if not projection.strip():
-                raise ValueError(
-                    f"artifact projection must be a non-empty string for artifact id: {artifact.id}"
-                )
+                raise ValueError(f"artifact projection must be a non-empty string for artifact id: {artifact.id}")
             return projection
         if isinstance(artifact, CodingArtifact):
             paths = ", ".join(file.path for file in artifact.files) or "no files"
             projection = f"coding artifact: {artifact.id} ({paths})"
             if not projection.strip():
-                raise ValueError(
-                    f"artifact projection must be a non-empty string for artifact id: {artifact.id}"
-                )
+                raise ValueError(f"artifact projection must be a non-empty string for artifact id: {artifact.id}")
             return projection
         adapter = registry.resolve(artifact.kind)
         projection = adapter.project_artifact(artifact)
         if not projection.strip():
-            raise ValueError(
-                f"artifact projection must be a non-empty string for artifact id: {artifact.id}"
-            )
+            raise ValueError(f"artifact projection must be a non-empty string for artifact id: {artifact.id}")
         return projection
 
     projected_artifacts = tuple(_project_one(artifact) for artifact in state.artifacts)

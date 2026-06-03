@@ -63,9 +63,7 @@ def _apply_proposal(workspace: Path, proposal: dict, dry_run: bool) -> None:
         "[apply-northstar] current NorthStar:\n%s",
         config.get("northstar_markdown", "(empty)"),
     )
-    logger.info(
-        "[apply-northstar] proposed NorthStar:\n%s", proposal["proposed_northstar"]
-    )
+    logger.info("[apply-northstar] proposed NorthStar:\n%s", proposal["proposed_northstar"])
 
     if dry_run:
         logger.info("[apply-northstar] dry-run: no changes written.")
@@ -140,9 +138,7 @@ def main() -> None:
         chosen = proposals[idx]
     else:
         print()
-        raw = input(
-            f"Enter proposal index to apply [0–{len(proposals) - 1}], or 'q' to quit: "
-        ).strip()
+        raw = input(f"Enter proposal index to apply [0–{len(proposals) - 1}], or 'q' to quit: ").strip()
         if raw.lower() in ("q", "quit", ""):
             logger.info("[apply-northstar] aborted.")
             sys.exit(0)

@@ -46,9 +46,7 @@ def test_env_for_model_ollama() -> None:
 
 def test_env_for_model_inherits_existing_env() -> None:
     with patch.dict(os.environ, {"MY_CUSTOM_VAR": "hello"}):
-        env = _env_for_model(
-            ModelConfig("sonnet", Backend.ANTHROPIC, "claude-sonnet-4-6")
-        )
+        env = _env_for_model(ModelConfig("sonnet", Backend.ANTHROPIC, "claude-sonnet-4-6"))
     assert env["MY_CUSTOM_VAR"] == "hello"
 
 
@@ -78,9 +76,7 @@ def test_auto_ladder_openai_only() -> None:
 
 
 def test_auto_ladder_both_keys_includes_all() -> None:
-    with patch.dict(
-        os.environ, {"ANTHROPIC_API_KEY": "k1", "OPENAI_API_KEY": "k2"}, clear=True
-    ):
+    with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "k1", "OPENAI_API_KEY": "k2"}, clear=True):
         ladder = _auto_ladder()
     names = [m.name for m in ladder]
     assert "haiku" in names and "gpt-4o" in names
@@ -105,9 +101,7 @@ def test_default_model_ladder_reads_env_var() -> None:
 
 
 def test_default_model_ladder_skips_unknown_names() -> None:
-    with patch.dict(
-        os.environ, {"BAPS_MODEL_LADDER": "haiku,does-not-exist,sonnet"}, clear=True
-    ):
+    with patch.dict(os.environ, {"BAPS_MODEL_LADDER": "haiku,does-not-exist,sonnet"}, clear=True):
         ladder = _default_model_ladder()
     names = [m.name for m in ladder]
     assert "does-not-exist" not in names
@@ -204,9 +198,7 @@ def test_main_rejects_policy_path_outside_cwd(tmp_path: Path, monkeypatch) -> No
     import sys
 
     outside = tmp_path / "policy.json"
-    monkeypatch.setattr(
-        sys, "argv", ["scheduler", "--policy", str(outside), "--rounds", "0"]
-    )
+    monkeypatch.setattr(sys, "argv", ["scheduler", "--policy", str(outside), "--rounds", "0"])
     with pytest.raises(SystemExit) as exc_info:
         from baps.scheduler.scheduler import main
 
@@ -218,9 +210,7 @@ def test_main_accepts_policy_path_within_cwd(monkeypatch, tmp_path: Path) -> Non
     import sys
 
     policy_file = Path(".baps-test-scheduler-policy-tmp.json")
-    monkeypatch.setattr(
-        sys, "argv", ["scheduler", "--policy", str(policy_file), "--rounds", "0"]
-    )
+    monkeypatch.setattr(sys, "argv", ["scheduler", "--policy", str(policy_file), "--rounds", "0"])
     try:
         from baps.scheduler.scheduler import main
 

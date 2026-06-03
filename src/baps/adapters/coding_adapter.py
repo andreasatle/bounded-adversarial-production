@@ -61,11 +61,7 @@ def _coding_api_stats(file, plugin) -> str:
     except NotImplementedError:
         return ""
     lines = api_text.splitlines()
-    sig_count = sum(
-        1
-        for ln in lines
-        if ln.lstrip().startswith("def ") or ln.lstrip().startswith("async def ")
-    )
+    sig_count = sum(1 for ln in lines if ln.lstrip().startswith("def ") or ln.lstrip().startswith("async def "))
     doc_count = sum(1 for ln in lines if '"""' in ln and "def " not in ln)
     return f" — {sig_count} signatures, {doc_count} documented"
 
@@ -76,9 +72,7 @@ def _coding_test_stats(file, plugin) -> str:
         test_text = plugin.extract_tests(file)
     except NotImplementedError:
         return ""
-    test_count = sum(
-        1 for ln in test_text.splitlines() if ln.strip().startswith("test_")
-    )
+    test_count = sum(1 for ln in test_text.splitlines() if ln.strip().startswith("test_"))
     return f" — {test_count} tests"
 
 
@@ -105,11 +99,7 @@ class CodingProjectAdapter:
         language = config_language(config)
         plugin_for(language)
         return State(
-            artifacts=(
-                CodingArtifact(
-                    id=config_artifact_id(config), language=language, files=()
-                ),
-            ),
+            artifacts=(CodingArtifact(id=config_artifact_id(config), language=language, files=()),),
         )
 
     def build_create_game_state_view(
@@ -139,9 +129,7 @@ class CodingProjectAdapter:
         if verification_result is None:
             del state, config, state_view
             return base
-        verification_json = json.dumps(
-            verification_result_to_dict(verification_result), sort_keys=True
-        )
+        verification_json = json.dumps(verification_result_to_dict(verification_result), sort_keys=True)
         exit_code = verification_result.exit_code
         if exit_code == 5:
             no_tests_hint = (
@@ -165,9 +153,7 @@ class CodingProjectAdapter:
             "- If evidence shows import/layout errors, prefer a repair game that fixes import/layout.\n"
         )
 
-    def normalize_game_spec(
-        self, game_spec: GameSpec, state: State, config: dict[str, object]
-    ) -> GameSpec:
+    def normalize_game_spec(self, game_spec: GameSpec, state: State, config: dict[str, object]) -> GameSpec:
         """Normalize and return game spec."""
         del state
         configured_artifact_id = config_artifact_id(config)
@@ -187,9 +173,7 @@ class CodingProjectAdapter:
         summarization_context: SummarizationContext | None = None,
     ) -> StateView:
         """Build and return state view."""
-        return build_coding_state_view(
-            state, game_spec, summarization_context=summarization_context
-        )
+        return build_coding_state_view(state, game_spec, summarization_context=summarization_context)
 
     def render_blue_prompt(
         self,
@@ -246,9 +230,7 @@ class CodingProjectAdapter:
 
     def build_create_game_research_tools(self, state: State) -> list:
         """Build and return create game research tools."""
-        artifact = next(
-            (a for a in state.artifacts if isinstance(a, CodingArtifact)), None
-        )
+        artifact = next((a for a in state.artifacts if isinstance(a, CodingArtifact)), None)
         if artifact is None:
             return []
         plugin = plugin_for(artifact.language)
@@ -260,13 +242,9 @@ class CodingProjectAdapter:
             entity_desc="Get a top-level entity (function or class) from a file.",
         )
 
-    def execute_create_game_research_tool(
-        self, tool_name: str, tool_input: dict, state: State
-    ) -> str:
+    def execute_create_game_research_tool(self, tool_name: str, tool_input: dict, state: State) -> str:
         """Execute and return create game research tool."""
-        artifact = next(
-            (a for a in state.artifacts if isinstance(a, CodingArtifact)), None
-        )
+        artifact = next((a for a in state.artifacts if isinstance(a, CodingArtifact)), None)
 
         if tool_name == "list_modules":
             if artifact is None or not artifact.files:
@@ -289,17 +267,13 @@ class CodingProjectAdapter:
         if tool_name == "fetch_module":
             module_id = tool_input.get("module_id", "")
             if not isinstance(module_id, str) or not module_id:
-                return (
-                    "tool_error: fetch_module requires a non-empty 'module_id' string"
-                )
+                return "tool_error: fetch_module requires a non-empty 'module_id' string"
             if artifact is None:
                 return "tool_error: no coding artifact found in state"
             file = next((f for f in artifact.files if f.path == module_id), None)
             if file is None:
                 available = sorted(f.path for f in artifact.files)
-                available_str = (
-                    ", ".join(f"'{p}'" for p in available) if available else "(none)"
-                )
+                available_str = ", ".join(f"'{p}'" for p in available) if available else "(none)"
                 return f"File '{module_id}' not found. Available files: {available_str}"
             plugin = plugin_for(artifact.language)
             filter_val = tool_input.get("filter")
@@ -324,13 +298,9 @@ class CodingProjectAdapter:
             module_id = tool_input.get("module_id", "")
             entity_id = tool_input.get("entity_id", "")
             if not isinstance(module_id, str) or not module_id:
-                return (
-                    "tool_error: fetch_entity requires a non-empty 'module_id' string"
-                )
+                return "tool_error: fetch_entity requires a non-empty 'module_id' string"
             if not isinstance(entity_id, str) or not entity_id:
-                return (
-                    "tool_error: fetch_entity requires a non-empty 'entity_id' string"
-                )
+                return "tool_error: fetch_entity requires a non-empty 'entity_id' string"
             if artifact is None:
                 return "tool_error: no coding artifact found in state"
             file = next((f for f in artifact.files if f.path == module_id), None)
@@ -451,9 +421,7 @@ class CodingProjectAdapter:
                     }
                 )
             except Exception as exc:
-                raise ValueError(
-                    f"tool call arguments failed DeltaCodingBatchState validation: {exc}"
-                ) from exc
+                raise ValueError(f"tool call arguments failed DeltaCodingBatchState validation: {exc}") from exc
             validate_coding_write_files_purity(delta_batch)
             return delta_batch
         if tool_call.name == "write_file":
@@ -472,9 +440,7 @@ class CodingProjectAdapter:
                     }
                 )
             except Exception as exc:
-                raise ValueError(
-                    f"tool call arguments failed DeltaCodingState validation: {exc}"
-                ) from exc
+                raise ValueError(f"tool call arguments failed DeltaCodingState validation: {exc}") from exc
             validate_coding_write_file_artifact_purity(delta_single)
             return delta_single
         if tool_call.name == "delete_file":
@@ -493,9 +459,7 @@ class CodingProjectAdapter:
                     }
                 )
             except Exception as exc:
-                raise ValueError(
-                    f"tool call arguments failed DeltaDeleteCodingState validation: {exc}"
-                ) from exc
+                raise ValueError(f"tool call arguments failed DeltaDeleteCodingState validation: {exc}") from exc
         raise ValueError(f"unexpected tool: {tool_call.name!r}")
 
     def parse_blue_delta(self, text: str) -> DeltaState:
@@ -512,9 +476,7 @@ class CodingProjectAdapter:
         for code_file in artifact.files:
             dest = (output_path / code_file.path).resolve()
             if not dest.is_relative_to(resolved_root):
-                raise ValueError(
-                    f"file path escapes output directory: {code_file.path!r}"
-                )
+                raise ValueError(f"file path escapes output directory: {code_file.path!r}")
             dest.parent.mkdir(parents=True, exist_ok=True)
             materialized = normalize_coding_export_content(code_file.content)
             before = dest.read_text(encoding="utf-8") if dest.exists() else None
@@ -560,11 +522,7 @@ class CodingProjectAdapter:
         """Verify and return export."""
         output_path.mkdir(parents=True, exist_ok=True)
         artifact = coding_artifact_from_state(state, artifact_id)
-        missing_files = [
-            code_file.path
-            for code_file in artifact.files
-            if not (output_path / code_file.path).exists()
-        ]
+        missing_files = [code_file.path for code_file in artifact.files if not (output_path / code_file.path).exists()]
         if missing_files:
             return VerificationResult(
                 command="file_presence_check",
@@ -598,11 +556,7 @@ class CodingProjectAdapter:
             for code_file in candidate_files:
                 dest = (tmp_path / code_file.path).resolve()
                 if not dest.is_relative_to(resolved_tmp):
-                    raise ValueError(
-                        f"file path escapes temp directory: {code_file.path!r}"
-                    )
+                    raise ValueError(f"file path escapes temp directory: {code_file.path!r}")
                 dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_text(
-                    normalize_coding_export_content(code_file.content), encoding="utf-8"
-                )
+                dest.write_text(normalize_coding_export_content(code_file.content), encoding="utf-8")
             return plugin.run_tests(tmp_path, sandbox_mode)
