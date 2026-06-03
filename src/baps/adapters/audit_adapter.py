@@ -6,13 +6,6 @@ import hashlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from baps.models.model_output import parse_model_output
-from baps.models.models import ToolCall, ToolDefinition
-from baps.northstar.northstar_projection import (
-    ProjectionType,
-    StateView,
-    assemble_state_view,
-)
 from baps.adapters.project_adapter import (
     VerificationResult,
     config_artifact_id,
@@ -21,10 +14,24 @@ from baps.adapters.project_adapter import (
     sanitize_model_string,
     sanitize_model_title,
 )
+from baps.models.model_output import parse_model_output
+from baps.models.models import ToolCall, ToolDefinition
+from baps.northstar.northstar_projection import (
+    ProjectionType,
+    StateView,
+    assemble_state_view,
+)
 
 if TYPE_CHECKING:
     from baps.game.roles import PlayGameFeedback
     from baps.summarizer.summarizer import SummarizationContext
+from baps.adapters.document_adapter import (
+    build_module_research_tools,
+    document_artifact_from_state,
+    export_document_artifact,
+    first_sentence,
+    parse_document_delta_json,
+)
 from baps.state.state import (
     DeltaState,
     DocumentArtifact,
@@ -32,14 +39,6 @@ from baps.state.state import (
     Section,
     State,
 )
-from baps.adapters.document_adapter import (
-    build_module_research_tools,
-    first_sentence,
-    document_artifact_from_state,
-    export_document_artifact,
-    parse_document_delta_json,
-)
-
 
 _SOURCE_PATH_MARKER = "<!-- audit:source_path="
 _AUDIT_META_ARTIFACT_ID_PREFIX = "audit:meta:"

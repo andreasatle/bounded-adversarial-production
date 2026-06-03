@@ -16,16 +16,15 @@ from baps.models.model_output import (
     _OBJECT_CORRECTION_PROMPT,
     _REACT_CORRECTION_PROMPT,
     _STRIPPED_KEYS_FILE,
-    extract_json_candidate,
+    ParseRecoveryRecord,
     _is_react_format,
     _rescue_react_payload,
+    extract_json_candidate,
     parse_model_output,
     render_output_schema_hint,
     wrap_json_prompt,
-    ParseRecoveryRecord,
 )
 from baps.state.state import GameSpec, RedFinding
-
 
 _KEYS = frozenset({"a", "b", "c"})
 

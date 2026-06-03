@@ -4,6 +4,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from baps.plugins.language_rust import RustLanguagePlugin
 from baps.state.state import CodeFile
 

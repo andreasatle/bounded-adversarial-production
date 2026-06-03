@@ -21,7 +21,6 @@ import json
 import sys
 from pathlib import Path
 
-
 # ---------------------------------------------------------------------------
 # Workspace loading
 # ---------------------------------------------------------------------------
@@ -115,15 +114,15 @@ def main() -> None:
     workspace = args.workspace.resolve()
     config_dict, state_raw, events = _load_workspace(workspace)
 
-    from baps.core.run_config import RunConfig
     from baps.adapters.project_adapter import resolve_project_type_adapter
     from baps.core.prompts import (
         render_create_game_prompt,
         render_red_prompt,
-        render_referee_prompt,
         render_red_prompt_supplement_with_adapter,
+        render_referee_prompt,
         render_referee_prompt_supplement_with_adapter,
     )
+    from baps.core.run_config import RunConfig
     from baps.state.state import GameSpec, RedFinding, State
 
     project_type = config_dict.get("project_type", "coding")

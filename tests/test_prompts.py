@@ -6,20 +6,19 @@ import inspect
 from pathlib import Path
 from unittest.mock import patch
 
-
-from baps.models.models import FakeModelClient, ToolCall
-from baps.core.run import create_state as _create_state
-from baps.core.run_config import RunConfig
-from baps.game.engine import play_game
-from baps.adapters.document_adapter import DocumentProjectAdapter
+import baps.state.state as state_module
 from baps.adapters.coding_adapter import CodingProjectAdapter
+from baps.adapters.document_adapter import DocumentProjectAdapter
 from baps.core.prompts import (
     render_create_game_prompt,
     render_red_prompt,
     render_referee_prompt,
 )
+from baps.core.run import create_state as _create_state
+from baps.core.run_config import RunConfig
+from baps.game.engine import play_game
+from baps.models.models import FakeModelClient, ToolCall
 from baps.state.state import GameSpec, RedFinding
-import baps.state.state as state_module
 
 
 def create_state(config: RunConfig | dict) -> state_module.State:
@@ -443,7 +442,7 @@ def test_document_blue_prompt_includes_modify_section_shape() -> None:
 
 def test_blue_prompt_includes_context_chain_from_game_spec() -> None:
     from baps.adapters.project_adapter import render_blue_prompt_core
-    from baps.northstar.northstar_projection import StateView, ProjectionType
+    from baps.northstar.northstar_projection import ProjectionType, StateView
 
     game_spec = GameSpec(
         objective="Write jwt_utils.py",
@@ -466,7 +465,7 @@ def test_blue_prompt_includes_context_chain_from_game_spec() -> None:
 
 def test_blue_prompt_no_context_block_when_chain_empty() -> None:
     from baps.adapters.project_adapter import render_blue_prompt_core
-    from baps.northstar.northstar_projection import StateView, ProjectionType
+    from baps.northstar.northstar_projection import ProjectionType, StateView
 
     game_spec = GameSpec(
         objective="Write something",

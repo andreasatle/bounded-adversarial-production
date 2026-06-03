@@ -5,13 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from baps.models.model_output import parse_model_output
-from baps.models.models import ToolCall, ToolDefinition
-from baps.northstar.northstar_projection import (
-    ProjectionType,
-    StateView,
-    assemble_state_view,
-)
 from baps.adapters.project_adapter import (
     VerificationResult,
     config_artifact_id,
@@ -19,6 +12,13 @@ from baps.adapters.project_adapter import (
     render_blue_prompt_core,
     sanitize_model_string,
     sanitize_model_title,
+)
+from baps.models.model_output import parse_model_output
+from baps.models.models import ToolCall, ToolDefinition
+from baps.northstar.northstar_projection import (
+    ProjectionType,
+    StateView,
+    assemble_state_view,
 )
 
 if TYPE_CHECKING:
@@ -31,7 +31,6 @@ from baps.state.state import (
     DeltaState,
     DocumentArtifact,
     GameSpec,
-    Section,
     State,
 )
 

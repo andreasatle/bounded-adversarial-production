@@ -3,15 +3,15 @@
 import pytest
 
 from baps.state.state import (
-    build_default_state_artifact_registry,
     CodingArtifactAdapter,
     DocumentArtifactAdapter,
-    find_state_artifact,
-    fingerprint_state,
     State,
     StateArtifact,
     StateArtifactRegistry,
     StateProjection,
+    build_default_state_artifact_registry,
+    find_state_artifact,
+    fingerprint_state,
     project_state,
     validate_state_artifacts,
 )

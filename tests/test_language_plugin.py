@@ -8,7 +8,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # LanguagePlugin protocol and registry
 # ---------------------------------------------------------------------------
@@ -90,14 +89,14 @@ def test_python_plugin_test_command_is_str() -> None:
 
 
 def test_initialize_creates_conftest(tmp_path: Path) -> None:
-    from baps.plugins.language_python import PythonLanguagePlugin, _CONFTEST_CONTENT
+    from baps.plugins.language_python import _CONFTEST_CONTENT, PythonLanguagePlugin
 
     PythonLanguagePlugin().initialize(tmp_path)
     assert (tmp_path / "conftest.py").read_text(encoding="utf-8") == _CONFTEST_CONTENT
 
 
 def test_initialize_creates_gitignore(tmp_path: Path) -> None:
-    from baps.plugins.language_python import PythonLanguagePlugin, _GITIGNORE_CONTENT
+    from baps.plugins.language_python import _GITIGNORE_CONTENT, PythonLanguagePlugin
 
     PythonLanguagePlugin().initialize(tmp_path)
     assert (tmp_path / ".gitignore").read_text(encoding="utf-8") == _GITIGNORE_CONTENT
@@ -169,6 +168,7 @@ def test_run_tests_bare_uses_uv(tmp_path: Path) -> None:
 
 def test_run_tests_bare_falls_back_when_uv_missing(tmp_path: Path) -> None:
     import sys as _sys
+
     from baps.plugins.language_python import PythonLanguagePlugin
 
     completed = _make_completed(returncode=0, stdout="1 passed")
@@ -462,7 +462,7 @@ def test_zig_plugin_initialize_creates_src_main_zig(tmp_path: Path) -> None:
 
 
 def test_zig_plugin_initialize_creates_gitignore(tmp_path: Path) -> None:
-    from baps.plugins.language_zig import ZigLanguagePlugin, _GITIGNORE_CONTENT
+    from baps.plugins.language_zig import _GITIGNORE_CONTENT, ZigLanguagePlugin
 
     ZigLanguagePlugin().initialize(tmp_path)
     assert (tmp_path / ".gitignore").read_text(encoding="utf-8") == _GITIGNORE_CONTENT
@@ -558,7 +558,7 @@ def test_zig_plugin_run_tests_docker_uses_plugin_values(tmp_path: Path) -> None:
 
 def test_coding_adapter_verify_export_zig_uses_zig_docker_image(tmp_path: Path) -> None:
     from baps.adapters.coding_adapter import CodingProjectAdapter
-    from baps.state.state import CodingArtifact, CodeFile, State
+    from baps.state.state import CodeFile, CodingArtifact, State
 
     artifact = CodingArtifact(
         id="art",
@@ -582,7 +582,7 @@ def test_coding_adapter_verify_export_zig_uses_zig_docker_image(tmp_path: Path) 
 
 def test_coding_adapter_verify_export_zig_uses_zig_test_command(tmp_path: Path) -> None:
     from baps.adapters.coding_adapter import CodingProjectAdapter
-    from baps.state.state import CodingArtifact, CodeFile, State
+    from baps.state.state import CodeFile, CodingArtifact, State
 
     artifact = CodingArtifact(
         id="art",
@@ -608,7 +608,7 @@ def test_coding_adapter_verify_export_zig_does_not_use_python_image(
     tmp_path: Path,
 ) -> None:
     from baps.adapters.coding_adapter import CodingProjectAdapter
-    from baps.state.state import CodingArtifact, CodeFile, State
+    from baps.state.state import CodeFile, CodingArtifact, State
 
     artifact = CodingArtifact(
         id="art",
@@ -773,7 +773,7 @@ def test_rust_plugin_initialize_creates_src_lib_rs(tmp_path: Path) -> None:
 
 
 def test_rust_plugin_initialize_creates_gitignore(tmp_path: Path) -> None:
-    from baps.plugins.language_rust import RustLanguagePlugin, _GITIGNORE_CONTENT
+    from baps.plugins.language_rust import _GITIGNORE_CONTENT, RustLanguagePlugin
 
     RustLanguagePlugin().initialize(tmp_path)
     assert (tmp_path / ".gitignore").read_text(encoding="utf-8") == _GITIGNORE_CONTENT

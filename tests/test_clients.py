@@ -8,18 +8,18 @@ from pathlib import Path
 import pytest
 import yaml
 
+import baps.core.clients as _clients_module
+from baps.core.run import create_state as _create_state
+from baps.core.run_config import RunConfig
+from baps.game.engine import create_game, play_game
 from baps.models.models import (
     AnthropicClient,
+    Backend,
     FakeModelClient,
     OllamaClient,
     OpenAIClient,
     ToolCall,
 )
-from baps.models.models import Backend
-from baps.core.run import create_state as _create_state
-from baps.core.run_config import RunConfig
-from baps.game.engine import create_game, play_game
-import baps.core.clients as _clients_module
 
 # Captured before autouse fixtures patch them — used by backend dispatch tests.
 _real_build_model_client = _clients_module._build_model_client

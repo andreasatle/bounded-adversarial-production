@@ -2,10 +2,10 @@ import ast
 import subprocess
 from pathlib import Path
 
-from baps.game.engine import commit_export_with_adapter
+import baps.state.state as state_module
 from baps.adapters.coding_adapter import CodingProjectAdapter
 from baps.adapters.document_adapter import DocumentProjectAdapter
-import baps.state.state as state_module
+from baps.game.engine import commit_export_with_adapter
 
 
 def test_coding_adapter_export_writes_files(tmp_path: Path) -> None:

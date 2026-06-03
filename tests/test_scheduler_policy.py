@@ -8,7 +8,6 @@ import pytest
 from baps.models.models import Backend
 from baps.scheduler.scheduler_policy import ModelConfig, ModelPolicy, compute_reward
 
-
 # ---------------------------------------------------------------------------
 # compute_reward
 # ---------------------------------------------------------------------------

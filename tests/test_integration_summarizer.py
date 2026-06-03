@@ -4,21 +4,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
+import baps.state.state as state_module
 from baps.adapters.document_adapter import DocumentProjectAdapter
 from baps.core.clients import parse_spec_roles
-from baps.core.roles import SpecRole
 from baps.core.orchestration import run_project_iterations
+from baps.core.parsers import NoNewGameError
+from baps.core.roles import SpecRole
 from baps.core.run_config import RoleConfig, RunConfig
-from baps.core.runtime import build_runtime, _resolve_summarize_role
+from baps.core.runtime import (
+    _initialize_project,
+    _resolve_summarize_role,
+    build_runtime,
+)
 from baps.models.models import Backend, FakeModelClient, Role
 from baps.state.state import GameSpec, StopReason
 from baps.summarizer.summarizer import SummarizationContext
-from baps.core.runtime import _initialize_project
-from baps.core.parsers import NoNewGameError
-import baps.state.state as state_module
-
 
 # ---------------------------------------------------------------------------
 # Helpers

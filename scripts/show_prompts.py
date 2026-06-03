@@ -94,8 +94,8 @@ def build_prompts() -> dict[str, str]:
         render_create_game_prompt,
         render_create_game_red_prompt,
         render_red_prompt,
-        render_referee_prompt,
         render_red_prompt_supplement_with_adapter,
+        render_referee_prompt,
         render_referee_prompt_supplement_with_adapter,
     )
 

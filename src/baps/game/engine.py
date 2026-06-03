@@ -7,7 +7,14 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable
 
-from baps.core.roles import SpecRole
+from baps.adapters.project_adapter import (
+    ProjectTypeAdapter,
+    VerificationResult,
+    config_artifact_id,
+    resolve_adapter_for_allowed_delta_type,
+    resolve_project_type_adapter,
+    sanitize_model_string,
+)
 from baps.core.clients import (
     build_client_for_role,
     build_fallback_chain_for_role,
@@ -16,34 +23,9 @@ from baps.core.clients import (
     resolve_backend_model,
 )
 from baps.core.debug import (
+    debug_event,
     debug_print_create_game_prompt,
     debug_print_create_game_raw_model_output,
-    debug_event,
-)
-from baps.core.run_config import RunConfig
-from baps.models.models import ModelClient, Role
-from baps.game.attempt import (
-    PlayAttemptRecord,
-    apply_play_game_attempt_decision,
-    run_play_game_attempt,
-)
-from baps.game.play import record_play_game_telemetry
-from baps.game.roles import (
-    PlayGameContext,
-    PlayGameFeedback,
-    RED_FINDING_SCHEMA,
-    VerifyCandidateFn,
-    build_play_game_fallbacks,
-    initial_play_game_feedback,
-    resolve_play_game_roles,
-)
-from baps.game.telemetry import (
-    VERIFICATION_SUMMARY_CAP,
-    append_create_game_to_blackboard,
-    append_integration_to_blackboard,
-    append_northstar_proposal_to_blackboard,
-    client_model_name,
-    sanitize_game_spec_dict,
 )
 from baps.core.parsers import (
     NoNewGameError,
@@ -51,14 +33,6 @@ from baps.core.parsers import (
     normalize_game_spec_with_adapter,
     parse_create_game_output,
     parse_red_finding_json,
-)
-from baps.adapters.project_adapter import (
-    ProjectTypeAdapter,
-    VerificationResult,
-    config_artifact_id,
-    resolve_adapter_for_allowed_delta_type,
-    resolve_project_type_adapter,
-    sanitize_model_string,
 )
 from baps.core.prompts import (
     render_create_game_prompt,
@@ -68,8 +42,31 @@ from baps.core.prompts import (
     render_referee_prompt,
     render_tool_session_block,
 )
+from baps.core.roles import SpecRole
+from baps.core.run_config import RunConfig
+from baps.game.attempt import (
+    PlayAttemptRecord,
+    apply_play_game_attempt_decision,
+    run_play_game_attempt,
+)
+from baps.game.play import record_play_game_telemetry
+from baps.game.roles import (
+    RED_FINDING_SCHEMA,
+    PlayGameContext,
+    PlayGameFeedback,
+    VerifyCandidateFn,
+    build_play_game_fallbacks,
+    initial_play_game_feedback,
+    resolve_play_game_roles,
+)
+from baps.game.telemetry import (
+    VERIFICATION_SUMMARY_CAP,
+    append_create_game_to_blackboard,
+    client_model_name,
+    sanitize_game_spec_dict,
+)
+from baps.models.models import ModelClient, Role
 from baps.northstar.northstar_projection import StateView
-from baps.summarizer.summarizer import SummarizationContext
 from baps.state.state import (
     DecomposeSpec,
     DeltaState,
@@ -78,6 +75,7 @@ from baps.state.state import (
     RedFinding,
     State,
 )
+from baps.summarizer.summarizer import SummarizationContext
 from baps.tools.tools import ToolExecutor
 
 logger = logging.getLogger(__name__)

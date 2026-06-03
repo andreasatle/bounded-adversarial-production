@@ -5,36 +5,36 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from baps.adapters.project_adapter import (
     VerificationResult,
     config_artifact_id,
     verification_result_to_dict,
 )
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from baps.game.roles import PlayGameFeedback
     from baps.summarizer.summarizer import SummarizationContext
 from baps.adapters.coding.common import (
+    coding_artifact_from_state,
     config_language,
     plugin_for,
     validate_file_path,
-    coding_artifact_from_state,
 )
 from baps.adapters.coding.delta_apply import (
     apply_delta_to_files,
     normalize_coding_export_content,
 )
 from baps.adapters.coding.parsing import (
+    parse_coding_delta_json,
     validate_coding_write_file_artifact_purity,
     validate_coding_write_files_purity,
-    parse_coding_delta_json,
 )
 from baps.adapters.coding.prompting import (
+    render_coding_blue_prompt,
     render_coding_evaluation_supplement,
     truncate_lines,
-    render_coding_blue_prompt,
 )
 from baps.adapters.coding.views import (
     build_coding_create_game_state_view,
@@ -42,7 +42,6 @@ from baps.adapters.coding.views import (
 )
 from baps.adapters.document_adapter import build_module_research_tools
 from baps.models.models import ToolCall, ToolDefinition
-from baps.tools.tools import FETCH_FILE_DEFINITION
 from baps.northstar.northstar_projection import StateView, require_state_view_metadata
 from baps.state.state import (
     CodingArtifact,

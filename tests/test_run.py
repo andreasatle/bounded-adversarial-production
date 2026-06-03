@@ -4,18 +4,18 @@ from pathlib import Path
 
 import pytest
 
-from baps.models.models import FakeModelClient, ToolCall
+import baps.state.state as state_module
+from baps.adapters.document_adapter import DocumentProjectAdapter
+from baps.core.orchestration import run_project_iterations
+from baps.core.parsers import NoNewGameError, NorthStarUpdateNeededError
 from baps.core.run import create_state
 from baps.core.run_config import RunConfig
 from baps.game.engine import create_game, play_game
+from baps.models.models import FakeModelClient, ToolCall
 from baps.state.state import (
     DecomposeSpec,
     GameSpec,
 )
-from baps.core.parsers import NoNewGameError, NorthStarUpdateNeededError
-from baps.core.orchestration import run_project_iterations
-from baps.adapters.document_adapter import DocumentProjectAdapter
-import baps.state.state as state_module
 
 
 def _make_doc_config(

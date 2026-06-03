@@ -9,8 +9,8 @@ import os
 from baps.core.lifecycle import reset_project, start_project
 
 # Compatibility re-export used by tests.
-from baps.core.run_config import resolve_run_config
-from baps.core.runtime import create_state
+from baps.core.run_config import resolve_run_config  # noqa: F401
+from baps.core.runtime import create_state  # noqa: F401
 
 
 def _configure_runtime_logging() -> None:

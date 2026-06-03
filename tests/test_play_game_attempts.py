@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from baps.models.models import FakeModelClient, ToolCall
+import baps.state.state as state_module
+from baps.core.prompts import render_red_prompt, render_referee_prompt
 from baps.core.run import create_state as _create_state
 from baps.core.run_config import RunConfig
 from baps.game.engine import play_game
-from baps.core.prompts import render_red_prompt, render_referee_prompt
+from baps.models.models import FakeModelClient, ToolCall
 from baps.state.state import GameSpec
-import baps.state.state as state_module
 
 
 def create_state(config: RunConfig | dict) -> state_module.State:

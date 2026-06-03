@@ -2,9 +2,8 @@ import json
 import logging
 from pathlib import Path
 
-
-from baps.core.run import main
 import baps.state.state as state_module
+from baps.core.run import main
 
 
 def test_main_prints_required_fields_and_no_legacy_iteration_output(

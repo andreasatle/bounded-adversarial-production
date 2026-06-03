@@ -5,20 +5,21 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from baps.core.run_config import RunConfig
-from baps.models.model_output import render_output_schema_hint
-from baps.models.models import ToolCallRecord
-from baps.northstar.northstar_projection import StateView
+from pydantic import BaseModel
+
 from baps.adapters.project_adapter import (
     ProjectTypeAdapter,
     VerificationResult,
     config_artifact_id,
-    verification_result_to_dict,
     resolve_project_type_adapter,
     sanitize_model_string,
+    verification_result_to_dict,
 )
+from baps.core.run_config import RunConfig
+from baps.models.model_output import render_output_schema_hint
+from baps.models.models import ToolCallRecord
+from baps.northstar.northstar_projection import StateView
 from baps.state.state import DeltaState, GameSpec, RedFinding, RefereeDecision, State
-from pydantic import BaseModel
 
 
 class _CreateGameOutput(BaseModel):

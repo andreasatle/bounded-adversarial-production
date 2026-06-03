@@ -7,14 +7,13 @@ import logging
 
 import pytest
 
+import baps.state.state as state_module
 from baps.core.parsers import (
     NorthStarUpdateNeededError,
     parse_create_game_output,
     parse_red_finding_json,
     parse_referee_decision_json,
 )
-import baps.state.state as state_module
-
 
 # ---------------------------------------------------------------------------
 # NorthStar update-needed signal tests
@@ -370,7 +369,6 @@ def testparse_create_game_output_correction_retry_no_new_game_no_fallback_raises
     None
 ):
     """Correction retry returning no_new_game with no fallback raises ValueError, not NoNewGameError."""
-    from baps.core.parsers import NoNewGameError
 
     def retry_fn(prompt: str) -> str:
         return json.dumps({"kind": "no_new_game", "reason": "nothing to do"})
@@ -652,7 +650,6 @@ def testparse_create_game_output_correction_retry_kind_terminal_signal_blocked()
     None
 ):
     """Correction retry returning kind=no_new_game must not escape as NoNewGameError."""
-    from baps.core.parsers import NoNewGameError
     from baps.state.state import GameSpec
 
     valid_game_spec = json.dumps(

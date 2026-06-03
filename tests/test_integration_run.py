@@ -1,9 +1,9 @@
 from pathlib import Path
 
+import baps.state.state as state_module
 from baps.adapters.project_adapter import VerificationResult
 from baps.core.parsers import NoNewGameError
 from baps.state.state import GameSpec
-import baps.state.state as state_module
 
 
 def test_coding_run_no_files_keeps_output_exported_false(

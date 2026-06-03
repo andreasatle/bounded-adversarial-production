@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from baps.adapters.project_adapter import VerificationResult
-from baps.state.state import PlayGameRuntime
-
 from baps.game.attempt import PlayAttemptRecord
 from baps.game.roles import PlayGameContext
 from baps.game.telemetry import append_game_to_blackboard
+from baps.state.state import PlayGameRuntime
 
 
 def record_play_game_telemetry(

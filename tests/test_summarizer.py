@@ -5,8 +5,6 @@ from __future__ import annotations
 from baps.models.models import FakeModelClient, Role
 from baps.summarizer.summarizer import (
     SummarizationContext,
-    _build_api_prompt,
-    _build_objective_prompt,
 )
 
 

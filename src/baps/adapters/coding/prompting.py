@@ -7,14 +7,14 @@ from baps.adapters.project_adapter import (
     render_blue_prompt_core,
     sanitize_model_string,
 )
-from baps.northstar.northstar_projection import StateView
-from baps.plugins.language_plugin import LanguagePlugin
-from baps.state.state import GameSpec
 from baps.game.roles import (
     AttemptRejectionFeedback,
     PlayGameFeedback,
     PriorExportFeedback,
 )
+from baps.northstar.northstar_projection import StateView
+from baps.plugins.language_plugin import LanguagePlugin
+from baps.state.state import GameSpec
 
 from .common import BLUE_CONTENT_FORBIDDEN_MARKERS
 

@@ -10,9 +10,9 @@ from baps.adapters.project_adapter import (
     resolve_project_type_adapter,
 )
 from baps.core.clients import build_client_for_role, resolve_backend_model
-from baps.core.roles import SpecRole
 from baps.core.debug import debug_print_create_state
 from baps.core.orchestration import IterationRunResult, run_project_iterations
+from baps.core.roles import SpecRole
 from baps.core.run_config import RunConfig
 from baps.core.workspace import (
     save_workspace_settings,

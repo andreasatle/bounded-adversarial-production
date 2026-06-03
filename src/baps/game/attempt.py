@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, SerializeAsAny
 
-from baps.core.roles import SpecRole
+from baps.adapters.project_adapter import VerificationResult
 from baps.core.parsers import parse_red_finding_json, parse_referee_decision_json
-from baps.models.model_output import ParseRecoveryRecord
 from baps.core.prompts import (
     get_research_tools,
     render_red_prompt_supplement_with_adapter,
@@ -14,7 +13,15 @@ from baps.core.prompts import (
     render_research_prompt,
     render_tool_session_block,
 )
-from baps.adapters.project_adapter import VerificationResult
+from baps.core.roles import SpecRole
+from baps.game.roles import (
+    AttemptRejection,
+    AttemptRejectionFeedback,
+    BlueValidationFeedback,
+    PlayGameContext,
+    PlayGameFeedback,
+)
+from baps.models.model_output import ParseRecoveryRecord
 from baps.models.models import ToolCallRecord
 from baps.state.state import (
     DeltaState,
@@ -22,14 +29,6 @@ from baps.state.state import (
     RedFinding,
     RefereeDecision,
     apply_referee_decision_to_runtime,
-)
-
-from baps.game.roles import (
-    AttemptRejection,
-    AttemptRejectionFeedback,
-    BlueValidationFeedback,
-    PlayGameContext,
-    PlayGameFeedback,
 )
 
 

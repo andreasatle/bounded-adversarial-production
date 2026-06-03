@@ -8,15 +8,14 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from baps.core.run_config import RunConfig, resolve_reset_targets, resolve_run_config
 from baps.core.orchestration import IterationRunResult
+from baps.core.run_config import RunConfig, resolve_reset_targets, resolve_run_config
 from baps.core.runtime import (
     active_model_info,
     build_runtime,
     run_project,
 )
 from baps.core.workspace import wipe_workspace_state, write_run_result
-from baps.adapters.project_adapter import VerificationResult
 from baps.state.state import StopReason
 
 logger = logging.getLogger(__name__)

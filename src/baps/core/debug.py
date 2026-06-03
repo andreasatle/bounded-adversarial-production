@@ -6,13 +6,13 @@ import argparse
 import logging
 from typing import Any
 
-from baps.core.run_config import RunConfig
 from baps.adapters.project_adapter import (
     VerificationResult,
     config_artifact_id,
     config_northstar_markdown,
     verification_result_to_dict,
 )
+from baps.core.run_config import RunConfig
 from baps.state.state import State
 
 logger = logging.getLogger(__name__)

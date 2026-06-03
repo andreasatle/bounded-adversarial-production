@@ -8,29 +8,29 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from baps.core.clients import build_client_for_role
-from baps.core.roles import SpecRole
-from baps.core.run_config import RunConfig
-from baps.core.debug import (
-    debug_print_northstar_update_proposal,
-    debug_print_verification_result,
-)
-from baps.game.engine import (
-    commit_export_with_adapter,
-    verify_export_with_adapter,
-    create_game,
-    play_game,
-)
-from baps.game.telemetry import (
-    append_integration_to_blackboard,
-    append_northstar_proposal_to_blackboard,
-)
-from baps.core.parsers import NoNewGameError, NorthStarUpdateNeededError
 from baps.adapters.project_adapter import (
     ProjectTypeAdapter,
     VerificationResult,
     config_artifact_id,
     config_northstar_markdown,
+)
+from baps.core.clients import build_client_for_role
+from baps.core.debug import (
+    debug_print_northstar_update_proposal,
+    debug_print_verification_result,
+)
+from baps.core.parsers import NoNewGameError, NorthStarUpdateNeededError
+from baps.core.roles import SpecRole
+from baps.core.run_config import RunConfig
+from baps.game.engine import (
+    commit_export_with_adapter,
+    create_game,
+    play_game,
+    verify_export_with_adapter,
+)
+from baps.game.telemetry import (
+    append_integration_to_blackboard,
+    append_northstar_proposal_to_blackboard,
 )
 from baps.state.state import DecomposeSpec, State, StopReason
 from baps.state.state_service import StateService

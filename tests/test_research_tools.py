@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
-import pytest
-
-import baps.state.state as state_module
 from baps.state.state import (
     CodeFile,
     CodingArtifact,
     DocumentArtifact,
+    NorthStar,
     Section,
     State,
-    NorthStar,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -506,6 +502,7 @@ _TEST_FOO_ITEM = {
 
 def test_rust_extract_api_returns_public_items() -> None:
     from unittest.mock import patch
+
     from baps.plugins.language_rust import RustLanguagePlugin
 
     file = CodeFile(path="lib.rs", content="pub fn foo() {}")
@@ -519,6 +516,7 @@ def test_rust_extract_api_returns_public_items() -> None:
 
 def test_rust_extract_tests_returns_test_items() -> None:
     from unittest.mock import patch
+
     from baps.plugins.language_rust import RustLanguagePlugin
 
     file = CodeFile(path="lib.rs", content="#[test]\nfn test_foo() {}")
@@ -532,6 +530,7 @@ def test_rust_extract_tests_returns_test_items() -> None:
 
 def test_rust_extract_entity_returns_entity_body() -> None:
     from unittest.mock import patch
+
     from baps.plugins.language_rust import RustLanguagePlugin
 
     file = CodeFile(path="lib.rs", content="pub fn foo() {}")
@@ -544,8 +543,9 @@ def test_rust_extract_entity_returns_entity_body() -> None:
 
 
 def test_zig_extract_api_is_implemented() -> None:
-    from unittest.mock import MagicMock, patch
     import json
+    from unittest.mock import MagicMock, patch
+
     from baps.plugins.language_zig import ZigLanguagePlugin
 
     file = CodeFile(path="main.zig", content="pub fn foo() void {}")
@@ -572,8 +572,9 @@ def test_zig_extract_api_is_implemented() -> None:
 
 
 def test_zig_extract_entity_is_implemented() -> None:
-    from unittest.mock import MagicMock, patch
     import json
+    from unittest.mock import MagicMock, patch
+
     from baps.plugins.language_zig import ZigLanguagePlugin
 
     file = CodeFile(path="main.zig", content="pub fn foo() void {}")

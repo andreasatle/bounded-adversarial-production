@@ -6,7 +6,6 @@ import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-
 _TEST_COMMAND = "my_test_runner --verbose"
 _DOCKER_IMAGE = "example:1.0"
 
@@ -222,8 +221,9 @@ def test_run_sandboxed_docker_mode_calls_docker(tmp_path: Path) -> None:
 
 
 def test_run_sandboxed_unknown_mode_raises(tmp_path: Path) -> None:
-    from baps.tools.sandbox import run_sandboxed
     import pytest
+
+    from baps.tools.sandbox import run_sandboxed
 
     with pytest.raises(ValueError, match="unknown sandbox_mode"):
         run_sandboxed(tmp_path, "qemu", _TEST_COMMAND, _DOCKER_IMAGE)
@@ -233,8 +233,8 @@ def test_run_sandboxed_unknown_mode_raises(tmp_path: Path) -> None:
 
 
 def test_python_plugin_docker_image_is_passed_to_docker(tmp_path: Path) -> None:
-    from baps.tools.sandbox import _run_docker
     from baps.plugins.language_python import PythonLanguagePlugin
+    from baps.tools.sandbox import _run_docker
 
     plugin = PythonLanguagePlugin()
     completed = _make_completed(returncode=0)
@@ -313,8 +313,9 @@ def test_is_docker_unavailable_error_unrelated_error() -> None:
 
 
 def test_run_docker_raises_runtime_error_on_daemon_error(tmp_path: Path) -> None:
-    from baps.tools.sandbox import _run_docker
     import pytest
+
+    from baps.tools.sandbox import _run_docker
 
     daemon_stderr = (
         "Cannot connect to the Docker daemon at unix:///var/run/docker.sock."

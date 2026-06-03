@@ -6,15 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from baps.models.models import FakeModelClient, ToolCall
-from baps.core.run import create_state as _create_state
-from baps.core.run_config import RunConfig
-from baps.game.engine import play_game
 from baps.core.parsers import (
     parse_red_finding_json,
     parse_referee_decision_json,
 )
 from baps.core.prompts import render_red_prompt, render_referee_prompt
+from baps.core.run import create_state as _create_state
+from baps.core.run_config import RunConfig
+from baps.game.engine import play_game
+from baps.models.models import FakeModelClient, ToolCall
 from baps.state.state import GameSpec
 
 

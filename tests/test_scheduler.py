@@ -18,7 +18,6 @@ from baps.scheduler.scheduler import (
 )
 from baps.scheduler.scheduler_policy import ModelConfig, ModelPolicy
 
-
 # ---------------------------------------------------------------------------
 # _env_for_model
 # ---------------------------------------------------------------------------

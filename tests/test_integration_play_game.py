@@ -1,10 +1,10 @@
+import baps.state.state as state_module
 from baps.adapters.project_adapter import VerificationResult
 from baps.game.engine import play_game
 from baps.game.roles import PriorExportFeedback
 from baps.models.models import FakeModelClient, ToolCall
 from baps.northstar.northstar_projection import ProjectionType, StateView
 from baps.state.state import GameSpec
-import baps.state.state as state_module
 
 
 def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:

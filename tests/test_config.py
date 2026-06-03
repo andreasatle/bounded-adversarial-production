@@ -593,7 +593,9 @@ def test_coding_example_output_path_resolves_under_workspace() -> None:
 
 def test_resolve_run_config_max_sub_gaps_defaults_to_5(tmp_path: Path) -> None:
     import argparse
+
     import yaml
+
     import baps.core.run as run_module
 
     (tmp_path / "ns.md").write_text("NorthStar")
@@ -623,7 +625,9 @@ def test_resolve_run_config_max_sub_gaps_defaults_to_5(tmp_path: Path) -> None:
 
 def test_resolve_run_config_max_sub_gaps_from_spec(tmp_path: Path) -> None:
     import argparse
+
     import yaml
+
     import baps.core.run as run_module
 
     (tmp_path / "ns.md").write_text("NorthStar")
@@ -654,8 +658,10 @@ def test_resolve_run_config_max_sub_gaps_from_spec(tmp_path: Path) -> None:
 
 def test_resolve_run_config_max_sub_gaps_zero_raises(tmp_path: Path) -> None:
     import argparse
+
     import pytest
     import yaml
+
     import baps.core.run as run_module
 
     (tmp_path / "ns.md").write_text("NorthStar")
@@ -686,8 +692,10 @@ def test_resolve_run_config_max_sub_gaps_zero_raises(tmp_path: Path) -> None:
 
 def test_resolve_run_config_max_sub_gaps_non_integer_raises(tmp_path: Path) -> None:
     import argparse
+
     import pytest
     import yaml
+
     import baps.core.run as run_module
 
     (tmp_path / "ns.md").write_text("NorthStar")
@@ -718,7 +726,9 @@ def test_resolve_run_config_max_sub_gaps_non_integer_raises(tmp_path: Path) -> N
 
 def test_resolve_runconfig_language_zig_propagates_to_config(tmp_path: Path) -> None:
     import argparse
+
     import yaml
+
     import baps.core.run as run_module
 
     spec = {
@@ -748,7 +758,9 @@ def test_resolve_runconfig_language_zig_propagates_to_config(tmp_path: Path) -> 
 
 def test_resolve_runconfig_language_absent_leaves_empty_string(tmp_path: Path) -> None:
     import argparse
+
     import yaml
+
     import baps.core.run as run_module
 
     spec = {

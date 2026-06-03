@@ -16,11 +16,9 @@ if TYPE_CHECKING:
     from baps.summarizer.summarizer import SummarizationContext
 
 from baps.core.run_config import RunConfig
-
 from baps.models.models import ToolCall, ToolDefinition
 from baps.northstar.northstar_projection import StateView
 from baps.state.state import DeltaState, GameSpec, State
-
 
 _MODEL_INJECTION_RE = re.compile(
     r"(ignore|disregard|forget|override)\s+(all\s+)?(previous|prior|above|earlier)\s+"
@@ -239,9 +237,9 @@ class ProjectTypeAdapter(Protocol):
 
 def build_default_project_type_adapters() -> dict[str, ProjectTypeAdapter]:
     """Build and return default project type adapters."""
+    from baps.adapters.audit_adapter import AuditProjectAdapter
     from baps.adapters.coding_adapter import CodingProjectAdapter
     from baps.adapters.document_adapter import DocumentProjectAdapter
-    from baps.adapters.audit_adapter import AuditProjectAdapter
 
     return {
         DocumentProjectAdapter.project_type: DocumentProjectAdapter(),

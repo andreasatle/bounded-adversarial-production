@@ -1,5 +1,5 @@
-from baps.adapters.coding_adapter import CodingProjectAdapter
 import baps.state.state as state_module
+from baps.adapters.coding_adapter import CodingProjectAdapter
 
 
 def testapply_delta_to_files_write_file() -> None:

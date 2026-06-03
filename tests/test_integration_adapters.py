@@ -2,13 +2,13 @@ from pathlib import Path
 
 import pytest
 
+import baps.state.state as state_module
+from baps.adapters.coding_adapter import CodingProjectAdapter
+from baps.adapters.document_adapter import DocumentProjectAdapter
 from baps.adapters.project_adapter import VerificationResult
 from baps.core.run_config import RunConfig
 from baps.game.roles import AttemptRejectionFeedback, PriorExportFeedback
 from baps.state.state import GameSpec, RedFinding, RefereeDecision
-from baps.adapters.coding_adapter import CodingProjectAdapter
-from baps.adapters.document_adapter import DocumentProjectAdapter
-import baps.state.state as state_module
 
 
 def test_coding_create_state_creates_coding_artifact() -> None:
@@ -162,8 +162,8 @@ def test_document_adapter_tool_call_delete_section_returns_correct_delta() -> No
 
 def test_coding_blue_prompt_includes_prior_export_failures() -> None:
     from baps.adapters.coding_adapter import render_coding_blue_prompt
-    from baps.plugins.language_python import PythonLanguagePlugin
     from baps.northstar.northstar_projection import ProjectionType, StateView
+    from baps.plugins.language_python import PythonLanguagePlugin
 
     state_view = StateView(
         id="sv:test",
@@ -202,8 +202,8 @@ def test_coding_blue_prompt_includes_prior_export_failures() -> None:
 
 def test_coding_blue_prompt_no_verification_section_when_feedback_is_none() -> None:
     from baps.adapters.coding_adapter import render_coding_blue_prompt
-    from baps.plugins.language_python import PythonLanguagePlugin
     from baps.northstar.northstar_projection import ProjectionType, StateView
+    from baps.plugins.language_python import PythonLanguagePlugin
 
     state_view = StateView(
         id="sv:test",
@@ -231,8 +231,8 @@ def test_coding_blue_prompt_no_verification_section_when_feedback_is_none() -> N
 
 def test_coding_blue_prompt_includes_candidate_verification_failures() -> None:
     from baps.adapters.coding_adapter import render_coding_blue_prompt
-    from baps.plugins.language_python import PythonLanguagePlugin
     from baps.northstar.northstar_projection import ProjectionType, StateView
+    from baps.plugins.language_python import PythonLanguagePlugin
 
     state_view = StateView(
         id="sv:test",

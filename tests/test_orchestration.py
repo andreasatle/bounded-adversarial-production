@@ -8,22 +8,22 @@ from pathlib import Path
 
 import pytest
 
-from baps.core.run import create_state, main
-from baps.core.run_config import RunConfig
+import baps.state.state as state_module
 from baps.adapters.document_adapter import DocumentProjectAdapter
-from baps.core.parsers import NoNewGameError, NorthStarUpdateNeededError
-from baps.state.state import (
-    GameSpec,
-    DecomposeSpec,
-    SubGapSpec,
-    State,
-)
 from baps.adapters.project_adapter import VerificationResult
+from baps.core.orchestration import run_project_iterations
+from baps.core.parsers import NoNewGameError, NorthStarUpdateNeededError
+from baps.core.run import main
+from baps.core.run_config import RunConfig
+from baps.core.runtime import _initialize_project
+from baps.state.state import (
+    DecomposeSpec,
+    GameSpec,
+    State,
+    SubGapSpec,
+)
 from baps.state.state_service import StateService
 from baps.state.state_store import JsonStateStore
-from baps.core.orchestration import run_project_iterations
-import baps.state.state as state_module
-from baps.core.runtime import _initialize_project
 
 
 def test_main_calls_play_game_with_gamespec_from_create_game(

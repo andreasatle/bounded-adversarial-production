@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from baps.models.models import FakeModelClient, ToolCall
+from baps.adapters.project_adapter import VerificationResult
+from baps.core.parsers import NoNewGameError
 from baps.core.run import create_state
 from baps.core.run_config import RunConfig
-from baps.game.engine import create_game, play_game, VERIFICATION_SUMMARY_CAP
-from baps.core.parsers import NoNewGameError
+from baps.game.engine import VERIFICATION_SUMMARY_CAP, create_game, play_game
+from baps.models.models import FakeModelClient, ToolCall
 from baps.state.state import GameSpec
-from baps.adapters.project_adapter import VerificationResult
 
 
 def _make_play_game_config(workspace: Path) -> RunConfig:

@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pytest
 
+import baps.state.state as state_module
 from baps.adapters.document_adapter import DocumentProjectAdapter
 from baps.game.engine import create_game
-import baps.state.state as state_module
 
 
 def test_create_state_output_flows_into_create_game(
@@ -65,8 +65,8 @@ def test_create_state_output_flows_into_create_game(
 def test_main_integration_uses_state_service_apply_delta(
     monkeypatch, tmp_path: Path
 ) -> None:
-    from baps.state.state_service import StateService
     import baps.core.run as run_module
+    from baps.state.state_service import StateService
 
     called = {"value": False}
     original_apply = StateService.apply_delta
@@ -134,8 +134,9 @@ def test_main_persists_updated_state_with_appended_section(
 def test_main_unsupported_delta_operation_fails_explicitly(
     monkeypatch, capsys, caplog, tmp_path: Path
 ) -> None:
-    import baps.core.run as run_module
     import logging
+
+    import baps.core.run as run_module
 
     monkeypatch.setattr(
         "baps.core.orchestration.play_game",
@@ -228,8 +229,8 @@ def test_document_export_output_changed_false_when_unchanged(tmp_path: Path) -> 
 
 
 def test_document_export_lives_behind_adapter_not_main_orchestration() -> None:
-    import baps.core.run as run_module
     import baps.adapters.document_adapter as doc_adapter_module
+    import baps.core.run as run_module
 
     main_src = inspect.getsource(run_module.main)
     assert "output_path.write_text" not in main_src

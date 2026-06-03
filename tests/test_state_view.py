@@ -2,16 +2,15 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import baps.state.state as state_module
+from baps.adapters.coding_adapter import CodingProjectAdapter
+from baps.adapters.document_adapter import DocumentProjectAdapter
 from baps.core.run_config import RunConfig
 from baps.models.models import FakeModelClient, Role
 from baps.state.state import (
     GameSpec,
 )
-from baps.adapters.document_adapter import DocumentProjectAdapter
-from baps.adapters.coding_adapter import CodingProjectAdapter
 from baps.summarizer.summarizer import SummarizationContext
-import baps.state.state as state_module
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers for Rust / Zig Docker mocking

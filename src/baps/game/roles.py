@@ -8,8 +8,7 @@ from typing import Any, Callable, Protocol
 
 from pydantic import BaseModel
 
-from baps.core.run_config import RunConfig
-from baps.core.roles import SpecRole
+from baps.adapters.project_adapter import ProjectTypeAdapter, VerificationResult
 from baps.core.clients import (
     build_client_for_role,
     build_fallback_chain_for_role,
@@ -17,8 +16,9 @@ from baps.core.clients import (
     make_fallback_chain_fn,
     resolve_backend_model,
 )
+from baps.core.roles import SpecRole
+from baps.core.run_config import RunConfig
 from baps.models.models import ModelClient, Role
-from baps.adapters.project_adapter import ProjectTypeAdapter, VerificationResult
 from baps.northstar.northstar_projection import StateView
 from baps.state.state import DeltaState, GameSpec, RedFinding, RefereeDecision, State
 from baps.tools.tools import ToolExecutor

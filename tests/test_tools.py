@@ -2,23 +2,21 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-
 from baps.models.models import ToolDefinition
 from baps.tools.tools import (
     FETCH_FILE_DEFINITION,
     FETCH_URL_DEFINITION,
     WEB_SEARCH_DEFINITION,
     ToolExecutor,
+    _is_private_host,
+    _sanitize_external_content,
+    _strip_html,
     build_default_tool_executor,
     build_fetch_file_tool,
     fetch_file,
     fetch_url,
     web_search,
-    _is_private_host,
-    _strip_html,
-    _sanitize_external_content,
 )
-
 
 # ---------------------------------------------------------------------------
 # _is_private_host
@@ -347,7 +345,7 @@ def test_web_search_definition_has_query_parameter() -> None:
 
 
 def _make_artifact(files: list[tuple[str, str]]):
-    from baps.state.state import CodingArtifact, CodeFile
+    from baps.state.state import CodeFile, CodingArtifact
 
     return CodingArtifact(
         id="art",

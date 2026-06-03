@@ -8,12 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from baps.models.models import FakeModelClient
+from baps.adapters.document_adapter import DocumentProjectAdapter
+from baps.core.prompts import render_create_game_prompt
 from baps.core.run import create_state
 from baps.core.run_config import RunConfig
 from baps.game.engine import create_game
-from baps.adapters.document_adapter import DocumentProjectAdapter
-from baps.core.prompts import render_create_game_prompt
+from baps.models.models import FakeModelClient
 
 
 def _make_doc_config(
@@ -923,7 +923,7 @@ def test_create_game_research_phase_fetch_file_dispatches_via_adapter() -> None:
     """execute_create_game_research_tool is dispatched by ToolExecutor during research."""
     from baps.adapters.coding_adapter import CodingProjectAdapter
     from baps.models.models import ToolCall
-    from baps.state.state import CodingArtifact, CodeFile, State, NorthStar
+    from baps.state.state import CodeFile, CodingArtifact, NorthStar, State
 
     config = _make_coding_config()
     state = State(

@@ -4,7 +4,6 @@ import pytest
 from pydantic import ValidationError
 
 from baps.state.state import (
-    apply_referee_decision_to_runtime,
     AppendSectionDelta,
     CodeFile,
     DeltaDocumentState,
@@ -18,6 +17,7 @@ from baps.state.state import (
     Section,
     State,
     StateArtifact,
+    apply_referee_decision_to_runtime,
 )
 
 

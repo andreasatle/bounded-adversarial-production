@@ -139,8 +139,8 @@ def _load_spec(spec_path: Path) -> dict[str, object]:
 
 def resolve_run_config(args: argparse.Namespace) -> RunConfig:
     """Merge CLI args, YAML spec, and workspace settings into a validated RunConfig."""
-    from baps.core.debug import debug_print_read_config
     from baps.core.clients import VALID_BACKENDS, parse_spec_roles
+    from baps.core.debug import debug_print_read_config
 
     spec_data: dict[str, object] = {}
     if args.spec:

@@ -6,6 +6,7 @@ import datetime
 import json
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from baps.adapters.project_adapter import (
     VerificationResult,
@@ -15,8 +16,6 @@ from baps.adapters.project_adapter import (
 from baps.models.model_output import BlackboardEvent
 from baps.models.models import ModelClient
 from baps.state.state import DeltaState, GameSpec
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from baps.game.attempt import PlayAttemptRecord

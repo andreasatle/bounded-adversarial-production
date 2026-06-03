@@ -8,15 +8,14 @@ import pytest
 import baps.state.state as state_module
 from baps.adapters.audit_adapter import (
     AuditProjectAdapter,
+    _collect_source_files,
     _embed_source_path,
     _extract_source_path,
-    _collect_source_files,
     _fence_lang,
-    _render_source_listing,
     _render_source_content,
+    _render_source_listing,
 )
 from baps.models.models import ToolCall
-
 
 # ---------------------------------------------------------------------------
 # Source path embedding / extraction
