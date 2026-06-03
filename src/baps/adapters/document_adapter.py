@@ -199,7 +199,7 @@ summarization_context :SummarizationContext |None =None ,
                 if summary is not None :
                     section_lines .append (f"### {sanitize_model_title (section .title )} [summary]")
                     section_lines .append ("")
-                    section_lines .append (summary )
+                    section_lines .append (sanitize_model_string (summary ))
                     section_lines .append ("")
                     continue 
                 section_lines .append (f"### {sanitize_model_title (section .title )} [full]")
