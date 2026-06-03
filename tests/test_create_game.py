@@ -495,7 +495,7 @@ def test_create_game_missing_gamespec_fields_fails_cleanly ()->None :
     max_iterations =2 ,
     )
     state =create_state (config )
-    with pytest .raises (ValueError ,match ="must contain exactly keys"):
+    with pytest .raises (ValueError ,match ="missing required keys"):
         create_game (
         config ,
         state ,

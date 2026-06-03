@@ -144,7 +144,19 @@ fallback_fn :Any =None ,
 
         # GameSpec branch
     _game_spec_required ={"objective","target_artifact_id","allowed_delta_type","success_condition"}
-    if not _game_spec_required .issubset (parsed .keys ()):
+    missing =_game_spec_required -parsed .keys ()
+    if missing :
+        if retry_fn is not None :
+            logger .warning (
+            "[create_game] unrecognizable response shape (keys: %s); retrying with correction prompt",
+            sorted (parsed .keys ()),
+            )
+            try :
+                raw =retry_fn (_UNRECOGNIZABLE_SHAPE_CORRECTION_PROMPT )
+            except Exception as exc :# noqa: BLE001
+                logger .debug ("[create_game] retry_fn raised during shape correction: %s",exc )
+            else :
+                return parse_create_game_output (raw ,max_sub_gaps =max_sub_gaps ,workspace =workspace )
         if fallback_fn is not None :
             logger .warning (
             "[create_game] unrecognizable response shape (keys: %s); escalating to fallback model",
@@ -153,8 +165,7 @@ fallback_fn :Any =None ,
             raw =fallback_fn (_UNRECOGNIZABLE_SHAPE_CORRECTION_PROMPT )
             return parse_create_game_output (raw ,max_sub_gaps =max_sub_gaps ,workspace =workspace )
         raise ValueError (
-        "create_game model output must contain exactly keys: "
-        "objective, target_artifact_id, allowed_delta_type, success_condition"
+        f"create_game model output missing required keys: {', '.join (sorted (missing ))}"
         )
     try :
         return GameSpec .model_validate (parsed )

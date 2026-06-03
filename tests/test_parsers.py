@@ -39,7 +39,7 @@ def testparse_create_game_output_northstar_update_needed_flag_false_falls_throug
     "rationale":"some reason",
     "proposed_northstar":"new northstar",
     })
-    with pytest .raises (ValueError ,match ="must contain exactly keys"):
+    with pytest .raises (ValueError ,match ="missing required keys"):
         parse_create_game_output (raw )
 
 
@@ -196,7 +196,7 @@ def testparse_create_game_output_all_empty_sub_gaps_with_fallback_escalates ()->
 
 def testparse_create_game_output_unrecognizable_shape_no_fallback_raises ()->None :
     text =json .dumps ({"something_unexpected":"value"})
-    with pytest .raises (ValueError ,match ="must contain exactly keys"):
+    with pytest .raises (ValueError ,match ="missing required keys"):
         parse_create_game_output (text ,max_sub_gaps =5 )
 
 
@@ -239,6 +239,50 @@ caplog :pytest .LogCaptureFixture ,
     with caplog .at_level (logging .WARNING ):
         parse_create_game_output (text ,max_sub_gaps =5 ,fallback_fn =fallback_fn )
     assert "unrecognizable response shape"in caplog .text 
+
+
+def testparse_create_game_output_unrecognizable_shape_with_retry_fn_retries ()->None :
+    from baps .state .state import GameSpec
+
+    valid_game_spec =json .dumps ({
+    "objective":"Close the gap",
+    "target_artifact_id":"main-document",
+    "allowed_delta_type":"DeltaDocumentState",
+    "success_condition":"section present",
+    })
+    retry_calls :list [str ]=[]
+
+    def retry_fn (prompt :str )->str :
+        retry_calls .append (prompt )
+        return valid_game_spec
+
+    text =json .dumps ({"something_unexpected":"value"})
+    result =parse_create_game_output (text ,max_sub_gaps =5 ,retry_fn =retry_fn )
+    assert isinstance (result ,GameSpec )
+    assert len (retry_calls )==1
+
+
+def testparse_create_game_output_unexpected_status_key_triggers_retry ()->None :
+    from baps .state .state import GameSpec
+
+    valid_game_spec =json .dumps ({
+    "objective":"Close the gap",
+    "target_artifact_id":"main-document",
+    "allowed_delta_type":"DeltaDocumentState",
+    "success_condition":"section present",
+    })
+    retry_calls :list [str ]=[]
+
+    def retry_fn (prompt :str )->str :
+        retry_calls .append (prompt )
+        return valid_game_spec
+
+    # status is not in _CREATE_GAME_ALL_KEYS — stripped by parse_model_output,
+    # leaving an empty dict that fails the shape check and should trigger retry
+    text =json .dumps ({"status":"complete"})
+    result =parse_create_game_output (text ,max_sub_gaps =5 ,retry_fn =retry_fn )
+    assert isinstance (result ,GameSpec )
+    assert len (retry_calls )==1
 
 
 def testparse_create_game_output_empty_dict_with_fallback_escalates ()->None :
