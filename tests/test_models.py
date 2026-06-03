@@ -1,4 +1,5 @@
 import json
+from email.message import Message
 from urllib import error
 
 import pytest
@@ -14,6 +15,7 @@ from baps.models.models import (
     ToolCall,
     ToolDefinition,
 )
+from baps.tools.tools import ToolExecutor
 
 
 def test_fake_model_client_returns_responses_in_order() -> None:
@@ -147,7 +149,7 @@ def test_ollama_client_generate_raises_runtime_error_on_http_error(monkeypatch) 
             url=req.full_url,
             code=500,
             msg="server error",
-            hdrs=None,
+            hdrs=Message(),
             fp=None,
         )
 
@@ -390,7 +392,7 @@ def test_anthropic_client_generate_with_schema_uses_tool_use(monkeypatch) -> Non
 def test_anthropic_client_generate_raises_on_http_error(monkeypatch) -> None:
     def fake_urlopen(req):
         fp = __import__("io").BytesIO(b'{"error": "unauthorized"}')
-        raise error.HTTPError(req.full_url, 401, "Unauthorized", {}, fp)
+        raise error.HTTPError(req.full_url, 401, "Unauthorized", Message(), fp)
 
     monkeypatch.setattr("baps.models.models.request.urlopen", fake_urlopen)
     client = AnthropicClient(model="claude-sonnet-4-6", api_key="bad-key")
@@ -488,7 +490,7 @@ def test_openai_client_generate_with_schema_sends_json_schema_format(
 def test_openai_client_generate_raises_on_http_error(monkeypatch) -> None:
     def fake_urlopen(req):
         fp = __import__("io").BytesIO(b'{"error": {"message": "invalid key"}}')
-        raise error.HTTPError(req.full_url, 401, "Unauthorized", {}, fp)
+        raise error.HTTPError(req.full_url, 401, "Unauthorized", Message(), fp)
 
     monkeypatch.setattr("baps.models.models.request.urlopen", fake_urlopen)
     client = OpenAIClient(model="gpt-4o", api_key="bad-key")
@@ -613,12 +615,13 @@ def test_openai_client_generate_with_tools_raises_when_no_tool_called(
 # ---------------------------------------------------------------------------
 
 
-class _FakeExecutor:
+class _FakeExecutor(ToolExecutor):
     def __init__(self, results: dict[str, str] | None = None) -> None:
+        super().__init__()
         self._results = results or {}
-        self.calls: list[tuple[str, dict]] = []
+        self.calls: list[tuple[str, dict[str, object]]] = []
 
-    def execute(self, tool_name: str, arguments: dict) -> str:
+    def execute(self, tool_name: str, arguments: dict[str, object]) -> str:
         self.calls.append((tool_name, arguments))
         return self._results.get(tool_name, f"result_of_{tool_name}")
 
