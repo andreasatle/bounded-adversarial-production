@@ -371,8 +371,8 @@ tmp_path :Path ,monkeypatch
     assert len (vr_summary ["stderr_summary"])==cap 
 
     attempt_vr =entry ["attempts"][0 ]["candidate_verification"]
-    assert attempt_vr ["stdout_summary"]=="O"*cap 
-    assert attempt_vr ["stderr_summary"]=="E"*cap 
+    assert attempt_vr ["stdout"]==long_stdout
+    assert attempt_vr ["stderr"]==long_stderr
 
     # Original VerificationResult object is not mutated
     assert mock_vr .stdout ==long_stdout 

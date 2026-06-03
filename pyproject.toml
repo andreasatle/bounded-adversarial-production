@@ -28,4 +28,8 @@ module-name = "baps"
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
+    "pytest-timeout>=2.0",
 ]
+
+[tool.pytest.ini_options]
+timeout = 3

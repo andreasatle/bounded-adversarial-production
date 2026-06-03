@@ -143,5 +143,5 @@ def test_play_game_pre_seeds_verification_result_as_previous_feedback(monkeypatc
     fb = captured_feedback[0]
     assert fb is not None
     assert isinstance(fb, PriorExportFeedback)
-    assert fb.prior_export_verification["exit_code"] == 1
-    assert fb.prior_export_verification["passed"] is False
+    assert fb.prior_export_verification.exit_code == 1
+    assert fb.prior_export_verification.passed is False

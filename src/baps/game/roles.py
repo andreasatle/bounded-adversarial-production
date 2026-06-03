@@ -9,8 +9,8 @@ from typing import Any ,Callable ,Protocol
 from pydantic import BaseModel 
 
 from baps .core .run_config import RunConfig 
+from baps .core .roles import SpecRole
 from baps .core .clients import (
-SpecRole ,
 build_client_for_role ,
 build_fallback_chain_for_role ,
 build_role_client ,
@@ -27,21 +27,29 @@ from baps .tools .tools import ToolExecutor
 class PriorExportFeedback (BaseModel ):
     """Feedback carrying the prior export verification result into the next Blue attempt."""
 
-    prior_export_verification :dict 
+    prior_export_verification :VerificationResult
+
+
+class AttemptRejection (BaseModel ):
+    """A single rejected attempt, capturing stage, reason, and validation error."""
+
+    stage :SpecRole
+    reason :str
+    validation_error :str
 
 
 class BlueValidationFeedback (BaseModel ):
     """Feedback carrying a Blue output validation error back to the next Blue attempt."""
 
-    attempt_rejection :dict 
+    attempt_rejection :AttemptRejection
 
 
 class AttemptRejectionFeedback (BaseModel ):
     """Feedback from a rejected attempt carrying Red/Referee findings for the next Blue attempt."""
 
-    red_finding :dict 
-    referee_decision :dict 
-    candidate_verification :dict |None =None 
+    red_finding :RedFinding
+    referee_decision :RefereeDecision
+    candidate_verification :VerificationResult |None =None
 
 
 PlayGameFeedback =PriorExportFeedback |BlueValidationFeedback |AttemptRejectionFeedback 
@@ -124,15 +132,8 @@ verification_result :VerificationResult |None ,
 )->PriorExportFeedback |None :
     """Return PriorExportFeedback from a verification result, or None if no result was provided."""
     if verification_result is None :
-        return None 
-    return PriorExportFeedback (
-    prior_export_verification ={
-    "exit_code":verification_result .exit_code ,
-    "passed":verification_result .passed ,
-    "stdout":verification_result .stdout ,
-    "stderr":verification_result .stderr ,
-    }
-    )
+        return None
+    return PriorExportFeedback (prior_export_verification =verification_result )
 
 
 def resolve_play_game_roles (

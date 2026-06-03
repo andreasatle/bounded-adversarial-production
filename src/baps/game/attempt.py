@@ -2,11 +2,9 @@
 
 from __future__ import annotations 
 
-from typing import Any 
+from pydantic import BaseModel ,SerializeAsAny
 
-from pydantic import BaseModel 
-
-from baps .core .clients import SpecRole 
+from baps .core .roles import SpecRole
 from baps .core .parsers import parse_red_finding_json ,parse_referee_decision_json 
 from baps .models .model_output import ParseRecoveryRecord 
 from baps .core .prompts import (
@@ -27,25 +25,25 @@ apply_referee_decision_to_runtime ,
 )
 
 from baps .game .roles import (
+AttemptRejection ,
 AttemptRejectionFeedback ,
 BlueValidationFeedback ,
 PlayGameContext ,
 PlayGameFeedback ,
 )
-from baps .game .telemetry import sanitize_feedback_dict ,summarize_verification_result 
 
 
 class PlayAttemptRecord (BaseModel ):
     """Records the inputs and outputs for a single play_game attempt for telemetry."""
 
-    attempt_number :int 
-    blue_delta :dict [str ,Any ]|None =None 
-    red_finding :dict [str ,Any ]|None =None 
-    referee_decision :dict [str ,Any ]|None =None 
-    candidate_verification :dict [str ,Any ]|None =None 
-    parse_recovery :ParseRecoveryRecord |None =None 
+    attempt_number :int
+    blue_delta :SerializeAsAny [DeltaState ]|None =None
+    red_finding :RedFinding |None =None
+    referee_decision :RefereeDecision |None =None
+    candidate_verification :VerificationResult |None =None
+    parse_recovery :ParseRecoveryRecord |None =None
 
-    def to_telemetry_dict (self )->dict [str ,Any ]:
+    def to_telemetry_dict (self )->dict :
         """Serialize this record to a JSON-safe dict for blackboard writing."""
         return self .model_dump (mode ="json")
 
@@ -118,13 +116,13 @@ PlayGameFeedback |None ,
             reason =f"blue output failed DeltaState validation: {exc }"
             ctx .debug_event_fn ("play_game.attempt_rejected",{"attempt":attempt ,"reason":reason })
             updated_feedback =BlueValidationFeedback (
-            attempt_rejection ={
-            "stage":SpecRole .BLUE ,
-            "reason":reason ,
-            "validation_error":str (exc ),
-            }
+            attempt_rejection =AttemptRejection (
+            stage =SpecRole .BLUE ,
+            reason =reason ,
+            validation_error =str (exc ),
             )
-            return attempt_rec ,None ,None ,None ,updated_feedback 
+            )
+            return attempt_rec ,None ,None ,None ,updated_feedback
     else :
         blue_generated =ctx .blue_role .generate (blue_prompt )
         try :
@@ -133,15 +131,15 @@ PlayGameFeedback |None ,
             reason =f"blue output failed DeltaState validation: {exc }"
             ctx .debug_event_fn ("play_game.attempt_rejected",{"attempt":attempt ,"reason":reason })
             updated_feedback =BlueValidationFeedback (
-            attempt_rejection ={
-            "stage":SpecRole .BLUE ,
-            "reason":reason ,
-            "validation_error":str (exc ),
-            }
+            attempt_rejection =AttemptRejection (
+            stage =SpecRole .BLUE ,
+            reason =reason ,
+            validation_error =str (exc ),
             )
-            return attempt_rec ,None ,None ,None ,updated_feedback 
+            )
+            return attempt_rec ,None ,None ,None ,updated_feedback
     ctx .debug_event_fn ("blue.output",{"delta_state":candidate_delta .model_dump (mode ="json")})
-    attempt_rec .blue_delta =sanitize_feedback_dict (candidate_delta .model_dump (mode ="json"))
+    attempt_rec .blue_delta =candidate_delta
 
     red_session :list [ToolCallRecord ]=[]
     red_summary =""
@@ -206,7 +204,7 @@ PlayGameFeedback |None ,
     retry_fn =ctx .red_role .generate ,fallback_fn =ctx .red_fallback_fn ,
     )
     ctx .debug_event_fn ("red.output",{"red_finding":red_finding .model_dump (mode ="json")})
-    attempt_rec .red_finding =sanitize_feedback_dict (red_finding .model_dump (mode ="json"))
+    attempt_rec .red_finding =red_finding
 
     referee_session :list [ToolCallRecord ]=[]
     referee_summary =""
@@ -278,7 +276,7 @@ PlayGameFeedback |None ,
     retry_fn =ctx .referee_role .generate ,fallback_fn =ctx .referee_fallback_fn ,
     )
     ctx .debug_event_fn ("referee.output",{"referee_decision":referee_decision .model_dump (mode ="json")})
-    attempt_rec .referee_decision =sanitize_feedback_dict (referee_decision .model_dump (mode ="json"))
+    attempt_rec .referee_decision =referee_decision
     attempt_rec .parse_recovery =_aggregate_parse_recovery ([red_recovery ,referee_recovery ])
     return attempt_rec ,candidate_delta ,red_finding ,referee_decision ,previous_feedback 
 
@@ -304,26 +302,21 @@ referee_decision :RefereeDecision ,
         ctx .resolved_adapter ,candidate_delta ,ctx .state ,ctx .game_spec .target_artifact_id ,
         sandbox_mode =ctx .sandbox_mode ,
         )
-        attempt_rec .candidate_verification =summarize_verification_result (candidate_result )
+        attempt_rec .candidate_verification =candidate_result
         if (
         candidate_result is not None 
         and not candidate_result .passed 
         and attempt <ctx .max_attempts 
         ):
             previous_feedback =AttemptRejectionFeedback (
-            red_finding =sanitize_feedback_dict (red_finding .model_dump (mode ="json")),
-            referee_decision =sanitize_feedback_dict (referee_decision .model_dump (mode ="json")),
-            candidate_verification ={
-            "exit_code":candidate_result .exit_code ,
-            "passed":False ,
-            "stdout":candidate_result .stdout ,
-            "stderr":candidate_result .stderr ,
-            },
+            red_finding =red_finding ,
+            referee_decision =referee_decision ,
+            candidate_verification =candidate_result ,
             )
-            return runtime ,previous_feedback ,candidate_result ,False 
-        return runtime ,None ,candidate_result ,True 
+            return runtime ,previous_feedback ,candidate_result ,False
+        return runtime ,None ,candidate_result ,True
     previous_feedback =AttemptRejectionFeedback (
-    red_finding =sanitize_feedback_dict (red_finding .model_dump (mode ="json")),
-    referee_decision =sanitize_feedback_dict (referee_decision .model_dump (mode ="json")),
+    red_finding =red_finding ,
+    referee_decision =referee_decision ,
     )
     return runtime ,previous_feedback ,None ,False 

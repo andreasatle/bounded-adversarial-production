@@ -5,7 +5,7 @@ import pytest
 from baps.adapters.project_adapter import VerificationResult
 from baps.core.run_config import RunConfig
 from baps.game.roles import AttemptRejectionFeedback, PriorExportFeedback
-from baps.state.state import GameSpec
+from baps.state.state import GameSpec, RedFinding, RefereeDecision
 from baps.adapters.coding_adapter import CodingProjectAdapter
 from baps.adapters.document_adapter import DocumentProjectAdapter
 import baps.state.state as state_module
@@ -173,12 +173,14 @@ def test_coding_blue_prompt_includes_prior_export_failures() -> None:
         success_condition="tests pass",
     )
     previous_feedback = PriorExportFeedback(
-        prior_export_verification={
-            "exit_code": 1,
-            "passed": False,
-            "stdout": "FAILED tests/test_foo.py::test_bar - AssertionError: wrong\n",
-            "stderr": "",
-        }
+        prior_export_verification=VerificationResult(
+            command="",
+            cwd="",
+            exit_code=1,
+            passed=False,
+            stdout="FAILED tests/test_foo.py::test_bar - AssertionError: wrong\n",
+            stderr="",
+        )
     )
     prompt = render_coding_blue_prompt(
         state_view=state_view,
@@ -239,14 +241,16 @@ def test_coding_blue_prompt_includes_candidate_verification_failures() -> None:
         success_condition="tests pass",
     )
     previous_feedback = AttemptRejectionFeedback(
-        red_finding={},
-        referee_decision={},
-        candidate_verification={
-            "exit_code": 1,
-            "passed": False,
-            "stdout": "FAILED tests/test_calc.py::test_add - AssertionError: assert 99 == 3\n",
-            "stderr": "",
-        },
+        red_finding=RedFinding(disposition="accept", rationale="ok"),
+        referee_decision=RefereeDecision(disposition="accept", rationale="ok"),
+        candidate_verification=VerificationResult(
+            command="",
+            cwd="",
+            exit_code=1,
+            passed=False,
+            stdout="FAILED tests/test_calc.py::test_add - AssertionError: assert 99 == 3\n",
+            stderr="",
+        ),
     )
     prompt = render_coding_blue_prompt(
         state_view=state_view,

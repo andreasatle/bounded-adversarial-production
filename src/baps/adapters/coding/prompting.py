@@ -20,9 +20,9 @@ plugin :LanguagePlugin ,
         return ""
     section =""
     if isinstance (previous_feedback ,PriorExportFeedback ):
-        pv =previous_feedback .prior_export_verification 
-        exit_code =pv .get ("exit_code","?")
-        stdout =str (pv .get ("stdout",""))
+        pv =previous_feedback .prior_export_verification
+        exit_code =pv .exit_code
+        stdout =str (pv .stdout )
         failures =plugin .parse_test_failures (stdout )
         if failures :
             lines ="\n".join (f"  - {f ['test_id']}: {f ['reason']}"for f in failures )
@@ -37,9 +37,9 @@ plugin :LanguagePlugin ,
             "- Inspect prior_export_verification in previous_feedback_json and repair the cause.\n"
             )
     elif isinstance (previous_feedback ,AttemptRejectionFeedback )and previous_feedback .candidate_verification is not None :
-        cv =previous_feedback .candidate_verification 
-        exit_code =cv .get ("exit_code","?")
-        stdout =str (cv .get ("stdout",""))
+        cv =previous_feedback .candidate_verification
+        exit_code =cv .exit_code
+        stdout =str (cv .stdout )
         failures =plugin .parse_test_failures (stdout )
         if failures :
             lines ="\n".join (f"  - {f ['test_id']}: {f ['reason']}"for f in failures )

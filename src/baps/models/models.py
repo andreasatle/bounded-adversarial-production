@@ -12,6 +12,8 @@ from urllib import error, request
 
 from pydantic import BaseModel, ConfigDict
 
+from baps.core.roles import SpecRole
+
 logger = logging.getLogger(__name__)
 
 
@@ -42,7 +44,7 @@ class ToolCall(BaseModel):
 class ToolCallRecord(BaseModel):
     """Immutable record of one tool call made during an agentic role turn."""
     model_config = ConfigDict(frozen=True)
-    role: str
+    role: SpecRole
     tool_name: str
     arguments: dict
     result: str
@@ -64,7 +66,7 @@ class ModelClient:
         prompt: str,
         tools: list[ToolDefinition],
         executor: Any,
-        role_name: str = "",
+        role_name: str = "blue",
         max_tool_calls: int = 10,
     ) -> tuple[str, list[ToolCallRecord]]:
         """Handle generate agentic."""
@@ -124,7 +126,7 @@ class FakeModelClient(ModelClient):
         prompt: str,
         tools: list[ToolDefinition],
         executor: Any,
-        role_name: str = "",
+        role_name: str = "blue",
         max_tool_calls: int = 10,
     ) -> tuple[str, list[ToolCallRecord]]:
         """Handle generate agentic."""
@@ -253,7 +255,7 @@ class AnthropicClient(ModelClient):
         prompt: str,
         tools: list[ToolDefinition],
         executor: Any,
-        role_name: str = "",
+        role_name: str = "blue",
         max_tool_calls: int = 10,
     ) -> tuple[str, list[ToolCallRecord]]:
         """Handle generate agentic."""
@@ -408,7 +410,7 @@ class OpenAIClient(ModelClient):
         prompt: str,
         tools: list[ToolDefinition],
         executor: Any,
-        role_name: str = "",
+        role_name: str = "blue",
         max_tool_calls: int = 10,
     ) -> tuple[str, list[ToolCallRecord]]:
         """Handle generate agentic."""
@@ -542,7 +544,7 @@ class OllamaClient(ModelClient):
         prompt: str,
         tools: list[ToolDefinition],
         executor: Any,
-        role_name: str = "",
+        role_name: str = "blue",
         max_tool_calls: int = 10,
     ) -> tuple[str, list[ToolCallRecord]]:
         """Handle generate agentic."""
@@ -635,7 +637,7 @@ class FallbackClient(ModelClient):
         prompt: str,
         tools: list[ToolDefinition],
         executor: Any,
-        role_name: str = "",
+        role_name: str = "blue",
         max_tool_calls: int = 10,
     ) -> tuple[str, list[ToolCallRecord]]:
         """Handle generate agentic."""
@@ -679,3 +681,5 @@ class Role:
         return self.client.generate_agentic(
             prompt, tools, executor, role_name=self.name, max_tool_calls=max_tool_calls
         )
+
+

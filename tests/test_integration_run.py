@@ -8,15 +8,21 @@ def test_coding_run_no_files_keeps_output_exported_false(monkeypatch, tmp_path: 
     import baps.core.run as run_module
 
     workspace = tmp_path / "coding-empty-export"
-    monkeypatch.setattr(
-        "baps.core.orchestration.create_game",
-        lambda *_args, **_kwargs: GameSpec(
-            objective="No-op coding objective",
-            target_artifact_id="main-codebase",
-            allowed_delta_type="DeltaCodingState",
-            success_condition="No file changes required",
-        ),
+    _cg_n: dict[str, int] = {"n": 0}
+    _cg_spec = GameSpec(
+        objective="No-op coding objective",
+        target_artifact_id="main-codebase",
+        allowed_delta_type="DeltaCodingState",
+        success_condition="No file changes required",
     )
+
+    def _mock_cg(*_args, **_kwargs):
+        _cg_n["n"] += 1
+        if _cg_n["n"] > 1:
+            raise NoNewGameError("done")
+        return _cg_spec
+
+    monkeypatch.setattr("baps.core.orchestration.create_game", _mock_cg)
     monkeypatch.setattr("baps.core.orchestration.play_game", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         "sys.argv",

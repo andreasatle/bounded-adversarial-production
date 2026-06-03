@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest 
 
 from baps .adapters .document_adapter import DocumentProjectAdapter 
-from baps .core .clients import SpecRole ,parse_spec_roles 
+from baps .core .clients import parse_spec_roles
+from baps .core .roles import SpecRole
 from baps .core .orchestration import run_project_iterations 
 from baps .core .run_config import RoleConfig ,RunConfig 
 from baps .core .runtime import build_runtime ,_resolve_summarize_role 
@@ -154,20 +155,19 @@ monkeypatch ,tmp_path :Path
     """run_project_iterations must forward summarization_context to play_game."""
     captured :dict [str ,object ]={}
 
-    monkeypatch .setattr (
-    "baps.core.orchestration.create_game",
-    lambda _config ,_state ,adapter =None ,verification_result =None ,
-    context_chain =(),depth =0 ,**_kw :GameSpec (
-    objective ="Write intro",
-    target_artifact_id ="main-document",
-    allowed_delta_type ="DeltaDocumentState",
-    success_condition ="section added",
-    ),
-    )
+    _cg1 :dict [str ,int ]={"n":0 }
+
+    def _mock_create_game1 (_config ,_state ,adapter =None ,verification_result =None ,context_chain =(),depth =0 ,**_kw ):
+        _cg1 ["n"]+=1
+        if _cg1 ["n"]>1 :
+            raise NoNewGameError ("done")
+        return GameSpec (objective ="Write intro",target_artifact_id ="main-document",allowed_delta_type ="DeltaDocumentState",success_condition ="section added",)
+
+    monkeypatch .setattr ("baps.core.orchestration.create_game",_mock_create_game1 )
 
     def _capturing_play_game (_state ,_spec ,**kwargs ):
         captured .update (kwargs )
-        return None # no delta → loop stops with PLAY_GAME_NO_DELTA
+        return None
 
     monkeypatch .setattr ("baps.core.orchestration.play_game",_capturing_play_game )
 
@@ -196,19 +196,19 @@ monkeypatch ,tmp_path :Path
 )->None :
     captured :dict [str ,object ]={}
 
-    monkeypatch .setattr (
-    "baps.core.orchestration.create_game",
-    lambda _config ,_state ,**_kw :GameSpec (
-    objective ="Write something",
-    target_artifact_id ="main-document",
-    allowed_delta_type ="DeltaDocumentState",
-    success_condition ="done",
-    ),
-    )
+    _cg2 :dict [str ,int ]={"n":0 }
+
+    def _mock_create_game2 (_config ,_state ,**_kw ):
+        _cg2 ["n"]+=1
+        if _cg2 ["n"]>1 :
+            raise NoNewGameError ("done")
+        return GameSpec (objective ="Write something",target_artifact_id ="main-document",allowed_delta_type ="DeltaDocumentState",success_condition ="done",)
+
+    monkeypatch .setattr ("baps.core.orchestration.create_game",_mock_create_game2 )
 
     def _capturing_play_game (_state ,_spec ,**kwargs ):
         captured .update (kwargs )
-        return None 
+        return None
 
     monkeypatch .setattr ("baps.core.orchestration.play_game",_capturing_play_game )
 

@@ -2,12 +2,12 @@
 
 from __future__ import annotations 
 
-import logging 
-import os 
-from enum import StrEnum 
-from typing import Any 
+import logging
+import os
+from typing import Any
 
-from baps .core .run_config import RoleConfig ,RunConfig 
+from baps .core .roles import SpecRole
+from baps .core .run_config import RoleConfig ,RunConfig
 from baps .models .models import (
 AnthropicClient ,
 Backend ,
@@ -27,17 +27,6 @@ _DEFAULT_OPENAI_MODEL ="gpt-4o"
 _DEFAULT_OPENAI_BASE_URL ="https://api.openai.com/v1"
 
 VALID_BACKENDS =frozenset (Backend )
-
-
-class SpecRole (StrEnum ):
-    """Named roles used in spec-file configuration and role-specific client resolution."""
-    BLUE ="blue"
-    RED ="red"
-    REFEREE ="referee"
-    CREATE_GAME ="create_game"
-    DECOMPOSE ="decompose"
-    CREATE_GAME_RED ="create_game_red"
-    SUMMARIZE ="summarize"
 
 
 _VALID_SPEC_ROLES =frozenset (SpecRole )

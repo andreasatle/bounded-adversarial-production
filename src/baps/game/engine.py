@@ -7,8 +7,8 @@ import uuid
 from pathlib import Path 
 from typing import Any ,Callable 
 
+from baps .core .roles import SpecRole
 from baps .core .clients import (
-SpecRole ,
 build_client_for_role ,
 build_fallback_chain_for_role ,
 build_role_client ,
@@ -204,7 +204,7 @@ context_chain :tuple [str ,...]=(),
 depth :int =0 ,
 create_game_red_client :ModelClient |None =None ,
 summarization_context :SummarizationContext |None =None ,
-planning_role_selector :Callable [[int ],str ]=lambda depth :SpecRole .DECOMPOSE if depth >0 else SpecRole .CREATE_GAME ,
+planning_role_selector :Callable [[int ],SpecRole ]=lambda depth :SpecRole .DECOMPOSE if depth >0 else SpecRole .CREATE_GAME ,
 )->GameSpec |DecomposeSpec :
     """Create and return game."""
     debug_event ("create_game.input",{"state":state .model_dump (mode ="json")})

@@ -69,8 +69,19 @@ def test_main_calls_play_game_with_gamespec_from_create_game (monkeypatch ,tmp_p
 
 
 def test_main_exits_cleanly_if_play_game_returns_none (monkeypatch ,capsys ,tmp_path :Path )->None :
+    # play_game returns None → PLAY_GAME_NO_DELTA → outer loop retries.
+    # On retry, create_game raises NoNewGameError → loop stops cleanly.
+    _cg_calls :dict [str ,int ]={"n":0 }
+
+    def _mock_create_game (*args ,**kwargs ):
+        _cg_calls ["n"]+=1
+        if _cg_calls ["n"]>1 :
+            raise NoNewGameError ("no more games after retry")
+        from baps .game .engine import create_game as _real
+        return _real (*args ,**kwargs )
 
     monkeypatch .setattr ("baps.core.orchestration.play_game",lambda _state ,_spec ,adapter =None ,verification_result =None ,**_kwargs :None )
+    monkeypatch .setattr ("baps.core.orchestration.create_game",_mock_create_game )
     monkeypatch .setattr (
     "sys.argv",
     [
@@ -84,11 +95,10 @@ def test_main_exits_cleanly_if_play_game_returns_none (monkeypatch ,capsys ,tmp_
     )
     main ()
     captured =capsys .readouterr ()
-    assert "error: play_game produced no DeltaState"not in captured .err 
-    assert "update_applied=False"in captured .out 
-    assert "state_changed=False"in captured .out 
-    assert "stop_reason=northstar_update_proposed"in captured .out 
-    assert "northstar_proposal_written=True"in captured .out 
+    assert "error: play_game produced no DeltaState"not in captured .err
+    assert "update_applied=False"in captured .out
+    assert "state_changed=False"in captured .out
+    assert "stop_reason=create_game_no_new_game"in captured .out
 
 
 def test_orchestration_does_not_apply_delta_when_play_game_has_no_integration_eligible_delta (
@@ -100,7 +110,17 @@ monkeypatch ,tmp_path :Path
         called ["apply_delta"]+=1 
         return self .store .load ()
 
+    _cg_calls2 :dict [str ,int ]={"n":0 }
+
+    def _mock_create_game2 (*args ,**kwargs ):
+        _cg_calls2 ["n"]+=1
+        if _cg_calls2 ["n"]>1 :
+            raise NoNewGameError ("no more games after retry")
+        from baps .game .engine import create_game as _real
+        return _real (*args ,**kwargs )
+
     monkeypatch .setattr ("baps.core.orchestration.play_game",lambda *_a ,**_k :None )
+    monkeypatch .setattr ("baps.core.orchestration.create_game",_mock_create_game2 )
     monkeypatch .setattr ("baps.core.orchestration.StateService.apply_delta",_count_apply_delta )
     monkeypatch .setattr (
     "sys.argv",
@@ -115,7 +135,7 @@ monkeypatch ,tmp_path :Path
     ],
     )
     main ()
-    assert called ["apply_delta"]==0 
+    assert called ["apply_delta"]==0
 
 
 def test_orchestration_runtime_integration_calls_apply_delta (
@@ -620,12 +640,24 @@ monkeypatch ,capsys ,tmp_path :Path
     assert "state_changed=True"in out 
 
 
-def test_play_game_no_delta_escalates_to_northstar_proposal (
-monkeypatch ,tmp_path :Path ,capsys 
+def test_play_game_no_delta_retries_then_stops_on_no_new_game (
+monkeypatch ,tmp_path :Path ,capsys
 )->None :
+    # PLAY_GAME_NO_DELTA now causes the outer loop to retry rather than escalate
+    # to a NorthStar proposal.  After one retry, create_game signals no_new_game
+    # and the loop stops with CREATE_GAME_NO_NEW_GAME.
+    workspace =tmp_path /"ws-no-delta-retry"
+    _call_count :dict [str ,int ]={"n":0 }
 
-    workspace =tmp_path /"ws-no-delta-proposal"
+    def _mock_create_game (*args ,**kwargs ):
+        _call_count ["n"]+=1
+        if _call_count ["n"]>1 :
+            raise NoNewGameError ("no more games after retry")
+        from baps .game .engine import create_game as _real
+        return _real (*args ,**kwargs )
+
     monkeypatch .setattr ("baps.core.orchestration.play_game",lambda _s ,_g ,adapter =None ,verification_result =None ,**_kw :None )
+    monkeypatch .setattr ("baps.core.orchestration.create_game",_mock_create_game )
     monkeypatch .setattr (
     "sys.argv",
     [
@@ -637,16 +669,8 @@ monkeypatch ,tmp_path :Path ,capsys
     ],
     )
     main ()
-    out =capsys .readouterr ().out 
-    assert "stop_reason=northstar_update_proposed"in out 
-    assert "northstar_proposal_written=True"in out 
-
-    proposals_path =workspace /"blackboard"/"northstar_proposals.jsonl"
-    assert proposals_path .exists ()
-    entry =json .loads (proposals_path .read_text (encoding ="utf-8").strip ())
-    assert entry ["event"]=="northstar_update_proposal"
-    assert "play_game produced no accepted delta"in entry ["rationale"]
-    assert "created_at"in entry 
+    out =capsys .readouterr ().out
+    assert "stop_reason=create_game_no_new_game"in out
 
 
 def test_no_state_change_escalates_to_northstar_proposal (

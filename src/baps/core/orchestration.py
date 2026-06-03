@@ -8,7 +8,8 @@ from pathlib import Path
 
 from pydantic import BaseModel 
 
-from baps .core .clients import SpecRole ,build_client_for_role 
+from baps .core .clients import build_client_for_role
+from baps .core .roles import SpecRole
 from baps .core .run_config import RunConfig 
 from baps .core .debug import debug_print_northstar_update_proposal ,debug_print_verification_result 
 from baps .game .engine import (
@@ -256,25 +257,17 @@ summarization_context :SummarizationContext |None =None ,
         depth =0 ,
         summarization_context =summarization_context ,
         )
-        # A gap was identified but the system could not close it.  Escalate to
-        # a NorthStar proposal so the human is alerted through the normal
-        # approval channel rather than receiving a silent stop.
-        if ctx .stop_reason in (StopReason .PLAY_GAME_NO_DELTA ,StopReason .NO_STATE_CHANGE ):
-            if ctx .stop_reason ==StopReason .PLAY_GAME_NO_DELTA :
-                rationale =(
-                "Gap was identified but play_game produced no accepted delta — "
-                "Blue was unable to close the gap. "
-                "NorthStar may need clarification or the gap may be unreachable "
-                "with the current approach."
-                )
-            else :
-                rationale =(
-                "Gap was identified and a delta was produced and accepted, but "
-                "applying it produced no state change — the gap may already be "
-                "satisfied or the delta was a no-op. "
-                "NorthStar may need clarification or the success condition may "
-                "need revision."
-                )
+        if ctx .stop_reason ==StopReason .PLAY_GAME_NO_DELTA :
+            ctx .stop_reason =None
+            continue
+        if ctx .stop_reason ==StopReason .NO_STATE_CHANGE :
+            rationale =(
+            "Gap was identified and a delta was produced and accepted, but "
+            "applying it produced no state change — the gap may already be "
+            "satisfied or the delta was a no-op. "
+            "NorthStar may need clarification or the success condition may "
+            "need revision."
+            )
             append_northstar_proposal_to_blackboard (
             workspace =config .workspace ,
             rationale =rationale ,
