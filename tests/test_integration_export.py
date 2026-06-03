@@ -1,10 +1,12 @@
 import ast
 import subprocess
 from pathlib import Path
+from typing import cast
 
 import baps.state.state as state_module
 from baps.adapters.coding_adapter import CodingProjectAdapter
 from baps.adapters.document_adapter import DocumentProjectAdapter
+from baps.adapters.project_adapter import ProjectTypeAdapter
 from baps.game.engine import commit_export_with_adapter
 
 
@@ -497,7 +499,7 @@ def testcommit_export_with_adapter_calls_adapter_method(monkeypatch, tmp_path: P
     )
     output_dir = tmp_path / "project"
     output_dir.mkdir()
-    result = commit_export_with_adapter(_CommittingAdapter(), output_dir, game_spec)
+    result = commit_export_with_adapter(cast(ProjectTypeAdapter, _CommittingAdapter()), output_dir, game_spec)
     assert result is True
     assert committed_args == [(output_dir, game_spec)]
 
@@ -512,5 +514,5 @@ def testcommit_export_with_adapter_skips_adapter_without_method(tmp_path: Path) 
         allowed_delta_type="DeltaCodingState",
         success_condition="tests pass",
     )
-    result = commit_export_with_adapter(_NoCommitAdapter(), tmp_path / "project", game_spec)
+    result = commit_export_with_adapter(cast(ProjectTypeAdapter, _NoCommitAdapter()), tmp_path / "project", game_spec)
     assert result is False

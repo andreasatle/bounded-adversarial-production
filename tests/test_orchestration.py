@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -18,6 +19,7 @@ from baps.core.run_config import RunConfig
 from baps.core.runtime import _initialize_project
 from baps.state.state import (
     DecomposeSpec,
+    DocumentArtifact,
     GameSpec,
     State,
     SubGapSpec,
@@ -266,7 +268,7 @@ def test_main_max_iterations_two_runs_two_iterations_with_state_carry_forward(
     assert "state_changed=True" in out
     assert "output_exported=True" in out
     persisted = JsonStateStore(tmp_path / "ws-multi-iter" / "state" / "state.json").load()
-    doc = next(a for a in persisted.artifacts if a.id == "main-document")
+    doc = cast(DocumentArtifact, next(a for a in persisted.artifacts if a.id == "main-document"))
     assert [section.title for section in doc.sections] == ["Introduction", "Conclusion"]
 
 

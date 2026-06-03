@@ -27,6 +27,7 @@ module-name = "baps"
 
 [dependency-groups]
 dev = [
+    "pyright>=1.1.410",
     "pytest>=9.0.3",
     "pytest-timeout>=2.0",
     "ruff>=0.15.15",

@@ -187,7 +187,7 @@ def test_projection_artifact_rejects_invalid_projection_type() -> None:
     with pytest.raises(ValidationError):
         StateView(
             id="projection-1",
-            projection_type="invalid_type",
+            projection_type="invalid_type",  # type: ignore[arg-type]
             content="content",
             input_fingerprint="fingerprint",
         )

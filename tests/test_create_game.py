@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import logging
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -13,7 +14,7 @@ from baps.core.prompts import render_create_game_prompt
 from baps.core.run import create_state
 from baps.core.run_config import RunConfig
 from baps.game.engine import create_game
-from baps.models.models import FakeModelClient
+from baps.models.models import FakeModelClient, ModelClient
 from baps.state.state import GameSpec
 
 
@@ -624,7 +625,7 @@ def test_create_game_prompt_forbids_markdown_fences_and_lists_required_shape() -
     prompt = render_create_game_prompt(
         config,
         state,
-        adapter.build_create_game_state_view(state, config),
+        adapter.build_create_game_state_view(state, config.to_adapter_config()),
         adapter=adapter,
     )
 
@@ -791,7 +792,7 @@ def test_create_game_red_feedback_appears_in_retry_prompt() -> None:
     create_game(
         config,
         state,
-        model_client=CapturingClient(),
+        model_client=cast(ModelClient, CapturingClient()),
         create_game_red_client=FakeModelClient([red_reject]),
     )
     assert len(prompts_seen) == 2

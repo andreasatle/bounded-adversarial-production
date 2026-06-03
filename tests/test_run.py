@@ -530,7 +530,7 @@ def test_document_adapter_normalize_game_spec_is_identity() -> None:
         allowed_delta_type="DeltaDocumentState",
         success_condition="Any document success condition",
     )
-    normalized = adapter.normalize_game_spec(original, state, config)
+    normalized = adapter.normalize_game_spec(original, state, config.to_adapter_config())
     assert normalized == original
 
 

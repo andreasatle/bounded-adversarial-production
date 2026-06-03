@@ -342,7 +342,7 @@ def test_resolve_config_reads_artifact_id_and_northstar_and_create_state_uses_ar
     )
     config = run_module.resolve_run_config(args)
     assert config["artifact_id"] == "doc-7"
-    assert "# Goal" in config["northstar_markdown"]
+    assert "# Goal" in str(config["northstar_markdown"])
     state = run_module.create_state(config)
     assert state.artifacts[0].id == "doc-7"
 

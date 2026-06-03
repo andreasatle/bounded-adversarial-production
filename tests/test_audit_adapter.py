@@ -181,7 +181,7 @@ def test_audit_create_game_state_view_includes_northstar(tmp_path: Path) -> None
             "source_path": str(tmp_path),
         }
     )
-    config = {
+    config: dict[str, object] = {
         "artifact_id": "report",
         "northstar_markdown": "# Security Audit Goal\n\nFind vulnerabilities.",
         "source_path": str(tmp_path),
@@ -200,7 +200,7 @@ def test_audit_create_game_state_view_includes_source_listing(tmp_path: Path) ->
             "source_path": str(tmp_path),
         }
     )
-    config = {
+    config: dict[str, object] = {
         "artifact_id": "report",
         "northstar_markdown": "# Goal",
         "source_path": str(tmp_path),
@@ -219,7 +219,7 @@ def test_audit_create_game_state_view_shows_existing_findings(tmp_path: Path) ->
         }
     )
     state = _append_finding(state, "report", "SQL Injection", "Found in db.py line 42.")
-    config = {
+    config: dict[str, object] = {
         "artifact_id": "report",
         "northstar_markdown": "# Goal",
         "source_path": str(tmp_path),

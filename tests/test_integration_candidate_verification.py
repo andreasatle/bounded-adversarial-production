@@ -24,10 +24,10 @@ def testapply_delta_to_files_write_files_adds_and_replaces() -> None:
         artifact_id="art",
         operation="write_files",
         payload=state_module.WriteFilesDelta(
-            files=[
+            files=(
                 state_module.CodeFile(path="src/a.py", content="new_a"),
                 state_module.CodeFile(path="src/b.py", content="b_content"),
-            ]
+            )
         ),
     )
     result = apply_delta_to_files(existing, delta)

@@ -1,5 +1,6 @@
 import inspect
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -53,7 +54,7 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
 
     run_module.main()
 
-    forwarded_state = captured.get("state")
+    forwarded_state = cast(state_module.State, captured.get("state"))
     assert forwarded_state is not None
     assert forwarded_state.model_dump(mode="json") == {
         "artifacts": [{"id": "main-document", "kind": "document", "sections": []}],

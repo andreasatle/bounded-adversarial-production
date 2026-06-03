@@ -1,5 +1,7 @@
+from typing import cast
+
 import baps.state.state as state_module
-from baps.adapters.project_adapter import VerificationResult
+from baps.adapters.project_adapter import ProjectTypeAdapter, VerificationResult
 from baps.game.engine import play_game
 from baps.game.roles import PriorExportFeedback
 from baps.models.models import FakeModelClient, ToolCall
@@ -62,7 +64,7 @@ def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
     delta = play_game(
         state,
         spec,
-        adapter=adapter,
+        adapter=cast(ProjectTypeAdapter, adapter),
         model_client=FakeModelClient(
             tool_responses=[
                 ToolCall(
@@ -150,7 +152,7 @@ def test_play_game_pre_seeds_verification_result_as_previous_feedback(
     result = play_game(
         state,
         game_spec,
-        adapter=_CapturingAdapter(),
+        adapter=cast(ProjectTypeAdapter, _CapturingAdapter()),
         model_client=FakeModelClient(tool_responses=[None], responses=["not valid json"]),
         red_model_client=FakeModelClient(responses=[]),
         referee_model_client=FakeModelClient(responses=[]),
