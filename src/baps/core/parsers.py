@@ -57,8 +57,9 @@ _UNRECOGNIZABLE_SHAPE_CORRECTION_PROMPT =(
 "Return exactly one of:\n"
 '- GameSpec: {"objective": "...", "target_artifact_id": "...", "allowed_delta_type": "...", "success_condition": "..."}\n'
 '- Decompose: {"decompose": true, "rationale": "...", "sub_gaps": [{"description": "..."}, ...]}\n'
-'- No new game: {"no_new_game": true, "reason": "..."}\n'
-"Return only a JSON object. No prose, no extra keys."
+"Return only a JSON object. No prose, no extra keys.\n"
+"Do not return no_new_game or northstar_update_needed — those require the full StateView context "
+"which is not available in this correction step."
 )
 
 _RED_REQUIRED_KEYS =frozenset ({"disposition","rationale"})
@@ -156,7 +157,13 @@ fallback_fn :Any =None ,
             except Exception as exc :# noqa: BLE001
                 logger .debug ("[create_game] retry_fn raised during shape correction: %s",exc )
             else :
-                return parse_create_game_output (raw ,max_sub_gaps =max_sub_gaps ,workspace =workspace )
+                try :
+                    return parse_create_game_output (raw ,max_sub_gaps =max_sub_gaps ,workspace =workspace )
+                except (NoNewGameError ,NorthStarUpdateNeededError ):
+                    logger .warning (
+                    "[create_game] correction retry returned terminal signal without StateView context; "
+                    "treating as shape failure"
+                    )
         if fallback_fn is not None :
             logger .warning (
             "[create_game] unrecognizable response shape (keys: %s); escalating to fallback model",

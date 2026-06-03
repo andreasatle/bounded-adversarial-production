@@ -285,6 +285,50 @@ def testparse_create_game_output_unexpected_status_key_triggers_retry ()->None :
     assert len (retry_calls )==1
 
 
+def testparse_create_game_output_correction_retry_no_new_game_escalates_to_fallback ()->None :
+    """Correction retry returning no_new_game must not be accepted — fall through to fallback."""
+    from baps .state .state import GameSpec
+
+    valid_game_spec =json .dumps ({
+    "objective":"Close the gap",
+    "target_artifact_id":"main-document",
+    "allowed_delta_type":"DeltaDocumentState",
+    "success_condition":"section present",
+    })
+    fallback_calls :list [str ]=[]
+
+    def retry_fn (prompt :str )->str :
+        return json .dumps ({"no_new_game":True ,"reason":"nothing to do"})
+
+    def fallback_fn (prompt :str )->str :
+        fallback_calls .append (prompt )
+        return valid_game_spec
+
+    text =json .dumps ({"status":"complete"})
+    result =parse_create_game_output (text ,retry_fn =retry_fn ,fallback_fn =fallback_fn )
+    assert isinstance (result ,GameSpec )
+    assert len (fallback_calls )==1
+
+
+def testparse_create_game_output_correction_retry_no_new_game_no_fallback_raises ()->None :
+    """Correction retry returning no_new_game with no fallback raises ValueError, not NoNewGameError."""
+    from baps .core .parsers import NoNewGameError
+
+    def retry_fn (prompt :str )->str :
+        return json .dumps ({"no_new_game":True ,"reason":"nothing to do"})
+
+    text =json .dumps ({"status":"complete"})
+    with pytest .raises (ValueError ,match ="missing required keys"):
+        parse_create_game_output (text ,retry_fn =retry_fn )
+
+
+def testparse_create_game_output_correction_prompt_excludes_no_new_game ()->None :
+    """The correction prompt must not list no_new_game as a valid option."""
+    from baps .core .parsers import _UNRECOGNIZABLE_SHAPE_CORRECTION_PROMPT
+    assert '"no_new_game": true'not in _UNRECOGNIZABLE_SHAPE_CORRECTION_PROMPT
+    assert "Do not return no_new_game"in _UNRECOGNIZABLE_SHAPE_CORRECTION_PROMPT
+
+
 def testparse_create_game_output_empty_dict_with_fallback_escalates ()->None :
     from baps .state .state import GameSpec 
 
