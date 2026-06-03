@@ -49,6 +49,21 @@ def sanitize_model_title (text :str )->str :
     return sanitize_model_string (single_line )
 
 
+def sanitize_feedback_dict (d :dict )->dict :
+    """Recursively sanitize string values in a dict by stripping prompt-injection patterns."""
+    result ={}
+    for k ,v in d .items ():
+        if isinstance (v ,str ):
+            result [k ]=sanitize_model_string (v )
+        elif isinstance (v ,list ):
+            result [k ]=[sanitize_model_string (i )if isinstance (i ,str )else i for i in v ]
+        elif isinstance (v ,dict ):
+            result [k ]=sanitize_feedback_dict (v )
+        else :
+            result [k ]=v
+    return result
+
+
 def config_artifact_id (config :dict [str ,Any ]|RunConfig )->str :
     """Handle config artifact id."""
     if isinstance (config ,RunConfig ):
@@ -263,8 +278,8 @@ project_delta_instructions :str ="",
     import json 
 
     feedback_dict =(
-    previous_feedback .model_dump (mode ="json",exclude_none =True )
-    if previous_feedback is not None else None 
+    sanitize_feedback_dict (previous_feedback .model_dump (mode ="json",exclude_none =True ))
+    if previous_feedback is not None else None
     )
     previous_feedback_json =json .dumps (feedback_dict ,sort_keys =True )
     context_block =""

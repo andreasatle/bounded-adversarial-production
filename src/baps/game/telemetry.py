@@ -7,7 +7,7 @@ import json
 import logging 
 from pathlib import Path 
 
-from baps .adapters .project_adapter import VerificationResult ,sanitize_model_string 
+from baps .adapters .project_adapter import VerificationResult ,sanitize_feedback_dict ,sanitize_model_string
 from baps .models .model_output import BlackboardEvent 
 from baps .models .models import ModelClient 
 from baps .state .state import DeltaState ,GameSpec 
@@ -23,20 +23,6 @@ _NORTHSTAR_PROPOSALS_FILE ="northstar_proposals.jsonl"
 _GAMES_FILE ="games.jsonl"
 VERIFICATION_SUMMARY_CAP =500 
 
-
-def sanitize_feedback_dict (d :dict )->dict :
-    """Recursively sanitize string values in a dict by stripping prompt-injection patterns."""
-    result ={}
-    for k ,v in d .items ():
-        if isinstance (v ,str ):
-            result [k ]=sanitize_model_string (v )
-        elif isinstance (v ,list ):
-            result [k ]=[sanitize_model_string (i )if isinstance (i ,str )else i for i in v ]
-        elif isinstance (v ,dict ):
-            result [k ]=sanitize_feedback_dict (v )
-        else :
-            result [k ]=v 
-    return result 
 
 
 def summarize_verification_result (result :VerificationResult |None )->dict |None :
