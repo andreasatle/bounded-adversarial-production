@@ -29,7 +29,14 @@ module-name = "baps"
 dev = [
     "pytest>=9.0.3",
     "pytest-timeout>=2.0",
+    "ruff>=0.15.15",
 ]
 
 [tool.pytest.ini_options]
 timeout = 3
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
