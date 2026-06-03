@@ -556,6 +556,9 @@ def play_game(
             previous_feedback = updated_feedback
             attempt_records.append(attempt_rec)
             continue
+        assert red_finding is not None and referee_decision is not None, (
+            "red_finding and referee_decision must be set when candidate_delta is not None"
+        )
         runtime, previous_feedback, candidate_result, stop_attempts = apply_play_game_attempt_decision(
             ctx=ctx,
             runtime=runtime,

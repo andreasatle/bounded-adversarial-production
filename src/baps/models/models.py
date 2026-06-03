@@ -12,8 +12,6 @@ from urllib import error, request
 
 from pydantic import BaseModel, ConfigDict
 
-from baps.core.roles import SpecRole
-
 logger = logging.getLogger(__name__)
 
 
@@ -49,7 +47,7 @@ class ToolCallRecord(BaseModel):
     """Immutable record of one tool call made during an agentic role turn."""
 
     model_config = ConfigDict(frozen=True)
-    role: SpecRole
+    role: str
     tool_name: str
     arguments: dict
     result: str

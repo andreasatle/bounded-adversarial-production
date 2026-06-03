@@ -138,7 +138,9 @@ def _recover_malformed_coding_delta_json(text: str) -> dict[str, object] | None:
     return parsed
 
 
-def parse_coding_delta_json(text: str, workspace: Path | None = None) -> DeltaCodingState | DeltaCodingBatchState:
+def parse_coding_delta_json(
+    text: str, workspace: Path | None = None
+) -> DeltaCodingState | DeltaCodingBatchState | DeltaDeleteCodingState:
     """Parse Blue model text output into a validated coding delta, with malformed-JSON recovery."""
     try:
         parsed, _ = parse_model_output(text, _BLUE_CODING_KEYS, context="blue:coding", workspace=workspace)

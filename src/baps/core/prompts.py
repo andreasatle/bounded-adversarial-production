@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from typing import Any
 
 from pydantic import BaseModel
@@ -411,7 +412,7 @@ def get_research_tools(adapter: ProjectTypeAdapter) -> list:
 
 
 def render_tool_session_block(
-    sessions: list[tuple[str, list[ToolCallRecord], str]],
+    sessions: Sequence[tuple[str, list[ToolCallRecord], str]],
 ) -> str:
     """Render one or more (role, records, summary) tuples as a readable context block."""
     if not sessions:
@@ -437,7 +438,7 @@ def render_research_prompt(
     role_name: str,
     state_view: StateView,
     game_spec: GameSpec,
-    prior_sessions: list[tuple[str, list[ToolCallRecord], str]],
+    prior_sessions: Sequence[tuple[str, list[ToolCallRecord], str]],
 ) -> str:
     """Render and return research prompt."""
     prior_block = render_tool_session_block(prior_sessions)

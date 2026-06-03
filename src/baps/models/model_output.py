@@ -269,7 +269,11 @@ def parse_model_output(
 def render_output_schema_hint(model: type[BaseModel]) -> str:
     """Return a prompt block describing the exact JSON keys and types expected."""
     fields = {
-        name: (info.annotation.__name__ if hasattr(info.annotation, "__name__") else str(info.annotation))
+        name: (
+            info.annotation.__name__
+            if info.annotation is not None and hasattr(info.annotation, "__name__")
+            else str(info.annotation)
+        )
         for name, info in model.model_fields.items()
     }
     return (

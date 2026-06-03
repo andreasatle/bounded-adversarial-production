@@ -140,13 +140,18 @@ def _parse_role_backend_model(cfg: dict, path: str) -> dict[str, str]:
 
 def _parse_role_config(cfg: dict, path: str) -> RoleConfig:
     """Parse a role config dict, recursively including arbitrarily deep fallback chains."""
-    parsed: dict[str, str | RoleConfig] = _parse_role_backend_model(cfg, path)
+    bm = _parse_role_backend_model(cfg, path)
+    fallback: RoleConfig | None = None
     if "fallback" in cfg:
         fallback_raw = cfg["fallback"]
         if not isinstance(fallback_raw, dict):
             raise ValueError(f"spec '{path}.fallback' must be a mapping")
-        parsed["fallback"] = _parse_role_config(fallback_raw, f"{path}.fallback")
-    return RoleConfig(**parsed)
+        fallback = _parse_role_config(fallback_raw, f"{path}.fallback")
+    return RoleConfig(
+        backend=Backend(bm["backend"]) if "backend" in bm else None,
+        model=bm.get("model"),
+        fallback=fallback,
+    )
 
 
 def parse_spec_roles(roles_raw: object) -> dict[str, RoleConfig]:

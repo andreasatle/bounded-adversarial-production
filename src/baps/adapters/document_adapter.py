@@ -288,7 +288,7 @@ _BLUE_DOCUMENT_KEYS = frozenset({"artifact_id", "operation", "payload"})
 
 def parse_document_delta_json(
     text: str, workspace: Path | None = None
-) -> DeltaDocumentState | DeltaModifyDocumentState:
+) -> DeltaDocumentState | DeltaModifyDocumentState | DeltaDeleteDocumentState:
     """Parse and return document delta json."""
     parsed, _ = parse_model_output(text, _BLUE_DOCUMENT_KEYS, context="blue:document", workspace=workspace)
     if not _BLUE_DOCUMENT_KEYS.issubset(parsed.keys()):
@@ -396,7 +396,7 @@ class DocumentProjectAdapter:
         state_view: StateView,
         game_spec: GameSpec,
         attempt_number: int,
-        previous_feedback: dict[str, object] | None,
+        previous_feedback: PlayGameFeedback | None,
     ) -> str:
         """Render and return blue prompt."""
         return render_document_blue_prompt(

@@ -786,3 +786,14 @@ class AuditProjectAdapter:
     def export_state(self, state: State, output_path: Path, artifact_id: str) -> bool:
         """Export and return state."""
         return export_document_artifact(document_artifact_from_state(state, artifact_id), output_path)
+
+    def verify_export(
+        self,
+        output_path: Path,
+        state: State,
+        artifact_id: str,
+        sandbox_mode: str = "docker",
+    ) -> VerificationResult | None:
+        """Return None — audit adapters do not run export verification."""
+        del output_path, state, artifact_id, sandbox_mode
+        return None

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-if False:  # pragma: no cover
+if TYPE_CHECKING:
     from baps.core.run_config import RunConfig
 
 _WORKSPACE_CONFIG_FILE = "baps-config.json"
