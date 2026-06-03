@@ -22,12 +22,14 @@ from pydantic import BaseModel
 
 
 class _CreateGameOutput (BaseModel ):
-    """The four required output keys when create_game produces a GameSpec."""
+    """Model-facing GameSpec output fields; context_chain is orchestrator-injected, not a model output."""
 
     objective :str
     target_artifact_id :str
     allowed_delta_type :str
     success_condition :str
+    max_words :int |None =None
+    target_entity :str |None =None
 
 
 def _render_verification_block (result :VerificationResult |None ,*,guidance :str )->str :

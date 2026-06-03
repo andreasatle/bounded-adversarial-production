@@ -58,6 +58,12 @@ def sanitize_game_spec_dict (game_spec :GameSpec )->dict :
     "target_artifact_id":game_spec .target_artifact_id ,
     "allowed_delta_type":game_spec .allowed_delta_type ,
     "success_condition":sanitize_model_string (game_spec .success_condition ),
+    "max_words":game_spec .max_words ,
+    "target_entity":(
+    sanitize_model_string (game_spec .target_entity )
+    if game_spec .target_entity is not None
+    else None
+    ),
     }
 
 
