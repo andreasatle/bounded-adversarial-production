@@ -20,9 +20,11 @@ extract_json_candidate ,
 _is_react_format ,
 _rescue_react_payload ,
 parse_model_output ,
+render_output_schema_hint ,
 wrap_json_prompt ,
 ParseRecoveryRecord ,
 )
+from baps .state .state import GameSpec ,RedFinding
 
 
 _KEYS =frozenset ({"a","b","c"})
@@ -631,3 +633,19 @@ class TestParseRecoveryRecord :
     def test_no_recovery_needed_fields_all_false (self )->None :
         _ ,recovery =parse_model_output (json .dumps ({"a":1 ,"b":2 }),_KEYS ,context ="test")
         assert recovery ==ParseRecoveryRecord ()
+
+
+class TestRenderOutputSchemaHint :
+    def test_red_finding_contains_disposition_and_findings (self )->None :
+        hint =render_output_schema_hint (RedFinding )
+        assert "disposition"in hint
+        assert "findings"in hint
+
+    def test_game_spec_contains_expected_keys (self )->None :
+        hint =render_output_schema_hint (GameSpec )
+        for key in ("objective","target_artifact_id","allowed_delta_type","success_condition"):
+            assert key in hint
+
+    def test_hint_contains_no_others_guard (self )->None :
+        hint =render_output_schema_hint (RedFinding )
+        assert "no others"in hint

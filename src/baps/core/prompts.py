@@ -6,7 +6,8 @@ import json
 from typing import Any 
 
 from baps .core .run_config import RunConfig 
-from baps .models .models import ToolCallRecord 
+from baps .models .model_output import render_output_schema_hint
+from baps .models .models import ToolCallRecord
 from baps .northstar .northstar_projection import StateView 
 from baps .adapters .project_adapter import (
 ProjectTypeAdapter ,
@@ -16,7 +17,17 @@ verification_result_to_dict ,
 resolve_project_type_adapter ,
 sanitize_model_string ,
 )
-from baps .state .state import DeltaState ,GameSpec ,RedFinding ,State 
+from baps .state .state import DecomposeSpec ,DeltaState ,GameSpec ,RedFinding ,RefereeDecision ,State
+from pydantic import BaseModel
+
+
+class _CreateGameOutput (BaseModel ):
+    """The four required output keys when create_game produces a GameSpec."""
+
+    objective :str
+    target_artifact_id :str
+    allowed_delta_type :str
+    success_condition :str
 
 
 def _render_verification_block (result :VerificationResult |None ,*,guidance :str )->str :
@@ -151,6 +162,9 @@ create_game_red_feedback :dict [str ,Any ]|None =None ,
     f"For this project type, allowed_delta_type must be {resolved_adapter .supported_delta_type }.\n"
     f"{red_feedback_block }"
     f"{supplement }"
+    + "\n" + render_output_schema_hint (_CreateGameOutput )
+    + "\nOR, if the gap should be decomposed:\n"
+    + render_output_schema_hint (DecomposeSpec )
     )
 
 
@@ -290,6 +304,7 @@ prompt_supplement :str ="",
     "}\n"
     "findings must be an empty list for accept. "
     "success_condition_met must be true for accept and false for revise/reject.\n"
+    + "\n" + render_output_schema_hint (RedFinding )
     )
 
 
@@ -352,6 +367,7 @@ prompt_supplement :str ="",
     "}\n"
     "red_override must be true when your disposition differs from Red's disposition. "
     "improvement_hints must be empty for accept.\n"
+    + "\n" + render_output_schema_hint (RefereeDecision )
     )
 
 

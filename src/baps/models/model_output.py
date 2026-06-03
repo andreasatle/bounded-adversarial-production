@@ -263,6 +263,19 @@ fallback_fn :Callable [[str ],str ]|None =None ,
     raise ValueError (f"{context }: model output must be valid JSON")
 
 
+def render_output_schema_hint (model :type [BaseModel ])->str :
+    """Return a prompt block describing the exact JSON keys and types expected."""
+    fields ={
+    name :(info .annotation .__name__ if hasattr (info .annotation ,"__name__")else str (info .annotation ))
+    for name ,info in model .model_fields .items ()
+    }
+    return (
+    "Respond with ONLY a JSON object with exactly these keys and no others:\n"
+    +json .dumps (fields ,indent =2 )
+    +"\nNo prose, no markdown fences, no wrapper keys."
+    )
+
+
 def wrap_json_prompt (text :str )->str :
     """Wrap a prompt with the JSON-only instruction at both top and bottom."""
     return f"{_JSON_ONLY_INSTRUCTION }\n\n{text }\n\n{_JSON_ONLY_INSTRUCTION }"
