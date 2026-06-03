@@ -2,7 +2,7 @@
 
 from __future__ import annotations 
 
-from baps .adapters .project_adapter import VerificationResult ,render_blue_prompt_core 
+from baps .adapters .project_adapter import VerificationResult ,render_blue_prompt_core ,sanitize_model_string
 from baps .northstar .northstar_projection import StateView 
 from baps .plugins .language_plugin import LanguagePlugin 
 from baps .state .state import GameSpec 
@@ -25,7 +25,7 @@ plugin :LanguagePlugin ,
         stdout =str (pv .stdout )
         failures =plugin .parse_test_failures (stdout )
         if failures :
-            lines ="\n".join (f"  - {f ['test_id']}: {f ['reason']}"for f in failures )
+            lines ="\n".join (f"  - {sanitize_model_string (f ['test_id'])}: {sanitize_model_string (f ['reason'])}"for f in failures )
             section +=(
             f"\nPrevious export verification failed (exit_code={exit_code }):\n"
             f"{lines }\n"
@@ -42,7 +42,7 @@ plugin :LanguagePlugin ,
         stdout =str (cv .stdout )
         failures =plugin .parse_test_failures (stdout )
         if failures :
-            lines ="\n".join (f"  - {f ['test_id']}: {f ['reason']}"for f in failures )
+            lines ="\n".join (f"  - {sanitize_model_string (f ['test_id'])}: {sanitize_model_string (f ['reason'])}"for f in failures )
             section +=(
             f"\nCandidate verification failed (exit_code={exit_code }) — your last delta did not pass tests:\n"
             f"{lines }\n"
