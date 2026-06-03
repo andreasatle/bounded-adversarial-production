@@ -114,10 +114,10 @@ def test_extract_api_pub_items(plugin, fixture_file):
 def test_extract_api_missing_doc(plugin, fixture_file):
     result = plugin.extract_api(fixture_file)
     lines = result.splitlines()
-    struct_idx = next(i for i, l in enumerate(lines) if "WordPair" in l)
+    struct_idx = next(i for i, line in enumerate(lines) if "WordPair" in line)
     assert "MISSING" in lines[struct_idx + 1]
     fn_idx = next(
-        i for i, l in enumerate(lines) if "wordCount" in l and "test" not in l
+        i for i, line in enumerate(lines) if "wordCount" in line and "test" not in line
     )
     assert "Counts words" in lines[fn_idx + 1]
 

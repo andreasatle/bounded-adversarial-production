@@ -119,9 +119,9 @@ def test_extract_api_pub_items(plugin, fixture_file):
 def test_extract_api_missing_doc(plugin, fixture_file):
     result = plugin.extract_api(fixture_file)
     lines = result.splitlines()
-    struct_idx = next(i for i, l in enumerate(lines) if "WordCounter" in l)
+    struct_idx = next(i for i, line in enumerate(lines) if "WordCounter" in line)
     assert "MISSING" in lines[struct_idx + 1]
-    fn_idx = next(i for i, l in enumerate(lines) if "word_frequency" in l)
+    fn_idx = next(i for i, line in enumerate(lines) if "word_frequency" in line)
     assert "Returns the word frequency map." in lines[fn_idx + 1]
 
 

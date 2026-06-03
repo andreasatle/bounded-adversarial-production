@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 from baps.state.state import (
     CodeFile,
     CodingArtifact,
@@ -192,9 +194,9 @@ def test_extract_api_omits_none_docstrings() -> None:
     file = CodeFile(path="m.py", content=_SIMPLE_PY)
     result = PythonLanguagePlugin().extract_api(file)
     lines = result.splitlines()
-    no_doc_idx = next(i for i, l in enumerate(lines) if "def no_doc" in l)
+    no_doc_idx = next(i for i, line in enumerate(lines) if "def no_doc" in line)
     # Next non-empty line should not be a docstring
-    following = [l for l in lines[no_doc_idx + 1 :] if l.strip()]
+    following = [line for line in lines[no_doc_idx + 1 :] if line.strip()]
     assert not (following and following[0].strip().startswith('"""'))
 
 
@@ -348,7 +350,7 @@ def test_extract_tests_omits_docstring_for_undocumented_test() -> None:
     result = PythonLanguagePlugin().extract_tests(file)
     # test_subtraction has no docstring — just its name
     lines = result.splitlines()
-    sub_line = next((l for l in lines if "test_subtraction" in l), None)
+    sub_line = next((line for line in lines if "test_subtraction" in line), None)
     assert sub_line is not None
     assert ":" not in sub_line.split("test_subtraction")[1]
 
