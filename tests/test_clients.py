@@ -491,7 +491,7 @@ def test_build_fallback_client_for_role_returns_none_for_unconfigured_role ()->N
 
 def test_create_game_fallback_called_when_primary_exhausts_retries (monkeypatch )->None :
     valid_response =(
-    '{"objective":"Advance goal","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Advance goal","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"section exists"}'
     )
@@ -524,7 +524,7 @@ def test_create_game_fallback_called_when_primary_exhausts_retries (monkeypatch 
 
 def test_create_game_fallback_not_called_when_primary_succeeds (monkeypatch )->None :
     valid_response =(
-    '{"objective":"Advance goal","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Advance goal","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"section exists"}'
     )
@@ -757,7 +757,7 @@ def testbuild_fallback_chain_for_role_returns_two_entry_chain ()->None :
 
 def test_create_game_fallback_chain_escalates_through_all_links (monkeypatch )->None :
     valid_response =(
-    '{"objective":"Advance goal","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Advance goal","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"section exists"}'
     )
@@ -817,7 +817,7 @@ def test_create_game_chain_exhaustion_raises_runtime_error (monkeypatch )->None 
 
 def test_no_fallback_behavior_unchanged_when_primary_succeeds (monkeypatch )->None :
     valid_response =(
-    '{"objective":"Advance goal","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Advance goal","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"section exists"}'
     )

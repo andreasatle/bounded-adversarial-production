@@ -75,7 +75,7 @@ def test_create_game_accepts_atomic_introduction_gamespec ()->None :
     state ,
     model_client =FakeModelClient (
     [
-    '{"objective":"Add Introduction section",'
+    '{"kind":"game_spec","objective":"Add Introduction section",'
     '"target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"Introduction section exists."}'
@@ -103,7 +103,7 @@ def test_create_game_accepts_atomic_conclusion_gamespec ()->None :
     state ,
     model_client =FakeModelClient (
     [
-    '{"objective":"Add Conclusion section",'
+    '{"kind":"game_spec","objective":"Add Conclusion section",'
     '"target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"Conclusion section exists."}'
@@ -141,7 +141,7 @@ def test_create_game_engine_does_not_compute_next_missing_section ()->None :
     state ,
     model_client =FakeModelClient (
     [
-    '{"objective":"Add Abstract section",'
+    '{"kind":"game_spec","objective":"Add Abstract section",'
     '"target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"Abstract section exists."}'
@@ -169,7 +169,7 @@ def test_create_game_explicit_no_new_game_signal ()->None :
         config ,
         state ,
         model_client =FakeModelClient (
-        ['{"no_new_game": true, "reason": "all required sections already present"}']
+        ['{"kind": "no_new_game", "reason": "all required sections already present"}']
         ),
         )
 
@@ -192,7 +192,7 @@ def test_create_game_extra_key_on_no_new_game_response_is_stripped ()->None :
         config ,
         state ,
         model_client =FakeModelClient (
-        ['{"no_new_game": true, "reason": "all required sections already present", "confidence": 0.9}']
+        ['{"kind": "no_new_game", "reason": "all required sections already present", "confidence": 0.9}']
         ),
         )
 
@@ -216,7 +216,7 @@ def test_create_game_extra_key_on_northstar_response_is_stripped ()->None :
         state ,
         model_client =FakeModelClient (
         [
-        '{"northstar_update_needed": true, "rationale": "trajectory drifted",'
+        '{"kind": "northstar_update_needed", "rationale": "trajectory drifted",'
         ' "proposed_northstar": "new goal", "confidence": 0.8}'
         ]
         ),
@@ -227,7 +227,7 @@ def test_create_game_extra_key_on_decompose_response_is_stripped ()->None :
     import baps .core .run as run_module 
 
     valid_sub_game =(
-    '{"objective":"Advance goal","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Advance goal","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState","success_condition":"section exists"}'
     )
     config =RunConfig (
@@ -241,7 +241,7 @@ def test_create_game_extra_key_on_decompose_response_is_stripped ()->None :
     )
     state =run_module .create_state (config )
     decompose_response =(
-    '{"decompose": true, "rationale": "split into parts",'
+    '{"kind": "decompose", "rationale": "split into parts",'
     ' "sub_gaps": [{"description": "part one"}], "confidence": 0.7}'
     )
     result =create_game (
@@ -264,7 +264,7 @@ def test_create_game_extra_key_on_gamespec_response_is_stripped ()->None :
     )
     state =create_state (config )
     response =(
-    '{"objective":"Advance goal","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Advance goal","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState","success_condition":"section exists",'
     '"confidence": 0.95}'
     )
@@ -327,7 +327,7 @@ def test_coding_create_game_accepts_src_file_task_first_iteration ()->None :
     state ,
     model_client =FakeModelClient (
     [
-    '{"objective":"Write src/fibonacci.py with fibonacci implementation",'
+    '{"kind":"game_spec","objective":"Write src/fibonacci.py with fibonacci implementation",'
     '"target_artifact_id":"main-codebase",'
     '"allowed_delta_type":"DeltaCodingState",'
     '"success_condition":"Artifact contains src/fibonacci.py with a fibonacci function."}'
@@ -367,7 +367,7 @@ def test_coding_create_game_accepts_test_file_task_second_iteration ()->None :
     state ,
     model_client =FakeModelClient (
     [
-    '{"objective":"Write tests/test_fibonacci.py with pytest cases for fibonacci",'
+    '{"kind":"game_spec","objective":"Write tests/test_fibonacci.py with pytest cases for fibonacci",'
     '"target_artifact_id":"main-codebase",'
     '"allowed_delta_type":"DeltaCodingState",'
     '"success_condition":"Artifact contains tests/test_fibonacci.py with pytest tests for fibonacci."}'
@@ -397,7 +397,7 @@ def test_coding_normalize_passes_through_model_objective_and_success_condition (
     state ,
     model_client =FakeModelClient (
     [
-    '{"objective":"Write src/similarity.py with normalize and token_overlap",'
+    '{"kind":"game_spec","objective":"Write src/similarity.py with normalize and token_overlap",'
     '"target_artifact_id":"main-codebase",'
     '"allowed_delta_type":"DeltaCodingState",'
     '"success_condition":"Artifact contains src/similarity.py with all required functions."}'
@@ -428,7 +428,7 @@ def test_coding_normalize_does_not_inject_hardcoded_file_paths ()->None :
     state ,
     model_client =FakeModelClient (
     [
-    '{"objective":"Write src/similarity.py",'
+    '{"kind":"game_spec","objective":"Write src/similarity.py",'
     '"target_artifact_id":"main-codebase",'
     '"allowed_delta_type":"DeltaCodingState",'
     '"success_condition":"src/similarity.py exists with required functions"}'
@@ -459,7 +459,7 @@ def test_coding_normalization_overrides_file_path_target_artifact_id ()->None :
     state ,
     model_client =FakeModelClient (
     [
-    '{"objective":"Write tests file",'
+    '{"kind":"game_spec","objective":"Write tests file",'
     '"target_artifact_id":"tests/test_fibonacci.py",'
     '"allowed_delta_type":"DeltaCodingState",'
     '"success_condition":"tests/test_fibonacci.py exists"}'
@@ -547,7 +547,7 @@ def test_create_game_northstar_update_needed_signal_raises_error ()->None :
     )
     state =run_module .create_state (config )
     response =json .dumps ({
-    "northstar_update_needed":True ,
+    "kind":"northstar_update_needed",
     "rationale":"State has drifted from NorthStar goal.",
     "proposed_northstar":"# Revised Goal\n\nNew direction.",
     })

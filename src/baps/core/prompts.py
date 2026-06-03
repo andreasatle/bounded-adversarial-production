@@ -17,19 +17,28 @@ verification_result_to_dict ,
 resolve_project_type_adapter ,
 sanitize_model_string ,
 )
-from baps .state .state import DecomposeSpec ,DeltaState ,GameSpec ,RedFinding ,RefereeDecision ,State
+from baps .state .state import DeltaState ,GameSpec ,RedFinding ,RefereeDecision ,State
 from pydantic import BaseModel
 
 
 class _CreateGameOutput (BaseModel ):
     """Model-facing GameSpec output fields; context_chain is orchestrator-injected, not a model output."""
 
+    kind :str
     objective :str
     target_artifact_id :str
     allowed_delta_type :str
     success_condition :str
     max_words :int |None =None
     target_entity :str |None =None
+
+
+class _CreateGameDecomposeHint (BaseModel ):
+    """Hint model for the decompose response shape shown in the create_game prompt."""
+
+    kind :str
+    rationale :str
+    sub_gaps :list
 
 
 def _render_verification_block (result :VerificationResult |None ,*,guidance :str )->str :
@@ -133,18 +142,19 @@ create_game_red_feedback :dict [str ,Any ]|None =None ,
     "Do not include prose before or after JSON.\n"
     "No extra fields.\n\n"
     "If all gaps in current scope are closed, return exactly:\n"
-    '{\"no_new_game\": true, \"reason\": \"...\"}\n\n'
+    '{\"kind\": \"no_new_game\", \"reason\": \"...\"}\n\n'
     "If this gap is too large or spans independent concerns, return exactly:\n"
-    '{\"decompose\": true, \"rationale\": \"...\", \"sub_gaps\": [{\"description\": \"...\"}, ...]}\n'
+    '{\"kind\": \"decompose\", \"rationale\": \"...\", \"sub_gaps\": [{\"description\": \"...\"}, ...]}\n'
     "Sub-gaps must partition the current gap: together they close it, individually they are coherent.\n"
     "Sub-gaps are executed strictly in list order — each sub-gap runs to completion before the next begins.\n"
     "Order sub-gaps by dependency: if sub-gap B requires anything that sub-gap A produces, A must appear before B.\n"
     "A sub-gap must never depend on the output of a later sub-gap.\n\n"
     "If the current trajectory cannot satisfy NorthStar without changing NorthStar itself, return exactly:\n"
-    '{\"northstar_update_needed\": true, \"rationale\": \"...\", \"proposed_northstar\": \"...\"}\n'
+    '{\"kind\": \"northstar_update_needed\", \"rationale\": \"...\", \"proposed_northstar\": \"...\"}\n'
     "proposed_northstar must contain the complete updated NorthStar content as a plain string.\n\n"
     "GameSpec JSON shape:\n"
     "{\n"
+    '  "kind": "game_spec",\n'
     '  "objective": "...",\n'
     '  "target_artifact_id": "...",\n'
     '  "allowed_delta_type": "...",\n'
@@ -166,7 +176,7 @@ create_game_red_feedback :dict [str ,Any ]|None =None ,
     f"{supplement }"
     + "\n" + render_output_schema_hint (_CreateGameOutput )
     + "\nOR, if the gap should be decomposed:\n"
-    + render_output_schema_hint (DecomposeSpec )
+    + render_output_schema_hint (_CreateGameDecomposeHint )
     )
 
 

@@ -21,7 +21,7 @@ import baps .state .state as state_module
 
 def testparse_create_game_output_northstar_update_needed_raises_signal ()->None :
     raw =json .dumps ({
-    "northstar_update_needed":True ,
+    "kind": "northstar_update_needed",
     "rationale":"Accumulated state has drifted from NorthStar intent.",
     "proposed_northstar":"# Updated Goal\n\nNew direction.",
     })
@@ -45,7 +45,7 @@ def testparse_create_game_output_northstar_update_needed_flag_false_falls_throug
 
 def testparse_create_game_output_northstar_update_needed_empty_rationale_raises ()->None :
     raw =json .dumps ({
-    "northstar_update_needed":True ,
+    "kind": "northstar_update_needed",
     "rationale":"   ",
     "proposed_northstar":"new northstar",
     })
@@ -55,7 +55,7 @@ def testparse_create_game_output_northstar_update_needed_empty_rationale_raises 
 
 def testparse_create_game_output_northstar_update_needed_empty_proposed_northstar_raises ()->None :
     raw =json .dumps ({
-    "northstar_update_needed":True ,
+    "kind": "northstar_update_needed",
     "rationale":"valid rationale",
     "proposed_northstar":"   ",
     })
@@ -71,7 +71,7 @@ def testparse_create_game_output_returns_decompose_spec ()->None :
     from baps .state .state import DecomposeSpec 
 
     text =json .dumps ({
-    "decompose":True ,
+    "kind": "decompose",
     "rationale":"Gap is too large",
     "sub_gaps":[
     {"description":"Implement auth module"},
@@ -88,7 +88,7 @@ def testparse_create_game_output_returns_decompose_spec ()->None :
 
 def testparse_create_game_output_decompose_requires_non_empty_sub_gaps ()->None :
     text =json .dumps ({
-    "decompose":True ,
+    "kind": "decompose",
     "rationale":"Too large",
     "sub_gaps":[],
     })
@@ -98,7 +98,7 @@ def testparse_create_game_output_decompose_requires_non_empty_sub_gaps ()->None 
 
 def testparse_create_game_output_decompose_requires_rationale ()->None :
     text =json .dumps ({
-    "decompose":True ,
+    "kind": "decompose",
     "rationale":"",
     "sub_gaps":[{"description":"x"}],
     })
@@ -110,7 +110,7 @@ def testparse_create_game_output_truncates_sub_gaps_when_over_max ()->None :
     from baps .state .state import DecomposeSpec 
 
     sub_gaps =[{"description":f"Gap {i }"}for i in range (7 )]
-    text =json .dumps ({"decompose":True ,"rationale":"Too large","sub_gaps":sub_gaps })
+    text =json .dumps ({"kind": "decompose","rationale":"Too large","sub_gaps":sub_gaps })
     result =parse_create_game_output (text ,max_sub_gaps =5 )
     assert isinstance (result ,DecomposeSpec )
     assert len (result .sub_gaps )==5 
@@ -122,7 +122,7 @@ def testparse_create_game_output_does_not_truncate_at_exactly_max ()->None :
     from baps .state .state import DecomposeSpec 
 
     sub_gaps =[{"description":f"Gap {i }"}for i in range (5 )]
-    text =json .dumps ({"decompose":True ,"rationale":"Decomposing","sub_gaps":sub_gaps })
+    text =json .dumps ({"kind": "decompose","rationale":"Decomposing","sub_gaps":sub_gaps })
     result =parse_create_game_output (text ,max_sub_gaps =5 )
     assert isinstance (result ,DecomposeSpec )
     assert len (result .sub_gaps )==5 
@@ -132,7 +132,7 @@ def testparse_create_game_output_max_sub_gaps_1_allows_only_one ()->None :
     from baps .state .state import DecomposeSpec 
 
     sub_gaps =[{"description":"First"},{"description":"Second"}]
-    text =json .dumps ({"decompose":True ,"rationale":"Big gap","sub_gaps":sub_gaps })
+    text =json .dumps ({"kind": "decompose","rationale":"Big gap","sub_gaps":sub_gaps })
     result =parse_create_game_output (text ,max_sub_gaps =1 )
     assert isinstance (result ,DecomposeSpec )
     assert len (result .sub_gaps )==1 
@@ -149,7 +149,7 @@ caplog :pytest .LogCaptureFixture ,
     {"description":""},
     {"description":"   "},
     ]
-    text =json .dumps ({"decompose":True ,"rationale":"gap is large","sub_gaps":sub_gaps })
+    text =json .dumps ({"kind": "decompose","rationale":"gap is large","sub_gaps":sub_gaps })
     with caplog .at_level (logging .WARNING ):
         result =parse_create_game_output (text ,max_sub_gaps =5 )
     assert isinstance (result ,DecomposeSpec )
@@ -160,7 +160,7 @@ caplog :pytest .LogCaptureFixture ,
 
 def testparse_create_game_output_all_empty_sub_gaps_no_fallback_raises ()->None :
     text =json .dumps ({
-    "decompose":True ,
+    "kind": "decompose",
     "rationale":"gap is large",
     "sub_gaps":[{"description":""},{"description":"   "}],
     })
@@ -172,7 +172,7 @@ def testparse_create_game_output_all_empty_sub_gaps_with_fallback_escalates ()->
     from baps .state .state import DecomposeSpec 
 
     valid_decompose =json .dumps ({
-    "decompose":True ,
+    "kind": "decompose",
     "rationale":"gap is large",
     "sub_gaps":[{"description":"write the implementation"}],
     })
@@ -183,7 +183,7 @@ def testparse_create_game_output_all_empty_sub_gaps_with_fallback_escalates ()->
         return valid_decompose 
 
     text =json .dumps ({
-    "decompose":True ,
+    "kind": "decompose",
     "rationale":"gap is large",
     "sub_gaps":[{"description":""},{"description":"   "}],
     })
@@ -204,7 +204,8 @@ def testparse_create_game_output_unrecognizable_shape_with_fallback_escalates ()
     from baps .state .state import GameSpec 
 
     valid_game_spec =json .dumps ({
-    "objective":"Close the gap",
+    "kind": "game_spec",
+    "objective": "Close the gap",
     "target_artifact_id":"main-document",
     "allowed_delta_type":"DeltaDocumentState",
     "success_condition":"section present",
@@ -226,7 +227,8 @@ def testparse_create_game_output_unrecognizable_shape_fallback_logs_warning (
 caplog :pytest .LogCaptureFixture ,
 )->None :
     valid_game_spec =json .dumps ({
-    "objective":"Close the gap",
+    "kind": "game_spec",
+    "objective": "Close the gap",
     "target_artifact_id":"main-document",
     "allowed_delta_type":"DeltaDocumentState",
     "success_condition":"section present",
@@ -245,7 +247,8 @@ def testparse_create_game_output_unrecognizable_shape_with_retry_fn_retries ()->
     from baps .state .state import GameSpec
 
     valid_game_spec =json .dumps ({
-    "objective":"Close the gap",
+    "kind": "game_spec",
+    "objective": "Close the gap",
     "target_artifact_id":"main-document",
     "allowed_delta_type":"DeltaDocumentState",
     "success_condition":"section present",
@@ -266,7 +269,8 @@ def testparse_create_game_output_unexpected_status_key_triggers_retry ()->None :
     from baps .state .state import GameSpec
 
     valid_game_spec =json .dumps ({
-    "objective":"Close the gap",
+    "kind": "game_spec",
+    "objective": "Close the gap",
     "target_artifact_id":"main-document",
     "allowed_delta_type":"DeltaDocumentState",
     "success_condition":"section present",
@@ -290,7 +294,8 @@ def testparse_create_game_output_correction_retry_no_new_game_escalates_to_fallb
     from baps .state .state import GameSpec
 
     valid_game_spec =json .dumps ({
-    "objective":"Close the gap",
+    "kind": "game_spec",
+    "objective": "Close the gap",
     "target_artifact_id":"main-document",
     "allowed_delta_type":"DeltaDocumentState",
     "success_condition":"section present",
@@ -298,7 +303,7 @@ def testparse_create_game_output_correction_retry_no_new_game_escalates_to_fallb
     fallback_calls :list [str ]=[]
 
     def retry_fn (prompt :str )->str :
-        return json .dumps ({"no_new_game":True ,"reason":"nothing to do"})
+        return json .dumps ({"kind": "no_new_game","reason":"nothing to do"})
 
     def fallback_fn (prompt :str )->str :
         fallback_calls .append (prompt )
@@ -315,7 +320,7 @@ def testparse_create_game_output_correction_retry_no_new_game_no_fallback_raises
     from baps .core .parsers import NoNewGameError
 
     def retry_fn (prompt :str )->str :
-        return json .dumps ({"no_new_game":True ,"reason":"nothing to do"})
+        return json .dumps ({"kind": "no_new_game","reason":"nothing to do"})
 
     text =json .dumps ({"status":"complete"})
     with pytest .raises (ValueError ,match ="missing required keys"):
@@ -333,8 +338,8 @@ def testparse_create_game_output_correction_prompt_excludes_no_new_game ()->None
 # Ambiguity guard tests (mixed control-plane signals + GameSpec fields)
 # ---------------------------------------------------------------------------
 
-def testparse_create_game_output_no_new_game_with_gamespec_fields_raises ()->None :
-    """A response mixing a terminal signal with GameSpec fields must not be silently resolved."""
+def testparse_create_game_output_old_style_no_new_game_with_gamespec_fields_rejected ()->None :
+    """Old-style response mixing no_new_game with GameSpec fields must be rejected (kind missing)."""
     text =json .dumps ({
     "no_new_game":True ,
     "reason":"done",
@@ -347,8 +352,8 @@ def testparse_create_game_output_no_new_game_with_gamespec_fields_raises ()->Non
         parse_create_game_output (text )
 
 
-def testparse_create_game_output_multiple_terminal_signals_raises ()->None :
-    """A response with two active terminal signals must not be resolved by silent priority."""
+def testparse_create_game_output_old_style_multiple_terminal_signals_rejected ()->None :
+    """Old-style response with two active signals must be rejected (both stripped, kind missing)."""
     text =json .dumps ({
     "no_new_game":True ,
     "reason":"done",
@@ -360,8 +365,8 @@ def testparse_create_game_output_multiple_terminal_signals_raises ()->None :
         parse_create_game_output (text )
 
 
-def testparse_create_game_output_northstar_and_decompose_signals_raises ()->None :
-    """northstar_update_needed + decompose share the rationale key; mixed response must be rejected."""
+def testparse_create_game_output_old_style_northstar_and_decompose_signals_rejected ()->None :
+    """Old-style mixed northstar_update_needed + decompose must be rejected (kind missing)."""
     text =json .dumps ({
     "northstar_update_needed":True ,
     "decompose":True ,
@@ -373,11 +378,24 @@ def testparse_create_game_output_northstar_and_decompose_signals_raises ()->None
         parse_create_game_output (text )
 
 
-def testparse_create_game_output_ambiguous_retry_recovers_with_valid_gamespec ()->None :
-    """Ambiguous response routes through shape-correction retry; valid GameSpec on retry succeeds."""
+def testparse_create_game_output_old_style_game_spec_rejected ()->None :
+    """Old-style flat game_spec response without kind must be rejected via shape-failure."""
+    text =json .dumps ({
+    "objective":"Add intro section",
+    "target_artifact_id":"doc-main",
+    "allowed_delta_type":"append_section",
+    "success_condition":"section present",
+    })
+    with pytest .raises (ValueError ,match ="missing required keys"):
+        parse_create_game_output (text )
+
+
+def testparse_create_game_output_missing_kind_triggers_correction_retry ()->None :
+    """Response missing kind routes through correction retry; valid game_spec on retry succeeds."""
     from baps .state .state import GameSpec
 
     valid_game_spec =json .dumps ({
+    "kind":"game_spec",
     "objective":"Add intro section",
     "target_artifact_id":"doc-main",
     "allowed_delta_type":"append_section",
@@ -407,7 +425,7 @@ def testparse_create_game_output_fallback_returning_terminal_signal_is_blocked (
     from baps .core .parsers import NoNewGameError
 
     def fallback_fn (prompt :str )->str :
-        return json .dumps ({"no_new_game":True ,"reason":"nothing to do"})
+        return json .dumps ({"kind": "no_new_game","reason":"nothing to do"})
 
     text =json .dumps ({"something_unexpected":"value"})
     with pytest .raises (ValueError ):
@@ -426,7 +444,8 @@ def testparse_create_game_output_empty_dict_with_fallback_escalates ()->None :
     from baps .state .state import GameSpec 
 
     valid_game_spec =json .dumps ({
-    "objective":"Close the gap",
+    "kind": "game_spec",
+    "objective": "Close the gap",
     "target_artifact_id":"main-document",
     "allowed_delta_type":"DeltaDocumentState",
     "success_condition":"section present",
@@ -444,23 +463,146 @@ def testparse_create_game_output_empty_dict_with_fallback_escalates ()->None :
     assert len (fallback_calls )==1 
 
 
-def testparse_create_game_output_game_spec_with_false_marker_keys_and_extra_keys ()->None :
-    from baps .state .state import GameSpec 
+def testparse_create_game_output_game_spec_with_extra_keys_stripped ()->None :
+    from baps .state .state import GameSpec
 
-    # Local models (e.g. qwen2.5-coder) often include false-valued marker keys and
-    # extra metadata like confidence in what is intended to be a GameSpec response.
+    # Extra metadata keys like confidence are stripped; kind must be present.
     raw =json .dumps ({
+    "kind":"game_spec",
     "objective":"Add introduction section",
     "target_artifact_id":"doc-main",
     "allowed_delta_type":"append_section",
     "success_condition":"Introduction section present",
-    "no_new_game":False ,
-    "decompose":False ,
     "confidence":0.95 ,
     })
     result =parse_create_game_output (raw )
     assert isinstance (result ,GameSpec )
     assert result .objective =="Add introduction section"
+
+
+    # ---------------------------------------------------------------------------
+    # Discriminated kind field — new invariant tests
+    # ---------------------------------------------------------------------------
+
+def testparse_create_game_output_kind_game_spec_valid ()->None :
+    """kind=game_spec with all required fields produces a GameSpec."""
+    from baps .state .state import GameSpec
+
+    raw =json .dumps ({
+    "kind":"game_spec",
+    "objective":"Add intro section",
+    "target_artifact_id":"doc-main",
+    "allowed_delta_type":"append_section",
+    "success_condition":"Intro section present.",
+    })
+    result =parse_create_game_output (raw )
+    assert isinstance (result ,GameSpec )
+    assert result .objective =="Add intro section"
+
+
+def testparse_create_game_output_kind_decompose_valid ()->None :
+    """kind=decompose with rationale and sub_gaps produces a DecomposeSpec."""
+    from baps .state .state import DecomposeSpec
+
+    raw =json .dumps ({
+    "kind":"decompose",
+    "rationale":"Gap is too large to close in one turn.",
+    "sub_gaps":[{"description":"Step one"},{"description":"Step two"}],
+    })
+    result =parse_create_game_output (raw )
+    assert isinstance (result ,DecomposeSpec )
+    assert result .rationale =="Gap is too large to close in one turn."
+    assert len (result .sub_gaps )==2
+
+
+def testparse_create_game_output_kind_no_new_game_valid ()->None :
+    """kind=no_new_game with non-empty reason raises NoNewGameError."""
+    from baps .core .parsers import NoNewGameError
+
+    raw =json .dumps ({"kind":"no_new_game","reason":"All gaps are closed."})
+    with pytest .raises (NoNewGameError )as exc_info :
+        parse_create_game_output (raw )
+    assert exc_info .value .args [0 ]=="All gaps are closed."
+
+
+def testparse_create_game_output_kind_northstar_update_needed_valid ()->None :
+    """kind=northstar_update_needed raises NorthStarUpdateNeededError."""
+    raw =json .dumps ({
+    "kind":"northstar_update_needed",
+    "rationale":"The goal has drifted.",
+    "proposed_northstar":"# New Goal\n\nUpdated direction.",
+    })
+    with pytest .raises (NorthStarUpdateNeededError )as exc_info :
+        parse_create_game_output (raw )
+    assert exc_info .value .rationale =="The goal has drifted."
+
+
+def testparse_create_game_output_invalid_kind_triggers_shape_failure ()->None :
+    """An unrecognized kind value routes through correction retry path."""
+    from baps .state .state import GameSpec
+
+    valid_game_spec =json .dumps ({
+    "kind":"game_spec",
+    "objective":"Add intro",
+    "target_artifact_id":"doc",
+    "allowed_delta_type":"append_section",
+    "success_condition":"Intro present.",
+    })
+    retry_calls :list [str ]=[]
+
+    def retry_fn (prompt :str )->str :
+        retry_calls .append (prompt )
+        return valid_game_spec
+
+    raw =json .dumps ({"kind":"unknown_value","objective":"something"})
+    result =parse_create_game_output (raw ,retry_fn =retry_fn )
+    assert isinstance (result ,GameSpec )
+    assert len (retry_calls )==1
+
+
+def testparse_create_game_output_correction_retry_kind_terminal_signal_blocked ()->None :
+    """Correction retry returning kind=no_new_game must not escape as NoNewGameError."""
+    from baps .core .parsers import NoNewGameError
+    from baps .state .state import GameSpec
+
+    valid_game_spec =json .dumps ({
+    "kind":"game_spec",
+    "objective":"Add intro",
+    "target_artifact_id":"doc",
+    "allowed_delta_type":"append_section",
+    "success_condition":"Intro present.",
+    })
+    fallback_calls :list [str ]=[]
+
+    def retry_fn (prompt :str )->str :
+        return json .dumps ({"kind":"no_new_game","reason":"nothing to do"})
+
+    def fallback_fn (prompt :str )->str :
+        fallback_calls .append (prompt )
+        return valid_game_spec
+
+    raw =json .dumps ({"status":"complete"})
+    result =parse_create_game_output (raw ,retry_fn =retry_fn ,fallback_fn =fallback_fn )
+    assert isinstance (result ,GameSpec )
+    assert len (fallback_calls )==1
+
+
+def testparse_create_game_output_correction_fallback_kind_terminal_signal_blocked ()->None :
+    """Correction fallback returning kind=no_new_game must not escape as NoNewGameError."""
+    from baps .core .parsers import NoNewGameError
+
+    def fallback_fn (prompt :str )->str :
+        return json .dumps ({"kind":"no_new_game","reason":"nothing to do"})
+
+    raw =json .dumps ({"something_unexpected":"value"})
+    with pytest .raises (ValueError ):
+        parse_create_game_output (raw ,fallback_fn =fallback_fn )
+    try :
+        parse_create_game_output (raw ,fallback_fn =fallback_fn )
+    except NoNewGameError :
+        pytest .fail ("NoNewGameError must not escape from shape-correction fallback path")
+    except ValueError :
+        pass
 
 
     # ---------------------------------------------------------------------------

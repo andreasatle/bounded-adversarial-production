@@ -104,19 +104,17 @@ __all__ =[
 _CREATE_GAME_SCHEMA :dict ={
 "type":"object",
 "properties":{
+"kind":{"type":"string"},
 "objective":{"type":"string"},
 "target_artifact_id":{"type":"string"},
 "allowed_delta_type":{"type":"string"},
 "success_condition":{"type":"string"},
 "max_words":{"type":["integer","null"]},
 "target_entity":{"type":["string","null"]},
-"no_new_game":{"type":"boolean"},
-"reason":{"type":"string"},
-"northstar_update_needed":{"type":"boolean"},
 "rationale":{"type":"string"},
-"proposed_northstar":{"type":"string"},
-"decompose":{"type":"boolean"},
 "sub_gaps":{"type":"array"},
+"reason":{"type":"string"},
+"proposed_northstar":{"type":"string"},
 },
 "additionalProperties":False ,
 }

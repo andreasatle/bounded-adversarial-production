@@ -47,7 +47,7 @@ def test_create_game_receives_input_and_state_and_outputs_game_spec ()->None :
     state ,
     model_client =FakeModelClient (
     [
-    '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Advance report objective","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}'
     ]
@@ -75,7 +75,7 @@ def test_create_game_target_artifact_exists_in_state ()->None :
     state ,
     model_client =FakeModelClient (
     [
-    '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Advance report objective","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}'
     ]
@@ -142,7 +142,7 @@ def test_create_game_invalid_json_without_debug_does_not_print_raw_model_output 
 
 def test_create_game_json_retry_with_correction_prompt_succeeds ()->None :
     valid_response =(
-    '{"objective":"Advance goal","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Advance goal","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"section exists"}'
     )
@@ -194,7 +194,7 @@ monkeypatch ,caplog
     )
     state =create_state (config )
     payload =(
-    '{"objective":" ","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":" ","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"Add introduction and conclusion"}'
     )
@@ -225,7 +225,7 @@ def test_create_game_validation_input_debug_enabled (caplog )->None :
         state ,
         model_client =FakeModelClient (
         [
-        '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+        '{"kind":"game_spec","objective":"Advance report objective","target_artifact_id":"main-document",'
         '"allowed_delta_type":"DeltaDocumentState",'
         '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}'
         ]
@@ -256,7 +256,7 @@ def test_create_game_semantic_refinement_objective_is_accepted (caplog )->None :
         state ,
         model_client =FakeModelClient (
         [
-        '{"objective":"Add a Conclusion section to artifact main-document, summarizing bounded adversarial evaluation outcomes and reiterating relevance to software project improvement.",'
+        '{"kind":"game_spec","objective":"Add a Conclusion section to artifact main-document, summarizing bounded adversarial evaluation outcomes and reiterating relevance to software project improvement.",'
         '"target_artifact_id":"main-document",'
         '"allowed_delta_type":"DeltaDocumentState",'
         '"success_condition":"Artifact contains a Conclusion section summarizing bounded adversarial evaluation outcomes and reiterating relevance to software project improvement."}'
@@ -283,7 +283,7 @@ def test_create_game_objective_with_multiple_tasks_is_accepted_by_structural_val
     state ,
     model_client =FakeModelClient (
     [
-    '{"objective":"Update report and create appendix",'
+    '{"kind":"game_spec","objective":"Update report and create appendix",'
     '"target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"Report is updated and appendix is created."}'
@@ -311,7 +311,7 @@ def test_create_game_validation_debug_disabled_prints_nothing (caplog )->None :
         state ,
         model_client =FakeModelClient (
         [
-        '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+        '{"kind":"game_spec","objective":"Advance report objective","target_artifact_id":"main-document",'
         '"allowed_delta_type":"DeltaDocumentState",'
         '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}'
         ]
@@ -337,7 +337,7 @@ def test_create_game_raw_json_still_accepted ()->None :
     state ,
     model_client =FakeModelClient (
     [
-    '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Advance report objective","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}'
     ]
@@ -363,7 +363,7 @@ def test_create_game_exact_json_fence_accepted ()->None :
     model_client =FakeModelClient (
     [
     "```json\n"
-    '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Advance report objective","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}\n'
     "```"
@@ -390,7 +390,7 @@ def test_create_game_exact_plain_fence_accepted ()->None :
     model_client =FakeModelClient (
     [
     "```\n"
-    '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Advance report objective","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}\n'
     "```"
@@ -414,7 +414,7 @@ def test_create_game_prose_before_fence_extracted_and_parsed ()->None :
     state =create_state (config )
     response =(
     "Here is the result:\n```json\n"
-    '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Advance report objective","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}\n'
     "```"
@@ -437,7 +437,7 @@ def test_create_game_prose_after_fence_extracted_and_parsed ()->None :
     state =create_state (config )
     response =(
     "```json\n"
-    '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Advance report objective","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}\n'
     "```\nDone."
@@ -459,7 +459,7 @@ def test_create_game_multiple_fenced_blocks_rejected ()->None :
     state =create_state (config )
     bad =(
     "```json\n"
-    '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Advance report objective","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}\n'
     "```\n```json\n{}\n```"
@@ -499,7 +499,7 @@ def test_create_game_missing_gamespec_fields_fails_cleanly ()->None :
         create_game (
         config ,
         state ,
-        model_client =FakeModelClient (['{"objective":"only-objective"}']),
+        model_client =FakeModelClient (['{"kind":"game_spec","objective":"only-objective"}']),
         )
 
 
@@ -520,7 +520,7 @@ def test_create_game_target_artifact_not_in_state_fails_cleanly ()->None :
         state ,
         model_client =FakeModelClient (
         [
-        '{"objective":"Advance report objective","target_artifact_id":"missing-document",'
+        '{"kind":"game_spec","objective":"Advance report objective","target_artifact_id":"missing-document",'
         '"allowed_delta_type":"DeltaDocumentState",'
         '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting missing-document."}'
         ]
@@ -556,7 +556,7 @@ def test_create_game_uses_adapter_build_create_game_state_view (monkeypatch )->N
     adapter =adapter ,
     model_client =FakeModelClient (
     [
-    '{"objective":"Advance report objective","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Advance report objective","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}'
     ]
@@ -621,7 +621,7 @@ def test_create_game_broad_goal_accepts_decomposed_atomic_gamespec ()->None :
     state ,
     model_client =FakeModelClient (
     [
-    '{"objective":"add introduction section",'
+    '{"kind":"game_spec","objective":"add introduction section",'
     '"target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"Introduction section exists in main-document."}'
@@ -648,7 +648,7 @@ def test_create_game_bundled_objective_and_success_condition_are_structurally_va
     state ,
     model_client =FakeModelClient (
     [
-    '{"objective":"add introduction and conclusion",'
+    '{"kind":"game_spec","objective":"add introduction and conclusion",'
     '"target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"Introduction and conclusion sections both exist."}'
@@ -674,7 +674,7 @@ def test_create_game_multi_feature_wording_is_structurally_valid ()->None :
     state ,
     model_client =FakeModelClient (
     [
-    '{"objective":"implement parser and tests",'
+    '{"kind":"game_spec","objective":"implement parser and tests",'
     '"target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"Parser and tests are implemented."}'
@@ -688,7 +688,7 @@ def test_create_game_red_accepts_game_spec_immediately ()->None :
     config =_make_doc_config ()
     state =create_state (config )
     game_spec_json =(
-    '{"objective":"Write introduction","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Write introduction","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState","success_condition":"Introduction present."}'
     )
     red_accept_json ='{"disposition":"accept","rationale":"Good scope.","success_condition_met":null,"findings":[]}'
@@ -705,11 +705,11 @@ def test_create_game_red_reject_triggers_retry_with_feedback ()->None :
     config =_make_doc_config ()
     state =create_state (config )
     first_spec =(
-    '{"objective":"Write everything","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Write everything","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState","success_condition":"All done."}'
     )
     second_spec =(
-    '{"objective":"Write introduction section","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Write introduction section","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState","success_condition":"Introduction present."}'
     )
     red_reject =(
@@ -730,7 +730,7 @@ def test_create_game_red_feedback_appears_in_retry_prompt ()->None :
     config =_make_doc_config ()
     state =create_state (config )
     spec_json =(
-    '{"objective":"Write everything","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Write everything","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState","success_condition":"All done."}'
     )
     red_reject =(
@@ -764,7 +764,7 @@ def test_create_game_red_client_none_skips_challenge ()->None :
     config =_make_doc_config ()
     state =create_state (config )
     spec_json =(
-    '{"objective":"Write introduction","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Write introduction","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState","success_condition":"Introduction present."}'
     )
     # No create_game_red_client — should return immediately after one CreateGame call
@@ -781,7 +781,7 @@ def test_create_game_red_unparseable_output_falls_back_to_accept ()->None :
     config =_make_doc_config ()
     state =create_state (config )
     spec_json =(
-    '{"objective":"Write introduction","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Write introduction","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState","success_condition":"Introduction present."}'
     )
     game_spec =create_game (
@@ -797,11 +797,11 @@ def test_create_game_red_revise_triggers_retry ()->None :
     config =_make_doc_config ()
     state =create_state (config )
     first_spec =(
-    '{"objective":"Write intro","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Write intro","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState","success_condition":"Vague."}'
     )
     second_spec =(
-    '{"objective":"Write introduction section","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Write introduction section","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"Introduction section present with title and 2+ paragraphs."}'
     )
@@ -847,7 +847,7 @@ def test_create_game_research_phase_calls_fetch_file_tool ()->None :
     state =create_state (config )
 
     spec_json =(
-    '{"objective":"Add utils module","target_artifact_id":"main-codebase",'
+    '{"kind":"game_spec","objective":"Add utils module","target_artifact_id":"main-codebase",'
     '"allowed_delta_type":"DeltaCodingState","success_condition":"utils.py present."}'
     )
     research_summary ="Found no existing files; artifact is empty."
@@ -877,7 +877,7 @@ def test_create_game_research_phase_fetch_file_dispatches_via_adapter ()->None :
     ),),
     )
     spec_json =(
-    '{"objective":"Add tests","target_artifact_id":"main-codebase",'
+    '{"kind":"game_spec","objective":"Add tests","target_artifact_id":"main-codebase",'
     '"allowed_delta_type":"DeltaCodingState","success_condition":"tests.py present."}'
     )
     fetch_call =ToolCall (name ="fetch_file",arguments ={"path":"src/main.py"})

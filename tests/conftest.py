@@ -12,7 +12,7 @@ from baps.models.models import FakeModelClient, ToolCall
 @pytest.fixture(autouse=True)
 def _patch_create_game_model_client(monkeypatch):
     create_game_response = (
-        '{"objective":"Advance goal","target_artifact_id":"main-document",'
+        '{"kind":"game_spec","objective":"Advance goal","target_artifact_id":"main-document",'
         '"allowed_delta_type":"DeltaDocumentState",'
         '"success_condition":"PlayGame must return a valid DeltaDocumentState targeting main-document."}'
     )

@@ -124,7 +124,7 @@ def test_create_game_prompt_includes_northstar_context ()->None :
     assert "name the gap being closed"in prompt 
     assert "verifiable from the artifact alone"in prompt 
     assert "Do not artificially split a coherent gap into multiple games"in prompt 
-    assert '{\"no_new_game\": true, \"reason\": \"...\"}'in prompt 
+    assert '{\"kind\": \"no_new_game\", \"reason\": \"...\"}'in prompt
     assert "state_json:"not in prompt 
     assert "mandatory_sections_json"not in prompt 
     assert "next_missing_required_section"not in prompt 
@@ -146,9 +146,9 @@ def test_create_game_prompt_includes_northstar_update_needed_instruction ()->Non
     config ,state ,adapter .build_create_game_state_view (state ,config ),adapter =adapter 
     )
 
-    assert '"northstar_update_needed": true'in prompt 
-    assert '"rationale"'in prompt 
-    assert '"proposed_northstar"'in prompt 
+    assert '"kind": "northstar_update_needed"'in prompt
+    assert '"rationale"'in prompt
+    assert '"proposed_northstar"'in prompt
     assert "cannot satisfy NorthStar without changing NorthStar itself"in prompt 
     assert "complete updated NorthStar content"in prompt 
 

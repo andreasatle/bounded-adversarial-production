@@ -53,7 +53,7 @@ def test_create_game_writes_create_game_blackboard_event (tmp_path :Path )->None
     config ,
     state ,
     model_client =FakeModelClient ([
-    '{"objective":"Close the gap","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Close the gap","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"Section present."}'
     ]),
@@ -90,7 +90,7 @@ def test_create_game_writes_no_new_game_event (tmp_path :Path )->None :
         create_game (
         config ,
         state ,
-        model_client =FakeModelClient (['{"no_new_game": true, "reason": "All gaps closed."}']),
+        model_client =FakeModelClient (['{"kind": "no_new_game", "reason": "All gaps closed."}']),
         )
 
     games_path =config ["workspace"]/"blackboard"/"games.jsonl"
@@ -117,7 +117,7 @@ def test_create_game_writes_decompose_spec_event (tmp_path :Path )->None :
     config ,
     state ,
     model_client =FakeModelClient ([
-    '{"decompose": true, "rationale": "Too large", '
+    '{"kind": "decompose", "rationale": "Too large", '
     '"sub_gaps": [{"description": "Part one"}, {"description": "Part two"}]}'
     ]),
     )
@@ -315,7 +315,7 @@ def test_create_game_blackboard_captures_depth_and_context_chain (tmp_path :Path
     depth =2 ,
     context_chain =chain ,
     model_client =FakeModelClient ([
-    '{"objective":"Close the gap","target_artifact_id":"main-document",'
+    '{"kind":"game_spec","objective":"Close the gap","target_artifact_id":"main-document",'
     '"allowed_delta_type":"DeltaDocumentState",'
     '"success_condition":"Section present."}'
     ]),
@@ -496,7 +496,7 @@ tmp_path :Path ,
         state ,
         verification_result =failing_vr ,
         model_client =FakeModelClient (
-        ['{"no_new_game": true, "reason": "No gap identified."}']
+        ['{"kind": "no_new_game", "reason": "No gap identified."}']
         ),
         )
 

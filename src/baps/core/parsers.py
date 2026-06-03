@@ -1,17 +1,17 @@
 """Parses model output for create_game, Red, and Referee roles into typed domain objects."""
 
-from __future__ import annotations 
+from __future__ import annotations
 
-import logging 
-from pathlib import Path 
-from typing import Any 
+import logging
+from pathlib import Path
+from typing import Any
 
-from pydantic import ValidationError 
+from pydantic import ValidationError
 
 from baps .core .roles import SpecRole
-from baps .core .run_config import RunConfig 
-from baps .models .model_output import ParseRecoveryRecord ,parse_model_output 
-from baps .adapters .project_adapter import ProjectTypeAdapter 
+from baps .core .run_config import RunConfig
+from baps .models .model_output import ParseRecoveryRecord ,parse_model_output
+from baps .adapters .project_adapter import ProjectTypeAdapter
 from baps .state .state import (
 DecomposeSpec ,
 GameSpec ,
@@ -34,29 +34,31 @@ class NorthStarUpdateNeededError (ValueError ):
     def __init__ (self ,rationale :str ,proposed_northstar :str )->None :
         """Initialize the instance."""
         super ().__init__ (rationale )
-        self .rationale =rationale 
-        self .proposed_northstar =proposed_northstar 
+        self .rationale =rationale
+        self .proposed_northstar =proposed_northstar
 
 
 _CREATE_GAME_ALL_KEYS =frozenset ({
-"no_new_game","reason",
-"northstar_update_needed","rationale","proposed_northstar",
-"decompose","sub_gaps",
+"kind",
 "objective","target_artifact_id","allowed_delta_type","success_condition",
 "max_words","context_chain","target_entity",
+"rationale","sub_gaps",
+"reason",
+"proposed_northstar",
 })
 
 _DECOMPOSE_EMPTY_SUBGAPS_CORRECTION_PROMPT =(
 "Your previous decompose response contained sub_gaps with empty description fields. "
 "Every sub_gap must have a non-empty, meaningful description string. "
-"Return a corrected JSON object where each sub_gap.description is a non-empty string."
+'Return a corrected JSON object where each sub_gap.description is a non-empty string, '
+'and include "kind": "decompose".'
 )
 
 _UNRECOGNIZABLE_SHAPE_CORRECTION_PROMPT =(
 "Your previous response did not match any valid create_game response shape. "
 "Return exactly one of:\n"
-'- GameSpec: {"objective": "...", "target_artifact_id": "...", "allowed_delta_type": "...", "success_condition": "..."}\n'
-'- Decompose: {"decompose": true, "rationale": "...", "sub_gaps": [{"description": "..."}, ...]}\n'
+'- {"kind": "game_spec", "objective": "...", "target_artifact_id": "...", "allowed_delta_type": "...", "success_condition": "..."}\n'
+'- {"kind": "decompose", "rationale": "...", "sub_gaps": [{"description": "..."}, ...]}\n'
 "Return only a JSON object. No prose, no extra keys.\n"
 "Do not return no_new_game or northstar_update_needed — those require the full StateView context "
 "which is not available in this correction step."
@@ -66,6 +68,8 @@ _RED_REQUIRED_KEYS =frozenset ({"disposition","rationale"})
 _RED_ALL_KEYS =frozenset ({"disposition","rationale","success_condition_met","findings"})
 _REFEREE_REQUIRED_KEYS =frozenset ({"disposition","rationale"})
 _REFEREE_ALL_KEYS =frozenset ({"disposition","rationale","red_override","improvement_hints"})
+
+_GAME_SPEC_REQUIRED =frozenset ({"objective","target_artifact_id","allowed_delta_type","success_condition"})
 
 
 def parse_create_game_output (
@@ -85,26 +89,15 @@ fallback_fn :Any =None ,
     fallback_fn =fallback_fn ,
     )
 
-    _active_signals =[k for k in ("no_new_game","northstar_update_needed","decompose")
-    if parsed .get (k )is True ]
-    _gamespec_keys_present =bool (
-    {"objective","target_artifact_id","allowed_delta_type","success_condition"}&set (parsed .keys ())
-    )
-    _ambiguous =len (_active_signals )>1 or (bool (_active_signals )and _gamespec_keys_present )
-    if _ambiguous :
-        logger .warning (
-        "[create_game] ambiguous response: active_signals=%s, gamespec_keys_present=%s; "
-        "treating as unrecognizable shape",
-        _active_signals ,_gamespec_keys_present ,
-        )
+    kind =parsed .get ("kind")
 
-    if not _ambiguous and parsed .get ("no_new_game")is True :
+    if kind =="no_new_game":
         reason =str (parsed .get ("reason","")).strip ()
         if not reason :
             raise ValueError ("create_game no-game response reason must be non-empty")
         raise NoNewGameError (reason )
 
-    if not _ambiguous and parsed .get ("northstar_update_needed")is True :
+    if kind =="northstar_update_needed":
         rationale =str (parsed .get ("rationale","")).strip ()
         if not rationale :
             raise ValueError (
@@ -117,7 +110,7 @@ fallback_fn :Any =None ,
             )
         raise NorthStarUpdateNeededError (rationale =rationale ,proposed_northstar =proposed_northstar )
 
-    if not _ambiguous and parsed .get ("decompose")is True :
+    if kind =="decompose":
         rationale =str (parsed .get ("rationale","")).strip ()
         if not rationale :
             raise ValueError ("create_game decompose response rationale must be non-empty")
@@ -125,10 +118,9 @@ fallback_fn :Any =None ,
         if not isinstance (sub_gaps_raw ,list )or not sub_gaps_raw :
             raise ValueError ("create_game decompose response sub_gaps must be a non-empty list")
 
-            # Build descriptions, filtering empty ones before Pydantic validation.
         raw_descriptions =[
         str (sg .get ("description","")).strip ()
-        for sg in sub_gaps_raw 
+        for sg in sub_gaps_raw
         if isinstance (sg ,dict )
         ]
         valid_descriptions =[d for d in raw_descriptions if d ]
@@ -156,52 +148,51 @@ fallback_fn :Any =None ,
             sub_gaps =sub_gaps [:max_sub_gaps ]
         return DecomposeSpec (rationale =rationale ,sub_gaps =sub_gaps )
 
-        # GameSpec branch
-    _game_spec_required ={"objective","target_artifact_id","allowed_delta_type","success_condition"}
-    missing =_game_spec_required -parsed .keys ()
-    if missing or _ambiguous :
-        if retry_fn is not None :
-            logger .warning (
-            "[create_game] unrecognizable response shape (keys: %s); retrying with correction prompt",
-            sorted (parsed .keys ()),
+    if kind =="game_spec":
+        missing =_GAME_SPEC_REQUIRED -parsed .keys ()
+        if missing :
+            raise ValueError (
+            f"create_game model output missing required keys: {', '.join (sorted (missing ))}"
             )
-            try :
-                raw =retry_fn (_UNRECOGNIZABLE_SHAPE_CORRECTION_PROMPT )
-            except Exception as exc :# noqa: BLE001
-                logger .debug ("[create_game] retry_fn raised during shape correction: %s",exc )
-            else :
-                try :
-                    return parse_create_game_output (raw ,max_sub_gaps =max_sub_gaps ,workspace =workspace )
-                except (NoNewGameError ,NorthStarUpdateNeededError ):
-                    logger .warning (
-                    "[create_game] correction retry returned terminal signal without StateView context; "
-                    "treating as shape failure"
-                    )
-        if fallback_fn is not None :
-            logger .warning (
-            "[create_game] unrecognizable response shape (keys: %s); escalating to fallback model",
-            sorted (parsed .keys ()),
-            )
-            raw =fallback_fn (_UNRECOGNIZABLE_SHAPE_CORRECTION_PROMPT )
+        try :
+            return GameSpec .model_validate (parsed )
+        except ValidationError as exc :
+            raise ValueError ("create_game model output failed GameSpec validation")from exc
+
+    # Unknown or missing kind — shape failure; trigger correction retry/fallback.
+    if retry_fn is not None :
+        logger .warning (
+        "[create_game] unrecognizable response shape (keys: %s); retrying with correction prompt",
+        sorted (parsed .keys ()),
+        )
+        try :
+            raw =retry_fn (_UNRECOGNIZABLE_SHAPE_CORRECTION_PROMPT )
+        except Exception as exc :# noqa: BLE001
+            logger .debug ("[create_game] retry_fn raised during shape correction: %s",exc )
+        else :
             try :
                 return parse_create_game_output (raw ,max_sub_gaps =max_sub_gaps ,workspace =workspace )
-            except (NoNewGameError ,NorthStarUpdateNeededError ):
+            except (NoNewGameError ,NorthStarUpdateNeededError ,ValueError ):
                 logger .warning (
-                "[create_game] fallback returned terminal signal without StateView context; "
+                "[create_game] correction retry returned invalid response; "
                 "treating as shape failure"
                 )
-        if _ambiguous :
-            raise ValueError (
-            f"create_game response contains ambiguous signals {_active_signals } "
-            "with GameSpec keys present; return exactly one response shape"
-            )
-        raise ValueError (
-        f"create_game model output missing required keys: {', '.join (sorted (missing ))}"
+    if fallback_fn is not None :
+        logger .warning (
+        "[create_game] unrecognizable response shape (keys: %s); escalating to fallback model",
+        sorted (parsed .keys ()),
         )
-    try :
-        return GameSpec .model_validate (parsed )
-    except ValidationError as exc :
-        raise ValueError ("create_game model output failed GameSpec validation")from exc 
+        raw =fallback_fn (_UNRECOGNIZABLE_SHAPE_CORRECTION_PROMPT )
+        try :
+            return parse_create_game_output (raw ,max_sub_gaps =max_sub_gaps ,workspace =workspace )
+        except (NoNewGameError ,NorthStarUpdateNeededError ):
+            logger .warning (
+            "[create_game] fallback returned terminal signal without StateView context; "
+            "treating as shape failure"
+            )
+    raise ValueError (
+    "create_game model output missing required keys: kind"
+    )
 
 
 def normalize_game_spec_with_adapter (
@@ -213,7 +204,7 @@ config :RunConfig ,
     """Normalize and return game spec with adapter."""
     normalizer =getattr (adapter ,"normalize_game_spec",None )
     if normalizer is None :
-        return game_spec 
+        return game_spec
     return normalizer (game_spec ,state ,config .to_adapter_config ())
 
 
@@ -236,11 +227,11 @@ fallback_fn :Any =None ,
     if missing :
         raise ValueError (f"{context } model output missing required keys: {sorted (missing )}")
     try :
-        return model_cls .model_validate (parsed ),recovery 
+        return model_cls .model_validate (parsed ),recovery
     except ValidationError as exc :
         raise ValueError (
         f"{context } model output failed {model_cls .__name__ } validation"
-        )from exc 
+        )from exc
 
 
 def parse_red_finding_json (
