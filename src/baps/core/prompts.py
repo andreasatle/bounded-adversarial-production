@@ -77,12 +77,12 @@ create_game_red_feedback :dict [str ,Any ]|None =None ,
     if create_game_red_feedback is not None :
         findings =create_game_red_feedback .get ("findings")or []
         findings_str =(
-        "\n".join (f"    - {f }"for f in findings )if findings else "    (none listed)"
+        "\n".join (f"    - {sanitize_model_string (f )}"for f in findings )if findings else "    (none listed)"
         )
         red_feedback_block =(
         "\nPrevious GameSpec was challenged by adversarial review:\n"
         f"  disposition: {create_game_red_feedback .get ('disposition','unknown')}\n"
-        f"  rationale: {create_game_red_feedback .get ('rationale','')}\n"
+        f"  rationale: {sanitize_model_string (create_game_red_feedback .get ('rationale',''))}\n"
         f"  findings:\n{findings_str }\n"
         "Address the above issues in your revised GameSpec.\n"
         )
