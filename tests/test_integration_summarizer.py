@@ -298,7 +298,6 @@ def test_summaries_appear_in_state_view_when_summarizer_configured() -> None:
     from baps.adapters.document_adapter import DocumentProjectAdapter
 
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.DocumentArtifact(
                 id="main-document",
@@ -335,7 +334,6 @@ def test_no_summaries_when_summarizer_is_none_even_with_target_entity() -> None:
     from baps.adapters.document_adapter import DocumentProjectAdapter
 
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.DocumentArtifact(
                 id="main-document",

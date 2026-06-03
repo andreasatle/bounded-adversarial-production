@@ -12,6 +12,11 @@ def _make_role(responses: list[str]) -> Role:
     return Role(name="summarize", client=FakeModelClient(responses))
 
 
+def _fake_client_of(role: Role) -> FakeModelClient:
+    assert isinstance(role.client, FakeModelClient)
+    return role.client
+
+
 def test_summarize_returns_none_when_summarizer_is_none() -> None:
     ctx = SummarizationContext(summarizer=None, game_spec=None)
     assert ctx.summarize("def foo(): pass\n", objective=None) is None
@@ -30,9 +35,9 @@ def test_summarize_calls_api_prompt_when_objective_is_none() -> None:
     result = ctx.summarize(content, objective=None)
 
     assert result == "API: def foo(): pass"
-    assert len(role.client.prompts) == 1
+    assert len(_fake_client_of(role).prompts) == 1
     # Role wraps the prompt; verify the API-surface instruction and content appear in it
-    sent = role.client.prompts[0]
+    sent = _fake_client_of(role).prompts[0]
     assert "Extract the public API surface" in sent
     assert content in sent
 
@@ -46,8 +51,8 @@ def test_summarize_calls_objective_prompt_when_objective_provided() -> None:
     result = ctx.summarize(content, objective=objective)
 
     assert result == "objective summary text"
-    assert len(role.client.prompts) == 1
-    sent = role.client.prompts[0]
+    assert len(_fake_client_of(role).prompts) == 1
+    sent = _fake_client_of(role).prompts[0]
     assert objective in sent
     assert content in sent
     assert "Extract the public API surface" not in sent
@@ -63,7 +68,7 @@ def test_summarize_cache_hit_second_call_does_not_call_model() -> None:
 
     assert r1 == "cached result"
     assert r2 == "cached result"
-    assert len(role.client.prompts) == 1
+    assert len(_fake_client_of(role).prompts) == 1
 
 
 def test_summarize_cache_hit_preserves_exact_result() -> None:
@@ -75,7 +80,7 @@ def test_summarize_cache_hit_preserves_exact_result() -> None:
     r2 = ctx.summarize(content, objective="obj")
 
     assert r2 == "first and only"
-    assert len(role.client.prompts) == 1
+    assert len(_fake_client_of(role).prompts) == 1
 
 
 def test_summarize_cache_miss_different_content_calls_model_again() -> None:
@@ -87,7 +92,7 @@ def test_summarize_cache_miss_different_content_calls_model_again() -> None:
 
     assert r1 == "summary-A"
     assert r2 == "summary-B"
-    assert len(role.client.prompts) == 2
+    assert len(_fake_client_of(role).prompts) == 2
 
 
 def test_summarize_cache_miss_same_content_different_objective_calls_model_again() -> None:
@@ -100,7 +105,7 @@ def test_summarize_cache_miss_same_content_different_objective_calls_model_again
 
     assert r1 == "summary-obj1"
     assert r2 == "summary-obj2"
-    assert len(role.client.prompts) == 2
+    assert len(_fake_client_of(role).prompts) == 2
 
 
 def test_cache_key_includes_objective_not_just_content() -> None:
@@ -114,12 +119,12 @@ def test_cache_key_includes_objective_not_just_content() -> None:
 
     assert r_no_obj == "no-obj-summary"
     assert r_with_obj == "with-obj-summary"
-    assert len(role.client.prompts) == 2
+    assert len(_fake_client_of(role).prompts) == 2
 
     # A third call with the same objective hits the cache — no new model call
     r_cached = ctx.summarize(content, objective="some objective")
     assert r_cached == "with-obj-summary"
-    assert len(role.client.prompts) == 2
+    assert len(_fake_client_of(role).prompts) == 2
 
 
 def test_cache_key_distinguishes_none_and_empty_objective() -> None:
@@ -133,9 +138,9 @@ def test_cache_key_distinguishes_none_and_empty_objective() -> None:
 
     assert r_api == "api-summary"
     assert r_empty == "empty-objective-summary"
-    assert len(role.client.prompts) == 2
-    assert "Extract the public API surface" in role.client.prompts[0]
-    assert "Extract the public API surface" not in role.client.prompts[1]
+    assert len(_fake_client_of(role).prompts) == 2
+    assert "Extract the public API surface" in _fake_client_of(role).prompts[0]
+    assert "Extract the public API surface" not in _fake_client_of(role).prompts[1]
 
 
 def test_two_context_instances_have_independent_caches() -> None:
@@ -157,4 +162,4 @@ def test_cache_populated_by_first_ctx_not_visible_in_second_ctx() -> None:
     r2 = ctx2.summarize(content, objective=None)
 
     assert r2 == "result-from-ctx2"
-    assert len(role2.client.prompts) == 1
+    assert len(_fake_client_of(role2).prompts) == 1

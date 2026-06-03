@@ -57,7 +57,6 @@ def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
         success_condition="section exists",
     )
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
     )
     delta = play_game(
@@ -137,7 +136,6 @@ def test_play_game_pre_seeds_verification_result_as_previous_feedback(
         passed=False,
     )
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.CodingArtifact(id="main-codebase", files=()),),
     )
     game_spec = GameSpec(

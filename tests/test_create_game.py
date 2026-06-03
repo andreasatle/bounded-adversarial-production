@@ -14,6 +14,7 @@ from baps.core.run import create_state
 from baps.core.run_config import RunConfig
 from baps.game.engine import create_game
 from baps.models.models import FakeModelClient
+from baps.state.state import GameSpec
 
 
 def _make_doc_config(
@@ -54,6 +55,7 @@ def test_create_game_receives_input_and_state_and_outputs_game_spec() -> None:
             ]
         ),
     )
+    assert isinstance(game_spec, GameSpec)
 
     assert game_spec.target_artifact_id == "main-document"
     assert game_spec.allowed_delta_type == "DeltaDocumentState"
@@ -82,6 +84,7 @@ def test_create_game_target_artifact_exists_in_state() -> None:
             ]
         ),
     )
+    assert isinstance(game_spec, GameSpec)
     assert any(artifact.id == game_spec.target_artifact_id for artifact in state.artifacts)
 
 
@@ -178,6 +181,7 @@ def test_create_game_json_retry_with_correction_prompt_succeeds() -> None:
 
     # First response is invalid JSON; the retry with the correction prompt returns valid JSON.
     game_spec = create_game(config, state, model_client=FakeModelClient(["not-json", valid_response]))
+    assert isinstance(game_spec, GameSpec)
 
     assert game_spec.target_artifact_id == "main-document"
 
@@ -287,6 +291,7 @@ def test_create_game_semantic_refinement_objective_is_accepted(caplog) -> None:
                 ]
             ),
         )
+    assert isinstance(game_spec, GameSpec)
     assert game_spec.target_artifact_id == "main-document"
     assert "create_game.validation_input:" in caplog.text
 
@@ -314,6 +319,7 @@ def test_create_game_objective_with_multiple_tasks_is_accepted_by_structural_val
             ]
         ),
     )
+    assert isinstance(game_spec, GameSpec)
     assert game_spec.objective == "Update report and create appendix"
 
 
@@ -367,6 +373,7 @@ def test_create_game_raw_json_still_accepted() -> None:
             ]
         ),
     )
+    assert isinstance(game_spec, GameSpec)
     assert game_spec.target_artifact_id == "main-document"
 
 
@@ -394,6 +401,7 @@ def test_create_game_exact_json_fence_accepted() -> None:
             ]
         ),
     )
+    assert isinstance(game_spec, GameSpec)
     assert game_spec.target_artifact_id == "main-document"
 
 
@@ -421,6 +429,7 @@ def test_create_game_exact_plain_fence_accepted() -> None:
             ]
         ),
     )
+    assert isinstance(game_spec, GameSpec)
     assert game_spec.target_artifact_id == "main-document"
 
 
@@ -444,6 +453,7 @@ def test_create_game_prose_before_fence_extracted_and_parsed() -> None:
         "```"
     )
     game_spec = create_game(config, state, model_client=FakeModelClient([response]))
+    assert isinstance(game_spec, GameSpec)
     assert game_spec.objective == "Advance report objective"
 
 
@@ -467,6 +477,7 @@ def test_create_game_prose_after_fence_extracted_and_parsed() -> None:
         "```\nDone."
     )
     game_spec = create_game(config, state, model_client=FakeModelClient([response]))
+    assert isinstance(game_spec, GameSpec)
     assert game_spec.objective == "Advance report objective"
 
 
@@ -652,6 +663,7 @@ def test_create_game_broad_goal_accepts_decomposed_atomic_gamespec() -> None:
             ]
         ),
     )
+    assert isinstance(game_spec, GameSpec)
     assert game_spec.objective == "add introduction section"
     assert game_spec.success_condition == "Introduction section exists in main-document."
 
@@ -679,6 +691,7 @@ def test_create_game_bundled_objective_and_success_condition_are_structurally_va
             ]
         ),
     )
+    assert isinstance(game_spec, GameSpec)
     assert game_spec.objective == "add introduction and conclusion"
 
 
@@ -705,6 +718,7 @@ def test_create_game_multi_feature_wording_is_structurally_valid() -> None:
             ]
         ),
     )
+    assert isinstance(game_spec, GameSpec)
     assert game_spec.objective == "implement parser and tests"
 
 
@@ -722,6 +736,7 @@ def test_create_game_red_accepts_game_spec_immediately() -> None:
         model_client=FakeModelClient([game_spec_json]),
         create_game_red_client=FakeModelClient([red_accept_json]),
     )
+    assert isinstance(game_spec, GameSpec)
     assert game_spec.objective == "Write introduction"
 
 
@@ -747,6 +762,7 @@ def test_create_game_red_reject_triggers_retry_with_feedback() -> None:
         model_client=FakeModelClient([first_spec, second_spec]),
         create_game_red_client=FakeModelClient([red_reject]),
     )
+    assert isinstance(game_spec, GameSpec)
     assert game_spec.objective == "Write introduction section"
 
 
@@ -797,6 +813,7 @@ def test_create_game_red_client_none_skips_challenge() -> None:
         model_client=FakeModelClient([spec_json]),
         create_game_red_client=None,
     )
+    assert isinstance(game_spec, GameSpec)
     assert game_spec.objective == "Write introduction"
 
 
@@ -813,6 +830,7 @@ def test_create_game_red_unparseable_output_falls_back_to_accept() -> None:
         model_client=FakeModelClient([spec_json]),
         create_game_red_client=FakeModelClient(["not valid json at all"]),
     )
+    assert isinstance(game_spec, GameSpec)
     assert game_spec.objective == "Write introduction"
 
 
@@ -838,6 +856,7 @@ def test_create_game_red_revise_triggers_retry() -> None:
         model_client=FakeModelClient([first_spec, second_spec]),
         create_game_red_client=FakeModelClient([red_revise]),
     )
+    assert isinstance(game_spec, GameSpec)
     assert "2+ paragraphs" in game_spec.success_condition
 
     # ---------------------------------------------------------------------------
@@ -880,6 +899,7 @@ def test_create_game_research_phase_calls_fetch_file_tool() -> None:
     )
     adapter = CodingProjectAdapter()
     game_spec = create_game(config, state, model_client=fake_client, adapter=adapter)
+    assert isinstance(game_spec, GameSpec)
     assert game_spec.objective == "Add utils module"
     assert fake_client._agentic_sequences == []
 
@@ -888,11 +908,10 @@ def test_create_game_research_phase_fetch_file_dispatches_via_adapter() -> None:
     """execute_create_game_research_tool is dispatched by ToolExecutor during research."""
     from baps.adapters.coding_adapter import CodingProjectAdapter
     from baps.models.models import ToolCall
-    from baps.state.state import CodeFile, CodingArtifact, NorthStar, State
+    from baps.state.state import CodeFile, CodingArtifact, State
 
     config = _make_coding_config()
     state = State(
-        northstar=NorthStar(artifacts=()),
         artifacts=(
             CodingArtifact(
                 id="main-codebase",
@@ -912,5 +931,6 @@ def test_create_game_research_phase_fetch_file_dispatches_via_adapter() -> None:
     )
     adapter = CodingProjectAdapter()
     game_spec = create_game(config, state, model_client=fake_client, adapter=adapter)
+    assert isinstance(game_spec, GameSpec)
     assert game_spec.objective == "Add tests"
     assert fake_client._agentic_sequences == []

@@ -113,7 +113,6 @@ def test_state_view_is_derived_from_state_and_gamespec_with_existing_sections() 
         success_condition="PlayGame must return a valid DeltaDocumentState targeting main-document.",
     )
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.DocumentArtifact(
                 id="main-document",
@@ -147,7 +146,6 @@ def test_document_state_view_content_for_empty_document() -> None:
         success_condition="Any success condition.",
     )
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
     )
 
@@ -254,7 +252,6 @@ def test_coding_create_game_state_view_is_textual_with_delimiters() -> None:
 def test_coding_create_game_state_view_includes_structural_api_summary() -> None:
 
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",
@@ -283,7 +280,6 @@ def test_coding_create_game_state_view_does_not_use_first_30_lines_as_primary_pa
 
     long_content = "\n".join(f"line_{i} = {i}" for i in range(100))
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",
@@ -310,7 +306,6 @@ def test_coding_create_game_state_view_does_not_use_first_30_lines_as_primary_pa
 
 def test_coding_create_game_state_view_line_count_in_heading_without_summarizer() -> None:
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",
@@ -337,7 +332,6 @@ def test_coding_create_game_state_view_line_count_in_heading_without_summarizer(
 def test_coding_create_game_state_view_remains_structural_even_with_summarizer() -> None:
     long_content = "\n".join(f"line_{i} = {i}" for i in range(100))
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",
@@ -367,7 +361,6 @@ def test_coding_create_game_state_view_remains_structural_even_with_summarizer()
 def test_coding_create_game_state_view_line_count_present_with_summarizer() -> None:
     content = "a = 1\nb = 2\nc = 3\n"
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",
@@ -401,7 +394,6 @@ def test_coding_create_game_state_view_line_count_present_with_summarizer() -> N
 
 def _make_coding_state(files: list[tuple[str, str]]) -> state_module.State:
     return state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",
@@ -502,7 +494,6 @@ def test_coding_state_view_invalid_target_entity_warns_and_stays_compact() -> No
 
 def _make_document_state(sections: list[tuple[str, str]]) -> state_module.State:
     return state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.DocumentArtifact(
                 id="main-document",
@@ -596,7 +587,6 @@ def _private():
 
 def _make_python_state() -> state_module.State:
     return state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="lib",
@@ -627,7 +617,6 @@ def test_python_create_game_state_view_api_surface() -> None:
 
 def test_python_play_game_state_view_target_full_other_api() -> None:
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="lib",
@@ -661,7 +650,6 @@ def test_python_play_game_state_view_target_full_other_api() -> None:
 
 def _make_rust_state() -> state_module.State:
     return state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="lib",
@@ -694,7 +682,6 @@ def test_rust_create_game_state_view_api_surface() -> None:
 
 def test_rust_play_game_state_view_target_full_no_extraction() -> None:
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="lib",
@@ -747,7 +734,6 @@ def test_rust_play_game_state_view_target_full_no_extraction() -> None:
 
 def _make_zig_state() -> state_module.State:
     return state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="lib",
@@ -780,7 +766,6 @@ def test_zig_create_game_state_view_api_surface() -> None:
 
 def test_zig_play_game_state_view_target_full_no_extraction() -> None:
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="lib",

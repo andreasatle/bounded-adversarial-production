@@ -165,7 +165,6 @@ def test_document_export_markdown_contains_sections_in_order(tmp_path: Path) -> 
 
     adapter = DocumentProjectAdapter()
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.DocumentArtifact(
                 id="main-document",
@@ -189,7 +188,6 @@ def test_document_export_creates_parent_directories(tmp_path: Path) -> None:
 
     adapter = DocumentProjectAdapter()
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
     )
     output_path = tmp_path / "a" / "b" / "c" / "report.md"
@@ -201,7 +199,6 @@ def test_document_export_output_changed_false_when_unchanged(tmp_path: Path) -> 
 
     adapter = DocumentProjectAdapter()
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.DocumentArtifact(
                 id="main-document",

@@ -11,7 +11,6 @@ from baps.game.engine import commit_export_with_adapter
 def test_coding_adapter_export_writes_files(tmp_path: Path) -> None:
 
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",
@@ -42,7 +41,6 @@ def test_coding_adapter_export_writes_files(tmp_path: Path) -> None:
 def test_coding_adapter_export_writes_src_and_tests_layout(tmp_path: Path) -> None:
 
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",
@@ -77,7 +75,6 @@ def test_coding_adapter_export_writes_src_and_tests_layout(tmp_path: Path) -> No
 def test_coding_export_normalizes_escaped_newline_content(tmp_path: Path) -> None:
 
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",
@@ -100,7 +97,6 @@ def test_coding_export_normalizes_escaped_newline_content(tmp_path: Path) -> Non
 def test_coding_export_normalizes_escaped_quotes_content(tmp_path: Path) -> None:
 
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",
@@ -133,7 +129,6 @@ def test_coding_export_normalizes_multiline_pytest_and_parses(tmp_path: Path) ->
         "        fibonacci(-1)\\n"
     )
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",
@@ -154,7 +149,6 @@ def test_coding_adapter_verify_export_discovers_and_runs_pytest_tests(
 ) -> None:
 
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",
@@ -203,7 +197,6 @@ def test_coding_adapter_verify_export_discovers_and_runs_pytest_tests(
 def test_coding_export_creates_nested_parent_directories(tmp_path: Path) -> None:
 
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",
@@ -228,7 +221,6 @@ def test_coding_export_creates_nested_parent_directories(tmp_path: Path) -> None
 def test_coding_export_output_changed_false_when_unchanged(tmp_path: Path) -> None:
 
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",
@@ -254,7 +246,6 @@ def test_document_adapter_verify_export_passes_for_matching_export(
 ) -> None:
 
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.DocumentArtifact(
                 id="main-document",
@@ -279,7 +270,6 @@ def test_document_adapter_verify_export_fails_when_section_content_missing(
 ) -> None:
 
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.DocumentArtifact(
                 id="main-document",
@@ -311,7 +301,6 @@ def test_coding_adapter_verify_export_runs_pytest_and_captures_success(monkeypat
     adapter = CodingProjectAdapter()
     output_dir = tmp_path / "project"
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.CodingArtifact(id="main-codebase", files=()),),
     )
     result = adapter.verify_export(output_dir, state, "main-codebase", sandbox_mode="none")
@@ -335,7 +324,6 @@ def test_coding_adapter_verify_export_captures_failure(monkeypatch, tmp_path: Pa
     monkeypatch.setattr(sandbox_module.subprocess, "run", _fake_run)
     adapter = CodingProjectAdapter()
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.CodingArtifact(id="main-codebase", files=()),),
     )
     result = adapter.verify_export(tmp_path / "project", state, "main-codebase", sandbox_mode="none")
@@ -351,7 +339,6 @@ def test_coding_adapter_verify_export_fails_for_missing_state_file(
 ) -> None:
 
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",
@@ -382,7 +369,6 @@ def test_coding_adapter_verify_export_skips_pytest_when_files_missing(monkeypatc
 
     monkeypatch.setattr(coding_module.subprocess, "run", _fake_run)
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",

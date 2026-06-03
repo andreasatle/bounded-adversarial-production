@@ -8,6 +8,7 @@ from baps.state.state import (
     CodeFile,
     DeltaDocumentState,
     DeltaState,
+    Disposition,
     DocumentArtifact,
     GameSpec,
     NorthStar,
@@ -234,14 +235,14 @@ def test_game_spec_rejects_empty_required_fields(field_name: str, value: str) ->
         GameSpec.model_validate(payload)
 
 
-@pytest.mark.parametrize("disposition", ["accept", "revise", "reject"])
-def test_red_finding_accepts_valid_dispositions(disposition: str) -> None:
+@pytest.mark.parametrize("disposition", [Disposition.accept, Disposition.revise, Disposition.reject])
+def test_red_finding_accepts_valid_dispositions(disposition: Disposition) -> None:
     finding = RedFinding(disposition=disposition, rationale="Reason")
     assert finding.disposition == disposition
 
 
-@pytest.mark.parametrize("disposition", ["accept", "revise", "reject"])
-def test_referee_decision_accepts_valid_dispositions(disposition: str) -> None:
+@pytest.mark.parametrize("disposition", [Disposition.accept, Disposition.revise, Disposition.reject])
+def test_referee_decision_accepts_valid_dispositions(disposition: Disposition) -> None:
     decision = RefereeDecision(disposition=disposition, rationale="Reason")
     assert decision.disposition == disposition
 
@@ -249,13 +250,13 @@ def test_referee_decision_accepts_valid_dispositions(disposition: str) -> None:
 @pytest.mark.parametrize("bad_rationale", ["", "   ", "\n\t"])
 def test_red_finding_rejects_empty_rationale(bad_rationale: str) -> None:
     with pytest.raises(ValidationError):
-        RedFinding(disposition="accept", rationale=bad_rationale)
+        RedFinding(disposition=Disposition.accept, rationale=bad_rationale)
 
 
 @pytest.mark.parametrize("bad_rationale", ["", "   ", "\n\t"])
 def test_referee_decision_rejects_empty_rationale(bad_rationale: str) -> None:
     with pytest.raises(ValidationError):
-        RefereeDecision(disposition="accept", rationale=bad_rationale)
+        RefereeDecision(disposition=Disposition.accept, rationale=bad_rationale)
 
 
 def test_play_game_runtime_defaults_current_best_delta_to_none() -> None:
@@ -274,7 +275,7 @@ def test_play_game_runtime_preserves_earlier_accepted_delta_when_later_candidate
     runtime = apply_referee_decision_to_runtime(
         runtime=runtime,
         candidate_delta=accepted_delta,
-        decision=RefereeDecision(disposition="accept", rationale="Good candidate"),
+        decision=RefereeDecision(disposition=Disposition.accept, rationale="Good candidate"),
     )
 
     later_candidate = DeltaDocumentState(
@@ -285,7 +286,7 @@ def test_play_game_runtime_preserves_earlier_accepted_delta_when_later_candidate
     runtime_after_reject = apply_referee_decision_to_runtime(
         runtime=runtime,
         candidate_delta=later_candidate,
-        decision=RefereeDecision(disposition="reject", rationale="Reject later candidate"),
+        decision=RefereeDecision(disposition=Disposition.reject, rationale="Reject later candidate"),
     )
 
     assert runtime_after_reject.current_best_delta is not None
@@ -305,7 +306,7 @@ def test_apply_referee_decision_revise_does_not_set_current_best_delta() -> None
     runtime = apply_referee_decision_to_runtime(
         runtime=PlayGameRuntime(),
         candidate_delta=candidate,
-        decision=RefereeDecision(disposition="revise", rationale="Promising but needs work."),
+        decision=RefereeDecision(disposition=Disposition.revise, rationale="Promising but needs work."),
     )
 
     assert runtime.current_best_delta is None
@@ -321,7 +322,7 @@ def test_apply_referee_decision_reject_discards_candidate_and_keeps_none() -> No
     runtime = apply_referee_decision_to_runtime(
         runtime=PlayGameRuntime(),
         candidate_delta=candidate,
-        decision=RefereeDecision(disposition="reject", rationale="Wrong direction."),
+        decision=RefereeDecision(disposition=Disposition.reject, rationale="Wrong direction."),
     )
 
     assert runtime.current_best_delta is None
@@ -337,7 +338,7 @@ def test_apply_referee_decision_revise_then_reject_produces_no_accepted_candidat
     runtime = apply_referee_decision_to_runtime(
         runtime=PlayGameRuntime(),
         candidate_delta=first_candidate,
-        decision=RefereeDecision(disposition="revise", rationale="Good start."),
+        decision=RefereeDecision(disposition=Disposition.revise, rationale="Good start."),
     )
     second_candidate = DeltaDocumentState(
         artifact_id="main-document",
@@ -347,7 +348,7 @@ def test_apply_referee_decision_revise_then_reject_produces_no_accepted_candidat
     runtime = apply_referee_decision_to_runtime(
         runtime=runtime,
         candidate_delta=second_candidate,
-        decision=RefereeDecision(disposition="reject", rationale="Regression."),
+        decision=RefereeDecision(disposition=Disposition.reject, rationale="Regression."),
     )
 
     assert runtime.current_best_delta is None
@@ -363,7 +364,7 @@ def test_apply_referee_decision_accept_then_revise_keeps_accepted_candidate_unch
     runtime = apply_referee_decision_to_runtime(
         runtime=PlayGameRuntime(),
         candidate_delta=accepted_candidate,
-        decision=RefereeDecision(disposition="accept", rationale="Approved."),
+        decision=RefereeDecision(disposition=Disposition.accept, rationale="Approved."),
     )
     revised_candidate = DeltaDocumentState(
         artifact_id="main-document",
@@ -373,7 +374,7 @@ def test_apply_referee_decision_accept_then_revise_keeps_accepted_candidate_unch
     runtime = apply_referee_decision_to_runtime(
         runtime=runtime,
         candidate_delta=revised_candidate,
-        decision=RefereeDecision(disposition="revise", rationale="Promising but not ready."),
+        decision=RefereeDecision(disposition=Disposition.revise, rationale="Promising but not ready."),
     )
     assert runtime.current_best_delta is not None
     assert runtime.current_best_delta.model_dump(mode="json") == accepted_candidate.model_dump(mode="json")

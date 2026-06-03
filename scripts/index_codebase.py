@@ -61,8 +61,9 @@ def _fmt_args(args: ast.arguments) -> str:
         s = arg.arg
         if arg.annotation:
             s += f": {ast.unparse(arg.annotation)}"
-        if args.kw_defaults[i] is not None:
-            s += f" = {ast.unparse(args.kw_defaults[i])}"
+        kw_default = args.kw_defaults[i]
+        if kw_default is not None:
+            s += f" = {ast.unparse(kw_default)}"
         parts.append(s)
 
     if args.kwarg:
@@ -79,6 +80,8 @@ def _fmt_return(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
 
 
 def _first_doc_line(node: ast.AST) -> str | None:
+    if not isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef, ast.ClassDef, ast.Module)):
+        return None
     doc = ast.get_docstring(node)
     if not doc:
         return None

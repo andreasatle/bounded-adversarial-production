@@ -8,7 +8,6 @@ from baps.state.state import (
     CodeFile,
     CodingArtifact,
     DocumentArtifact,
-    NorthStar,
     Section,
     State,
 )
@@ -20,7 +19,6 @@ from baps.state.state import (
 
 def _coding_state(files: list[tuple[str, str]], language: str = "python") -> State:
     return State(
-        northstar=NorthStar(artifacts=()),
         artifacts=(
             CodingArtifact(
                 id="art",
@@ -33,7 +31,6 @@ def _coding_state(files: list[tuple[str, str]], language: str = "python") -> Sta
 
 def _document_state(sections: list[tuple[str, str]]) -> State:
     return State(
-        northstar=NorthStar(artifacts=()),
         artifacts=(
             DocumentArtifact(
                 id="doc",
@@ -620,7 +617,6 @@ def test_coding_list_modules_no_artifact_returns_no_files() -> None:
     from baps.adapters.coding_adapter import CodingProjectAdapter
 
     state = State(
-        northstar=NorthStar(artifacts=()),
         artifacts=(DocumentArtifact(id="doc", sections=()),),
     )
     result = CodingProjectAdapter().execute_create_game_research_tool("list_modules", {}, state)

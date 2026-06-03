@@ -866,6 +866,7 @@ def test_coding_parse_recovers_unescaped_quotes_in_content() -> None:
         '"content":"def test_msg():\n    assert "hello" == "hello"\n"}}}'
     )
     delta = coding_module.parse_coding_delta_json(raw)
+    assert isinstance(delta, state_module.DeltaCodingState)
     assert delta.artifact_id == "main-codebase"
     assert delta.payload.file.path == "tests/test_fibonacci.py"
     assert 'assert "hello" == "hello"' in delta.payload.file.content
@@ -884,6 +885,7 @@ def test_coding_parse_recovers_multiline_pytest_content() -> None:
         '    assert fibonacci(5) == 5\n"}}}'
     )
     delta = coding_module.parse_coding_delta_json(raw)
+    assert isinstance(delta, state_module.DeltaCodingState)
     assert "import pytest" in delta.payload.file.content
     assert "assert fibonacci(5) == 5" in delta.payload.file.content
 
@@ -900,6 +902,7 @@ def test_coding_parse_recovers_long_content_payload() -> None:
         "}}}"
     )
     delta = coding_module.parse_coding_delta_json(raw)
+    assert isinstance(delta, state_module.DeltaCodingState)
     assert len(delta.payload.file.content.splitlines()) >= 301
     assert "assert 299 == 299" in delta.payload.file.content
 
@@ -957,6 +960,7 @@ def test_coding_parse_fixes_double_escaped_quotes_in_single_line_content() -> No
         }
     )
     delta = coding_module.parse_coding_delta_json(raw)
+    assert isinstance(delta, state_module.DeltaCodingState)
     assert delta.payload.file.content == 'def greet(): return "hello"'
 
 
@@ -973,6 +977,7 @@ def test_coding_parse_fixes_double_escaped_quotes_in_multiline_python() -> None:
         }
     )
     delta = coding_module.parse_coding_delta_json(raw)
+    assert isinstance(delta, state_module.DeltaCodingState)
     assert '\\"' not in delta.payload.file.content
     assert 'normalize("") == ""' in delta.payload.file.content
 
@@ -990,6 +995,7 @@ def test_coding_parse_leaves_valid_multiline_python_unchanged() -> None:
         }
     )
     delta = coding_module.parse_coding_delta_json(raw)
+    assert isinstance(delta, state_module.DeltaCodingState)
     assert delta.payload.file.content == content
 
 
@@ -1006,6 +1012,7 @@ def test_coding_parse_does_not_fix_backslash_quotes_in_multiline_non_python_file
         }
     )
     delta = coding_module.parse_coding_delta_json(raw)
+    assert isinstance(delta, state_module.DeltaCodingState)
     assert delta.payload.file.content == content
 
     # ---------------------------------------------------------------------------

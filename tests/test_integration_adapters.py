@@ -8,7 +8,7 @@ from baps.adapters.document_adapter import DocumentProjectAdapter
 from baps.adapters.project_adapter import VerificationResult
 from baps.core.run_config import RunConfig
 from baps.game.roles import AttemptRejectionFeedback, PriorExportFeedback
-from baps.state.state import GameSpec, RedFinding, RefereeDecision
+from baps.state.state import Disposition, GameSpec, RedFinding, RefereeDecision
 
 
 def test_coding_create_state_creates_coding_artifact() -> None:
@@ -38,7 +38,6 @@ def test_document_adapterrender_create_game_prompt_supplement_includes_delta_gui
 
     adapter = DocumentProjectAdapter()
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
     )
     from baps.northstar.northstar_projection import ProjectionType, StateView
@@ -64,7 +63,6 @@ def test_document_adapterrender_create_game_prompt_supplement_includes_guidance_
 
     adapter = DocumentProjectAdapter()
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
     )
     from baps.northstar.northstar_projection import ProjectionType, StateView
@@ -244,8 +242,8 @@ def test_coding_blue_prompt_includes_candidate_verification_failures() -> None:
         success_condition="tests pass",
     )
     previous_feedback = AttemptRejectionFeedback(
-        red_finding=RedFinding(disposition="accept", rationale="ok"),
-        referee_decision=RefereeDecision(disposition="accept", rationale="ok"),
+        red_finding=RedFinding(disposition=Disposition.accept, rationale="ok"),
+        referee_decision=RefereeDecision(disposition=Disposition.accept, rationale="ok"),
         candidate_verification=VerificationResult(
             command="",
             cwd="",
@@ -307,7 +305,6 @@ def test_coding_adapter_build_research_tools_returns_empty() -> None:
 def test_coding_adapter_build_create_game_research_tools_with_artifact() -> None:
     adapter = CodingProjectAdapter()
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="art",
@@ -327,7 +324,6 @@ def test_coding_adapter_build_create_game_research_tools_with_artifact() -> None
 def test_coding_adapter_build_create_game_research_tools_no_artifact_returns_empty() -> None:
     adapter = CodingProjectAdapter()
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.DocumentArtifact(id="doc", sections=()),),
     )
     assert adapter.build_create_game_research_tools(state) == []
@@ -336,7 +332,6 @@ def test_coding_adapter_build_create_game_research_tools_no_artifact_returns_emp
 def test_coding_adapter_execute_create_game_research_tool_returns_content() -> None:
     adapter = CodingProjectAdapter()
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="art",
@@ -352,7 +347,6 @@ def test_coding_adapter_execute_create_game_research_tool_returns_content() -> N
 def test_coding_adapter_execute_create_game_research_tool_unknown_path() -> None:
     adapter = CodingProjectAdapter()
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="art",
@@ -369,7 +363,6 @@ def test_coding_adapter_execute_create_game_research_tool_unknown_path() -> None
 def test_coding_adapter_execute_create_game_research_tool_unknown_tool() -> None:
     adapter = CodingProjectAdapter()
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.CodingArtifact(id="art", language="python", files=()),),
     )
     result = adapter.execute_create_game_research_tool("bogus_tool", {}, state)
@@ -384,7 +377,6 @@ def test_coding_adapter_execute_create_game_research_tool_unknown_tool() -> None
 def test_document_adapter_build_create_game_research_tools_with_sections() -> None:
     adapter = DocumentProjectAdapter()
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.DocumentArtifact(
                 id="doc",
@@ -403,7 +395,6 @@ def test_document_adapter_build_create_game_research_tools_with_sections() -> No
 def test_document_adapter_build_create_game_research_tools_no_sections_returns_empty() -> None:
     adapter = DocumentProjectAdapter()
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.DocumentArtifact(id="doc", sections=()),),
     )
     assert adapter.build_create_game_research_tools(state) == []
@@ -412,7 +403,6 @@ def test_document_adapter_build_create_game_research_tools_no_sections_returns_e
 def test_document_adapter_execute_create_game_research_tool_returns_body() -> None:
     adapter = DocumentProjectAdapter()
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.DocumentArtifact(
                 id="doc",
@@ -427,7 +417,6 @@ def test_document_adapter_execute_create_game_research_tool_returns_body() -> No
 def test_document_adapter_execute_create_game_research_tool_unknown_title() -> None:
     adapter = DocumentProjectAdapter()
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.DocumentArtifact(
                 id="doc",
@@ -443,7 +432,6 @@ def test_document_adapter_execute_create_game_research_tool_unknown_title() -> N
 def test_document_adapter_execute_create_game_research_tool_unknown_tool() -> None:
     adapter = DocumentProjectAdapter()
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.DocumentArtifact(id="doc", sections=()),),
     )
     result = adapter.execute_create_game_research_tool("bogus", {}, state)

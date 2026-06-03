@@ -18,7 +18,7 @@ from baps.core.run import create_state as _create_state
 from baps.core.run_config import RunConfig
 from baps.game.engine import play_game
 from baps.models.models import FakeModelClient, ToolCall
-from baps.state.state import GameSpec, RedFinding
+from baps.state.state import Disposition, GameSpec, RedFinding
 
 
 def create_state(config: RunConfig | dict) -> state_module.State:
@@ -358,7 +358,6 @@ def test_blue_prompt_and_source_do_not_hardcode_project_policy_literals() -> Non
         success_condition="Overview section exists.",
     )
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.DocumentArtifact(id="doc-a", sections=()),),
     )
     state_view = DocumentProjectAdapter().build_state_view(state, spec)
@@ -382,7 +381,6 @@ def test_document_blue_prompt_contains_document_specific_shape_rules() -> None:
         success_condition="Overview section exists.",
     )
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.DocumentArtifact(id="doc-a", sections=()),),
     )
     state_view = DocumentProjectAdapter().build_state_view(state, spec)
@@ -468,7 +466,6 @@ def test_blue_prompt_no_context_block_when_chain_empty() -> None:
 
 def test_coding_blue_prompt_supplement_prefers_src_and_pytest_layout() -> None:
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.CodingArtifact(id="main-codebase", files=()),),
     )
     spec = GameSpec(
@@ -560,7 +557,6 @@ def test_coding_red_prompt_includes_verification_evidence_when_provided() -> Non
         success_condition="Tests pass",
     )
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",
@@ -616,7 +612,6 @@ def test_document_prompts_do_not_include_verification_evidence_by_default() -> N
         success_condition="Any success condition",
     )
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
     )
     state_view = DocumentProjectAdapter().build_state_view(state, spec)
@@ -625,7 +620,7 @@ def test_document_prompts_do_not_include_verification_evidence_by_default() -> N
         operation="append_section",
         payload=state_module.AppendSectionDelta(section=state_module.Section(title="Intro", body="Body")),
     )
-    red = RedFinding(disposition="accept", rationale="ok")
+    red = RedFinding(disposition=Disposition.accept, rationale="ok")
     red_prompt = render_red_prompt(state_view, spec, delta)
     referee_prompt = render_referee_prompt(state_view, spec, delta, red)
     assert "verification_result_json:" not in red_prompt
@@ -640,7 +635,6 @@ def test_document_red_referee_prompts_do_not_include_coding_guidance() -> None:
         success_condition="Any success condition",
     )
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.DocumentArtifact(id="main-document", sections=()),),
     )
     state_view = DocumentProjectAdapter().build_state_view(state, spec)
@@ -649,7 +643,7 @@ def test_document_red_referee_prompts_do_not_include_coding_guidance() -> None:
         operation="append_section",
         payload=state_module.AppendSectionDelta(section=state_module.Section(title="Intro", body="Body")),
     )
-    red = RedFinding(disposition="accept", rationale="ok")
+    red = RedFinding(disposition=Disposition.accept, rationale="ok")
     red_prompt = render_red_prompt(state_view, spec, delta)
     referee_prompt = render_referee_prompt(state_view, spec, delta, red)
     for prompt in (red_prompt, referee_prompt):
@@ -666,7 +660,6 @@ def test_coding_red_referee_prompts_include_coding_guidance() -> None:
         success_condition="tests exist",
     )
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.CodingArtifact(id="main-codebase", files=()),),
     )
     adapter = CodingProjectAdapter()
@@ -678,7 +671,7 @@ def test_coding_red_referee_prompts_include_coding_guidance() -> None:
             file=state_module.CodeFile(path="tests/test_fibonacci.py", content="assert True")
         ),
     )
-    red = RedFinding(disposition="accept", rationale="ok")
+    red = RedFinding(disposition=Disposition.accept, rationale="ok")
     red_supplement = adapter.render_red_prompt_supplement(state_view, spec, delta, verification_result=None)
     referee_supplement = adapter.render_referee_prompt_supplement(state_view, spec, delta, verification_result=None)
     red_prompt = render_red_prompt(state_view, spec, delta, prompt_supplement=red_supplement)
@@ -711,7 +704,7 @@ def test_red_and_referee_prompts_do_not_treat_state_mutation_alone_as_failure() 
         state_view,
         spec,
         delta,
-        RedFinding(disposition="accept", rationale="ok"),
+        RedFinding(disposition=Disposition.accept, rationale="ok"),
     )
     assert "Do NOT reject or revise merely because state differs from the original state." in red_prompt
     assert "Do NOT choose revise merely because state changed." in referee_prompt
@@ -796,7 +789,7 @@ def test_referee_prompt_intro_and_conclusion_guides_accept_policy() -> None:
             )
         ),
     )
-    red = RedFinding(disposition="accept", rationale="satisfies success condition")
+    red = RedFinding(disposition=Disposition.accept, rationale="satisfies success condition")
     prompt = render_referee_prompt(state_view, spec, delta, red)
     assert (
         "accept: objective/success_condition are satisfied enough for this game AND Red has no unresolved material findings."
@@ -824,7 +817,7 @@ def test_referee_prompt_declares_game_local_authority_and_not_final_integration(
         operation="append_section",
         payload=state_module.AppendSectionDelta(section=state_module.Section(title="Introduction", body="Body")),
     )
-    red = RedFinding(disposition="accept", rationale="ok")
+    red = RedFinding(disposition=Disposition.accept, rationale="ok")
     prompt = render_referee_prompt(state_view, spec, delta, red)
     assert "You are the game-local authority for this PlayGame decision." in prompt
     assert "You do NOT decide final State integration; integration is decided later by Integrator." in prompt
@@ -844,7 +837,7 @@ def test_referee_prompt_uses_red_material_findings_in_decision_policy() -> None:
         operation="append_section",
         payload=state_module.AppendSectionDelta(section=state_module.Section(title="Introduction", body="Body")),
     )
-    red = RedFinding(disposition="revise", rationale="missing conclusion")
+    red = RedFinding(disposition=Disposition.revise, rationale="missing conclusion")
     prompt = render_referee_prompt(state_view, spec, delta, red)
     assert "Red has no unresolved material findings" in prompt
     assert "Red has unresolved improvements that should be addressed." in prompt
@@ -860,7 +853,6 @@ def test_coding_referee_prompt_includes_failing_verification_evidence() -> None:
         success_condition="Tests pass",
     )
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.CodingArtifact(id="main-codebase", files=()),),
     )
     state_view = CodingProjectAdapter().build_state_view(state, spec)
@@ -874,7 +866,7 @@ def test_coding_referee_prompt_includes_failing_verification_evidence() -> None:
             )
         ),
     )
-    red = RedFinding(disposition="revise", rationale="needs fix")
+    red = RedFinding(disposition=Disposition.revise, rationale="needs fix")
     verification = VerificationResult(
         command="uv run pytest",
         cwd="/tmp/project",
@@ -899,7 +891,6 @@ def test_red_prompt_state_view_json_excludes_metadata_and_file_content() -> None
         success_condition="tests exist",
     )
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",
@@ -932,7 +923,6 @@ def test_referee_prompt_state_view_json_excludes_metadata_and_file_content() -> 
         success_condition="tests exist",
     )
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="main-codebase",
@@ -948,7 +938,7 @@ def test_referee_prompt_state_view_json_excludes_metadata_and_file_content() -> 
             file=state_module.CodeFile(path="tests/test_main.py", content="assert True")
         ),
     )
-    red = RedFinding(disposition="accept", rationale="ok")
+    red = RedFinding(disposition=Disposition.accept, rationale="ok")
     prompt = render_referee_prompt(state_view, spec, delta, red)
     assert "state_view_json:" in prompt
     assert state_view.id in prompt
@@ -966,7 +956,6 @@ def test_red_referee_prompts_forbid_goalpost_drift_language() -> None:
         success_condition="Artifact contains tests/test_example.py with non-empty pytest tests.",
     )
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(state_module.CodingArtifact(id="main-codebase", files=()),),
     )
     state_view = CodingProjectAdapter().build_state_view(state, spec)
@@ -980,7 +969,7 @@ def test_red_referee_prompts_forbid_goalpost_drift_language() -> None:
             )
         ),
     )
-    red = RedFinding(disposition="accept", rationale="ok")
+    red = RedFinding(disposition=Disposition.accept, rationale="ok")
     red_prompt = render_red_prompt(state_view, spec, delta)
     referee_prompt = render_referee_prompt(state_view, spec, delta, red)
     for prompt in (red_prompt, referee_prompt):

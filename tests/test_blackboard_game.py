@@ -62,7 +62,7 @@ def test_create_game_writes_create_game_blackboard_event(tmp_path: Path) -> None
         ),
     )
 
-    games_path = config["workspace"] / "blackboard" / "games.jsonl"
+    games_path = config.workspace / "blackboard" / "games.jsonl"
     assert games_path.exists(), "games.jsonl must be written by create_game"
     entry = json.loads(games_path.read_text(encoding="utf-8").strip())
 
@@ -96,7 +96,7 @@ def test_create_game_writes_no_new_game_event(tmp_path: Path) -> None:
             model_client=FakeModelClient(['{"kind": "no_new_game", "reason": "All gaps closed."}']),
         )
 
-    games_path = config["workspace"] / "blackboard" / "games.jsonl"
+    games_path = config.workspace / "blackboard" / "games.jsonl"
     assert games_path.exists()
     entry = json.loads(games_path.read_text(encoding="utf-8").strip())
     assert entry["event"] == "create_game"
@@ -127,7 +127,7 @@ def test_create_game_writes_decompose_spec_event(tmp_path: Path) -> None:
         ),
     )
 
-    games_path = config["workspace"] / "blackboard" / "games.jsonl"
+    games_path = config.workspace / "blackboard" / "games.jsonl"
     assert games_path.exists()
     entry = json.loads(games_path.read_text(encoding="utf-8").strip())
     assert entry["event"] == "create_game"
@@ -334,7 +334,7 @@ def test_create_game_blackboard_captures_depth_and_context_chain(
         ),
     )
 
-    entry = json.loads((config["workspace"] / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip())
+    entry = json.loads((config.workspace / "blackboard" / "games.jsonl").read_text(encoding="utf-8").strip())
     assert entry["depth"] == 2
     assert entry["context_chain"] == list(chain)
 
@@ -534,7 +534,7 @@ def test_create_game_blackboard_no_new_game_with_failing_verification(
             model_client=FakeModelClient(['{"kind": "no_new_game", "reason": "No gap identified."}']),
         )
 
-    games_path = config["workspace"] / "blackboard" / "games.jsonl"
+    games_path = config.workspace / "blackboard" / "games.jsonl"
     assert games_path.exists()
     entry = json.loads(games_path.read_text(encoding="utf-8").strip())
     assert entry["event"] == "create_game"

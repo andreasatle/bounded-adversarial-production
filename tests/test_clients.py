@@ -20,6 +20,7 @@ from baps.models.models import (
     OpenAIClient,
     ToolCall,
 )
+from baps.state.state import GameSpec
 
 # Captured before autouse fixtures patch them — used by backend dispatch tests.
 _real_build_model_client = _clients_module._build_model_client
@@ -590,6 +591,7 @@ def test_create_game_fallback_called_when_primary_exhausts_retries(monkeypatch) 
     # Primary exhausts initial call + two retries before escalating to fallback.
     primary_client = FakeModelClient(responses=["not-json"] * 3)
     game_spec = create_game(config, state, model_client=primary_client)
+    assert isinstance(game_spec, GameSpec)
 
     assert game_spec.target_artifact_id == "main-document"
     assert len(fallback_client.prompts) == 1
@@ -624,6 +626,7 @@ def test_create_game_fallback_not_called_when_primary_succeeds(monkeypatch) -> N
 
     primary_client = FakeModelClient(responses=[valid_response])
     game_spec = create_game(config, state, model_client=primary_client)
+    assert isinstance(game_spec, GameSpec)
 
     assert game_spec.target_artifact_id == "main-document"
     assert len(fallback_client.prompts) == 0
@@ -632,7 +635,6 @@ def test_create_game_fallback_not_called_when_primary_succeeds(monkeypatch) -> N
 def test_play_game_red_fallback_called_when_primary_exhausts_retries(
     monkeypatch,
 ) -> None:
-    from baps.state.state import GameSpec
 
     valid_accept = '{"disposition":"accept","rationale":"looks good"}'
     fallback_red_client = FakeModelClient(responses=[valid_accept])
@@ -684,7 +686,6 @@ def test_play_game_red_fallback_called_when_primary_exhausts_retries(
 def test_play_game_referee_fallback_called_when_primary_exhausts_retries(
     monkeypatch,
 ) -> None:
-    from baps.state.state import GameSpec
 
     valid_accept = '{"disposition":"accept","rationale":"looks good"}'
     fallback_referee_client = FakeModelClient(responses=[valid_accept])
@@ -904,6 +905,7 @@ def test_create_game_fallback_chain_escalates_through_all_links(monkeypatch) -> 
 
     primary_client = FakeModelClient(responses=["not-json"] * 3)
     game_spec = create_game(config, state, model_client=primary_client)
+    assert isinstance(game_spec, GameSpec)
 
     assert game_spec.target_artifact_id == "main-document"
     assert len(fail_client.prompts) == 1  # called once, raised RuntimeError
@@ -958,6 +960,7 @@ def test_no_fallback_behavior_unchanged_when_primary_succeeds(monkeypatch) -> No
 
     primary_client = FakeModelClient(responses=[valid_response])
     game_spec = create_game(config, state, model_client=primary_client)
+    assert isinstance(game_spec, GameSpec)
 
     assert game_spec.target_artifact_id == "main-document"
     assert len(primary_client.prompts) == 1  # called once, no retries needed

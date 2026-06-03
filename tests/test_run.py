@@ -92,6 +92,7 @@ def test_create_game_accepts_atomic_introduction_gamespec() -> None:
             ]
         ),
     )
+    assert isinstance(game_spec, GameSpec)
     assert "Introduction" in game_spec.objective
 
 
@@ -126,6 +127,7 @@ def test_create_game_accepts_atomic_conclusion_gamespec() -> None:
             ]
         ),
     )
+    assert isinstance(game_spec, GameSpec)
     assert "Conclusion" in game_spec.objective
 
 
@@ -147,7 +149,6 @@ def test_create_game_engine_does_not_compute_next_missing_section() -> None:
         max_iterations=2,
     )
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.DocumentArtifact(
                 id="main-document",
@@ -170,6 +171,7 @@ def test_create_game_engine_does_not_compute_next_missing_section() -> None:
             ]
         ),
     )
+    assert isinstance(game_spec, GameSpec)
     assert game_spec.objective == "Add Abstract section"
 
 
@@ -291,6 +293,7 @@ def test_create_game_extra_key_on_gamespec_response_is_stripped() -> None:
         '"confidence": 0.95}'
     )
     game_spec = create_game(config, state, model_client=FakeModelClient([response]))
+    assert isinstance(game_spec, GameSpec)
     assert game_spec.target_artifact_id == "main-document"
 
 
@@ -360,6 +363,7 @@ def test_coding_create_game_accepts_src_file_task_first_iteration() -> None:
             ]
         ),
     )
+    assert isinstance(game_spec, GameSpec)
     assert "src/fibonacci.py" in game_spec.objective
     assert game_spec.allowed_delta_type == "DeltaCodingState"
 
@@ -404,6 +408,7 @@ def test_coding_create_game_accepts_test_file_task_second_iteration() -> None:
             ]
         ),
     )
+    assert isinstance(game_spec, GameSpec)
     assert "tests/test_fibonacci.py" in game_spec.objective
     assert game_spec.allowed_delta_type == "DeltaCodingState"
 
@@ -436,6 +441,7 @@ def test_coding_normalize_passes_through_model_objective_and_success_condition()
             ]
         ),
     )
+    assert isinstance(game_spec, GameSpec)
     assert game_spec.objective == "Write src/similarity.py with normalize and token_overlap"
     assert game_spec.success_condition == "Artifact contains src/similarity.py with all required functions."
     assert game_spec.target_artifact_id == "main-codebase"
@@ -467,6 +473,7 @@ def test_coding_normalize_does_not_inject_hardcoded_file_paths() -> None:
             ]
         ),
     )
+    assert isinstance(game_spec, GameSpec)
     assert "fibonacci" not in game_spec.objective.lower()
     assert "fibonacci" not in game_spec.success_condition.lower()
     assert game_spec.target_artifact_id == "main-codebase"
@@ -498,6 +505,7 @@ def test_coding_normalization_overrides_file_path_target_artifact_id() -> None:
             ]
         ),
     )
+    assert isinstance(game_spec, GameSpec)
     assert game_spec.target_artifact_id == "main-codebase"
     assert game_spec.target_artifact_id != "tests/test_fibonacci.py"
 

@@ -57,7 +57,6 @@ def testapply_delta_to_files_delete_file() -> None:
 def test_verify_candidate_returns_none_when_no_test_files() -> None:
 
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="art",
@@ -77,7 +76,6 @@ def test_verify_candidate_returns_none_when_no_test_files() -> None:
 def test_verify_candidate_passes_when_tests_pass(tmp_path) -> None:
 
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="art",
@@ -110,7 +108,6 @@ def test_verify_candidate_passes_when_tests_pass(tmp_path) -> None:
 def test_verify_candidate_fails_when_tests_fail() -> None:
 
     state = state_module.State(
-        northstar=state_module.NorthStar(artifacts=()),
         artifacts=(
             state_module.CodingArtifact(
                 id="art",
