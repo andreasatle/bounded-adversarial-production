@@ -79,7 +79,7 @@ def test_create_game_prompt_forbids_markdown_fences_and_lists_required_shape() -
     prompt = render_create_game_prompt(
         config,
         state,
-        adapter.build_create_game_state_view(state, config),
+        adapter.build_create_game_state_view(state, config.to_adapter_config()),
         adapter=adapter,
     )
 
@@ -113,11 +113,11 @@ def test_create_game_prompt_includes_northstar_context() -> None:
     )
     state = create_state(config)
     adapter = DocumentProjectAdapter()
-    state_view = adapter.build_create_game_state_view(state, config)
+    state_view = adapter.build_create_game_state_view(state, config.to_adapter_config())
     prompt = render_create_game_prompt(
         config,
         state,
-        adapter.build_create_game_state_view(state, config),
+        adapter.build_create_game_state_view(state, config.to_adapter_config()),
         adapter=adapter,
     )
     assert "- state_view:" in prompt
@@ -159,7 +159,7 @@ def test_create_game_prompt_includes_northstar_update_needed_instruction() -> No
     prompt = render_create_game_prompt(
         config,
         state,
-        adapter.build_create_game_state_view(state, config),
+        adapter.build_create_game_state_view(state, config.to_adapter_config()),
         adapter=adapter,
     )
 
@@ -182,7 +182,7 @@ def test_create_game_prompt_includes_context_chain_when_provided() -> None:
     )
     state = create_state(config)
     adapter = DocumentProjectAdapter()
-    state_view = adapter.build_create_game_state_view(state, config)
+    state_view = adapter.build_create_game_state_view(state, config.to_adapter_config())
     prompt = render_create_game_prompt(
         config,
         state,
@@ -208,7 +208,7 @@ def test_create_game_prompt_no_context_block_when_chain_empty() -> None:
     )
     state = create_state(config)
     adapter = DocumentProjectAdapter()
-    state_view = adapter.build_create_game_state_view(state, config)
+    state_view = adapter.build_create_game_state_view(state, config.to_adapter_config())
     prompt = render_create_game_prompt(
         config,
         state,
@@ -232,7 +232,7 @@ def test_coding_create_game_prompt_includes_multi_file_guidance() -> None:
     )
     state = create_state(config)
     adapter = CodingProjectAdapter()
-    state_view = adapter.build_create_game_state_view(state, config)
+    state_view = adapter.build_create_game_state_view(state, config.to_adapter_config())
     prompt = render_create_game_prompt(
         config=config,
         state=state,
@@ -259,7 +259,7 @@ def test_coding_create_game_prompt_includes_previous_verification_evidence() -> 
     )
     state = create_state(config)
     adapter = CodingProjectAdapter()
-    state_view = adapter.build_create_game_state_view(state, config)
+    state_view = adapter.build_create_game_state_view(state, config.to_adapter_config())
     verification = VerificationResult(
         command="uv run pytest",
         cwd="/tmp/project",
@@ -292,7 +292,7 @@ def test_document_create_game_prompt_has_no_verification_block_by_default() -> N
     )
     state = create_state(config)
     adapter = DocumentProjectAdapter()
-    state_view = adapter.build_create_game_state_view(state, config)
+    state_view = adapter.build_create_game_state_view(state, config.to_adapter_config())
     prompt = render_create_game_prompt(
         config=config,
         state=state,
