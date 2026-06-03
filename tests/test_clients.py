@@ -45,7 +45,7 @@ def _make_run_config(**overrides) -> RunConfig:
         spec_roles={},
     )
     base.update(overrides)
-    return RunConfig(**base)
+    return RunConfig.model_validate(base)
 
 
 def create_state(config: RunConfig | dict):
@@ -375,9 +375,9 @@ def test_spec_roles_parsed_into_config(tmp_path: Path) -> None:
     import baps.core.run as run_module
 
     config = run_module.resolve_run_config(args)
-    assert config["spec_roles"]["blue"]["backend"] == "anthropic"
-    assert config["spec_roles"]["blue"]["model"] == "claude-sonnet-4-6"
-    assert config["spec_roles"]["decompose"]["model"] == "gemma4:e4b"
+    assert config.spec_roles["blue"]["backend"] == "anthropic"
+    assert config.spec_roles["blue"]["model"] == "claude-sonnet-4-6"
+    assert config.spec_roles["decompose"]["model"] == "gemma4:e4b"
 
 
 def test_spec_backend_invalid_raises(tmp_path: Path) -> None:
@@ -468,11 +468,12 @@ def test_spec_roles_parsed_with_fallback_config(tmp_path: Path) -> None:
     import baps.core.run as run_module
 
     config = run_module.resolve_run_config(args)
-    role_cfg = config["spec_roles"]["create_game"]
+    role_cfg = config.spec_roles["create_game"]
     assert role_cfg["backend"] == "ollama"
     assert role_cfg["model"] == "gemma4:e4b"
-    assert role_cfg["fallback"]["backend"] == "ollama"
-    assert role_cfg["fallback"]["model"] == "gemma4:26b"
+    assert role_cfg.fallback is not None
+    assert role_cfg.fallback["backend"] == "ollama"
+    assert role_cfg.fallback["model"] == "gemma4:26b"
 
 
 def test_spec_role_fallback_invalid_backend_raises(tmp_path: Path) -> None:
@@ -775,10 +776,12 @@ def test_spec_roles_parsed_with_deep_fallback_chain(tmp_path: Path) -> None:
     import baps.core.run as run_module
 
     config = run_module.resolve_run_config(args)
-    role_cfg = config["spec_roles"]["create_game"]
+    role_cfg = config.spec_roles["create_game"]
     assert role_cfg["model"] == "gemma4:e4b"
-    assert role_cfg["fallback"]["model"] == "gemma4:26b"
-    assert role_cfg["fallback"]["fallback"]["model"] == "gemma4:72b"
+    assert role_cfg.fallback is not None
+    assert role_cfg.fallback["model"] == "gemma4:26b"
+    assert role_cfg.fallback.fallback is not None
+    assert role_cfg.fallback.fallback["model"] == "gemma4:72b"
 
 
 def test_spec_role_deep_fallback_invalid_backend_raises(tmp_path: Path) -> None:
