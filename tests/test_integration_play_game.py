@@ -5,6 +5,8 @@ from baps.models.models import FakeModelClient, ToolCall
 from baps.northstar.northstar_projection import ProjectionType, StateView
 from baps.state.state import GameSpec
 import baps.state.state as state_module
+
+
 def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
     from baps.models.models import ToolDefinition
 
@@ -39,7 +41,11 @@ def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
 
         def build_blue_tools(self):
             self.calls.append("build_blue_tools")
-            return [ToolDefinition(name="append_section", description="Append", parameters={})]
+            return [
+                ToolDefinition(
+                    name="append_section", description="Append", parameters={}
+                )
+            ]
 
         def tool_call_to_delta(self, _tool_call):
             self.calls.append("tool_call_to_delta")
@@ -67,16 +73,34 @@ def test_play_game_uses_adapter_provided_state_view_prompt_and_parser() -> None:
         spec,
         adapter=adapter,
         model_client=FakeModelClient(
-            tool_responses=[ToolCall(name="append_section", arguments={"artifact_id": "main-document", "title": "Intro", "body": "Body"})]
+            tool_responses=[
+                ToolCall(
+                    name="append_section",
+                    arguments={
+                        "artifact_id": "main-document",
+                        "title": "Intro",
+                        "body": "Body",
+                    },
+                )
+            ]
         ),
         red_model_client=FakeModelClient(['{"disposition":"accept","rationale":"ok"}']),
-        referee_model_client=FakeModelClient(['{"disposition":"accept","rationale":"ok"}']),
+        referee_model_client=FakeModelClient(
+            ['{"disposition":"accept","rationale":"ok"}']
+        ),
     )
     assert isinstance(delta, state_module.DeltaDocumentState)
-    assert adapter.calls == ["build_state_view", "render_blue_prompt", "build_blue_tools", "tool_call_to_delta"]
+    assert adapter.calls == [
+        "build_state_view",
+        "render_blue_prompt",
+        "build_blue_tools",
+        "tool_call_to_delta",
+    ]
 
 
-def test_play_game_pre_seeds_verification_result_as_previous_feedback(monkeypatch) -> None:
+def test_play_game_pre_seeds_verification_result_as_previous_feedback(
+    monkeypatch,
+) -> None:
 
     captured_feedback: list[object] = []
 
@@ -86,12 +110,18 @@ def test_play_game_pre_seeds_verification_result_as_previous_feedback(monkeypatc
 
         def build_state_view(self, state, game_spec, summarization_context=None):
             from baps.northstar.northstar_projection import ProjectionType, StateView
+
             return StateView(
-                id="sv", projection_type=ProjectionType.NORTH_STAR,
-                content="view", input_fingerprint="fp", metadata={}
+                id="sv",
+                projection_type=ProjectionType.NORTH_STAR,
+                content="view",
+                input_fingerprint="fp",
+                metadata={},
             )
 
-        def render_blue_prompt(self, state_view, game_spec, attempt_number, previous_feedback):
+        def render_blue_prompt(
+            self, state_view, game_spec, attempt_number, previous_feedback
+        ):
             captured_feedback.append(previous_feedback)
             return "blue prompt"
 
@@ -111,9 +141,12 @@ def test_play_game_pre_seeds_verification_result_as_previous_feedback(monkeypatc
             return ""
 
     vr = VerificationResult(
-        command="uv run pytest", cwd="/tmp", exit_code=1,
+        command="uv run pytest",
+        cwd="/tmp",
+        exit_code=1,
         stdout="FAILED tests/test_foo.py::test_x - AssertionError\n",
-        stderr="", passed=False,
+        stderr="",
+        passed=False,
     )
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
@@ -129,9 +162,12 @@ def test_play_game_pre_seeds_verification_result_as_previous_feedback(monkeypatc
     # tool_responses=[None] makes generate_with_tools return None → falls through to generate().
     # parse_blue_delta raises ValueError → attempt exhausted → returns None.
     result = play_game(
-        state, game_spec,
+        state,
+        game_spec,
         adapter=_CapturingAdapter(),
-        model_client=FakeModelClient(tool_responses=[None], responses=["not valid json"]),
+        model_client=FakeModelClient(
+            tool_responses=[None], responses=["not valid json"]
+        ),
         red_model_client=FakeModelClient(responses=[]),
         referee_model_client=FakeModelClient(responses=[]),
         verification_result=vr,

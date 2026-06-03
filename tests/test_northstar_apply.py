@@ -17,6 +17,7 @@ from baps.northstar.northstar_apply import (
 # _load_proposals
 # ---------------------------------------------------------------------------
 
+
 def test_load_proposals_returns_empty_when_file_missing(tmp_path: Path) -> None:
     assert _load_proposals(tmp_path) == []
 
@@ -39,9 +40,7 @@ def test_load_proposals_skips_malformed_lines(tmp_path: Path) -> None:
     bb = tmp_path / "blackboard"
     bb.mkdir()
     (bb / "northstar_proposals.jsonl").write_text(
-        '{"rationale": "good"}\n'
-        'NOT VALID JSON\n'
-        '{"rationale": "also good"}\n',
+        '{"rationale": "good"}\nNOT VALID JSON\n{"rationale": "also good"}\n',
         encoding="utf-8",
     )
     proposals = _load_proposals(tmp_path)
@@ -63,6 +62,7 @@ def test_load_proposals_skips_blank_lines(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # _save_workspace_config
 # ---------------------------------------------------------------------------
+
 
 def test_save_workspace_config_writes_json(tmp_path: Path) -> None:
     config = {"northstar_markdown": "# Goal\nDo things.", "goal": "test"}
@@ -86,7 +86,9 @@ def test_save_workspace_config_rejects_escape_via_symlink(tmp_path: Path) -> Non
         _save_workspace_config(workspace, {"key": "value"})
 
 
-def test_save_workspace_config_rejects_traversal_via_workspace_symlink(tmp_path: Path) -> None:
+def test_save_workspace_config_rejects_traversal_via_workspace_symlink(
+    tmp_path: Path,
+) -> None:
     real_dir = tmp_path / "real"
     real_dir.mkdir()
     outside = tmp_path / "outside"
@@ -107,11 +109,16 @@ def test_save_workspace_config_rejects_traversal_via_workspace_symlink(tmp_path:
 # _apply_proposal
 # ---------------------------------------------------------------------------
 
+
 def test_apply_proposal_dry_run_does_not_write(tmp_path: Path, caplog) -> None:
     config = {"northstar_markdown": "old northstar", "goal": "test"}
     (tmp_path / "baps-config.json").write_text(json.dumps(config), encoding="utf-8")
     with caplog.at_level(logging.INFO):
-        _apply_proposal(tmp_path, {"proposed_northstar": "new northstar", "rationale": "better"}, dry_run=True)
+        _apply_proposal(
+            tmp_path,
+            {"proposed_northstar": "new northstar", "rationale": "better"},
+            dry_run=True,
+        )
     written = json.loads((tmp_path / "baps-config.json").read_text(encoding="utf-8"))
     assert written["northstar_markdown"] == "old northstar"
     assert "dry-run" in caplog.text
@@ -120,7 +127,11 @@ def test_apply_proposal_dry_run_does_not_write(tmp_path: Path, caplog) -> None:
 def test_apply_proposal_writes_northstar_to_config(tmp_path: Path) -> None:
     config = {"northstar_markdown": "old", "goal": "preserved"}
     (tmp_path / "baps-config.json").write_text(json.dumps(config), encoding="utf-8")
-    _apply_proposal(tmp_path, {"proposed_northstar": "new northstar", "rationale": "r"}, dry_run=False)
+    _apply_proposal(
+        tmp_path,
+        {"proposed_northstar": "new northstar", "rationale": "r"},
+        dry_run=False,
+    )
     written = json.loads((tmp_path / "baps-config.json").read_text(encoding="utf-8"))
     assert written["northstar_markdown"] == "new northstar"
     assert written["goal"] == "preserved"
@@ -128,5 +139,7 @@ def test_apply_proposal_writes_northstar_to_config(tmp_path: Path) -> None:
 
 def test_apply_proposal_exits_when_config_missing(tmp_path: Path) -> None:
     with pytest.raises(SystemExit) as exc_info:
-        _apply_proposal(tmp_path, {"proposed_northstar": "ns", "rationale": "r"}, dry_run=False)
+        _apply_proposal(
+            tmp_path, {"proposed_northstar": "ns", "rationale": "r"}, dry_run=False
+        )
     assert exc_info.value.code == 1

@@ -6,14 +6,26 @@ import pytest
 from baps.adapters.document_adapter import DocumentProjectAdapter
 from baps.game.engine import create_game
 import baps.state.state as state_module
-def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path) -> None:
+
+
+def test_create_state_output_flows_into_create_game(
+    monkeypatch, tmp_path: Path
+) -> None:
     workspace = tmp_path / "flow-ws"
     import baps.core.run as run_module
 
     captured: dict[str, object] = {}
     original_create_game = create_game
 
-    def _capturing_create_game(config, state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
+    def _capturing_create_game(
+        config,
+        state,
+        adapter=None,
+        verification_result=None,
+        context_chain=(),
+        depth=0,
+        **_kwargs,
+    ):
         captured.setdefault("state", state)
         return original_create_game(
             config,
@@ -32,7 +44,13 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
             str(workspace),
             "--project-type",
             "document",
-        "--artifact-id", "main-document", "--goal", "Write a report.", "--output", "output/report.md", ],
+            "--artifact-id",
+            "main-document",
+            "--goal",
+            "Write a report.",
+            "--output",
+            "output/report.md",
+        ],
     )
 
     run_module.main()
@@ -44,7 +62,9 @@ def test_create_state_output_flows_into_create_game(monkeypatch, tmp_path: Path)
     }
 
 
-def test_main_integration_uses_state_service_apply_delta(monkeypatch, tmp_path: Path) -> None:
+def test_main_integration_uses_state_service_apply_delta(
+    monkeypatch, tmp_path: Path
+) -> None:
     from baps.state.state_service import StateService
     import baps.core.run as run_module
 
@@ -65,13 +85,21 @@ def test_main_integration_uses_state_service_apply_delta(monkeypatch, tmp_path: 
             str(tmp_path / "ws-service"),
             "--project-type",
             "document",
-        "--artifact-id", "main-document", "--goal", "Write a report.", "--output", "output/report.md", ],
+            "--artifact-id",
+            "main-document",
+            "--goal",
+            "Write a report.",
+            "--output",
+            "output/report.md",
+        ],
     )
     run_module.main()
     assert called["value"] is True
 
 
-def test_main_persists_updated_state_with_appended_section(monkeypatch, tmp_path: Path) -> None:
+def test_main_persists_updated_state_with_appended_section(
+    monkeypatch, tmp_path: Path
+) -> None:
     import baps.core.run as run_module
     from baps.state.state_store import JsonStateStore
 
@@ -85,7 +113,13 @@ def test_main_persists_updated_state_with_appended_section(monkeypatch, tmp_path
             str(workspace),
             "--project-type",
             "document",
-        "--artifact-id", "main-document", "--goal", "Write a report.", "--output", "output/report.md", ],
+            "--artifact-id",
+            "main-document",
+            "--goal",
+            "Write a report.",
+            "--output",
+            "output/report.md",
+        ],
     )
     run_module.main()
 
@@ -97,18 +131,22 @@ def test_main_persists_updated_state_with_appended_section(monkeypatch, tmp_path
     assert doc.sections[0].body == "Advance goal"
 
 
-def test_main_unsupported_delta_operation_fails_explicitly(monkeypatch, capsys, caplog, tmp_path: Path) -> None:
+def test_main_unsupported_delta_operation_fails_explicitly(
+    monkeypatch, capsys, caplog, tmp_path: Path
+) -> None:
     import baps.core.run as run_module
     import logging
 
     monkeypatch.setattr(
         "baps.core.orchestration.play_game",
-        lambda _state, _spec, adapter=None, verification_result=None, **_kwargs: state_module.DeltaCodingState(
-            artifact_id="main-document",
-            operation="write_file",
-            payload=state_module.WriteFileDelta(
-                file=state_module.CodeFile(path="foo.py", content="x")
-            ),
+        lambda _state, _spec, adapter=None, verification_result=None, **_kwargs: (
+            state_module.DeltaCodingState(
+                artifact_id="main-document",
+                operation="write_file",
+                payload=state_module.WriteFileDelta(
+                    file=state_module.CodeFile(path="foo.py", content="x")
+                ),
+            )
         ),
     )
     monkeypatch.setattr(
@@ -120,7 +158,13 @@ def test_main_unsupported_delta_operation_fails_explicitly(monkeypatch, capsys, 
             str(tmp_path / "ws-unsupported-op"),
             "--project-type",
             "document",
-        "--artifact-id", "main-document", "--goal", "Write a report.", "--output", "output/report.md", ],
+            "--artifact-id",
+            "main-document",
+            "--goal",
+            "Write a report.",
+            "--output",
+            "output/report.md",
+        ],
     )
     with caplog.at_level(logging.ERROR), pytest.raises(SystemExit) as exc:
         run_module.main()
@@ -212,9 +256,13 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
             self.calls.append("create_initial_state")
             return self._delegate.create_initial_state(config)
 
-        def build_create_game_state_view(self, state, config, summarization_context=None):
+        def build_create_game_state_view(
+            self, state, config, summarization_context=None
+        ):
             self.calls.append("build_create_game_state_view")
-            return self._delegate.build_create_game_state_view(state, config, summarization_context=summarization_context)
+            return self._delegate.build_create_game_state_view(
+                state, config, summarization_context=summarization_context
+            )
 
         def render_create_game_prompt_supplement(
             self, state, config, state_view, verification_result
@@ -226,9 +274,13 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
 
         def build_state_view(self, state, game_spec, summarization_context=None):
             self.calls.append("build_state_view")
-            return self._delegate.build_state_view(state, game_spec, summarization_context=summarization_context)
+            return self._delegate.build_state_view(
+                state, game_spec, summarization_context=summarization_context
+            )
 
-        def render_blue_prompt(self, state_view, game_spec, attempt_number, previous_feedback):
+        def render_blue_prompt(
+            self, state_view, game_spec, attempt_number, previous_feedback
+        ):
             self.calls.append("render_blue_prompt")
             return self._delegate.render_blue_prompt(
                 state_view, game_spec, attempt_number, previous_feedback
@@ -251,8 +303,13 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
             return self._delegate.export_state(state, output_path, artifact_id)
 
     adapter = _RecordingAdapter()
-    monkeypatch.setattr("baps.core.runtime._resolve_project_type_adapter", lambda _ptype: adapter)
-    monkeypatch.setattr("baps.core.runtime.create_state", lambda _config: adapter.create_initial_state(_config.to_adapter_config()))
+    monkeypatch.setattr(
+        "baps.core.runtime._resolve_project_type_adapter", lambda _ptype: adapter
+    )
+    monkeypatch.setattr(
+        "baps.core.runtime.create_state",
+        lambda _config: adapter.create_initial_state(_config.to_adapter_config()),
+    )
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -264,7 +321,10 @@ def test_main_uses_project_type_adapter_dispatch_for_document(
             "document",
             "--artifact-id",
             "main-document",
-            "--goal", "Write a report.", "--output", "output/report.md",
+            "--goal",
+            "Write a report.",
+            "--output",
+            "output/report.md",
             "--max-iterations",
             "1",
         ],

@@ -27,7 +27,9 @@ def test_json_state_store_save_then_load_round_trips_state(tmp_path: Path) -> No
     assert loaded == state
 
 
-def test_json_state_store_load_validates_state_and_raises_on_malformed_state(tmp_path: Path) -> None:
+def test_json_state_store_load_validates_state_and_raises_on_malformed_state(
+    tmp_path: Path,
+) -> None:
     path = tmp_path / "state.json"
     path.write_text('{"artifacts": [{"kind": "document"}]}', encoding="utf-8")
     store = JsonStateStore(path)
@@ -77,7 +79,9 @@ def test_json_state_store_instances_do_not_share_state(tmp_path: Path) -> None:
     assert store_two.load() == state_two
 
 
-def test_json_state_store_load_missing_file_raises_clear_file_not_found(tmp_path: Path) -> None:
+def test_json_state_store_load_missing_file_raises_clear_file_not_found(
+    tmp_path: Path,
+) -> None:
     path = tmp_path / "missing-state.json"
     store = JsonStateStore(path)
 

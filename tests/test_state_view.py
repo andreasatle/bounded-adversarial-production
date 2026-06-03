@@ -29,16 +29,24 @@ fn _private() {}
 _RUST_INDEX = {
     "items": [
         {
-            "kind": "fn", "name": "add", "pub": True,
+            "kind": "fn",
+            "name": "add",
+            "pub": True,
             "signature": "pub fn add(a: i32, b: i32) -> i32",
             "doc": "Returns the sum of two integers.",
-            "is_test": False, "body_start": 2, "body_end": 4,
+            "is_test": False,
+            "body_start": 2,
+            "body_end": 4,
         },
         {
-            "kind": "fn", "name": "_private", "pub": False,
+            "kind": "fn",
+            "name": "_private",
+            "pub": False,
             "signature": "fn _private()",
             "doc": None,
-            "is_test": False, "body_start": 6, "body_end": 6,
+            "is_test": False,
+            "body_start": 6,
+            "body_end": 6,
         },
     ]
 }
@@ -55,16 +63,24 @@ fn _private() void {}
 _ZIG_INDEX = {
     "items": [
         {
-            "kind": "fn", "name": "add", "pub": True,
+            "kind": "fn",
+            "name": "add",
+            "pub": True,
             "signature": "pub fn add(a: i32, b: i32) i32",
             "doc": "Adds two integers.",
-            "is_test": False, "body_start": 2, "body_end": 4,
+            "is_test": False,
+            "body_start": 2,
+            "body_end": 4,
         },
         {
-            "kind": "fn", "name": "_private", "pub": False,
+            "kind": "fn",
+            "name": "_private",
+            "pub": False,
             "signature": "fn _private() void",
             "doc": None,
-            "is_test": False, "body_start": 6, "body_end": 6,
+            "is_test": False,
+            "body_start": 6,
+            "body_end": 6,
         },
     ]
 }
@@ -108,7 +124,9 @@ def test_state_view_is_derived_from_state_and_gamespec_with_existing_sections() 
     )
     state_view = DocumentProjectAdapter().build_state_view(state, spec)
     assert state_view.metadata["target_artifact_id"] == "main-document"
-    assert state_view.metadata["sections"] == [{"title": "Existing", "body": "Already here"}]
+    assert state_view.metadata["sections"] == [
+        {"title": "Existing", "body": "Already here"}
+    ]
     assert state_view.content.startswith("=== StateView Start ===")
     assert state_view.content.endswith("=== StateView End ===")
     assert "--- State Artifacts ---" in state_view.content
@@ -189,7 +207,9 @@ def test_create_game_state_view_content_includes_sections_as_markdown() -> None:
         artifacts=(
             state_module.DocumentArtifact(
                 id="main-document",
-                sections=(state_module.Section(title="Introduction", body="Intro body text."),),
+                sections=(
+                    state_module.Section(title="Introduction", body="Intro body text."),
+                ),
             ),
         ),
     )
@@ -240,12 +260,16 @@ def test_coding_create_game_state_view_includes_structural_api_summary() -> None
 
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
-        artifacts=(state_module.CodingArtifact(
-            id="main-codebase",
-            files=(
-                state_module.CodeFile(path="src/hello.py", content="def hello():\n    return 'hi'\n"),
+        artifacts=(
+            state_module.CodingArtifact(
+                id="main-codebase",
+                files=(
+                    state_module.CodeFile(
+                        path="src/hello.py", content="def hello():\n    return 'hi'\n"
+                    ),
+                ),
             ),
-        ),),
+        ),
     )
     config = {
         "workspace": Path(".baps-workspace"),
@@ -264,15 +288,19 @@ def test_coding_create_game_state_view_includes_structural_api_summary() -> None
     assert "[api]" in view.content
 
 
-def test_coding_create_game_state_view_does_not_use_first_30_lines_as_primary_path() -> None:
+def test_coding_create_game_state_view_does_not_use_first_30_lines_as_primary_path() -> (
+    None
+):
 
     long_content = "\n".join(f"line_{i} = {i}" for i in range(100))
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
-        artifacts=(state_module.CodingArtifact(
-            id="main-codebase",
-            files=(state_module.CodeFile(path="src/big.py", content=long_content),),
-        ),),
+        artifacts=(
+            state_module.CodingArtifact(
+                id="main-codebase",
+                files=(state_module.CodeFile(path="src/big.py", content=long_content),),
+            ),
+        ),
     )
     config = {
         "workspace": Path(".baps-workspace"),
@@ -291,13 +319,21 @@ def test_coding_create_game_state_view_does_not_use_first_30_lines_as_primary_pa
     assert "line_99 = 99" not in view.content
 
 
-def test_coding_create_game_state_view_line_count_in_heading_without_summarizer() -> None:
+def test_coding_create_game_state_view_line_count_in_heading_without_summarizer() -> (
+    None
+):
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
-        artifacts=(state_module.CodingArtifact(
-            id="main-codebase",
-            files=(state_module.CodeFile(path="src/hello.py", content="def hello():\n    return 'hi'\n"),),
-        ),),
+        artifacts=(
+            state_module.CodingArtifact(
+                id="main-codebase",
+                files=(
+                    state_module.CodeFile(
+                        path="src/hello.py", content="def hello():\n    return 'hi'\n"
+                    ),
+                ),
+            ),
+        ),
     )
     config = {
         "workspace": Path(".baps-workspace"),
@@ -309,20 +345,26 @@ def test_coding_create_game_state_view_line_count_in_heading_without_summarizer(
         "max_iterations": 1,
         "spec_path": None,
     }
-    view = CodingProjectAdapter().build_create_game_state_view(state, config, summarization_context=None)
+    view = CodingProjectAdapter().build_create_game_state_view(
+        state, config, summarization_context=None
+    )
     assert "src/hello.py (2 lines)" in view.content
     assert "def hello():" in view.content
     assert "[api]" in view.content
 
 
-def test_coding_create_game_state_view_remains_structural_even_with_summarizer() -> None:
+def test_coding_create_game_state_view_remains_structural_even_with_summarizer() -> (
+    None
+):
     long_content = "\n".join(f"line_{i} = {i}" for i in range(100))
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
-        artifacts=(state_module.CodingArtifact(
-            id="main-codebase",
-            files=(state_module.CodeFile(path="src/big.py", content=long_content),),
-        ),),
+        artifacts=(
+            state_module.CodingArtifact(
+                id="main-codebase",
+                files=(state_module.CodeFile(path="src/big.py", content=long_content),),
+            ),
+        ),
     )
     config = {
         "workspace": Path(".baps-workspace"),
@@ -334,8 +376,12 @@ def test_coding_create_game_state_view_remains_structural_even_with_summarizer()
         "max_iterations": 1,
         "spec_path": None,
     }
-    summarization_context = _make_summarization_context("API summary: assigns integers to variables")
-    view = CodingProjectAdapter().build_create_game_state_view(state, config, summarization_context=summarization_context)
+    summarization_context = _make_summarization_context(
+        "API summary: assigns integers to variables"
+    )
+    view = CodingProjectAdapter().build_create_game_state_view(
+        state, config, summarization_context=summarization_context
+    )
     assert "[api-empty]" in view.content
     assert "API summary: assigns integers to variables" not in view.content
     assert "src/big.py (100 lines)" in view.content
@@ -345,10 +391,12 @@ def test_coding_create_game_state_view_line_count_present_with_summarizer() -> N
     content = "a = 1\nb = 2\nc = 3\n"
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
-        artifacts=(state_module.CodingArtifact(
-            id="main-codebase",
-            files=(state_module.CodeFile(path="src/abc.py", content=content),),
-        ),),
+        artifacts=(
+            state_module.CodingArtifact(
+                id="main-codebase",
+                files=(state_module.CodeFile(path="src/abc.py", content=content),),
+            ),
+        ),
     )
     config = {
         "workspace": Path(".baps-workspace"),
@@ -361,7 +409,9 @@ def test_coding_create_game_state_view_line_count_present_with_summarizer() -> N
         "spec_path": None,
     }
     summarization_context = _make_summarization_context("three variable assignments")
-    view = CodingProjectAdapter().build_create_game_state_view(state, config, summarization_context=summarization_context)
+    view = CodingProjectAdapter().build_create_game_state_view(
+        state, config, summarization_context=summarization_context
+    )
     assert "src/abc.py (3 lines)" in view.content
     assert "[api-empty]" in view.content
     assert "three variable assignments" not in view.content
@@ -371,13 +421,16 @@ def test_coding_create_game_state_view_line_count_present_with_summarizer() -> N
 # build_coding_state_view — target_entity / summarization tests
 # ---------------------------------------------------------------------------
 
+
 def _make_coding_state(files: list[tuple[str, str]]) -> state_module.State:
     return state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
-        artifacts=(state_module.CodingArtifact(
-            id="main-codebase",
-            files=tuple(state_module.CodeFile(path=p, content=c) for p, c in files),
-        ),),
+        artifacts=(
+            state_module.CodingArtifact(
+                id="main-codebase",
+                files=tuple(state_module.CodeFile(path=p, content=c) for p, c in files),
+            ),
+        ),
     )
 
 
@@ -399,7 +452,9 @@ def test_coding_state_view_target_entity_match_is_full_others_summarized() -> No
     state = _make_coding_state(files)
     spec = _make_coding_spec(target_entity="src/target.py")
     summarization_context = _make_summarization_context("summary of other")
-    view = CodingProjectAdapter().build_state_view(state, spec, summarization_context=summarization_context)
+    view = CodingProjectAdapter().build_state_view(
+        state, spec, summarization_context=summarization_context
+    )
     assert "src/target.py (1 lines) [full]" in view.content
     assert "def target(): pass" in view.content
     assert "src/other.py (1 lines) [api]" in view.content
@@ -407,7 +462,9 @@ def test_coding_state_view_target_entity_match_is_full_others_summarized() -> No
     assert "def other(): pass" not in view.content
 
 
-def test_coding_state_view_target_entity_none_all_compact_api_current_behavior() -> None:
+def test_coding_state_view_target_entity_none_all_compact_api_current_behavior() -> (
+    None
+):
     files = [
         ("src/a.py", "x = 1\n"),
         ("src/b.py", "y = 2\n"),
@@ -415,13 +472,17 @@ def test_coding_state_view_target_entity_none_all_compact_api_current_behavior()
     state = _make_coding_state(files)
     spec = _make_coding_spec(target_entity=None)
     summarization_context = _make_summarization_context("should not appear")
-    view = CodingProjectAdapter().build_state_view(state, spec, summarization_context=summarization_context)
+    view = CodingProjectAdapter().build_state_view(
+        state, spec, summarization_context=summarization_context
+    )
     assert "[full]" not in view.content
     assert "src/a.py (1 lines) [api]" in view.content
     assert "src/b.py (1 lines) [api]" in view.content
 
 
-def test_coding_state_view_summarizer_none_keeps_non_target_compact_when_target_set() -> None:
+def test_coding_state_view_summarizer_none_keeps_non_target_compact_when_target_set() -> (
+    None
+):
     files = [
         ("src/target.py", "def t(): pass\n"),
         ("src/other.py", "def o(): pass\n"),
@@ -429,21 +490,27 @@ def test_coding_state_view_summarizer_none_keeps_non_target_compact_when_target_
     state = _make_coding_state(files)
     spec = _make_coding_spec(target_entity="src/target.py")
     ctx = SummarizationContext(summarizer=None, game_spec=spec)
-    view = CodingProjectAdapter().build_state_view(state, spec, summarization_context=ctx)
+    view = CodingProjectAdapter().build_state_view(
+        state, spec, summarization_context=ctx
+    )
     assert "src/target.py (1 lines) [full]" in view.content
     assert "src/other.py (1 lines) [api]" in view.content
     assert "def t(): pass" in view.content
     assert "def o(): pass" not in view.content
 
 
-def test_coding_state_view_target_entity_present_and_no_context_keeps_non_target_compact() -> None:
+def test_coding_state_view_target_entity_present_and_no_context_keeps_non_target_compact() -> (
+    None
+):
     files = [
         ("src/target.py", "def t(): pass\n"),
         ("src/other.py", "def o(): pass\n"),
     ]
     state = _make_coding_state(files)
     spec = _make_coding_spec(target_entity="src/target.py")
-    view = CodingProjectAdapter().build_state_view(state, spec, summarization_context=None)
+    view = CodingProjectAdapter().build_state_view(
+        state, spec, summarization_context=None
+    )
     assert "src/target.py (1 lines) [full]" in view.content
     assert "src/other.py (1 lines) [api]" in view.content
     assert "def t(): pass" in view.content
@@ -457,9 +524,14 @@ def test_coding_state_view_invalid_target_entity_warns_and_stays_compact() -> No
     ]
     state = _make_coding_state(files)
     spec = _make_coding_spec(target_entity="src/missing.py")
-    view = CodingProjectAdapter().build_state_view(state, spec, summarization_context=None)
+    view = CodingProjectAdapter().build_state_view(
+        state, spec, summarization_context=None
+    )
     assert "WARNING: target_entity did not match any known file." in view.content
-    assert "No full file was expanded; rendering compact structural views for all files." in view.content
+    assert (
+        "No full file was expanded; rendering compact structural views for all files."
+        in view.content
+    )
     assert "[full]" not in view.content
     assert "src/target.py (1 lines) [api]" in view.content
     assert "src/other.py (1 lines) [api]" in view.content
@@ -469,13 +541,18 @@ def test_coding_state_view_invalid_target_entity_warns_and_stays_compact() -> No
 # build_document_state_view — target_entity / summarization tests
 # ---------------------------------------------------------------------------
 
+
 def _make_document_state(sections: list[tuple[str, str]]) -> state_module.State:
     return state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
-        artifacts=(state_module.DocumentArtifact(
-            id="main-document",
-            sections=tuple(state_module.Section(title=t, body=b) for t, b in sections),
-        ),),
+        artifacts=(
+            state_module.DocumentArtifact(
+                id="main-document",
+                sections=tuple(
+                    state_module.Section(title=t, body=b) for t, b in sections
+                ),
+            ),
+        ),
     )
 
 
@@ -497,7 +574,9 @@ def test_document_state_view_target_entity_match_is_full_others_summarized() -> 
     state = _make_document_state(sections)
     spec = _make_document_spec(target_entity="Introduction")
     summarization_context = _make_summarization_context("background summary")
-    view = DocumentProjectAdapter().build_state_view(state, spec, summarization_context=summarization_context)
+    view = DocumentProjectAdapter().build_state_view(
+        state, spec, summarization_context=summarization_context
+    )
     assert "### Introduction [full]" in view.content
     assert "Full intro body here." in view.content
     assert "### Background [summary]" in view.content
@@ -513,14 +592,18 @@ def test_document_state_view_target_entity_none_all_full_current_behavior() -> N
     state = _make_document_state(sections)
     spec = _make_document_spec(target_entity=None)
     summarization_context = _make_summarization_context("should not appear")
-    view = DocumentProjectAdapter().build_state_view(state, spec, summarization_context=summarization_context)
+    view = DocumentProjectAdapter().build_state_view(
+        state, spec, summarization_context=summarization_context
+    )
     assert "[summary]" not in view.content
     assert "[full]" not in view.content
     assert "Body A." in view.content
     assert "Body B." in view.content
 
 
-def test_document_state_view_summarizer_none_all_full_regardless_of_target_entity() -> None:
+def test_document_state_view_summarizer_none_all_full_regardless_of_target_entity() -> (
+    None
+):
     sections = [
         ("Target", "Target body."),
         ("Other", "Other body."),
@@ -528,7 +611,9 @@ def test_document_state_view_summarizer_none_all_full_regardless_of_target_entit
     state = _make_document_state(sections)
     spec = _make_document_spec(target_entity="Target")
     ctx = SummarizationContext(summarizer=None, game_spec=spec)
-    view = DocumentProjectAdapter().build_state_view(state, spec, summarization_context=ctx)
+    view = DocumentProjectAdapter().build_state_view(
+        state, spec, summarization_context=ctx
+    )
     assert "[summary]" not in view.content
     assert "Target body." in view.content
     assert "Other body." in view.content
@@ -541,7 +626,9 @@ def test_document_state_view_fallback_to_full_when_summarization_context_none() 
     ]
     state = _make_document_state(sections)
     spec = _make_document_spec(target_entity="Target")
-    view = DocumentProjectAdapter().build_state_view(state, spec, summarization_context=None)
+    view = DocumentProjectAdapter().build_state_view(
+        state, spec, summarization_context=None
+    )
     assert "[summary]" not in view.content
     assert "Target body." in view.content
     assert "Other body." in view.content
@@ -564,11 +651,13 @@ def _private():
 def _make_python_state() -> state_module.State:
     return state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
-        artifacts=(state_module.CodingArtifact(
-            id="lib",
-            language="python",
-            files=(state_module.CodeFile(path="src/math.py", content=_PY_SRC),),
-        ),),
+        artifacts=(
+            state_module.CodingArtifact(
+                id="lib",
+                language="python",
+                files=(state_module.CodeFile(path="src/math.py", content=_PY_SRC),),
+            ),
+        ),
     )
 
 
@@ -583,7 +672,9 @@ def test_python_create_game_state_view_api_surface() -> None:
         "max_iterations": 1,
         "spec_path": None,
     }
-    view = CodingProjectAdapter().build_create_game_state_view(_make_python_state(), config)
+    view = CodingProjectAdapter().build_create_game_state_view(
+        _make_python_state(), config
+    )
     assert "src/math.py" in view.content
     assert "def add" in view.content
     assert "[api]" in view.content
@@ -593,14 +684,18 @@ def test_python_create_game_state_view_api_surface() -> None:
 def test_python_play_game_state_view_target_full_other_api() -> None:
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
-        artifacts=(state_module.CodingArtifact(
-            id="lib",
-            language="python",
-            files=(
-                state_module.CodeFile(path="src/math.py", content=_PY_SRC),
-                state_module.CodeFile(path="src/other.py", content="def helper(): pass\n"),
+        artifacts=(
+            state_module.CodingArtifact(
+                id="lib",
+                language="python",
+                files=(
+                    state_module.CodeFile(path="src/math.py", content=_PY_SRC),
+                    state_module.CodeFile(
+                        path="src/other.py", content="def helper(): pass\n"
+                    ),
+                ),
             ),
-        ),),
+        ),
     )
     spec = GameSpec(
         objective="Improve add",
@@ -621,14 +716,17 @@ def test_python_play_game_state_view_target_full_other_api() -> None:
 # Rust view — create-game and play-game
 # ---------------------------------------------------------------------------
 
+
 def _make_rust_state() -> state_module.State:
     return state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
-        artifacts=(state_module.CodingArtifact(
-            id="lib",
-            language="rust",
-            files=(state_module.CodeFile(path="src/lib.rs", content=_RUST_SRC),),
-        ),),
+        artifacts=(
+            state_module.CodingArtifact(
+                id="lib",
+                language="rust",
+                files=(state_module.CodeFile(path="src/lib.rs", content=_RUST_SRC),),
+            ),
+        ),
     )
 
 
@@ -643,8 +741,12 @@ def test_rust_create_game_state_view_api_surface() -> None:
         "max_iterations": 1,
         "spec_path": None,
     }
-    with patch("baps.plugins.language_rust.subprocess.run", return_value=_rust_docker_mock()):
-        view = CodingProjectAdapter().build_create_game_state_view(_make_rust_state(), config)
+    with patch(
+        "baps.plugins.language_rust.subprocess.run", return_value=_rust_docker_mock()
+    ):
+        view = CodingProjectAdapter().build_create_game_state_view(
+            _make_rust_state(), config
+        )
     assert "src/lib.rs" in view.content
     assert "pub fn add" in view.content
     assert "_private" not in view.content
@@ -655,14 +757,18 @@ def test_rust_create_game_state_view_api_surface() -> None:
 def test_rust_play_game_state_view_target_full_no_extraction() -> None:
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
-        artifacts=(state_module.CodingArtifact(
-            id="lib",
-            language="rust",
-            files=(
-                state_module.CodeFile(path="src/lib.rs", content=_RUST_SRC),
-                state_module.CodeFile(path="src/util.rs", content="pub fn noop() {}\n"),
+        artifacts=(
+            state_module.CodingArtifact(
+                id="lib",
+                language="rust",
+                files=(
+                    state_module.CodeFile(path="src/lib.rs", content=_RUST_SRC),
+                    state_module.CodeFile(
+                        path="src/util.rs", content="pub fn noop() {}\n"
+                    ),
+                ),
             ),
-        ),),
+        ),
     )
     spec = GameSpec(
         objective="Improve add",
@@ -671,9 +777,20 @@ def test_rust_play_game_state_view_target_full_no_extraction() -> None:
         success_condition="add updated",
         target_entity="src/lib.rs",
     )
-    _util_index = {"items": [{"kind": "fn", "name": "noop", "pub": True,
-                               "signature": "pub fn noop()", "doc": None,
-                               "is_test": False, "body_start": 1, "body_end": 1}]}
+    _util_index = {
+        "items": [
+            {
+                "kind": "fn",
+                "name": "noop",
+                "pub": True,
+                "signature": "pub fn noop()",
+                "doc": None,
+                "is_test": False,
+                "body_start": 1,
+                "body_end": 1,
+            }
+        ]
+    }
     util_mock = MagicMock()
     util_mock.stdout = json.dumps(_util_index)
     util_mock.returncode = 0
@@ -691,14 +808,17 @@ def test_rust_play_game_state_view_target_full_no_extraction() -> None:
 # Zig view — create-game and play-game
 # ---------------------------------------------------------------------------
 
+
 def _make_zig_state() -> state_module.State:
     return state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
-        artifacts=(state_module.CodingArtifact(
-            id="lib",
-            language="zig",
-            files=(state_module.CodeFile(path="src/main.zig", content=_ZIG_SRC),),
-        ),),
+        artifacts=(
+            state_module.CodingArtifact(
+                id="lib",
+                language="zig",
+                files=(state_module.CodeFile(path="src/main.zig", content=_ZIG_SRC),),
+            ),
+        ),
     )
 
 
@@ -713,8 +833,12 @@ def test_zig_create_game_state_view_api_surface() -> None:
         "max_iterations": 1,
         "spec_path": None,
     }
-    with patch("baps.plugins.language_zig.subprocess.run", return_value=_zig_docker_mock()):
-        view = CodingProjectAdapter().build_create_game_state_view(_make_zig_state(), config)
+    with patch(
+        "baps.plugins.language_zig.subprocess.run", return_value=_zig_docker_mock()
+    ):
+        view = CodingProjectAdapter().build_create_game_state_view(
+            _make_zig_state(), config
+        )
     assert "src/main.zig" in view.content
     assert "pub fn add" in view.content
     assert "_private" not in view.content
@@ -725,14 +849,18 @@ def test_zig_create_game_state_view_api_surface() -> None:
 def test_zig_play_game_state_view_target_full_no_extraction() -> None:
     state = state_module.State(
         northstar=state_module.NorthStar(artifacts=()),
-        artifacts=(state_module.CodingArtifact(
-            id="lib",
-            language="zig",
-            files=(
-                state_module.CodeFile(path="src/main.zig", content=_ZIG_SRC),
-                state_module.CodeFile(path="src/util.zig", content="pub fn noop() void {}\n"),
+        artifacts=(
+            state_module.CodingArtifact(
+                id="lib",
+                language="zig",
+                files=(
+                    state_module.CodeFile(path="src/main.zig", content=_ZIG_SRC),
+                    state_module.CodeFile(
+                        path="src/util.zig", content="pub fn noop() void {}\n"
+                    ),
+                ),
             ),
-        ),),
+        ),
     )
     spec = GameSpec(
         objective="Improve add",
@@ -741,9 +869,20 @@ def test_zig_play_game_state_view_target_full_no_extraction() -> None:
         success_condition="add updated",
         target_entity="src/main.zig",
     )
-    _util_index = {"items": [{"kind": "fn", "name": "noop", "pub": True,
-                               "signature": "pub fn noop() void", "doc": None,
-                               "is_test": False, "body_start": 1, "body_end": 1}]}
+    _util_index = {
+        "items": [
+            {
+                "kind": "fn",
+                "name": "noop",
+                "pub": True,
+                "signature": "pub fn noop() void",
+                "doc": None,
+                "is_test": False,
+                "body_start": 1,
+                "body_end": 1,
+            }
+        ]
+    }
     util_mock = MagicMock()
     util_mock.stdout = json.dumps(_util_index)
     util_mock.returncode = 0

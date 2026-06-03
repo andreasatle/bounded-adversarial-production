@@ -1,4 +1,5 @@
 """Unit tests for SummarizationContext."""
+
 from __future__ import annotations
 
 from baps.models.models import FakeModelClient, Role
@@ -91,7 +92,9 @@ def test_summarize_cache_miss_different_content_calls_model_again() -> None:
     assert len(role.client.prompts) == 2
 
 
-def test_summarize_cache_miss_same_content_different_objective_calls_model_again() -> None:
+def test_summarize_cache_miss_same_content_different_objective_calls_model_again() -> (
+    None
+):
     content = "def baz(): pass\n"
     role = _make_role(["summary-obj1", "summary-obj2"])
     ctx = SummarizationContext(summarizer=role, game_spec=None)

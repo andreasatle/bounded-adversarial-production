@@ -34,10 +34,18 @@ def _item(
 
 def test_render_includes_all_sections_in_required_order() -> None:
     data = NorthStarProjectionInput(
-        framework_policy=(_item("Framework rule", "framework-doc", "framework", "active"),),
-        project_state=(_item("Accepted project fact", "state-file", "project", "accepted"),),
-        blackboard_history=(_item("Historical rationale", "blackboard-log", "historical", "recorded"),),
-        runtime_context=(_item("Current run context", "runtime", "temporary", "active"),),
+        framework_policy=(
+            _item("Framework rule", "framework-doc", "framework", "active"),
+        ),
+        project_state=(
+            _item("Accepted project fact", "state-file", "project", "accepted"),
+        ),
+        blackboard_history=(
+            _item("Historical rationale", "blackboard-log", "historical", "recorded"),
+        ),
+        runtime_context=(
+            _item("Current run context", "runtime", "temporary", "active"),
+        ),
     )
 
     rendered = render_northstar_projection(data)
@@ -152,7 +160,9 @@ def test_repeated_rendering_of_same_input_is_identical() -> None:
         ("input_fingerprint", " "),
     ],
 )
-def test_projection_artifact_rejects_empty_required_strings(field_name: str, value: str) -> None:
+def test_projection_artifact_rejects_empty_required_strings(
+    field_name: str, value: str
+) -> None:
     payload = {
         "id": "projection-1",
         "projection_type": ProjectionType.NORTH_STAR,
@@ -232,9 +242,9 @@ def test_identical_northstar_inputs_produce_identical_fingerprints() -> None:
         runtime_context=(_item("Runtime A", "runtime", "temporary", "active"),),
     )
 
-    assert fingerprint_northstar_projection_input(first) == fingerprint_northstar_projection_input(
-        second
-    )
+    assert fingerprint_northstar_projection_input(
+        first
+    ) == fingerprint_northstar_projection_input(second)
 
 
 def test_changed_northstar_inputs_produce_different_fingerprints() -> None:
@@ -245,9 +255,9 @@ def test_changed_northstar_inputs_produce_different_fingerprints() -> None:
         project_state=(_item("State B", "state", "project", "accepted"),),
     )
 
-    assert fingerprint_northstar_projection_input(first) != fingerprint_northstar_projection_input(
-        second
-    )
+    assert fingerprint_northstar_projection_input(
+        first
+    ) != fingerprint_northstar_projection_input(second)
 
 
 def test_projection_artifact_is_distinct_from_state_and_does_not_mutate_state() -> None:
@@ -305,7 +315,9 @@ def test_modifying_input_after_render_does_not_mutate_projection_artifact() -> N
         ProjectionPolicy.DIRECT,
     ],
 )
-def test_renderer_rejects_unsupported_projection_policies(policy: ProjectionPolicy) -> None:
+def test_renderer_rejects_unsupported_projection_policies(
+    policy: ProjectionPolicy,
+) -> None:
     data = NorthStarProjectionInput(
         project_state=(
             NorthStarProjectionItem(
@@ -419,9 +431,9 @@ def test_changing_item_id_changes_fingerprint() -> None:
             ),
         ),
     )
-    assert fingerprint_northstar_projection_input(first) != fingerprint_northstar_projection_input(
-        second
-    )
+    assert fingerprint_northstar_projection_input(
+        first
+    ) != fingerprint_northstar_projection_input(second)
 
 
 def test_item_id_does_not_affect_item_ordering() -> None:

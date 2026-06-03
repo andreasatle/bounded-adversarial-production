@@ -17,19 +17,20 @@ from baps.state.state import StopReason
 @dataclass  # internal only — no serialization boundary
 class ModelConfig:
     """Represent the ModelConfig type."""
-    name: str       # short display name, used as key in policy state
+
+    name: str  # short display name, used as key in policy state
     backend: Backend
-    model_id: str   # the model string passed to the API
+    model_id: str  # the model string passed to the API
 
 
 # Base reward by stop_reason. Verification result adds a bonus/penalty on top.
 _STOP_REASON_BASE: dict[StopReason, float] = {
-    StopReason.NO_STATE_CHANGE:           0.7,
-    StopReason.ITERATION_LIMIT_REACHED:   0.5,
-    StopReason.CREATE_GAME_NO_NEW_GAME:   0.6,
+    StopReason.NO_STATE_CHANGE: 0.7,
+    StopReason.ITERATION_LIMIT_REACHED: 0.5,
+    StopReason.CREATE_GAME_NO_NEW_GAME: 0.6,
     StopReason.NORTHSTAR_UPDATE_PROPOSED: 0.4,
-    StopReason.PLAY_GAME_NO_DELTA:        0.1,
-    StopReason.ERROR:                     0.2,  # transient failure; low but doesn't permanently tank score
+    StopReason.PLAY_GAME_NO_DELTA: 0.1,
+    StopReason.ERROR: 0.2,  # transient failure; low but doesn't permanently tank score
 }
 
 
@@ -50,6 +51,7 @@ def compute_reward(result: dict) -> float:
 
 class _ModelStats(BaseModel):
     """Represent the _ModelStats type."""
+
     score: float = 0.5
     runs: int = 0
 
@@ -63,8 +65,8 @@ class ModelPolicy:
     escalation in the scheduler.
     """
 
-    EMA_ALPHA: float = 0.3    # blend factor for score updates
-    TEMP_INIT: float = 2.0    # starting temperature (exploration)
+    EMA_ALPHA: float = 0.3  # blend factor for score updates
+    TEMP_INIT: float = 2.0  # starting temperature (exploration)
     TEMP_DECAY: float = 0.02  # temperature = TEMP_INIT / (1 + total_runs * TEMP_DECAY)
 
     def __init__(self, models: list[ModelConfig]) -> None:

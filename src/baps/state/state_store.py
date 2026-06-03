@@ -23,6 +23,7 @@ class StateStore(Protocol):
 
 class JsonStateStore:
     """Stores State as JSON at a fixed file path."""
+
     def __init__(self, path: Path):
         """Initialize with the file path where State JSON will be read and written."""
         self.path = path

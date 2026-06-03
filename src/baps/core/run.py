@@ -7,6 +7,7 @@ import logging
 import os
 
 from baps.core.lifecycle import reset_project, start_project
+
 # Compatibility re-export used by tests.
 from baps.core.run_config import resolve_run_config
 from baps.core.runtime import create_state
@@ -26,35 +27,45 @@ def _add_start_args(parser: argparse.ArgumentParser) -> None:
     """Register all CLI arguments shared by the start subcommand."""
     parser.add_argument("--spec", default=None, help="YAML spec path.")
     parser.add_argument(
-        "--workspace", default=None,
+        "--workspace",
+        default=None,
         help="Workspace directory for runtime outputs.",
     )
     parser.add_argument(
-        "--project-type", default=None,
+        "--project-type",
+        default=None,
         help="Project type (currently supported: document, coding, audit).",
     )
     parser.add_argument(
-        "--artifact-id", default=None,
+        "--artifact-id",
+        default=None,
         help="Artifact id for project state.",
     )
     parser.add_argument(
-        "--goal", default=None,
+        "--goal",
+        default=None,
         help="Runtime goal text. Required if not set in spec or workspace config.",
     )
     parser.add_argument(
-        "--output", default=None,
+        "--output",
+        default=None,
         help="Output path (relative paths are resolved under workspace).",
     )
     parser.add_argument(
-        "--max-iterations", type=int, default=None,
+        "--max-iterations",
+        type=int,
+        default=None,
         help="Maximum loop iterations (must be >= 1).",
     )
     parser.add_argument(
-        "--sandbox", default=None, choices=("docker", "none"),
+        "--sandbox",
+        default=None,
+        choices=("docker", "none"),
         help="Sandbox mode for code execution: 'docker' (default) or 'none' (unsafe, prints warning).",
     )
     parser.add_argument(
-        "--language", default=None,
+        "--language",
+        default=None,
         help="Language plugin for coding projects (e.g. python, zig). Required for coding project type.",
     )
 
@@ -95,7 +106,8 @@ def _build_cli_parser() -> argparse.ArgumentParser:
     reset_parser.add_argument("--spec", default=None, help="YAML spec path.")
     reset_parser.add_argument("--workspace", default=None, help="Workspace directory.")
     reset_parser.add_argument(
-        "--output", default=None,
+        "--output",
+        default=None,
         help="Output file to wipe (relative paths resolved under workspace).",
     )
     return parser

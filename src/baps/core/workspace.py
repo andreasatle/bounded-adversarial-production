@@ -9,7 +9,13 @@ if False:  # pragma: no cover
     from baps.core.run_config import RunConfig
 
 _WORKSPACE_CONFIG_FILE = "baps-config.json"
-_WORKSPACE_CONFIG_FIELDS = ("project_type", "artifact_id", "northstar_markdown", "goal", "output")
+_WORKSPACE_CONFIG_FIELDS = (
+    "project_type",
+    "artifact_id",
+    "northstar_markdown",
+    "goal",
+    "output",
+)
 
 
 def resolve_output_path(workspace: Path, output_value: str) -> Path:

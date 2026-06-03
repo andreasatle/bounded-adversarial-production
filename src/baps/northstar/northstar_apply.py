@@ -53,11 +53,19 @@ def _apply_proposal(workspace: Path, proposal: dict, dry_run: bool) -> None:
     """Apply a NorthStar proposal to the workspace config, or log the proposal if dry_run is True."""
     config = _load_workspace_config(workspace)
     if not config:
-        logger.error("[apply-northstar] no workspace config found at %s", workspace / _WORKSPACE_CONFIG_FILE)
+        logger.error(
+            "[apply-northstar] no workspace config found at %s",
+            workspace / _WORKSPACE_CONFIG_FILE,
+        )
         sys.exit(1)
 
-    logger.info("[apply-northstar] current NorthStar:\n%s", config.get('northstar_markdown', '(empty)'))
-    logger.info("[apply-northstar] proposed NorthStar:\n%s", proposal['proposed_northstar'])
+    logger.info(
+        "[apply-northstar] current NorthStar:\n%s",
+        config.get("northstar_markdown", "(empty)"),
+    )
+    logger.info(
+        "[apply-northstar] proposed NorthStar:\n%s", proposal["proposed_northstar"]
+    )
 
     if dry_run:
         logger.info("[apply-northstar] dry-run: no changes written.")
@@ -65,14 +73,23 @@ def _apply_proposal(workspace: Path, proposal: dict, dry_run: bool) -> None:
 
     config["northstar_markdown"] = proposal["proposed_northstar"]
     _save_workspace_config(workspace, config)
-    logger.info("[apply-northstar] workspace config updated: %s", workspace / _WORKSPACE_CONFIG_FILE)
-    logger.info("[apply-northstar] NOTE: re-run 'baps-run init' or manually update the spec YAML to persist this NorthStar change across fresh workspaces.")
+    logger.info(
+        "[apply-northstar] workspace config updated: %s",
+        workspace / _WORKSPACE_CONFIG_FILE,
+    )
+    logger.info(
+        "[apply-northstar] NOTE: re-run 'baps-run init' or manually update the spec YAML to persist this NorthStar change across fresh workspaces."
+    )
 
 
 def main() -> None:
     """CLI entry point for baps-apply-northstar: list proposals and apply a chosen one."""
     _log_level = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
-    logging.basicConfig(level=_log_level, format="%(asctime)s %(levelname)-5s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    logging.basicConfig(
+        level=_log_level,
+        format="%(asctime)s %(levelname)-5s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 
     parser = argparse.ArgumentParser(
         description="Review and apply a NorthStar update proposal from a workspace blackboard."
@@ -82,7 +99,8 @@ def main() -> None:
         help="Path to the baps workspace directory.",
     )
     parser.add_argument(
-        "--index", "-i",
+        "--index",
+        "-i",
         type=int,
         default=None,
         help="Index of the proposal to apply (0-based). Omit to list proposals interactively.",
@@ -113,12 +131,18 @@ def main() -> None:
     if args.index is not None:
         idx = args.index
         if idx < 0 or idx >= len(proposals):
-            logger.error("[apply-northstar] index %d out of range (0–%d)", idx, len(proposals) - 1)
+            logger.error(
+                "[apply-northstar] index %d out of range (0–%d)",
+                idx,
+                len(proposals) - 1,
+            )
             sys.exit(1)
         chosen = proposals[idx]
     else:
         print()
-        raw = input(f"Enter proposal index to apply [0–{len(proposals) - 1}], or 'q' to quit: ").strip()
+        raw = input(
+            f"Enter proposal index to apply [0–{len(proposals) - 1}], or 'q' to quit: "
+        ).strip()
         if raw.lower() in ("q", "quit", ""):
             logger.info("[apply-northstar] aborted.")
             sys.exit(0)
@@ -132,7 +156,7 @@ def main() -> None:
             sys.exit(1)
         chosen = proposals[idx]
 
-    logger.info("[apply-northstar] rationale: %s", chosen.get('rationale', ''))
+    logger.info("[apply-northstar] rationale: %s", chosen.get("rationale", ""))
 
     if not args.dry_run and args.index is None:
         confirm = input("\nApply this proposal? [y/N] ").strip().lower()

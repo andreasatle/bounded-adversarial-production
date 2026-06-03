@@ -57,7 +57,9 @@ def run_sandboxed(
         return _run_bare(cwd, test_command)
     if sandbox_mode == "docker":
         return _run_docker(cwd, test_command, docker_image)
-    raise ValueError(f"unknown sandbox_mode: {sandbox_mode!r}; expected 'docker' or 'none'")
+    raise ValueError(
+        f"unknown sandbox_mode: {sandbox_mode!r}; expected 'docker' or 'none'"
+    )
 
 
 def _run_bare(cwd: Path, test_command: str) -> tuple[str, subprocess.CompletedProcess]:
@@ -74,11 +76,16 @@ def _run_docker(
     """Run test_command inside a Docker container with cwd bind-mounted at /work."""
     resolved = cwd.resolve()
     docker_args = [
-        "docker", "run", "--rm",
-        "-v", f"{resolved}:/work:rw",
-        "--workdir", "/work",
+        "docker",
+        "run",
+        "--rm",
+        "-v",
+        f"{resolved}:/work:rw",
+        "--workdir",
+        "/work",
         docker_image,
-        "sh", "-c",
+        "sh",
+        "-c",
         test_command,
     ]
     command = (

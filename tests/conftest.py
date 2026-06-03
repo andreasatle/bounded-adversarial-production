@@ -2,6 +2,7 @@
 
 This conftest provides the autouse _patch_create_game_model_client fixture used by all test files.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -18,7 +19,11 @@ def _patch_create_game_model_client(monkeypatch):
     )
     blue_tool_response = ToolCall(
         name="append_section",
-        arguments={"artifact_id": "main-document", "title": "Introduction", "body": "Advance goal"},
+        arguments={
+            "artifact_id": "main-document",
+            "title": "Introduction",
+            "body": "Advance goal",
+        },
     )
     red_response = '{"disposition":"accept","rationale":"deterministic test path"}'
 
@@ -41,8 +46,16 @@ def _patch_create_game_model_client(monkeypatch):
             return _fake_create_game_builder()
         return _fake_model_client_builder()
 
-    monkeypatch.setattr("baps.game.engine.build_client_for_role", _fakebuild_client_for_role)
-    monkeypatch.setattr("baps.core.orchestration.build_client_for_role", _fakebuild_client_for_role)
-    monkeypatch.setattr("baps.game.engine.build_role_client", lambda _role: _fake_model_client_builder())
+    monkeypatch.setattr(
+        "baps.game.engine.build_client_for_role", _fakebuild_client_for_role
+    )
+    monkeypatch.setattr(
+        "baps.core.orchestration.build_client_for_role", _fakebuild_client_for_role
+    )
+    monkeypatch.setattr(
+        "baps.game.engine.build_role_client", lambda _role: _fake_model_client_builder()
+    )
     # Fallback resolution returns no chain by default (no fallback configured in tests).
-    monkeypatch.setattr("baps.game.engine.build_fallback_chain_for_role", lambda role, config: [])
+    monkeypatch.setattr(
+        "baps.game.engine.build_fallback_chain_for_role", lambda role, config: []
+    )

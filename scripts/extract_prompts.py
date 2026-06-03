@@ -26,6 +26,7 @@ from pathlib import Path
 # Workspace loading
 # ---------------------------------------------------------------------------
 
+
 def _load_workspace(workspace: Path) -> tuple[dict, dict, list[dict]]:
     config_path = workspace / "baps-config.json"
     state_path = workspace / "state" / "state.json"
@@ -59,6 +60,7 @@ def _last_event(events: list[dict], kind: str) -> dict | None:
 # Delta reconstruction
 # ---------------------------------------------------------------------------
 
+
 def _reconstruct_delta(delta_dict: dict | None, project_type: str):
     if delta_dict is None:
         return None
@@ -66,9 +68,11 @@ def _reconstruct_delta(delta_dict: dict | None, project_type: str):
     try:
         if project_type == "coding":
             from baps.adapters.coding.parsing import parse_coding_delta_json
+
             return parse_coding_delta_json(text)
         if project_type == "document":
             from baps.adapters.document_adapter import parse_document_delta_json
+
             return parse_document_delta_json(text)
     except Exception as exc:
         print(f"warning: could not reconstruct delta — {exc}", file=sys.stderr)
@@ -90,14 +94,20 @@ def _find_delta(play_event: dict, project_type: str):
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Render agent prompts from a baps workspace.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("workspace", type=Path, help="Workspace directory (contains baps-config.json)")
     parser.add_argument(
-        "--output", "-o", type=Path, default=None,
+        "workspace", type=Path, help="Workspace directory (contains baps-config.json)"
+    )
+    parser.add_argument(
+        "--output",
+        "-o",
+        type=Path,
+        default=None,
         help="Write each prompt to <name>.txt in this directory (default: print to stdout)",
     )
     args = parser.parse_args()
@@ -173,15 +183,27 @@ def main() -> None:
                     adapter, play_view, game_spec, delta, None
                 )
                 prompts["referee"] = render_referee_prompt(
-                    play_view, game_spec, delta, red_finding,
+                    play_view,
+                    game_spec,
+                    delta,
+                    red_finding,
                     prompt_supplement=ref_supplement,
                 )
             else:
-                print("note: no red_finding in blackboard — skipping referee prompt", file=sys.stderr)
+                print(
+                    "note: no red_finding in blackboard — skipping referee prompt",
+                    file=sys.stderr,
+                )
         else:
-            print("note: no delta in blackboard — skipping red and referee prompts", file=sys.stderr)
+            print(
+                "note: no delta in blackboard — skipping red and referee prompts",
+                file=sys.stderr,
+            )
     else:
-        print("note: no play_game event in blackboard — skipping blue, red, and referee prompts", file=sys.stderr)
+        print(
+            "note: no play_game event in blackboard — skipping blue, red, and referee prompts",
+            file=sys.stderr,
+        )
 
     # --- emit ---
     _ROLE_ORDER = ["create_game", "blue", "red", "referee"]

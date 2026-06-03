@@ -33,13 +33,18 @@ def _is_private_host(host: str) -> bool:
 
 class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
     """Represent the _SafeRedirectHandler type."""
+
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         """Handle redirect request."""
         parsed = urllib.parse.urlparse(newurl)
         if parsed.scheme not in ("http", "https"):
-            raise urllib.error.URLError(f"redirect to non-http scheme blocked: {newurl}")
+            raise urllib.error.URLError(
+                f"redirect to non-http scheme blocked: {newurl}"
+            )
         if _is_private_host(parsed.hostname or ""):
-            raise urllib.error.URLError(f"redirect to private address blocked: {newurl}")
+            raise urllib.error.URLError(
+                f"redirect to private address blocked: {newurl}"
+            )
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
@@ -48,7 +53,9 @@ _OPENER = urllib.request.build_opener(_SafeRedirectHandler)
 
 def _raw_fetch(url: str, max_bytes: int) -> str:
     """Handle raw fetch."""
-    req = urllib.request.Request(url, headers={"User-Agent": "baps-research/1.0"}, method="GET")
+    req = urllib.request.Request(
+        url, headers={"User-Agent": "baps-research/1.0"}, method="GET"
+    )
     with _OPENER.open(req, timeout=_FETCH_TIMEOUT) as resp:
         raw = resp.read(max_bytes)
         if resp.headers.get("Content-Encoding") == "gzip":
@@ -58,10 +65,10 @@ def _raw_fetch(url: str, max_bytes: int) -> str:
 
 _JS_RENDER_MARKERS = re.compile(
     r'<div[^>]+id=["\'](?:root|app|__next|__nuxt|ember-application)["\']'
-    r'|<div[^>]+data-reactroot'
-    r'|window\.__INITIAL_STATE__'
-    r'|window\.__REDUX_STATE__'
-    r'|\bng-version='
+    r"|<div[^>]+data-reactroot"
+    r"|window\.__INITIAL_STATE__"
+    r"|window\.__REDUX_STATE__"
+    r"|\bng-version="
     r'|data-server-rendered=["\']false["\']',
     re.IGNORECASE,
 )
@@ -79,7 +86,9 @@ def _is_js_rendered(raw_html: str, stripped: str) -> bool:
 
 def _strip_html(text: str) -> str:
     """Handle strip html."""
-    text = re.sub(r"<script[^>]*>.*?</script>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(
+        r"<script[^>]*>.*?</script>", "", text, flags=re.DOTALL | re.IGNORECASE
+    )
     text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r"<[^>]+>", " ", text)
     text = re.sub(r"&nbsp;", " ", text)
@@ -133,7 +142,9 @@ def fetch_url(url: str) -> str:
 def web_search(query: str) -> str:
     """Search the web via DuckDuckGo instant answers. Best for CVEs, packages, standards."""
     encoded = urllib.parse.quote_plus(query)
-    url = f"https://api.duckduckgo.com/?q={encoded}&format=json&no_html=1&skip_disambig=1"
+    url = (
+        f"https://api.duckduckgo.com/?q={encoded}&format=json&no_html=1&skip_disambig=1"
+    )
     try:
         raw = _raw_fetch(url, max_bytes=_MAX_SEARCH_BYTES)
     except Exception as exc:
@@ -163,7 +174,9 @@ def web_search(query: str) -> str:
             line += f"\n  URL: {url}"
         parts.append(line)
     if not parts:
-        return "(no results — try fetch_url with a direct URL if you know where to look)"
+        return (
+            "(no results — try fetch_url with a direct URL if you know where to look)"
+        )
     return _sanitize_external_content("\n".join(parts))
 
 
@@ -172,7 +185,9 @@ def fetch_file(path: str, artifact: CodingArtifact) -> str:
     files_by_path = {f.path: f for f in artifact.files}
     if path not in files_by_path:
         available = sorted(files_by_path.keys())
-        available_str = ", ".join(f"'{p}'" for p in available) if available else "(none)"
+        available_str = (
+            ", ".join(f"'{p}'" for p in available) if available else "(none)"
+        )
         return f"File '{path}' not found in artifact. Available files: {available_str}"
     return files_by_path[path].content
 
@@ -211,7 +226,10 @@ FETCH_URL_DEFINITION = ToolDefinition(
     parameters={
         "type": "object",
         "properties": {
-            "url": {"type": "string", "description": "The URL to fetch (http or https only)"},
+            "url": {
+                "type": "string",
+                "description": "The URL to fetch (http or https only)",
+            },
         },
         "required": ["url"],
     },
@@ -248,7 +266,9 @@ class ToolExecutor:
     ) -> None:
         """Initialize the instance."""
         self._registry: dict[str, tuple[ToolDefinition, Callable[..., str]]] = {}
-        self._adapter_tools: dict[str, Callable[..., str]] = dict(adapter_tools) if adapter_tools else {}
+        self._adapter_tools: dict[str, Callable[..., str]] = (
+            dict(adapter_tools) if adapter_tools else {}
+        )
 
     def register(self, defn: ToolDefinition, fn: Callable[..., str]) -> "ToolExecutor":
         """Handle register."""

@@ -89,7 +89,9 @@ class Section(BaseModel):
         """Validate that body is non-empty and within the byte size limit."""
         _require_non_empty(value)
         if len(value.encode("utf-8")) > _MAX_SECTION_BODY_BYTES:
-            raise ValueError(f"section body must not exceed {_MAX_SECTION_BODY_BYTES} bytes")
+            raise ValueError(
+                f"section body must not exceed {_MAX_SECTION_BODY_BYTES} bytes"
+            )
         return value
 
 
@@ -152,7 +154,9 @@ class CodeFile(BaseModel):
         """Validate that path is non-empty and within the byte limit."""
         _require_non_empty(value)
         if len(value.encode("utf-8")) > _MAX_CODEFILE_PATH_BYTES:
-            raise ValueError(f"file path must not exceed {_MAX_CODEFILE_PATH_BYTES} bytes")
+            raise ValueError(
+                f"file path must not exceed {_MAX_CODEFILE_PATH_BYTES} bytes"
+            )
         return value
 
     @field_validator("content")
@@ -160,7 +164,9 @@ class CodeFile(BaseModel):
     def _validate_content_length(cls, value: str) -> str:
         """Validate that content is within the byte size limit."""
         if len(value.encode("utf-8")) > _MAX_CODEFILE_CONTENT_BYTES:
-            raise ValueError(f"file content must not exceed {_MAX_CODEFILE_CONTENT_BYTES} bytes")
+            raise ValueError(
+                f"file content must not exceed {_MAX_CODEFILE_CONTENT_BYTES} bytes"
+            )
         return value
 
 
@@ -176,12 +182,16 @@ class CodingArtifact(StateArtifact):
         if isinstance(delta, DeltaCodingState):
             files_by_path = {f.path: f for f in self.files}
             files_by_path[delta.payload.file.path] = delta.payload.file
-            return CodingArtifact(id=self.id, language=self.language, files=tuple(files_by_path.values()))
+            return CodingArtifact(
+                id=self.id, language=self.language, files=tuple(files_by_path.values())
+            )
         if isinstance(delta, DeltaCodingBatchState):
             files_by_path = {f.path: f for f in self.files}
             for incoming in delta.payload.files:
                 files_by_path[incoming.path] = incoming
-            return CodingArtifact(id=self.id, language=self.language, files=tuple(files_by_path.values()))
+            return CodingArtifact(
+                id=self.id, language=self.language, files=tuple(files_by_path.values())
+            )
         if isinstance(delta, DeltaDeleteCodingState):
             path = delta.payload.path
             if not any(f.path == path for f in self.files):
@@ -220,7 +230,9 @@ class ModifySectionDelta(BaseModel):
         """Validate that new_body is non-empty and within the byte size limit."""
         _require_non_empty(value)
         if len(value.encode("utf-8")) > _MAX_SECTION_BODY_BYTES:
-            raise ValueError(f"section body must not exceed {_MAX_SECTION_BODY_BYTES} bytes")
+            raise ValueError(
+                f"section body must not exceed {_MAX_SECTION_BODY_BYTES} bytes"
+            )
         return value
 
 
@@ -326,9 +338,15 @@ class GameSpec(BaseModel):
     target_entity: str | None = None
 
     _validate_objective = field_validator("objective")(_require_non_empty)
-    _validate_target_artifact_id = field_validator("target_artifact_id")(_require_non_empty)
-    _validate_allowed_delta_type = field_validator("allowed_delta_type")(_require_non_empty)
-    _validate_success_condition = field_validator("success_condition")(_require_non_empty)
+    _validate_target_artifact_id = field_validator("target_artifact_id")(
+        _require_non_empty
+    )
+    _validate_allowed_delta_type = field_validator("allowed_delta_type")(
+        _require_non_empty
+    )
+    _validate_success_condition = field_validator("success_condition")(
+        _require_non_empty
+    )
 
 
 class SubGapSpec(BaseModel):
@@ -515,6 +533,7 @@ def apply_state_delta(state: State, delta: DeltaState) -> State:
 
 def validate_state_artifacts(state: State, registry: StateArtifactRegistry) -> State:
     """Validate all artifacts in State through their registered adapters and return the validated State."""
+
     def _validate_one(artifact: StateArtifact) -> StateArtifact:
         if isinstance(artifact, DocumentArtifact):
             return artifact
@@ -533,7 +552,9 @@ def validate_state_artifacts(state: State, registry: StateArtifactRegistry) -> S
             )
         return validated
 
-    validated_state_artifacts = tuple(_validate_one(artifact) for artifact in state.artifacts)
+    validated_state_artifacts = tuple(
+        _validate_one(artifact) for artifact in state.artifacts
+    )
 
     return State(
         artifacts=validated_state_artifacts,
@@ -542,9 +563,13 @@ def validate_state_artifacts(state: State, registry: StateArtifactRegistry) -> S
 
 def project_state(state: State, registry: StateArtifactRegistry) -> StateProjection:
     """Project each artifact in State to a non-empty text string and return a StateProjection."""
+
     def _project_one(artifact: StateArtifact) -> str:
         if isinstance(artifact, DocumentArtifact):
-            titles = ", ".join(section.title for section in artifact.sections) or "no sections"
+            titles = (
+                ", ".join(section.title for section in artifact.sections)
+                or "no sections"
+            )
             projection = f"document artifact: {artifact.id} ({titles})"
             if not projection.strip():
                 raise ValueError(

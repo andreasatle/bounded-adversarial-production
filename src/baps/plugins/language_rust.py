@@ -11,7 +11,9 @@ from baps.adapters.project_adapter import VerificationResult
 from baps.tools.sandbox import DOCKER_DAEMON_ERROR, is_docker_unavailable_error
 
 DOCKER_IMAGE = "baps-rust-indexer:latest"
-BUILD_CMD = "docker build -t baps-rust-indexer:latest -f docker/rust-indexer/Dockerfile ."
+BUILD_CMD = (
+    "docker build -t baps-rust-indexer:latest -f docker/rust-indexer/Dockerfile ."
+)
 
 
 _CARGO_TOML_CONTENT = """\
@@ -38,6 +40,7 @@ _GITIGNORE_CONTENT = "/target\n"
 
 class RustLanguagePlugin:
     """Represent the RustLanguagePlugin type."""
+
     name = "rust"
     docker_image = "rust:latest"
     test_command = "cargo test"
@@ -61,7 +64,9 @@ class RustLanguagePlugin:
 
         gitignore_path = project_path / ".gitignore"
         gitignore_before = (
-            gitignore_path.read_text(encoding="utf-8") if gitignore_path.exists() else None
+            gitignore_path.read_text(encoding="utf-8")
+            if gitignore_path.exists()
+            else None
         )
         if gitignore_before != _GITIGNORE_CONTENT:
             gitignore_path.write_text(_GITIGNORE_CONTENT, encoding="utf-8")
@@ -75,6 +80,7 @@ class RustLanguagePlugin:
             command, completed = self._run_bare(project_path)
         else:
             from baps.tools.sandbox import run_sandboxed
+
             command, completed = run_sandboxed(
                 project_path, sandbox_mode, self.test_command, self.docker_image
             )
@@ -91,7 +97,10 @@ class RustLanguagePlugin:
         """Handle run bare."""
         completed = subprocess.run(
             ["cargo", "test"],
-            cwd=project_path, capture_output=True, text=True, check=False,
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            check=False,
         )
         return "cargo test", completed
 
@@ -99,7 +108,10 @@ class RustLanguagePlugin:
         """Handle build."""
         result = subprocess.run(
             ["cargo", "build"],
-            cwd=project_path, capture_output=True, text=True, check=False,
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            check=False,
         )
         if result.returncode != 0:
             raise RuntimeError(
@@ -112,7 +124,7 @@ class RustLanguagePlugin:
         for line in stdout.splitlines():
             stripped = line.strip()
             if stripped.startswith("test ") and stripped.endswith("... FAILED"):
-                test_id = stripped[len("test "):-len("... FAILED")].strip()
+                test_id = stripped[len("test ") : -len("... FAILED")].strip()
                 failures.append({"test_id": test_id, "reason": ""})
         return failures
 
@@ -128,7 +140,8 @@ class RustLanguagePlugin:
         """Return public API surface: signatures and first doc lines, no bodies."""
         items = self._run_indexer(file)
         pub_items = [
-            it for it in items
+            it
+            for it in items
             if it["pub"] and it["kind"] in ("fn", "struct", "trait", "enum", "type")
         ]
         line_count = len(file.content.splitlines())
@@ -181,7 +194,11 @@ class RustLanguagePlugin:
             stderr = exc.stderr or ""
             if is_docker_unavailable_error(stderr):
                 raise RuntimeError(DOCKER_DAEMON_ERROR) from exc
-            if "Unable to find image" in stderr or "No such image" in stderr or "pull access denied" in stderr:
+            if (
+                "Unable to find image" in stderr
+                or "No such image" in stderr
+                or "pull access denied" in stderr
+            ):
                 raise RuntimeError(
                     f"RustLanguagePlugin: Docker image '{DOCKER_IMAGE}' not found.\n"
                     f"Build it with: {BUILD_CMD}"

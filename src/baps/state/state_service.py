@@ -45,4 +45,3 @@ class StateService:
     def states_differ(self, before: State, after: State) -> bool:
         """Return True if two States have different fingerprints."""
         return fingerprint_state(before) != fingerprint_state(after)
-

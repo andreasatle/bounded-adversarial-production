@@ -50,14 +50,12 @@ test "placeholder" {
 }
 """
 
-_GITIGNORE_CONTENT = (
-    ".zig-cache/\n"
-    "zig-out/\n"
-)
+_GITIGNORE_CONTENT = ".zig-cache/\nzig-out/\n"
 
 
 class ZigLanguagePlugin:
     """Represent the ZigLanguagePlugin type."""
+
     name = "zig"
     docker_image = "baps-zig:latest"
     test_command = "zig build test"
@@ -81,7 +79,9 @@ class ZigLanguagePlugin:
 
         gitignore_path = project_path / ".gitignore"
         gitignore_before = (
-            gitignore_path.read_text(encoding="utf-8") if gitignore_path.exists() else None
+            gitignore_path.read_text(encoding="utf-8")
+            if gitignore_path.exists()
+            else None
         )
         if gitignore_before != _GITIGNORE_CONTENT:
             gitignore_path.write_text(_GITIGNORE_CONTENT, encoding="utf-8")
@@ -95,6 +95,7 @@ class ZigLanguagePlugin:
             command, completed = self._run_bare(project_path)
         else:
             from baps.tools.sandbox import run_sandboxed
+
             command, completed = run_sandboxed(
                 project_path, sandbox_mode, self.test_command, self.docker_image
             )
@@ -111,7 +112,10 @@ class ZigLanguagePlugin:
         """Handle run bare."""
         completed = subprocess.run(
             ["zig", "build", "test"],
-            cwd=project_path, capture_output=True, text=True, check=False,
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            check=False,
         )
         return "zig build test", completed
 
@@ -124,7 +128,7 @@ class ZigLanguagePlugin:
         failures = []
         for line in stdout.splitlines():
             if line.startswith("FAIL "):
-                rest = line[len("FAIL "):]
+                rest = line[len("FAIL ") :]
                 failures.append({"test_id": rest.strip(), "reason": ""})
             elif line.startswith("error: ") and ":test." in line:
                 failures.append({"test_id": line.strip(), "reason": ""})
@@ -142,7 +146,8 @@ class ZigLanguagePlugin:
         """Return public API surface: signatures and first doc lines, no bodies."""
         items = self._run_indexer(file)
         pub_items = [
-            it for it in items
+            it
+            for it in items
             if it["pub"] and it["kind"] in ("fn", "struct", "enum", "union", "const")
         ]
         line_count = len(file.content.splitlines())
@@ -195,7 +200,11 @@ class ZigLanguagePlugin:
             stderr = exc.stderr or ""
             if is_docker_unavailable_error(stderr):
                 raise RuntimeError(DOCKER_DAEMON_ERROR) from exc
-            if "Unable to find image" in stderr or "No such image" in stderr or "pull access denied" in stderr:
+            if (
+                "Unable to find image" in stderr
+                or "No such image" in stderr
+                or "pull access denied" in stderr
+            ):
                 raise RuntimeError(
                     f"ZigLanguagePlugin: Docker image '{DOCKER_IMAGE}' not found.\n"
                     f"Build it with: {BUILD_CMD}"

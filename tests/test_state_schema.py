@@ -1,4 +1,5 @@
 """Schema validation tests for state models."""
+
 import pytest
 from pydantic import ValidationError
 
@@ -83,7 +84,9 @@ def test_delta_document_state_rejects_empty_artifact_id(bad_artifact_id: str) ->
         DeltaDocumentState(
             artifact_id=bad_artifact_id,
             operation="append_section",
-            payload=AppendSectionDelta(section=Section(title="Intro", body="Body text")),
+            payload=AppendSectionDelta(
+                section=Section(title="Intro", body="Body text")
+            ),
         )
 
 
@@ -93,7 +96,9 @@ def test_delta_document_state_rejects_empty_section_title(bad_title: str) -> Non
         DeltaDocumentState(
             artifact_id="main-document",
             operation="append_section",
-            payload=AppendSectionDelta(section=Section(title=bad_title, body="Body text")),
+            payload=AppendSectionDelta(
+                section=Section(title=bad_title, body="Body text")
+            ),
         )
 
 
@@ -134,6 +139,7 @@ def test_section_rejects_extra_fields() -> None:
 
 def test_section_rejects_oversized_body() -> None:
     from baps.state.state import _MAX_SECTION_BODY_BYTES
+
     with pytest.raises(ValidationError):
         Section(title="Intro", body="x" * (_MAX_SECTION_BODY_BYTES + 1))
 
@@ -150,12 +156,14 @@ def test_code_file_rejects_non_string_content() -> None:
 
 def test_code_file_rejects_oversized_path() -> None:
     from baps.state.state import _MAX_CODEFILE_PATH_BYTES
+
     with pytest.raises(ValidationError):
         CodeFile(path="a" * (_MAX_CODEFILE_PATH_BYTES + 1), content="")
 
 
 def test_code_file_rejects_oversized_content() -> None:
     from baps.state.state import _MAX_CODEFILE_CONTENT_BYTES
+
     with pytest.raises(ValidationError):
         CodeFile(path="src/main.py", content="x" * (_MAX_CODEFILE_CONTENT_BYTES + 1))
 
@@ -260,7 +268,9 @@ def test_play_game_runtime_defaults_current_best_delta_to_none() -> None:
     assert runtime.integration_eligible_delta is None
 
 
-def test_play_game_runtime_preserves_earlier_accepted_delta_when_later_candidate_rejected() -> None:
+def test_play_game_runtime_preserves_earlier_accepted_delta_when_later_candidate_rejected() -> (
+    None
+):
     accepted_delta = DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
@@ -276,22 +286,26 @@ def test_play_game_runtime_preserves_earlier_accepted_delta_when_later_candidate
     later_candidate = DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
-        payload=AppendSectionDelta(section=Section(title="Conclusion", body="Body text")),
+        payload=AppendSectionDelta(
+            section=Section(title="Conclusion", body="Body text")
+        ),
     )
     runtime_after_reject = apply_referee_decision_to_runtime(
         runtime=runtime,
         candidate_delta=later_candidate,
-        decision=RefereeDecision(disposition="reject", rationale="Reject later candidate"),
+        decision=RefereeDecision(
+            disposition="reject", rationale="Reject later candidate"
+        ),
     )
 
     assert runtime_after_reject.current_best_delta is not None
-    assert runtime_after_reject.current_best_delta.model_dump(mode="json") == accepted_delta.model_dump(
+    assert runtime_after_reject.current_best_delta.model_dump(
         mode="json"
-    )
+    ) == accepted_delta.model_dump(mode="json")
     assert runtime_after_reject.integration_eligible_delta is not None
-    assert runtime_after_reject.integration_eligible_delta.model_dump(mode="json") == accepted_delta.model_dump(
+    assert runtime_after_reject.integration_eligible_delta.model_dump(
         mode="json"
-    )
+    ) == accepted_delta.model_dump(mode="json")
 
 
 def test_apply_referee_decision_revise_does_not_set_current_best_delta() -> None:
@@ -303,7 +317,9 @@ def test_apply_referee_decision_revise_does_not_set_current_best_delta() -> None
     runtime = apply_referee_decision_to_runtime(
         runtime=PlayGameRuntime(),
         candidate_delta=candidate,
-        decision=RefereeDecision(disposition="revise", rationale="Promising but needs work."),
+        decision=RefereeDecision(
+            disposition="revise", rationale="Promising but needs work."
+        ),
     )
 
     assert runtime.current_best_delta is None
@@ -314,7 +330,9 @@ def test_apply_referee_decision_reject_discards_candidate_and_keeps_none() -> No
     candidate = DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
-        payload=AppendSectionDelta(section=Section(title="Bad", body="Wrong direction.")),
+        payload=AppendSectionDelta(
+            section=Section(title="Bad", body="Wrong direction.")
+        ),
     )
     runtime = apply_referee_decision_to_runtime(
         runtime=PlayGameRuntime(),
@@ -326,7 +344,9 @@ def test_apply_referee_decision_reject_discards_candidate_and_keeps_none() -> No
     assert runtime.integration_eligible_delta is None
 
 
-def test_apply_referee_decision_revise_then_reject_produces_no_accepted_candidate() -> None:
+def test_apply_referee_decision_revise_then_reject_produces_no_accepted_candidate() -> (
+    None
+):
     first_candidate = DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
@@ -352,11 +372,15 @@ def test_apply_referee_decision_revise_then_reject_produces_no_accepted_candidat
     assert runtime.integration_eligible_delta is None
 
 
-def test_apply_referee_decision_accept_then_revise_keeps_accepted_candidate_unchanged() -> None:
+def test_apply_referee_decision_accept_then_revise_keeps_accepted_candidate_unchanged() -> (
+    None
+):
     accepted_candidate = DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
-        payload=AppendSectionDelta(section=Section(title="Accepted", body="Accepted body.")),
+        payload=AppendSectionDelta(
+            section=Section(title="Accepted", body="Accepted body.")
+        ),
     )
     runtime = apply_referee_decision_to_runtime(
         runtime=PlayGameRuntime(),
@@ -366,19 +390,25 @@ def test_apply_referee_decision_accept_then_revise_keeps_accepted_candidate_unch
     revised_candidate = DeltaDocumentState(
         artifact_id="main-document",
         operation="append_section",
-        payload=AppendSectionDelta(section=Section(title="Revised", body="Needs work.")),
+        payload=AppendSectionDelta(
+            section=Section(title="Revised", body="Needs work.")
+        ),
     )
     runtime = apply_referee_decision_to_runtime(
         runtime=runtime,
         candidate_delta=revised_candidate,
-        decision=RefereeDecision(disposition="revise", rationale="Promising but not ready."),
+        decision=RefereeDecision(
+            disposition="revise", rationale="Promising but not ready."
+        ),
     )
     assert runtime.current_best_delta is not None
-    assert runtime.current_best_delta.model_dump(mode="json") == accepted_candidate.model_dump(mode="json")
-    assert runtime.integration_eligible_delta is not None
-    assert runtime.integration_eligible_delta.model_dump(mode="json") == accepted_candidate.model_dump(
+    assert runtime.current_best_delta.model_dump(
         mode="json"
-    )
+    ) == accepted_candidate.model_dump(mode="json")
+    assert runtime.integration_eligible_delta is not None
+    assert runtime.integration_eligible_delta.model_dump(
+        mode="json"
+    ) == accepted_candidate.model_dump(mode="json")
 
 
 def test_document_artifact_is_subclass_and_instance_of_state_artifact() -> None:

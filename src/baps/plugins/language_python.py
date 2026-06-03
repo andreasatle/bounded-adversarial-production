@@ -44,7 +44,7 @@ def _format_function_sig(
     result.append(f"{indent}{async_kw}def {node.name}({ast.unparse(node.args)}){ret}:")
     doc = ast.get_docstring(node)
     if doc is not None:
-        result.append(f"{indent}    \"\"\"{doc.splitlines()[0].strip()}\"\"\"")
+        result.append(f'{indent}    """{doc.splitlines()[0].strip()}"""')
     return result
 
 
@@ -67,7 +67,7 @@ def _parse_pytest_failures(stdout: str) -> list[dict[str, str]]:
     failures = []
     for line in stdout.splitlines():
         if line.startswith("FAILED "):
-            rest = line[len("FAILED "):]
+            rest = line[len("FAILED ") :]
             if " - " in rest:
                 test_id, reason = rest.split(" - ", 1)
             else:
@@ -78,6 +78,7 @@ def _parse_pytest_failures(stdout: str) -> list[dict[str, str]]:
 
 class PythonLanguagePlugin:
     """Represent the PythonLanguagePlugin type."""
+
     name = "python"
     docker_image = "python:3.12-slim"
     test_command = "pip install pytest -q 2>/dev/null && python -m pytest"
@@ -89,7 +90,9 @@ class PythonLanguagePlugin:
 
         conftest_path = project_path / "conftest.py"
         conftest_before = (
-            conftest_path.read_text(encoding="utf-8") if conftest_path.exists() else None
+            conftest_path.read_text(encoding="utf-8")
+            if conftest_path.exists()
+            else None
         )
         if conftest_before != _CONFTEST_CONTENT:
             conftest_path.write_text(_CONFTEST_CONTENT, encoding="utf-8")
@@ -97,7 +100,9 @@ class PythonLanguagePlugin:
 
         gitignore_path = project_path / ".gitignore"
         gitignore_before = (
-            gitignore_path.read_text(encoding="utf-8") if gitignore_path.exists() else None
+            gitignore_path.read_text(encoding="utf-8")
+            if gitignore_path.exists()
+            else None
         )
         if gitignore_before != _GITIGNORE_CONTENT:
             gitignore_path.write_text(_GITIGNORE_CONTENT, encoding="utf-8")
@@ -111,6 +116,7 @@ class PythonLanguagePlugin:
             command, completed = self._run_bare(project_path)
         else:
             from baps.tools.sandbox import run_sandboxed
+
             command, completed = run_sandboxed(
                 project_path, sandbox_mode, self.test_command, self.docker_image
             )
@@ -131,13 +137,19 @@ class PythonLanguagePlugin:
         try:
             completed = subprocess.run(
                 ["uv", "run", "pytest"],
-                cwd=project_path, capture_output=True, text=True, check=False,
+                cwd=project_path,
+                capture_output=True,
+                text=True,
+                check=False,
             )
             return "uv run pytest", completed
         except FileNotFoundError:
             completed = subprocess.run(
                 [sys.executable, "-m", "pytest"],
-                cwd=project_path, capture_output=True, text=True, check=False,
+                cwd=project_path,
+                capture_output=True,
+                text=True,
+                check=False,
             )
             return f"{sys.executable} -m pytest", completed
 
@@ -151,10 +163,7 @@ class PythonLanguagePlugin:
 
     def has_tests(self, file_paths: Sequence[str]) -> bool:
         """Return whether the object has tests."""
-        return any(
-            p.startswith("tests/") or p.startswith("test_")
-            for p in file_paths
-        )
+        return any(p.startswith("tests/") or p.startswith("test_") for p in file_paths)
 
     def supported_filters(self) -> list[str]:
         """Return supported values for ed filters."""
@@ -175,7 +184,8 @@ class PythonLanguagePlugin:
             lines.append("")
 
         import_lines = [
-            ast.unparse(n) for n in tree.body
+            ast.unparse(n)
+            for n in tree.body
             if isinstance(n, (ast.Import, ast.ImportFrom))
         ]
         if import_lines:
@@ -185,7 +195,9 @@ class PythonLanguagePlugin:
         for node in tree.body:
             if isinstance(node, ast.ClassDef):
                 bases = ", ".join(ast.unparse(b) for b in node.bases)
-                lines.append("class " + node.name + (f"({bases})" if bases else "") + ":")
+                lines.append(
+                    "class " + node.name + (f"({bases})" if bases else "") + ":"
+                )
                 cls_doc = ast.get_docstring(node)
                 if cls_doc is not None:
                     lines.append(f'    """{cls_doc.splitlines()[0].strip()}"""')
@@ -236,15 +248,20 @@ class PythonLanguagePlugin:
 
         if target is None:
             available = [
-                n.name for n in tree.body
+                n.name
+                for n in tree.body
                 if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
             ]
-            available_str = ", ".join(f"'{n}'" for n in available) if available else "(none)"
-            return f"Entity '{entity_id}' not found. Available entities: {available_str}"
+            available_str = (
+                ", ".join(f"'{n}'" for n in available) if available else "(none)"
+            )
+            return (
+                f"Entity '{entity_id}' not found. Available entities: {available_str}"
+            )
 
         if filter in (None, "full"):
             src_lines = file.content.splitlines()
-            return "\n".join(src_lines[target.lineno - 1:target.end_lineno])
+            return "\n".join(src_lines[target.lineno - 1 : target.end_lineno])
 
         if filter == "api":
             if isinstance(target, ast.ClassDef):

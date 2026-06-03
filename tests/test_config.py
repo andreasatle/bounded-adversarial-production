@@ -7,7 +7,9 @@ import pytest
 from baps.core.run import main
 
 
-def test_main_cli_config_resolves_and_prints(monkeypatch, capsys, tmp_path: Path) -> None:
+def test_main_cli_config_resolves_and_prints(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
     workspace = tmp_path / "custom-ws"
     output = "custom/report.md"
     monkeypatch.setattr(
@@ -19,7 +21,9 @@ def test_main_cli_config_resolves_and_prints(monkeypatch, capsys, tmp_path: Path
             str(workspace),
             "--project-type",
             "document",
-            "--artifact-id", "main-document", "--goal",
+            "--artifact-id",
+            "main-document",
+            "--goal",
             "Custom goal",
             "--output",
             output,
@@ -38,7 +42,9 @@ def test_main_cli_config_resolves_and_prints(monkeypatch, capsys, tmp_path: Path
     assert "max_iterations=3" in out
 
 
-def test_main_yaml_spec_resolves_and_prints(monkeypatch, capsys, tmp_path: Path) -> None:
+def test_main_yaml_spec_resolves_and_prints(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
     workspace = tmp_path / "ws-from-spec"
     spec = tmp_path / "config.yaml"
     spec.write_text(
@@ -116,7 +122,9 @@ def test_main_cli_overrides_yaml(monkeypatch, capsys, tmp_path: Path) -> None:
             str(cli_workspace),
             "--project-type",
             "document",
-            "--artifact-id", "main-document", "--goal",
+            "--artifact-id",
+            "main-document",
+            "--goal",
             "CLI goal",
             "--output",
             "from-cli.md",
@@ -135,7 +143,9 @@ def test_main_cli_overrides_yaml(monkeypatch, capsys, tmp_path: Path) -> None:
     assert "max_iterations=2" in out
 
 
-def test_output_path_absolute_remains_absolute(monkeypatch, capsys, tmp_path: Path) -> None:
+def test_output_path_absolute_remains_absolute(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
     workspace = tmp_path / "ws"
     absolute_output = tmp_path / "abs" / "report.md"
     monkeypatch.setattr(
@@ -147,9 +157,12 @@ def test_output_path_absolute_remains_absolute(monkeypatch, capsys, tmp_path: Pa
             str(workspace),
             "--project-type",
             "document",
-            "--artifact-id", "main-document",
-            "--goal", "Write a report.",
-            "--output", str(absolute_output),
+            "--artifact-id",
+            "main-document",
+            "--goal",
+            "Write a report.",
+            "--output",
+            str(absolute_output),
         ],
     )
 
@@ -162,39 +175,101 @@ def test_output_path_absolute_remains_absolute(monkeypatch, capsys, tmp_path: Pa
     ("argv", "error_substring"),
     [
         (
-            ["baps-run", "start", "--project-type", "document", "--artifact-id", "main-document",
-             "--goal", "Write a report.", "--output", "output/report.md", "--max-iterations", "0"],
+            [
+                "baps-run",
+                "start",
+                "--project-type",
+                "document",
+                "--artifact-id",
+                "main-document",
+                "--goal",
+                "Write a report.",
+                "--output",
+                "output/report.md",
+                "--max-iterations",
+                "0",
+            ],
             "max_iterations must be >= 1",
         ),
         (["baps-run", "start"], "project_type must be non-empty"),
         (
-            ["baps-run", "start", "--project-type", "document", "--artifact-id", "main-document",
-             "--output", "output/report.md", "--goal", "   "],
+            [
+                "baps-run",
+                "start",
+                "--project-type",
+                "document",
+                "--artifact-id",
+                "main-document",
+                "--output",
+                "output/report.md",
+                "--goal",
+                "   ",
+            ],
             "goal must be non-empty",
         ),
         (
-            ["baps-run", "start", "--project-type", "document", "--artifact-id", "main-document",
-             "--goal", "Write a report.", "--output", "output/report.md", "--workspace", "   "],
+            [
+                "baps-run",
+                "start",
+                "--project-type",
+                "document",
+                "--artifact-id",
+                "main-document",
+                "--goal",
+                "Write a report.",
+                "--output",
+                "output/report.md",
+                "--workspace",
+                "   ",
+            ],
             "workspace must be non-empty",
         ),
         (
-            ["baps-run", "start", "--project-type", "document", "--artifact-id", "main-document",
-             "--goal", "Write a report.", "--output", "   "],
+            [
+                "baps-run",
+                "start",
+                "--project-type",
+                "document",
+                "--artifact-id",
+                "main-document",
+                "--goal",
+                "Write a report.",
+                "--output",
+                "   ",
+            ],
             "output must be non-empty",
         ),
         (
-            ["baps-run", "start", "--project-type", "document", "--artifact-id", "main-document",
-             "--output", "output/report.md"],
+            [
+                "baps-run",
+                "start",
+                "--project-type",
+                "document",
+                "--artifact-id",
+                "main-document",
+                "--output",
+                "output/report.md",
+            ],
             "goal is required",
         ),
         (
-            ["baps-run", "start", "--project-type", "document", "--artifact-id", "main-document",
-             "--goal", "Write a report."],
+            [
+                "baps-run",
+                "start",
+                "--project-type",
+                "document",
+                "--artifact-id",
+                "main-document",
+                "--goal",
+                "Write a report.",
+            ],
             "output is required",
         ),
     ],
 )
-def test_invalid_config_fails_cleanly(monkeypatch, caplog, tmp_path, argv: list[str], error_substring: str) -> None:
+def test_invalid_config_fails_cleanly(
+    monkeypatch, caplog, tmp_path, argv: list[str], error_substring: str
+) -> None:
     # Inject a fresh --workspace so the test doesn't pick up real workspace config
     # when no workspace or spec is specified.
     if "--workspace" not in argv and "--spec" not in argv:
@@ -210,11 +285,29 @@ def test_invalid_config_fails_cleanly(monkeypatch, caplog, tmp_path, argv: list[
     ("argv", "error_substring"),
     [
         (
-            ["baps-run", "start", "--project-type", "git", "--goal", "g", "--output", "o/o.md"],
+            [
+                "baps-run",
+                "start",
+                "--project-type",
+                "git",
+                "--goal",
+                "g",
+                "--output",
+                "o/o.md",
+            ],
             "project_type 'git' is not implemented",
         ),
         (
-            ["baps-run", "start", "--project-type", "unknown", "--goal", "g", "--output", "o/o.md"],
+            [
+                "baps-run",
+                "start",
+                "--project-type",
+                "unknown",
+                "--goal",
+                "g",
+                "--output",
+                "o/o.md",
+            ],
             "unknown project_type: unknown",
         ),
     ],
@@ -266,7 +359,9 @@ def test_resolve_config_reads_artifact_id_and_northstar_and_create_state_uses_ar
     assert state.artifacts[0].id == "doc-7"
 
 
-def test_required_sections_top_level_is_rejected_in_config(monkeypatch, caplog, tmp_path: Path) -> None:
+def test_required_sections_top_level_is_rejected_in_config(
+    monkeypatch, caplog, tmp_path: Path
+) -> None:
     spec = tmp_path / "bad-required-sections.yaml"
     spec.write_text(
         "\n".join(
@@ -301,7 +396,9 @@ def test_spec_file_unknown_key_raises(monkeypatch, caplog, tmp_path: Path) -> No
     assert "max_iteration" in caplog.text
 
 
-def test_spec_file_multiple_unknown_keys_all_reported(monkeypatch, caplog, tmp_path: Path) -> None:
+def test_spec_file_multiple_unknown_keys_all_reported(
+    monkeypatch, caplog, tmp_path: Path
+) -> None:
     spec = tmp_path / "multi-bad-keys.yaml"
     spec.write_text(
         "project_type: document\nartifact_id: main-document\ntypo_a: x\ntypo_b: y\n",
@@ -318,15 +415,17 @@ def test_spec_file_multiple_unknown_keys_all_reported(monkeypatch, caplog, tmp_p
 def test_spec_file_all_known_keys_accepted(monkeypatch, capsys, tmp_path: Path) -> None:
     spec = tmp_path / "all-known-keys.yaml"
     spec.write_text(
-        "\n".join([
-            "workspace: " + str(tmp_path / "ws"),
-            "project_type: document",
-            "artifact_id: main-document",
-            "northstar_markdown: '# Goal'",
-            "goal: Write a report.",
-            "output: output/report.md",
-            "max_iterations: 1",
-        ]),
+        "\n".join(
+            [
+                "workspace: " + str(tmp_path / "ws"),
+                "project_type: document",
+                "artifact_id: main-document",
+                "northstar_markdown: '# Goal'",
+                "goal: Write a report.",
+                "output: output/report.md",
+                "max_iterations: 1",
+            ]
+        ),
         encoding="utf-8",
     )
     monkeypatch.setattr("sys.argv", ["baps-run", "start", "--spec", str(spec)])
@@ -350,7 +449,9 @@ def test_spec_file_required_sections_still_gets_specific_error(
     assert "required_sections is no longer supported" in caplog.text
 
 
-def test_spec_relative_path_resolves_from_cwd(monkeypatch, capsys, tmp_path: Path) -> None:
+def test_spec_relative_path_resolves_from_cwd(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
     spec = tmp_path / "config.yaml"
     workspace = tmp_path / "from-relative-spec"
     spec.write_text(
@@ -366,7 +467,9 @@ def test_spec_relative_path_resolves_from_cwd(monkeypatch, capsys, tmp_path: Pat
     assert f"workspace={workspace}" in out
 
 
-def test_debug_enabled_prints_read_config_input_output(monkeypatch, caplog, tmp_path: Path) -> None:
+def test_debug_enabled_prints_read_config_input_output(
+    monkeypatch, caplog, tmp_path: Path
+) -> None:
     workspace = tmp_path / "debug-ws"
     spec = tmp_path / "debug-config.yaml"
     spec.write_text(
@@ -402,8 +505,11 @@ def test_debug_enabled_prints_read_config_input_output(monkeypatch, caplog, tmp_
     assert "{'cli_args':" not in caplog.text
 
 
-def test_examples_document_project_yaml_still_passes(monkeypatch, capsys, tmp_path: Path) -> None:
+def test_examples_document_project_yaml_still_passes(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
     import baps.core.run as run_module
+
     workspace = tmp_path / "example-doc-ws"
     monkeypatch.setattr(
         "sys.argv",
@@ -430,14 +536,16 @@ def test_start_cli_args_override_workspace_config(
     workspace = tmp_path / "ws-override"
     spec = tmp_path / "init-spec.yaml"
     spec.write_text(
-        "\n".join([
-            f"workspace: {workspace}",
-            "project_type: document",
-            "artifact_id: main-document",
-            "goal: Original goal.",
-            "northstar_markdown: '# NorthStar\\n\\nWrite a report.'",
-            "output: output/report.md",
-        ]),
+        "\n".join(
+            [
+                f"workspace: {workspace}",
+                "project_type: document",
+                "artifact_id: main-document",
+                "goal: Original goal.",
+                "northstar_markdown: '# NorthStar\\n\\nWrite a report.'",
+                "output: output/report.md",
+            ]
+        ),
         encoding="utf-8",
     )
     monkeypatch.setattr("sys.argv", ["baps-run", "start", "--spec", str(spec)])
@@ -447,10 +555,14 @@ def test_start_cli_args_override_workspace_config(
     monkeypatch.setattr(
         "sys.argv",
         [
-            "baps-run", "start",
-            "--workspace", str(workspace),
-            "--goal", "Overridden goal.",
-            "--max-iterations", "1",
+            "baps-run",
+            "start",
+            "--workspace",
+            str(workspace),
+            "--goal",
+            "Overridden goal.",
+            "--max-iterations",
+            "1",
         ],
     )
     run_module.main()
@@ -473,7 +585,10 @@ def test_coding_example_output_path_resolves_under_workspace() -> None:
     )
     config = run_module.resolve_run_config(args)
     assert config["workspace"] == Path(".baps-workspace/coding-project")
-    assert config["output_path"] == Path(".baps-workspace/coding-project/output/project").resolve()
+    assert (
+        config["output_path"]
+        == Path(".baps-workspace/coding-project/output/project").resolve()
+    )
 
 
 def test_resolve_run_config_max_sub_gaps_defaults_to_5(tmp_path: Path) -> None:

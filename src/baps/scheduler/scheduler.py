@@ -33,20 +33,20 @@ _DEFAULT_SPECS = [
 # Referenced by short name in BAPS_MODEL_LADDER.
 _KNOWN_MODELS: dict[str, ModelConfig] = {
     # Anthropic
-    "haiku":       ModelConfig("haiku",       Backend.ANTHROPIC, "claude-haiku-4-5-20251001"),
-    "sonnet":      ModelConfig("sonnet",      Backend.ANTHROPIC, "claude-sonnet-4-6"),
-    "opus":        ModelConfig("opus",        Backend.ANTHROPIC, "claude-opus-4-7"),
+    "haiku": ModelConfig("haiku", Backend.ANTHROPIC, "claude-haiku-4-5-20251001"),
+    "sonnet": ModelConfig("sonnet", Backend.ANTHROPIC, "claude-sonnet-4-6"),
+    "opus": ModelConfig("opus", Backend.ANTHROPIC, "claude-opus-4-7"),
     # OpenAI
-    "gpt-4o-mini": ModelConfig("gpt-4o-mini", Backend.OPENAI,    "gpt-4o-mini"),
-    "gpt-4o":      ModelConfig("gpt-4o",      Backend.OPENAI,    "gpt-4o"),
+    "gpt-4o-mini": ModelConfig("gpt-4o-mini", Backend.OPENAI, "gpt-4o-mini"),
+    "gpt-4o": ModelConfig("gpt-4o", Backend.OPENAI, "gpt-4o"),
     # Ollama (local)
-    "deepseek":    ModelConfig("deepseek",    Backend.OLLAMA,    "deepseek-r1:7b"),
-    "llama3":      ModelConfig("llama3",      Backend.OLLAMA,    "llama3.1:8b"),
-    "qwen-coder":  ModelConfig("qwen-coder",  Backend.OLLAMA,    "qwen2.5-coder:7b"),
-    "phi3":        ModelConfig("phi3",        Backend.OLLAMA,    "phi3:14b"),
-    "gemma3":      ModelConfig("gemma3",      Backend.OLLAMA,    "gemma3:latest"),
-    "gemma4-e4b":  ModelConfig("gemma4-e4b",  Backend.OLLAMA,    "gemma4:e4b"),
-    "gemma4-26b":  ModelConfig("gemma4-26b",  Backend.OLLAMA,    "gemma4:26b"),
+    "deepseek": ModelConfig("deepseek", Backend.OLLAMA, "deepseek-r1:7b"),
+    "llama3": ModelConfig("llama3", Backend.OLLAMA, "llama3.1:8b"),
+    "qwen-coder": ModelConfig("qwen-coder", Backend.OLLAMA, "qwen2.5-coder:7b"),
+    "phi3": ModelConfig("phi3", Backend.OLLAMA, "phi3:14b"),
+    "gemma3": ModelConfig("gemma3", Backend.OLLAMA, "gemma3:latest"),
+    "gemma4-e4b": ModelConfig("gemma4-e4b", Backend.OLLAMA, "gemma4:e4b"),
+    "gemma4-26b": ModelConfig("gemma4-26b", Backend.OLLAMA, "gemma4:26b"),
 }
 
 _ANTHROPIC_LADDER = ("haiku", "sonnet", "opus")
@@ -81,9 +81,13 @@ def _default_model_ladder() -> list[ModelConfig]:
         if name in _KNOWN_MODELS:
             ladder.append(_known_model(name))
         else:
-            print(f"[scheduler] warning: unknown model name {name!r} in BAPS_MODEL_LADDER, skipping")
+            print(
+                f"[scheduler] warning: unknown model name {name!r} in BAPS_MODEL_LADDER, skipping"
+            )
     if not ladder:
-        print("[scheduler] warning: BAPS_MODEL_LADDER produced no valid models, using auto-detect")
+        print(
+            "[scheduler] warning: BAPS_MODEL_LADDER produced no valid models, using auto-detect"
+        )
         return _auto_ladder()
     return ladder
 
@@ -110,9 +114,14 @@ async def _run_baps(
 ) -> dict:
     """Run baps-run asynchronously for the given spec and model, returning the run-result dict."""
     proc = await asyncio.create_subprocess_exec(
-        "uv", "run", "baps-run", command,
-        "--spec", spec,
-        "--workspace", str(workspace),
+        "uv",
+        "run",
+        "baps-run",
+        command,
+        "--spec",
+        spec,
+        "--workspace",
+        str(workspace),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
         env=_env_for_model(model),
@@ -176,8 +185,10 @@ async def _run_spec(
             command = "run"
 
 
-_SCORE_FLOOR = 0.2       # models scoring below this after min_runs are dropped from the ladder
-_FLOOR_MIN_RUNS = 5      # minimum runs before a model is eligible for floor-dropping
+_SCORE_FLOOR = (
+    0.2  # models scoring below this after min_runs are dropped from the ladder
+)
+_FLOOR_MIN_RUNS = 5  # minimum runs before a model is eligible for floor-dropping
 
 
 def _drop_underperformers(policy: ModelPolicy) -> list[str]:
@@ -201,33 +212,49 @@ def _print_summary(policy: ModelPolicy) -> None:
     for m in policy.models:
         s = policy._stats[m.name]
         lines.append(f"  {m.name:16s}  score={s.score:.3f}  runs={s.runs}")
-    lines.append(f"  temperature={policy.temperature:.3f}  total_runs={policy.total_runs}")
+    lines.append(
+        f"  temperature={policy.temperature:.3f}  total_runs={policy.total_runs}"
+    )
     logger.info("\n".join(lines))
 
 
 def main() -> None:
     """CLI entry point for the adaptive baps scheduler: run specs across a model ladder for N rounds."""
     from dotenv import load_dotenv
+
     load_dotenv()
     _log_level = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
-    logging.basicConfig(level=_log_level, format="%(asctime)s %(levelname)-5s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    logging.basicConfig(
+        level=_log_level,
+        format="%(asctime)s %(levelname)-5s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 
     parser = argparse.ArgumentParser(description="Adaptive baps scheduler.")
-    parser.add_argument("specs", nargs="*", help="YAML spec paths (default: examples/*.yaml).")
     parser.add_argument(
-        "--concurrency", type=int, default=_DEFAULT_CONCURRENCY,
+        "specs", nargs="*", help="YAML spec paths (default: examples/*.yaml)."
+    )
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=_DEFAULT_CONCURRENCY,
         help="Max concurrent runs.",
     )
     parser.add_argument(
-        "--escalation-threshold", type=float, default=_DEFAULT_ESCALATION_THRESHOLD,
+        "--escalation-threshold",
+        type=float,
+        default=_DEFAULT_ESCALATION_THRESHOLD,
         help="Reward below this triggers escalation to a stronger model.",
     )
     parser.add_argument(
-        "--policy", default=str(_DEFAULT_POLICY_PATH),
+        "--policy",
+        default=str(_DEFAULT_POLICY_PATH),
         help="Path to policy state JSON.",
     )
     parser.add_argument(
-        "--rounds", type=int, default=1,
+        "--rounds",
+        type=int,
+        default=1,
         help="Number of rounds to run each spec (reloads ladder from BAPS_MODEL_LADDER each round).",
     )
     args = parser.parse_args()
@@ -236,7 +263,11 @@ def main() -> None:
     policy_path = Path(args.policy).resolve()
     if not policy_path.is_relative_to(Path.cwd().resolve()):
         import sys as _sys
-        logger.error("[scheduler] --policy path must be within the current directory: %s", policy_path)
+
+        logger.error(
+            "[scheduler] --policy path must be within the current directory: %s",
+            policy_path,
+        )
         _sys.exit(1)
     policy_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -244,11 +275,20 @@ def main() -> None:
     policy = ModelPolicy(models)
     policy.load_stats(policy_path)
 
-    logger.info("[scheduler] backend=%s", os.getenv('BAPS_BACKEND', 'ollama'))
+    logger.info("[scheduler] backend=%s", os.getenv("BAPS_BACKEND", "ollama"))
     logger.info("[scheduler] ladder=%s", [m.name for m in models])
-    logger.info("[scheduler] concurrency=%d  threshold=%s  rounds=%d", args.concurrency, args.escalation_threshold, args.rounds)
+    logger.info(
+        "[scheduler] concurrency=%d  threshold=%s  rounds=%d",
+        args.concurrency,
+        args.escalation_threshold,
+        args.rounds,
+    )
     logger.info("[scheduler] specs=%s", specs)
-    logger.info("[scheduler] temperature=%.3f  total_runs=%d", policy.temperature, policy.total_runs)
+    logger.info(
+        "[scheduler] temperature=%.3f  total_runs=%d",
+        policy.temperature,
+        policy.total_runs,
+    )
 
     semaphore = asyncio.Semaphore(args.concurrency)
 
@@ -259,22 +299,26 @@ def main() -> None:
             models = _default_model_ladder()
             policy = ModelPolicy(models)
             policy.load_stats(policy_path)
-            print(f"\n[scheduler] round {round_num}/{args.rounds}  ladder={[m.name for m in policy.models]}")
+            print(
+                f"\n[scheduler] round {round_num}/{args.rounds}  ladder={[m.name for m in policy.models]}"
+            )
         else:
             print(f"\n[scheduler] round 1/1  ladder={[m.name for m in policy.models]}")
 
         async def _run_all() -> None:
-            await asyncio.gather(*[
-                _run_spec(
-                    spec,
-                    policy,
-                    Path(f".baps-workspace/{Path(spec).stem}"),
-                    semaphore,
-                    args.escalation_threshold,
-                    policy_path,
-                )
-                for spec in specs
-            ])
+            await asyncio.gather(
+                *[
+                    _run_spec(
+                        spec,
+                        policy,
+                        Path(f".baps-workspace/{Path(spec).stem}"),
+                        semaphore,
+                        args.escalation_threshold,
+                        policy_path,
+                    )
+                    for spec in specs
+                ]
+            )
 
         asyncio.run(_run_all())
 

@@ -1,4 +1,5 @@
 """Tests for state mutation, registry, fingerprint, validation, and projection."""
+
 import pytest
 
 from baps.state.state import (
@@ -129,8 +130,7 @@ def test_find_state_artifact_finds_ordinary_state_artifact() -> None:
 def test_find_state_artifact_rejects_empty_or_whitespace_artifact_id(
     bad_artifact_id: str,
 ) -> None:
-    state = State(
-    )
+    state = State()
     with pytest.raises(ValueError, match="non-empty string"):
         find_state_artifact(state, bad_artifact_id)
 
@@ -153,7 +153,10 @@ def test_build_default_registry_adapters_validate_artifacts_unchanged() -> None:
     registry = build_default_state_artifact_registry()
     document_artifact = StateArtifact(id="doc-1", kind="document")
 
-    assert registry.resolve("document").validate_artifact(document_artifact) is document_artifact
+    assert (
+        registry.resolve("document").validate_artifact(document_artifact)
+        is document_artifact
+    )
 
 
 def test_build_default_registry_adapters_project_deterministic_strings() -> None:
@@ -186,7 +189,10 @@ def test_modifying_one_default_registry_does_not_affect_another() -> None:
     second = build_default_state_artifact_registry()
     first.register(CustomAdapter())
 
-    assert first.resolve("custom").project_artifact(StateArtifact(id="x", kind="custom")) == "custom artifact: x"
+    assert (
+        first.resolve("custom").project_artifact(StateArtifact(id="x", kind="custom"))
+        == "custom artifact: x"
+    )
     with pytest.raises(ValueError, match="unknown artifact kind"):
         second.resolve("custom")
 

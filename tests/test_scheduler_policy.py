@@ -13,6 +13,7 @@ from baps.scheduler.scheduler_policy import ModelConfig, ModelPolicy, compute_re
 # compute_reward
 # ---------------------------------------------------------------------------
 
+
 def test_reward_no_state_change_with_passing_verification() -> None:
     result = {"stop_reason": "no_state_change", "verification_passed": True}
     assert compute_reward(result) == pytest.approx(1.0)
@@ -66,9 +67,10 @@ def test_reward_missing_fields_does_not_raise() -> None:
 # ModelPolicy construction
 # ---------------------------------------------------------------------------
 
+
 def _two_models() -> list[ModelConfig]:
     return [
-        ModelConfig("cheap",  Backend.ANTHROPIC, "claude-haiku-4-5-20251001"),
+        ModelConfig("cheap", Backend.ANTHROPIC, "claude-haiku-4-5-20251001"),
         ModelConfig("strong", Backend.ANTHROPIC, "claude-sonnet-4-6"),
     ]
 
@@ -89,6 +91,7 @@ def test_policy_initial_scores_are_neutral() -> None:
 # ---------------------------------------------------------------------------
 # ModelPolicy.select
 # ---------------------------------------------------------------------------
+
 
 def test_policy_select_returns_a_model_from_the_ladder() -> None:
     policy = ModelPolicy(_two_models())
@@ -116,6 +119,7 @@ def test_policy_select_is_uniform_at_equal_scores() -> None:
 # ---------------------------------------------------------------------------
 # ModelPolicy.update (EMA)
 # ---------------------------------------------------------------------------
+
 
 def test_policy_update_increases_score_on_high_reward() -> None:
     policy = ModelPolicy(_two_models())
@@ -162,6 +166,7 @@ def test_policy_update_ignores_unknown_model() -> None:
 # ModelPolicy.escalate_from
 # ---------------------------------------------------------------------------
 
+
 def test_escalate_from_returns_next_model() -> None:
     policy = ModelPolicy(_two_models())
     result = policy.escalate_from(policy.models[0])
@@ -178,6 +183,7 @@ def test_escalate_from_top_returns_none() -> None:
 # ModelPolicy.temperature
 # ---------------------------------------------------------------------------
 
+
 def test_temperature_decreases_with_runs() -> None:
     policy = ModelPolicy(_two_models())
     t0 = policy.temperature
@@ -189,6 +195,7 @@ def test_temperature_decreases_with_runs() -> None:
 # ---------------------------------------------------------------------------
 # ModelPolicy.save / load_stats
 # ---------------------------------------------------------------------------
+
 
 def test_policy_save_and_load_roundtrip(tmp_path: Path) -> None:
     policy = ModelPolicy(_two_models())
@@ -202,7 +209,9 @@ def test_policy_save_and_load_roundtrip(tmp_path: Path) -> None:
     assert policy2.total_runs == 2
     assert policy2._stats["cheap"].runs == 1
     snap = policy2.snapshot()
-    assert snap["cheap"]["score"] == pytest.approx(policy._stats["cheap"].score, abs=1e-4)
+    assert snap["cheap"]["score"] == pytest.approx(
+        policy._stats["cheap"].score, abs=1e-4
+    )
 
 
 def test_policy_load_stats_no_op_when_file_missing(tmp_path: Path) -> None:
@@ -213,10 +222,15 @@ def test_policy_load_stats_no_op_when_file_missing(tmp_path: Path) -> None:
 
 def test_policy_load_ignores_unknown_model_names(tmp_path: Path) -> None:
     path = tmp_path / "policy.json"
-    path.write_text(json.dumps({
-        "total_runs": 5,
-        "stats": {"ghost": {"score": 0.9, "runs": 5}},
-    }), encoding="utf-8")
+    path.write_text(
+        json.dumps(
+            {
+                "total_runs": 5,
+                "stats": {"ghost": {"score": 0.9, "runs": 5}},
+            }
+        ),
+        encoding="utf-8",
+    )
     policy = ModelPolicy(_two_models())
     policy.load_stats(path)
     assert policy.total_runs == 5

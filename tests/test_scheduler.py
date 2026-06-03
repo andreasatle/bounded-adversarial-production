@@ -23,6 +23,7 @@ from baps.scheduler.scheduler_policy import ModelConfig, ModelPolicy
 # _env_for_model
 # ---------------------------------------------------------------------------
 
+
 def test_env_for_model_anthropic() -> None:
     model = ModelConfig("sonnet", Backend.ANTHROPIC, "claude-sonnet-4-6")
     env = _env_for_model(model)
@@ -46,7 +47,9 @@ def test_env_for_model_ollama() -> None:
 
 def test_env_for_model_inherits_existing_env() -> None:
     with patch.dict(os.environ, {"MY_CUSTOM_VAR": "hello"}):
-        env = _env_for_model(ModelConfig("sonnet", Backend.ANTHROPIC, "claude-sonnet-4-6"))
+        env = _env_for_model(
+            ModelConfig("sonnet", Backend.ANTHROPIC, "claude-sonnet-4-6")
+        )
     assert env["MY_CUSTOM_VAR"] == "hello"
 
 
@@ -59,6 +62,7 @@ def test_env_for_model_does_not_mutate_os_environ() -> None:
 # ---------------------------------------------------------------------------
 # _auto_ladder
 # ---------------------------------------------------------------------------
+
 
 def test_auto_ladder_anthropic_only() -> None:
     with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "key"}, clear=True):
@@ -75,7 +79,9 @@ def test_auto_ladder_openai_only() -> None:
 
 
 def test_auto_ladder_both_keys_includes_all() -> None:
-    with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "k1", "OPENAI_API_KEY": "k2"}, clear=True):
+    with patch.dict(
+        os.environ, {"ANTHROPIC_API_KEY": "k1", "OPENAI_API_KEY": "k2"}, clear=True
+    ):
         ladder = _auto_ladder()
     names = [m.name for m in ladder]
     assert "haiku" in names and "gpt-4o" in names
@@ -92,6 +98,7 @@ def test_auto_ladder_falls_back_to_sonnet_when_no_keys() -> None:
 # _default_model_ladder
 # ---------------------------------------------------------------------------
 
+
 def test_default_model_ladder_reads_env_var() -> None:
     with patch.dict(os.environ, {"BAPS_MODEL_LADDER": "haiku,sonnet"}, clear=True):
         ladder = _default_model_ladder()
@@ -99,7 +106,9 @@ def test_default_model_ladder_reads_env_var() -> None:
 
 
 def test_default_model_ladder_skips_unknown_names() -> None:
-    with patch.dict(os.environ, {"BAPS_MODEL_LADDER": "haiku,does-not-exist,sonnet"}, clear=True):
+    with patch.dict(
+        os.environ, {"BAPS_MODEL_LADDER": "haiku,does-not-exist,sonnet"}, clear=True
+    ):
         ladder = _default_model_ladder()
     names = [m.name for m in ladder]
     assert "does-not-exist" not in names
@@ -107,7 +116,11 @@ def test_default_model_ladder_skips_unknown_names() -> None:
 
 
 def test_default_model_ladder_falls_back_when_all_unknown() -> None:
-    with patch.dict(os.environ, {"BAPS_MODEL_LADDER": "nonexistent", "ANTHROPIC_API_KEY": "k"}, clear=True):
+    with patch.dict(
+        os.environ,
+        {"BAPS_MODEL_LADDER": "nonexistent", "ANTHROPIC_API_KEY": "k"},
+        clear=True,
+    ):
         ladder = _default_model_ladder()
     # falls back to _auto_ladder → anthropic models
     assert any(m.backend == Backend.ANTHROPIC for m in ladder)
@@ -115,7 +128,10 @@ def test_default_model_ladder_falls_back_when_all_unknown() -> None:
 
 def test_default_model_ladder_falls_back_when_env_empty() -> None:
     with patch.dict(os.environ, {"BAPS_MODEL_LADDER": ""}, clear=True):
-        with patch("baps.scheduler.scheduler._auto_ladder", return_value=[_KNOWN_MODELS["sonnet"]]):
+        with patch(
+            "baps.scheduler.scheduler._auto_ladder",
+            return_value=[_KNOWN_MODELS["sonnet"]],
+        ):
             ladder = _default_model_ladder()
     assert ladder[0].name == "sonnet"
 
@@ -123,6 +139,7 @@ def test_default_model_ladder_falls_back_when_env_empty() -> None:
 # ---------------------------------------------------------------------------
 # _drop_underperformers
 # ---------------------------------------------------------------------------
+
 
 def _policy_with_low_score(names: list[str], low_name: str) -> ModelPolicy:
     """Build a policy where low_name has been updated _FLOOR_MIN_RUNS times with reward=0."""
@@ -183,22 +200,31 @@ def test_drop_underperformers_returns_empty_when_nothing_to_drop() -> None:
 # policy path validation (main)
 # ---------------------------------------------------------------------------
 
+
 def test_main_rejects_policy_path_outside_cwd(tmp_path: Path, monkeypatch) -> None:
     import sys
+
     outside = tmp_path / "policy.json"
-    monkeypatch.setattr(sys, "argv", ["scheduler", "--policy", str(outside), "--rounds", "0"])
+    monkeypatch.setattr(
+        sys, "argv", ["scheduler", "--policy", str(outside), "--rounds", "0"]
+    )
     with pytest.raises(SystemExit) as exc_info:
         from baps.scheduler.scheduler import main
+
         main()
     assert exc_info.value.code == 1
 
 
 def test_main_accepts_policy_path_within_cwd(monkeypatch, tmp_path: Path) -> None:
     import sys
+
     policy_file = Path(".baps-test-scheduler-policy-tmp.json")
-    monkeypatch.setattr(sys, "argv", ["scheduler", "--policy", str(policy_file), "--rounds", "0"])
+    monkeypatch.setattr(
+        sys, "argv", ["scheduler", "--policy", str(policy_file), "--rounds", "0"]
+    )
     try:
         from baps.scheduler.scheduler import main
+
         main()  # should not exit(1)
     except SystemExit as e:
         pytest.fail(f"main() exited with code {e.code} for a valid policy path")

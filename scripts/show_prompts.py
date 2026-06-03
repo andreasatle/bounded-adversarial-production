@@ -29,6 +29,7 @@ _SECTION_BODY = "<section_body>"
 
 def _make_config():
     from baps.core.run_config import RunConfig
+
     return RunConfig(
         workspace=Path(".baps-workspace"),
         project_type="document",
@@ -42,11 +43,13 @@ def _make_config():
 
 def _make_state():
     from baps.state.state import DocumentArtifact, State
+
     return State(artifacts=(DocumentArtifact(id=_ARTIFACT_ID),))
 
 
 def _make_game_spec():
     from baps.state.state import GameSpec
+
     return GameSpec(
         objective=_OBJECTIVE,
         target_artifact_id=_ARTIFACT_ID,
@@ -59,15 +62,19 @@ def _make_game_spec():
 
 def _make_delta():
     from baps.state.state import AppendSectionDelta, DeltaDocumentState, Section
+
     return DeltaDocumentState(
         artifact_id=_ARTIFACT_ID,
         operation="append_section",
-        payload=AppendSectionDelta(section=Section(title=_SECTION_TITLE, body=_SECTION_BODY)),
+        payload=AppendSectionDelta(
+            section=Section(title=_SECTION_TITLE, body=_SECTION_BODY)
+        ),
     )
 
 
 def _make_red_finding():
     from baps.state.state import Disposition, RedFinding
+
     return RedFinding(
         disposition=Disposition.revise,
         rationale="<red_rationale>",
@@ -79,6 +86,7 @@ def _make_red_finding():
 # ---------------------------------------------------------------------------
 # Prompt builders
 # ---------------------------------------------------------------------------
+
 
 def build_prompts() -> dict[str, str]:
     from baps.adapters.document_adapter import DocumentProjectAdapter
@@ -110,10 +118,16 @@ def build_prompts() -> dict[str, str]:
     )
 
     return {
-        "create_game": render_create_game_prompt(config, state, cg_view, adapter=adapter),
+        "create_game": render_create_game_prompt(
+            config, state, cg_view, adapter=adapter
+        ),
         "create_game_red": render_create_game_red_prompt(cg_view, spec, config),
-        "blue": adapter.render_blue_prompt(play_view, spec, attempt_number=1, previous_feedback=None),
-        "red": render_red_prompt(play_view, spec, delta, prompt_supplement=red_supplement),
+        "blue": adapter.render_blue_prompt(
+            play_view, spec, attempt_number=1, previous_feedback=None
+        ),
+        "red": render_red_prompt(
+            play_view, spec, delta, prompt_supplement=red_supplement
+        ),
         "referee": render_referee_prompt(
             play_view, spec, delta, red_finding, prompt_supplement=ref_supplement
         ),
@@ -128,9 +142,14 @@ _ROLE_ORDER = ["create_game", "create_game_red", "blue", "red", "referee"]
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument(
-        "--output", "-o", type=Path, default=None,
+        "--output",
+        "-o",
+        type=Path,
+        default=None,
         help="Write each prompt to <role>.txt in this directory (default: stdout)",
     )
     args = parser.parse_args()

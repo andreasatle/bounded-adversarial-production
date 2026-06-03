@@ -16,11 +16,16 @@ def test_main_prints_required_fields_and_no_legacy_iteration_output(
         [
             "baps-run",
             "start",
-            "--workspace", str(workspace),
-            "--project-type", "document",
-            "--artifact-id", "main-document",
-            "--goal", "Write a short report.",
-            "--output", "output/report.md",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "document",
+            "--artifact-id",
+            "main-document",
+            "--goal",
+            "Write a short report.",
+            "--output",
+            "output/report.md",
         ],
     )
 
@@ -56,7 +61,13 @@ def test_project_type_document_creates_state_and_logs_when_debug_enabled(
             str(workspace),
             "--project-type",
             "document",
-        "--artifact-id", "main-document", "--goal", "Write a report.", "--output", "output/report.md", ],
+            "--artifact-id",
+            "main-document",
+            "--goal",
+            "Write a report.",
+            "--output",
+            "output/report.md",
+        ],
     )
 
     with caplog.at_level(logging.DEBUG):
@@ -73,7 +84,9 @@ def test_project_type_document_creates_state_and_logs_when_debug_enabled(
     assert "sections: []" in caplog.text
 
 
-def test_document_type_is_not_stored_in_state_output(monkeypatch, caplog, tmp_path: Path) -> None:
+def test_document_type_is_not_stored_in_state_output(
+    monkeypatch, caplog, tmp_path: Path
+) -> None:
     workspace = tmp_path / "doc-ws"
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
     monkeypatch.setattr(
@@ -85,13 +98,21 @@ def test_document_type_is_not_stored_in_state_output(monkeypatch, caplog, tmp_pa
             str(workspace),
             "--project-type",
             "document",
-        "--artifact-id", "main-document", "--goal", "Write a report.", "--output", "output/report.md", ],
+            "--artifact-id",
+            "main-document",
+            "--goal",
+            "Write a report.",
+            "--output",
+            "output/report.md",
+        ],
     )
 
     with caplog.at_level(logging.DEBUG):
         main()
     create_state_output_msg = next(
-        r.getMessage() for r in caplog.records if "create_state.output:" in r.getMessage()
+        r.getMessage()
+        for r in caplog.records
+        if "create_state.output:" in r.getMessage()
     )
     assert "project_type" not in create_state_output_msg
 
@@ -135,7 +156,9 @@ def test_start_clean_workspace_creates_report_from_spec(
     assert "output_exported=True" in out
 
 
-def test_active_main_writes_output_path_from_state(tmp_path: Path, monkeypatch, capsys) -> None:
+def test_active_main_writes_output_path_from_state(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
     workspace = tmp_path / "ws-export"
     monkeypatch.setattr(
         "sys.argv",
@@ -148,7 +171,10 @@ def test_active_main_writes_output_path_from_state(tmp_path: Path, monkeypatch, 
             "document",
             "--artifact-id",
             "main-document",
-            "--goal", "Write a report.", "--output", "output/report.md",
+            "--goal",
+            "Write a report.",
+            "--output",
+            "output/report.md",
             "--max-iterations",
             "1",
         ],
@@ -174,8 +200,10 @@ def test_baps_start_creates_state_file(monkeypatch, tmp_path: Path) -> None:
             "document",
             "--artifact-id",
             "main-document",
-            "--goal", "Write a report.",
-            "--output", "output/report.md",
+            "--goal",
+            "Write a report.",
+            "--output",
+            "output/report.md",
         ],
     )
     main()
@@ -193,9 +221,12 @@ def test_baps_start_twice_continues(monkeypatch, tmp_path: Path) -> None:
         "document",
         "--artifact-id",
         "main-document",
-        "--goal", "Write a report.",
-        "--output", "output/report.md",
-        "--max-iterations", "1",
+        "--goal",
+        "Write a report.",
+        "--output",
+        "output/report.md",
+        "--max-iterations",
+        "1",
     ]
     monkeypatch.setattr("sys.argv", argv)
     main()
@@ -205,7 +236,9 @@ def test_baps_start_twice_continues(monkeypatch, tmp_path: Path) -> None:
     assert (workspace / "state" / "state.json").exists()
 
 
-def test_baps_start_without_existing_state_initializes(monkeypatch, tmp_path: Path) -> None:
+def test_baps_start_without_existing_state_initializes(
+    monkeypatch, tmp_path: Path
+) -> None:
     workspace = tmp_path / "ws-start-fresh"
     monkeypatch.setattr(
         "sys.argv",
@@ -218,9 +251,12 @@ def test_baps_start_without_existing_state_initializes(monkeypatch, tmp_path: Pa
             "document",
             "--artifact-id",
             "main-document",
-            "--goal", "Write a report.",
-            "--output", "output/report.md",
-            "--max-iterations", "1",
+            "--goal",
+            "Write a report.",
+            "--output",
+            "output/report.md",
+            "--max-iterations",
+            "1",
         ],
     )
     main()
@@ -245,8 +281,10 @@ def test_baps_start_loads_existing_state_without_create_state(
             "document",
             "--artifact-id",
             "main-document",
-            "--goal", "Write a report.",
-            "--output", "output/report.md",
+            "--goal",
+            "Write a report.",
+            "--output",
+            "output/report.md",
         ],
     )
     main()
@@ -255,7 +293,9 @@ def test_baps_start_loads_existing_state_without_create_state(
     monkeypatch.setattr(
         run_module,
         "create_state",
-        lambda _config: (_ for _ in ()).throw(AssertionError("create_state should not be called when state exists")),
+        lambda _config: (_ for _ in ()).throw(
+            AssertionError("create_state should not be called when state exists")
+        ),
     )
     monkeypatch.setattr(
         "sys.argv",
@@ -268,7 +308,10 @@ def test_baps_start_loads_existing_state_without_create_state(
             "document",
             "--artifact-id",
             "main-document",
-            "--goal", "Write a report.", "--output", "output/report.md",
+            "--goal",
+            "Write a report.",
+            "--output",
+            "output/report.md",
             "--max-iterations",
             "1",
         ],
@@ -289,7 +332,10 @@ def test_baps_start_works(monkeypatch, tmp_path: Path) -> None:
             "document",
             "--artifact-id",
             "main-document",
-            "--goal", "Write a report.", "--output", "output/report.md",
+            "--goal",
+            "Write a report.",
+            "--output",
+            "output/report.md",
             "--max-iterations",
             "1",
         ],
@@ -299,18 +345,31 @@ def test_baps_start_works(monkeypatch, tmp_path: Path) -> None:
     assert (workspace / "output" / "report.md").exists()
 
 
-def test_baps_reset_wipes_state_and_output_then_exits(monkeypatch, tmp_path: Path, capsys) -> None:
+def test_baps_reset_wipes_state_and_output_then_exits(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
     workspace = tmp_path / "ws-reset"
 
     # Create state and output via start
-    monkeypatch.setattr("sys.argv", [
-        "baps-run", "start",
-        "--workspace", str(workspace),
-        "--project-type", "document",
-        "--artifact-id", "main-document",
-        "--goal", "Write a report.", "--output", "output/report.md",
-        "--max-iterations", "1",
-    ])
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "start",
+            "--workspace",
+            str(workspace),
+            "--project-type",
+            "document",
+            "--artifact-id",
+            "main-document",
+            "--goal",
+            "Write a report.",
+            "--output",
+            "output/report.md",
+            "--max-iterations",
+            "1",
+        ],
+    )
     main()
 
     state_path = workspace / "state" / "state.json"
@@ -319,11 +378,17 @@ def test_baps_reset_wipes_state_and_output_then_exits(monkeypatch, tmp_path: Pat
     assert output_path.exists()
 
     # Reset: wipe state and output, no game loop
-    monkeypatch.setattr("sys.argv", [
-        "baps-run", "reset",
-        "--workspace", str(workspace),
-        "--output", "output/report.md",
-    ])
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "reset",
+            "--workspace",
+            str(workspace),
+            "--output",
+            "output/report.md",
+        ],
+    )
     main()
 
     assert not state_path.exists(), "reset must wipe state.json"
@@ -345,19 +410,31 @@ def test_baps_reset_makes_no_model_calls(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr("baps.core.clients.build_role_client", _fail)
     monkeypatch.setattr("baps.core.clients.build_client_for_role", _fail)
 
-    monkeypatch.setattr("sys.argv", [
-        "baps-run", "reset",
-        "--workspace", str(workspace),
-    ])
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "reset",
+            "--workspace",
+            str(workspace),
+        ],
+    )
     main()  # must not raise
 
 
-def test_baps_reset_without_existing_state_exits_cleanly(monkeypatch, tmp_path: Path, capsys) -> None:
+def test_baps_reset_without_existing_state_exits_cleanly(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
     workspace = tmp_path / "ws-reset-empty"
-    monkeypatch.setattr("sys.argv", [
-        "baps-run", "reset",
-        "--workspace", str(workspace),
-    ])
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "baps-run",
+            "reset",
+            "--workspace",
+            str(workspace),
+        ],
+    )
     main()
     out = capsys.readouterr().out
     assert "wiped=True" in out
@@ -368,7 +445,15 @@ def test_second_run_sees_previous_state(monkeypatch, tmp_path: Path) -> None:
     workspace = tmp_path / "ws-second-run-state"
     seen_titles: list[list[str]] = []
 
-    def _create_game(config, state, adapter=None, verification_result=None, context_chain=(), depth=0, **_kwargs):
+    def _create_game(
+        config,
+        state,
+        adapter=None,
+        verification_result=None,
+        context_chain=(),
+        depth=0,
+        **_kwargs,
+    ):
         del verification_result
         doc = next(a for a in state.artifacts if a.id == "main-document")
         titles = [s.title for s in doc.sections]
@@ -385,7 +470,9 @@ def test_second_run_sees_previous_state(monkeypatch, tmp_path: Path) -> None:
         )
 
     def _play_game(_state, spec, adapter=None, verification_result=None, **_kwargs):
-        title = "Introduction" if "introduction" in spec.objective.lower() else "Conclusion"
+        title = (
+            "Introduction" if "introduction" in spec.objective.lower() else "Conclusion"
+        )
         return state_module.DeltaDocumentState(
             artifact_id="main-document",
             operation="append_section",
@@ -406,7 +493,10 @@ def test_second_run_sees_previous_state(monkeypatch, tmp_path: Path) -> None:
         "document",
         "--artifact-id",
         "main-document",
-        "--goal", "Write a report.", "--output", "output/report.md",
+        "--goal",
+        "Write a report.",
+        "--output",
+        "output/report.md",
         "--max-iterations",
         "1",
     ]
@@ -431,7 +521,10 @@ def test_export_works_after_start_command(monkeypatch, tmp_path: Path) -> None:
         "document",
         "--artifact-id",
         "main-document",
-        "--goal", "Write a report.", "--output", "output/report.md",
+        "--goal",
+        "Write a report.",
+        "--output",
+        "output/report.md",
         "--max-iterations",
         "1",
     ]
@@ -442,17 +535,21 @@ def test_export_works_after_start_command(monkeypatch, tmp_path: Path) -> None:
     assert (workspace / "output" / "report.md").exists()
 
 
-def _write_init_spec(tmp_path: Path, workspace: Path, goal: str = "Write a report.") -> Path:
+def _write_init_spec(
+    tmp_path: Path, workspace: Path, goal: str = "Write a report."
+) -> Path:
     spec = tmp_path / "init-spec.yaml"
     spec.write_text(
-        "\n".join([
-            f"workspace: {workspace}",
-            "project_type: document",
-            "artifact_id: main-document",
-            f"goal: {goal}",
-            "northstar_markdown: '# NorthStar\\n\\nWrite a report.'",
-            "output: output/report.md",
-        ]),
+        "\n".join(
+            [
+                f"workspace: {workspace}",
+                "project_type: document",
+                "artifact_id: main-document",
+                f"goal: {goal}",
+                "northstar_markdown: '# NorthStar\\n\\nWrite a report.'",
+                "output: output/report.md",
+            ]
+        ),
         encoding="utf-8",
     )
     return spec
@@ -499,7 +596,9 @@ def test_start_loads_project_type_and_artifact_from_workspace_config(
     assert "stop_reason=" in out
 
 
-def test_init_from_spec_persists_northstar_in_workspace_config(monkeypatch, tmp_path: Path) -> None:
+def test_init_from_spec_persists_northstar_in_workspace_config(
+    monkeypatch, tmp_path: Path
+) -> None:
     import baps.core.run as run_module
     from baps.state.state_store import JsonStateStore
 
@@ -526,10 +625,14 @@ def test_init_from_spec_persists_northstar_in_workspace_config(monkeypatch, tmp_
     run_module.main()
 
     import json as _json
+
     workspace_config = _json.loads((workspace / "baps-config.json").read_text())
     assert "northstar_markdown" in workspace_config
     assert "# Goal" in workspace_config["northstar_markdown"]
-    assert "Write a short report grounded in NorthStar intent." in workspace_config["northstar_markdown"]
+    assert (
+        "Write a short report grounded in NorthStar intent."
+        in workspace_config["northstar_markdown"]
+    )
 
     persisted = JsonStateStore(workspace / "state" / "state.json").load()
     assert len(persisted.artifacts) == 1
@@ -552,8 +655,10 @@ def test_debug_formatter_renders_nested_list_of_dicts_without_python_repr(
             "document",
             "--artifact-id",
             "main-document",
-            "--goal", "Write a report.",
-            "--output", "output/report.md",
+            "--goal",
+            "Write a report.",
+            "--output",
+            "output/report.md",
         ],
     )
 
@@ -580,8 +685,10 @@ def test_debug_formatter_renders_tuple_as_yaml_list_and_empty_as_brackets(
             "document",
             "--artifact-id",
             "main-document",
-            "--goal", "Write a report.",
-            "--output", "output/report.md",
+            "--goal",
+            "Write a report.",
+            "--output",
+            "output/report.md",
         ],
     )
 

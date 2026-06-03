@@ -13,7 +13,10 @@ FORBIDDEN_PATTERNS = (
 
 def test_main_runtime_path_avoids_dict_style_runtime_config_access() -> None:
     repo_root = Path(__file__).resolve().parents[1]
-    target_dirs = (repo_root / "src" / "baps" / "core", repo_root / "src" / "baps" / "game")
+    target_dirs = (
+        repo_root / "src" / "baps" / "core",
+        repo_root / "src" / "baps" / "game",
+    )
     py_files = [p for target in target_dirs for p in target.rglob("*.py")]
 
     violations: list[str] = []
@@ -25,4 +28,6 @@ def test_main_runtime_path_avoids_dict_style_runtime_config_access() -> None:
                 line = text.count("\n", 0, match.start()) + 1
                 violations.append(f"{rel}:{line}: {pattern}")
 
-    assert violations == [], "Found forbidden dict-style runtime config access:\n" + "\n".join(violations)
+    assert violations == [], (
+        "Found forbidden dict-style runtime config access:\n" + "\n".join(violations)
+    )

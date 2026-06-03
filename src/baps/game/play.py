@@ -18,23 +18,28 @@ def record_play_game_telemetry(
     runtime: PlayGameRuntime,
 ) -> None:
     """Emit a debug event and write the completed game record to the blackboard."""
-    ctx.debug_event_fn("play_game.output", {
-        "current_best_delta": (
-            None
-            if runtime.current_best_delta is None
-            else runtime.current_best_delta.model_dump(mode="json")
-        ),
-        "integration_eligible_delta": (
-            None
-            if runtime.integration_eligible_delta is None
-            else runtime.integration_eligible_delta.model_dump(mode="json")
-        ),
-    })
+    ctx.debug_event_fn(
+        "play_game.output",
+        {
+            "current_best_delta": (
+                None
+                if runtime.current_best_delta is None
+                else runtime.current_best_delta.model_dump(mode="json")
+            ),
+            "integration_eligible_delta": (
+                None
+                if runtime.integration_eligible_delta is None
+                else runtime.integration_eligible_delta.model_dump(mode="json")
+            ),
+        },
+    )
     if ctx.workspace is None:
         return
     final_disposition = (
-        "accepted" if runtime.integration_eligible_delta is not None
-        else "rejected" if any(r.blue_delta is not None for r in attempt_records)
+        "accepted"
+        if runtime.integration_eligible_delta is not None
+        else "rejected"
+        if any(r.blue_delta is not None for r in attempt_records)
         else "no_delta"
     )
     append_game_to_blackboard(

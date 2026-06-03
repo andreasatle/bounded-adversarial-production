@@ -323,8 +323,9 @@ def _is_substantive_source_file(path: Path) -> bool:
     except SyntaxError:
         return True
     for node in tree.body:
-        if not isinstance(node, (ast.Import, ast.ImportFrom, ast.Assign,
-                                 ast.AnnAssign, ast.Expr)):
+        if not isinstance(
+            node, (ast.Import, ast.ImportFrom, ast.Assign, ast.AnnAssign, ast.Expr)
+        ):
             return True
         if isinstance(node, ast.Assign):
             for t in node.targets:
@@ -352,10 +353,14 @@ def _collect_protocols(source_files: list[Path]) -> list[tuple[str, str, str | N
         except SyntaxError:
             continue
         for node in tree.body:
-            if (isinstance(node, ast.ClassDef)
-                    and not node.name.startswith("_")
-                    and _is_protocol_class(node)):
-                entries.append((node.name, str(path.relative_to(ROOT)), _first_doc_line(node)))
+            if (
+                isinstance(node, ast.ClassDef)
+                and not node.name.startswith("_")
+                and _is_protocol_class(node)
+            ):
+                entries.append(
+                    (node.name, str(path.relative_to(ROOT)), _first_doc_line(node))
+                )
     return sorted(entries)
 
 
@@ -369,7 +374,9 @@ def _build_dir_index_lines(pkg_name: str, files: list[Path]) -> list[str]:
     return lines
 
 
-def _build_protocols_index_lines(protocols: list[tuple[str, str, str | None]]) -> list[str]:
+def _build_protocols_index_lines(
+    protocols: list[tuple[str, str, str | None]],
+) -> list[str]:
     lines: list[str] = ["# Protocol Index — src/baps", ""]
     for name, rel, doc in protocols:
         entry = f"- **{name}** — `{rel}`"
@@ -438,7 +445,9 @@ def main() -> None:
         out_path = ROOT / f"CODEBASE_API_{pkg_name}.md"
         out_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
         print(f"Wrote {out_path.relative_to(ROOT)}")
-        api_entries.append((out_path.name, f"public API surface for src/baps/{pkg_name}/"))
+        api_entries.append(
+            (out_path.name, f"public API surface for src/baps/{pkg_name}/")
+        )
 
     protocols = _collect_protocols(source_files)
     proto_lines = _build_protocols_index_lines(protocols)

@@ -1,569 +1,609 @@
 """Adapter implementing the full ProjectTypeAdapter contract for coding-type projects."""
 
-from __future__ import annotations 
+from __future__ import annotations
 
-import json 
-import subprocess 
-from pathlib import Path 
+import json
+import subprocess
+from pathlib import Path
 
-from baps .adapters .project_adapter import (
-VerificationResult ,
-config_artifact_id ,
-verification_result_to_dict ,
+from baps.adapters.project_adapter import (
+    VerificationResult,
+    config_artifact_id,
+    verification_result_to_dict,
 )
-from typing import TYPE_CHECKING 
-if TYPE_CHECKING :
-    from baps .game .roles import PlayGameFeedback 
-    from baps .summarizer .summarizer import SummarizationContext 
-from baps .adapters .coding .common import (
-config_language ,
-plugin_for ,
-validate_file_path ,
-coding_artifact_from_state ,
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from baps.game.roles import PlayGameFeedback
+    from baps.summarizer.summarizer import SummarizationContext
+from baps.adapters.coding.common import (
+    config_language,
+    plugin_for,
+    validate_file_path,
+    coding_artifact_from_state,
 )
-from baps .adapters .coding .delta_apply import apply_delta_to_files ,normalize_coding_export_content 
-from baps .adapters .coding .parsing import (
-validate_coding_write_file_artifact_purity ,
-validate_coding_write_files_purity ,
-parse_coding_delta_json ,
+from baps.adapters.coding.delta_apply import (
+    apply_delta_to_files,
+    normalize_coding_export_content,
 )
-from baps .adapters .coding .prompting import (
-render_coding_evaluation_supplement ,
-truncate_lines ,
-render_coding_blue_prompt ,
+from baps.adapters.coding.parsing import (
+    validate_coding_write_file_artifact_purity,
+    validate_coding_write_files_purity,
+    parse_coding_delta_json,
 )
-from baps .adapters .coding .views import build_coding_create_game_state_view ,build_coding_state_view 
-from baps .adapters .document_adapter import build_module_research_tools 
-from baps .models .models import ToolCall ,ToolDefinition 
-from baps .tools .tools import FETCH_FILE_DEFINITION 
-from baps .northstar .northstar_projection import StateView ,require_state_view_metadata 
-from baps .state .state import (
-CodingArtifact ,
-DeltaCodingBatchState ,
-DeltaCodingState ,
-DeltaDeleteCodingState ,
-DeltaState ,
-GameSpec ,
-State ,
+from baps.adapters.coding.prompting import (
+    render_coding_evaluation_supplement,
+    truncate_lines,
+    render_coding_blue_prompt,
+)
+from baps.adapters.coding.views import (
+    build_coding_create_game_state_view,
+    build_coding_state_view,
+)
+from baps.adapters.document_adapter import build_module_research_tools
+from baps.models.models import ToolCall, ToolDefinition
+from baps.tools.tools import FETCH_FILE_DEFINITION
+from baps.northstar.northstar_projection import StateView, require_state_view_metadata
+from baps.state.state import (
+    CodingArtifact,
+    DeltaCodingBatchState,
+    DeltaCodingState,
+    DeltaDeleteCodingState,
+    DeltaState,
+    GameSpec,
+    State,
 )
 
-def _coding_api_stats (file ,plugin )->str :
+
+def _coding_api_stats(file, plugin) -> str:
     """Return ' — N signatures, M documented' for list_modules filter='api'."""
-    try :
-        api_text =plugin .extract_api (file )
-    except NotImplementedError :
+    try:
+        api_text = plugin.extract_api(file)
+    except NotImplementedError:
         return ""
-    lines =api_text .splitlines ()
-    sig_count =sum (
-    1 for ln in lines 
-    if ln .lstrip ().startswith ("def ")or ln .lstrip ().startswith ("async def ")
+    lines = api_text.splitlines()
+    sig_count = sum(
+        1
+        for ln in lines
+        if ln.lstrip().startswith("def ") or ln.lstrip().startswith("async def ")
     )
-    doc_count =sum (1 for ln in lines if '"""'in ln and "def "not in ln )
-    return f" — {sig_count } signatures, {doc_count } documented"
+    doc_count = sum(1 for ln in lines if '"""' in ln and "def " not in ln)
+    return f" — {sig_count} signatures, {doc_count} documented"
 
 
-def _coding_test_stats (file ,plugin )->str :
+def _coding_test_stats(file, plugin) -> str:
     """Return ' — N tests' for list_modules filter='tests'."""
-    try :
-        test_text =plugin .extract_tests (file )
-    except NotImplementedError :
+    try:
+        test_text = plugin.extract_tests(file)
+    except NotImplementedError:
         return ""
-    test_count =sum (1 for ln in test_text .splitlines ()if ln .strip ().startswith ("test_"))
-    return f" — {test_count } tests"
+    test_count = sum(
+        1 for ln in test_text.splitlines() if ln.strip().startswith("test_")
+    )
+    return f" — {test_count} tests"
 
 
-__all__ =[
-"CodingProjectAdapter",
-"apply_delta_to_files",
-"truncate_lines",
-"build_coding_create_game_state_view",
-"build_coding_state_view",
-"coding_artifact_from_state",
-"parse_coding_delta_json",
-"render_coding_blue_prompt",
+__all__ = [
+    "CodingProjectAdapter",
+    "apply_delta_to_files",
+    "truncate_lines",
+    "build_coding_create_game_state_view",
+    "build_coding_state_view",
+    "coding_artifact_from_state",
+    "parse_coding_delta_json",
+    "render_coding_blue_prompt",
 ]
 
 
-class CodingProjectAdapter :
+class CodingProjectAdapter:
     """Implement the CodingProjectAdapter project adapter."""
-    project_type ="coding"
-    supported_delta_type ="DeltaCodingState"
 
-    def create_initial_state (self ,config :dict [str ,object ])->State :
+    project_type = "coding"
+    supported_delta_type = "DeltaCodingState"
+
+    def create_initial_state(self, config: dict[str, object]) -> State:
         """Create and return initial state."""
-        language =config_language (config )
-        plugin_for (language )
-        return State (
-        artifacts =(CodingArtifact (id =config_artifact_id (config ),language =language ,files =()),),
+        language = config_language(config)
+        plugin_for(language)
+        return State(
+            artifacts=(
+                CodingArtifact(
+                    id=config_artifact_id(config), language=language, files=()
+                ),
+            ),
         )
 
-    def build_create_game_state_view (
-    self ,
-    state :State ,
-    config :dict [str ,object ],
-    summarization_context :SummarizationContext |None =None ,
-    )->StateView :
+    def build_create_game_state_view(
+        self,
+        state: State,
+        config: dict[str, object],
+        summarization_context: SummarizationContext | None = None,
+    ) -> StateView:
         """Build and return create game state view."""
-        return build_coding_create_game_state_view (state ,config ,summarization_context )
+        return build_coding_create_game_state_view(state, config, summarization_context)
 
-    def render_create_game_prompt_supplement (
-    self ,
-    state :State ,
-    config :dict [str ,object ],
-    state_view :StateView ,
-    verification_result :VerificationResult |None ,
-    )->str :
+    def render_create_game_prompt_supplement(
+        self,
+        state: State,
+        config: dict[str, object],
+        state_view: StateView,
+        verification_result: VerificationResult | None,
+    ) -> str:
         """Render and return create game prompt supplement."""
-        base =(
-        "Coding CreateGame constraints:\n"
-        "- Blue can write one or more files per game using write_files (preferred) or write_file.\n"
-        "- Group logically related files (e.g. a module and its tests) into one GameSpec.\n"
-        "- File paths must be derived from the NorthStar spec, not invented.\n"
-        "- Prefer production files under src/ before writing test files.\n"
+        base = (
+            "Coding CreateGame constraints:\n"
+            "- Blue can write one or more files per game using write_files (preferred) or write_file.\n"
+            "- Group logically related files (e.g. a module and its tests) into one GameSpec.\n"
+            "- File paths must be derived from the NorthStar spec, not invented.\n"
+            "- Prefer production files under src/ before writing test files.\n"
         )
-        if verification_result is None :
-            del state ,config ,state_view 
-            return base 
-        verification_json =json .dumps (verification_result_to_dict (verification_result ),sort_keys =True )
-        exit_code =verification_result .exit_code 
-        if exit_code ==5 :
-            no_tests_hint =(
-            "- exit_code=5 means pytest collected zero tests: no test file exists yet.\n"
-            "  Choose a game that WRITES the missing test file. Do NOT rewrite src.\n"
+        if verification_result is None:
+            del state, config, state_view
+            return base
+        verification_json = json.dumps(
+            verification_result_to_dict(verification_result), sort_keys=True
+        )
+        exit_code = verification_result.exit_code
+        if exit_code == 5:
+            no_tests_hint = (
+                "- exit_code=5 means pytest collected zero tests: no test file exists yet.\n"
+                "  Choose a game that WRITES the missing test file. Do NOT rewrite src.\n"
             )
-        elif exit_code ==1 :
-            no_tests_hint =(
-            "- exit_code=1 means tests were found but failed.\n"
-            "  Prefer a repair game that fixes the failing implementation or test.\n"
+        elif exit_code == 1:
+            no_tests_hint = (
+                "- exit_code=1 means tests were found but failed.\n"
+                "  Prefer a repair game that fixes the failing implementation or test.\n"
             )
-        else :
-            no_tests_hint =""
-        del state ,config ,state_view 
+        else:
+            no_tests_hint = ""
+        del state, config, state_view
         return (
-        f"{base }"
-        "Coding CreateGame verification evidence:\n"
-        f"- previous_verification_result_json: {verification_json }\n"
-        "- Use this as evidence from the previous exported state only.\n"
-        f"{no_tests_hint }"
-        "- If evidence shows import/layout errors, prefer a repair game that fixes import/layout.\n"
+            f"{base}"
+            "Coding CreateGame verification evidence:\n"
+            f"- previous_verification_result_json: {verification_json}\n"
+            "- Use this as evidence from the previous exported state only.\n"
+            f"{no_tests_hint}"
+            "- If evidence shows import/layout errors, prefer a repair game that fixes import/layout.\n"
         )
 
-    def normalize_game_spec (
-    self ,game_spec :GameSpec ,state :State ,config :dict [str ,object ]
-    )->GameSpec :
+    def normalize_game_spec(
+        self, game_spec: GameSpec, state: State, config: dict[str, object]
+    ) -> GameSpec:
         """Normalize and return game spec."""
-        del state 
-        configured_artifact_id =config_artifact_id (config )
-        return GameSpec (
-        objective =game_spec .objective ,
-        target_artifact_id =configured_artifact_id ,
-        allowed_delta_type =game_spec .allowed_delta_type ,
-        success_condition =game_spec .success_condition ,
-        max_words =game_spec .max_words ,
-        target_entity =game_spec .target_entity ,
+        del state
+        configured_artifact_id = config_artifact_id(config)
+        return GameSpec(
+            objective=game_spec.objective,
+            target_artifact_id=configured_artifact_id,
+            allowed_delta_type=game_spec.allowed_delta_type,
+            success_condition=game_spec.success_condition,
+            max_words=game_spec.max_words,
+            target_entity=game_spec.target_entity,
         )
 
-    def build_state_view (
-    self ,
-    state :State ,
-    game_spec :GameSpec ,
-    summarization_context :SummarizationContext |None =None ,
-    )->StateView :
+    def build_state_view(
+        self,
+        state: State,
+        game_spec: GameSpec,
+        summarization_context: SummarizationContext | None = None,
+    ) -> StateView:
         """Build and return state view."""
-        return build_coding_state_view (state ,game_spec ,summarization_context =summarization_context )
-
-    def render_blue_prompt (
-    self ,
-    state_view :StateView ,
-    game_spec :GameSpec ,
-    attempt_number :int ,
-    previous_feedback :PlayGameFeedback |None ,
-    )->str :
-        """Render and return blue prompt."""
-        language =require_state_view_metadata (state_view ,"language")
-        plugin =plugin_for (language )
-        return render_coding_blue_prompt (
-        state_view =state_view ,
-        game_spec =game_spec ,
-        attempt_number =attempt_number ,
-        previous_feedback =previous_feedback ,
-        plugin =plugin ,
+        return build_coding_state_view(
+            state, game_spec, summarization_context=summarization_context
         )
 
-    def render_red_prompt_supplement (
-    self ,
-    state_view :StateView ,
-    game_spec :GameSpec ,
-    delta_state :DeltaState ,
-    verification_result :VerificationResult |None ,
-    )->str :
+    def render_blue_prompt(
+        self,
+        state_view: StateView,
+        game_spec: GameSpec,
+        attempt_number: int,
+        previous_feedback: PlayGameFeedback | None,
+    ) -> str:
+        """Render and return blue prompt."""
+        language = require_state_view_metadata(state_view, "language")
+        plugin = plugin_for(language)
+        return render_coding_blue_prompt(
+            state_view=state_view,
+            game_spec=game_spec,
+            attempt_number=attempt_number,
+            previous_feedback=previous_feedback,
+            plugin=plugin,
+        )
+
+    def render_red_prompt_supplement(
+        self,
+        state_view: StateView,
+        game_spec: GameSpec,
+        delta_state: DeltaState,
+        verification_result: VerificationResult | None,
+    ) -> str:
         """Render and return red prompt supplement."""
-        del state_view ,game_spec ,delta_state 
-        return render_coding_evaluation_supplement (verification_result )
+        del state_view, game_spec, delta_state
+        return render_coding_evaluation_supplement(verification_result)
 
-    def render_referee_prompt_supplement (
-    self ,
-    state_view :StateView ,
-    game_spec :GameSpec ,
-    delta_state :DeltaState ,
-    verification_result :VerificationResult |None ,
-    )->str :
+    def render_referee_prompt_supplement(
+        self,
+        state_view: StateView,
+        game_spec: GameSpec,
+        delta_state: DeltaState,
+        verification_result: VerificationResult | None,
+    ) -> str:
         """Render and return referee prompt supplement."""
-        del state_view ,game_spec ,delta_state 
-        return render_coding_evaluation_supplement (verification_result )
+        del state_view, game_spec, delta_state
+        return render_coding_evaluation_supplement(verification_result)
 
-    def build_blue_output_format (self )->str |dict |None :
+    def build_blue_output_format(self) -> str | dict | None:
         """Build and return blue output format."""
-        return None 
+        return None
 
-    def supported_filters (self )->list [str ]:
-    # Return superset; per-artifact filter list is resolved from the language plugin
+    def supported_filters(self) -> list[str]:
+        # Return superset; per-artifact filter list is resolved from the language plugin
         """Return supported values for ed filters."""
-        return ["api","tests","full"]
+        return ["api", "tests", "full"]
 
-    def build_research_tools (self )->list [ToolDefinition ]:
+    def build_research_tools(self) -> list[ToolDefinition]:
         """Build and return research tools."""
         return []
 
-    def build_create_game_research_tools (self ,state :State )->list :
+    def build_create_game_research_tools(self, state: State) -> list:
         """Build and return create game research tools."""
-        artifact =next ((a for a in state .artifacts if isinstance (a ,CodingArtifact )),None )
-        if artifact is None :
+        artifact = next(
+            (a for a in state.artifacts if isinstance(a, CodingArtifact)), None
+        )
+        if artifact is None:
             return []
-        plugin =plugin_for (artifact .language )
-        filters =plugin .supported_filters ()
-        return build_module_research_tools (
-        filters ,
-        list_desc ="List coding artifact files with name and line count.",
-        fetch_desc ="Get a file from the coding artifact by path.",
-        entity_desc ="Get a top-level entity (function or class) from a file.",
+        plugin = plugin_for(artifact.language)
+        filters = plugin.supported_filters()
+        return build_module_research_tools(
+            filters,
+            list_desc="List coding artifact files with name and line count.",
+            fetch_desc="Get a file from the coding artifact by path.",
+            entity_desc="Get a top-level entity (function or class) from a file.",
         )
 
-    def execute_create_game_research_tool (
-    self ,tool_name :str ,tool_input :dict ,state :State 
-    )->str :
+    def execute_create_game_research_tool(
+        self, tool_name: str, tool_input: dict, state: State
+    ) -> str:
         """Execute and return create game research tool."""
-        artifact =next ((a for a in state .artifacts if isinstance (a ,CodingArtifact )),None )
+        artifact = next(
+            (a for a in state.artifacts if isinstance(a, CodingArtifact)), None
+        )
 
-        if tool_name =="list_modules":
-            if artifact is None or not artifact .files :
+        if tool_name == "list_modules":
+            if artifact is None or not artifact.files:
                 return "(no files)"
-            plugin =plugin_for (artifact .language )
-            filter_val =tool_input .get ("filter")
-            if filter_val is not None and filter_val not in plugin .supported_filters ():
-                return f"Unknown filter '{filter_val }'. Available filters: {', '.join (plugin .supported_filters ())}"
-            lines =[]
-            for file in artifact .files :
-                line_count =len (file .content .splitlines ())
-                entry =f"{file .path } ({line_count } lines)"
-                if filter_val =="api":
-                    entry +=_coding_api_stats (file ,plugin )
-                elif filter_val =="tests":
-                    entry +=_coding_test_stats (file ,plugin )
-                lines .append (entry )
-            return "\n".join (lines )
+            plugin = plugin_for(artifact.language)
+            filter_val = tool_input.get("filter")
+            if filter_val is not None and filter_val not in plugin.supported_filters():
+                return f"Unknown filter '{filter_val}'. Available filters: {', '.join(plugin.supported_filters())}"
+            lines = []
+            for file in artifact.files:
+                line_count = len(file.content.splitlines())
+                entry = f"{file.path} ({line_count} lines)"
+                if filter_val == "api":
+                    entry += _coding_api_stats(file, plugin)
+                elif filter_val == "tests":
+                    entry += _coding_test_stats(file, plugin)
+                lines.append(entry)
+            return "\n".join(lines)
 
-        if tool_name =="fetch_module":
-            module_id =tool_input .get ("module_id","")
-            if not isinstance (module_id ,str )or not module_id :
-                return "tool_error: fetch_module requires a non-empty 'module_id' string"
-            if artifact is None :
+        if tool_name == "fetch_module":
+            module_id = tool_input.get("module_id", "")
+            if not isinstance(module_id, str) or not module_id:
+                return (
+                    "tool_error: fetch_module requires a non-empty 'module_id' string"
+                )
+            if artifact is None:
                 return "tool_error: no coding artifact found in state"
-            file =next ((f for f in artifact .files if f .path ==module_id ),None )
-            if file is None :
-                available =sorted (f .path for f in artifact .files )
-                available_str =", ".join (f"'{p }'"for p in available )if available else "(none)"
-                return f"File '{module_id }' not found. Available files: {available_str }"
-            plugin =plugin_for (artifact .language )
-            filter_val =tool_input .get ("filter")
-            if filter_val is not None and filter_val not in plugin .supported_filters ():
-                return f"Unknown filter '{filter_val }'. Available filters: {', '.join (plugin .supported_filters ())}"
-            if filter_val is None :
-                line_count =len (file .content .splitlines ())
-                return f"{file .path } ({line_count } lines)"
-            if filter_val =="api":
-                try :
-                    return plugin .extract_api (file )
-                except NotImplementedError :
-                    return f"tool_error: extract_api not implemented for language '{artifact .language }'"
-            if filter_val =="tests":
-                try :
-                    return plugin .extract_tests (file )
-                except NotImplementedError :
-                    return f"tool_error: extract_tests not implemented for language '{artifact .language }'"
-            return file .content # "full"
+            file = next((f for f in artifact.files if f.path == module_id), None)
+            if file is None:
+                available = sorted(f.path for f in artifact.files)
+                available_str = (
+                    ", ".join(f"'{p}'" for p in available) if available else "(none)"
+                )
+                return f"File '{module_id}' not found. Available files: {available_str}"
+            plugin = plugin_for(artifact.language)
+            filter_val = tool_input.get("filter")
+            if filter_val is not None and filter_val not in plugin.supported_filters():
+                return f"Unknown filter '{filter_val}'. Available filters: {', '.join(plugin.supported_filters())}"
+            if filter_val is None:
+                line_count = len(file.content.splitlines())
+                return f"{file.path} ({line_count} lines)"
+            if filter_val == "api":
+                try:
+                    return plugin.extract_api(file)
+                except NotImplementedError:
+                    return f"tool_error: extract_api not implemented for language '{artifact.language}'"
+            if filter_val == "tests":
+                try:
+                    return plugin.extract_tests(file)
+                except NotImplementedError:
+                    return f"tool_error: extract_tests not implemented for language '{artifact.language}'"
+            return file.content  # "full"
 
-        if tool_name =="fetch_entity":
-            module_id =tool_input .get ("module_id","")
-            entity_id =tool_input .get ("entity_id","")
-            if not isinstance (module_id ,str )or not module_id :
-                return "tool_error: fetch_entity requires a non-empty 'module_id' string"
-            if not isinstance (entity_id ,str )or not entity_id :
-                return "tool_error: fetch_entity requires a non-empty 'entity_id' string"
-            if artifact is None :
+        if tool_name == "fetch_entity":
+            module_id = tool_input.get("module_id", "")
+            entity_id = tool_input.get("entity_id", "")
+            if not isinstance(module_id, str) or not module_id:
+                return (
+                    "tool_error: fetch_entity requires a non-empty 'module_id' string"
+                )
+            if not isinstance(entity_id, str) or not entity_id:
+                return (
+                    "tool_error: fetch_entity requires a non-empty 'entity_id' string"
+                )
+            if artifact is None:
                 return "tool_error: no coding artifact found in state"
-            file =next ((f for f in artifact .files if f .path ==module_id ),None )
-            if file is None :
-                return f"tool_error: file '{module_id }' not found in artifact"
-            plugin =plugin_for (artifact .language )
-            filter_val =tool_input .get ("filter")
-            try :
-                return plugin .extract_entity (file ,entity_id ,filter_val )
-            except NotImplementedError :
-                return f"tool_error: extract_entity not implemented for language '{artifact .language }'"
+            file = next((f for f in artifact.files if f.path == module_id), None)
+            if file is None:
+                return f"tool_error: file '{module_id}' not found in artifact"
+            plugin = plugin_for(artifact.language)
+            filter_val = tool_input.get("filter")
+            try:
+                return plugin.extract_entity(file, entity_id, filter_val)
+            except NotImplementedError:
+                return f"tool_error: extract_entity not implemented for language '{artifact.language}'"
 
-        if tool_name =="fetch_file":
-            if artifact is None :
+        if tool_name == "fetch_file":
+            if artifact is None:
                 return "tool_error: no coding artifact found in state"
-            path =tool_input .get ("path","")
-            if not isinstance (path ,str )or not path :
+            path = tool_input.get("path", "")
+            if not isinstance(path, str) or not path:
                 return "tool_error: fetch_file requires a non-empty 'path' string"
-            from baps .tools .tools import fetch_file 
-            return fetch_file (path ,artifact )
+            from baps.tools.tools import fetch_file
 
-        return f"tool_error: unknown tool {tool_name !r }"
+            return fetch_file(path, artifact)
 
-    def build_blue_tools (self )->list [ToolDefinition ]:
+        return f"tool_error: unknown tool {tool_name!r}"
+
+    def build_blue_tools(self) -> list[ToolDefinition]:
         """Build and return blue tools."""
-        _file_schema ={
-        "type":"object",
-        "properties":{
-        "path":{"type":"string","description":"Relative file path (non-empty)"},
-        "content":{"type":"string","description":"Full file content"},
-        },
-        "required":["path","content"],
+        _file_schema = {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Relative file path (non-empty)",
+                },
+                "content": {"type": "string", "description": "Full file content"},
+            },
+            "required": ["path", "content"],
         }
         return [
-        ToolDefinition (
-        name ="write_files",
-        description ="Write one or more files to the coding artifact in a single delta.",
-        parameters ={
-        "type":"object",
-        "properties":{
-        "artifact_id":{
-        "type":"string",
-        "description":"Target coding artifact ID",
-        },
-        "files":{
-        "type":"array",
-        "items":_file_schema ,
-        "minItems":1 ,
-        "description":"List of files to write (path + content each)",
-        },
-        },
-        "required":["artifact_id","files"],
-        },
-        ),
-        ToolDefinition (
-        name ="write_file",
-        description ="Write a single file to the coding artifact.",
-        parameters ={
-        "type":"object",
-        "properties":{
-        "artifact_id":{
-        "type":"string",
-        "description":"Target coding artifact ID",
-        },
-        "path":{
-        "type":"string",
-        "description":"Relative file path (non-empty)",
-        },
-        "content":{
-        "type":"string",
-        "description":"Full file content",
-        },
-        },
-        "required":["artifact_id","path","content"],
-        },
-        ),
-        ToolDefinition (
-        name ="delete_file",
-        description ="Delete a file from the coding artifact.",
-        parameters ={
-        "type":"object",
-        "properties":{
-        "artifact_id":{
-        "type":"string",
-        "description":"Target coding artifact ID",
-        },
-        "path":{
-        "type":"string",
-        "description":"Relative file path to delete",
-        },
-        },
-        "required":["artifact_id","path"],
-        },
-        ),
+            ToolDefinition(
+                name="write_files",
+                description="Write one or more files to the coding artifact in a single delta.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "artifact_id": {
+                            "type": "string",
+                            "description": "Target coding artifact ID",
+                        },
+                        "files": {
+                            "type": "array",
+                            "items": _file_schema,
+                            "minItems": 1,
+                            "description": "List of files to write (path + content each)",
+                        },
+                    },
+                    "required": ["artifact_id", "files"],
+                },
+            ),
+            ToolDefinition(
+                name="write_file",
+                description="Write a single file to the coding artifact.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "artifact_id": {
+                            "type": "string",
+                            "description": "Target coding artifact ID",
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "Relative file path (non-empty)",
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "Full file content",
+                        },
+                    },
+                    "required": ["artifact_id", "path", "content"],
+                },
+            ),
+            ToolDefinition(
+                name="delete_file",
+                description="Delete a file from the coding artifact.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "artifact_id": {
+                            "type": "string",
+                            "description": "Target coding artifact ID",
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "Relative file path to delete",
+                        },
+                    },
+                    "required": ["artifact_id", "path"],
+                },
+            ),
         ]
 
-    def tool_call_to_delta (self ,tool_call :ToolCall )->DeltaState :
+    def tool_call_to_delta(self, tool_call: ToolCall) -> DeltaState:
         """Handle tool call to delta."""
-        args =tool_call .arguments 
-        if tool_call .name =="write_files":
-            try :
-                artifact_id =str (args ["artifact_id"])
-                files =args ["files"]
-            except KeyError as exc :
-                raise ValueError (f"missing required tool argument: {exc }")from exc 
-            if not isinstance (files ,list ):
-                raise ValueError ("write_files tool argument 'files' must be a list")
-            try :
-                delta_batch =DeltaCodingBatchState .model_validate (
-                {
-                "artifact_id":artifact_id ,
-                "operation":"write_files",
-                "payload":{"files":files },
-                }
+        args = tool_call.arguments
+        if tool_call.name == "write_files":
+            try:
+                artifact_id = str(args["artifact_id"])
+                files = args["files"]
+            except KeyError as exc:
+                raise ValueError(f"missing required tool argument: {exc}") from exc
+            if not isinstance(files, list):
+                raise ValueError("write_files tool argument 'files' must be a list")
+            try:
+                delta_batch = DeltaCodingBatchState.model_validate(
+                    {
+                        "artifact_id": artifact_id,
+                        "operation": "write_files",
+                        "payload": {"files": files},
+                    }
                 )
-            except Exception as exc :
-                raise ValueError (
-                f"tool call arguments failed DeltaCodingBatchState validation: {exc }"
-                )from exc 
-            validate_coding_write_files_purity (delta_batch )
-            return delta_batch 
-        if tool_call .name =="write_file":
-            try :
-                artifact_id =str (args ["artifact_id"])
-                path =str (args ["path"])
-                content =str (args ["content"])
-            except KeyError as exc :
-                raise ValueError (f"missing required tool argument: {exc }")from exc 
-            try :
-                delta_single =DeltaCodingState .model_validate (
-                {
-                "artifact_id":artifact_id ,
-                "operation":"write_file",
-                "payload":{"file":{"path":path ,"content":content }},
-                }
+            except Exception as exc:
+                raise ValueError(
+                    f"tool call arguments failed DeltaCodingBatchState validation: {exc}"
+                ) from exc
+            validate_coding_write_files_purity(delta_batch)
+            return delta_batch
+        if tool_call.name == "write_file":
+            try:
+                artifact_id = str(args["artifact_id"])
+                path = str(args["path"])
+                content = str(args["content"])
+            except KeyError as exc:
+                raise ValueError(f"missing required tool argument: {exc}") from exc
+            try:
+                delta_single = DeltaCodingState.model_validate(
+                    {
+                        "artifact_id": artifact_id,
+                        "operation": "write_file",
+                        "payload": {"file": {"path": path, "content": content}},
+                    }
                 )
-            except Exception as exc :
-                raise ValueError (
-                f"tool call arguments failed DeltaCodingState validation: {exc }"
-                )from exc 
-            validate_coding_write_file_artifact_purity (delta_single )
-            return delta_single 
-        if tool_call .name =="delete_file":
-            try :
-                artifact_id =str (args ["artifact_id"])
-                path =str (args ["path"])
-            except KeyError as exc :
-                raise ValueError (f"missing required tool argument: {exc }")from exc 
-            validate_file_path (path )
-            try :
-                return DeltaDeleteCodingState .model_validate (
-                {
-                "artifact_id":artifact_id ,
-                "operation":"delete_file",
-                "payload":{"path":path },
-                }
+            except Exception as exc:
+                raise ValueError(
+                    f"tool call arguments failed DeltaCodingState validation: {exc}"
+                ) from exc
+            validate_coding_write_file_artifact_purity(delta_single)
+            return delta_single
+        if tool_call.name == "delete_file":
+            try:
+                artifact_id = str(args["artifact_id"])
+                path = str(args["path"])
+            except KeyError as exc:
+                raise ValueError(f"missing required tool argument: {exc}") from exc
+            validate_file_path(path)
+            try:
+                return DeltaDeleteCodingState.model_validate(
+                    {
+                        "artifact_id": artifact_id,
+                        "operation": "delete_file",
+                        "payload": {"path": path},
+                    }
                 )
-            except Exception as exc :
-                raise ValueError (
-                f"tool call arguments failed DeltaDeleteCodingState validation: {exc }"
-                )from exc 
-        raise ValueError (f"unexpected tool: {tool_call .name !r }")
+            except Exception as exc:
+                raise ValueError(
+                    f"tool call arguments failed DeltaDeleteCodingState validation: {exc}"
+                ) from exc
+        raise ValueError(f"unexpected tool: {tool_call.name!r}")
 
-    def parse_blue_delta (self ,text :str )->DeltaState :
+    def parse_blue_delta(self, text: str) -> DeltaState:
         """Parse and return blue delta."""
-        return parse_coding_delta_json (text )
+        return parse_coding_delta_json(text)
 
-    def export_state (self ,state :State ,output_path :Path ,artifact_id :str )->bool :
+    def export_state(self, state: State, output_path: Path, artifact_id: str) -> bool:
         """Export and return state."""
-        artifact =coding_artifact_from_state (state ,artifact_id )
-        plugin =plugin_for (artifact .language )
-        changed =plugin .initialize (output_path )
+        artifact = coding_artifact_from_state(state, artifact_id)
+        plugin = plugin_for(artifact.language)
+        changed = plugin.initialize(output_path)
 
-        resolved_root =output_path .resolve ()
-        for code_file in artifact .files :
-            dest =(output_path /code_file .path ).resolve ()
-            if not dest .is_relative_to (resolved_root ):
-                raise ValueError (
-                f"file path escapes output directory: {code_file .path !r }"
+        resolved_root = output_path.resolve()
+        for code_file in artifact.files:
+            dest = (output_path / code_file.path).resolve()
+            if not dest.is_relative_to(resolved_root):
+                raise ValueError(
+                    f"file path escapes output directory: {code_file.path!r}"
                 )
-            dest .parent .mkdir (parents =True ,exist_ok =True )
-            materialized =normalize_coding_export_content (code_file .content )
-            before =dest .read_text (encoding ="utf-8")if dest .exists ()else None 
-            if before !=materialized :
-                dest .write_text (materialized ,encoding ="utf-8")
-                changed =True 
-        return changed 
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            materialized = normalize_coding_export_content(code_file.content)
+            before = dest.read_text(encoding="utf-8") if dest.exists() else None
+            if before != materialized:
+                dest.write_text(materialized, encoding="utf-8")
+                changed = True
+        return changed
 
-    def commit_export (self ,output_path :Path ,game_spec :GameSpec )->bool :
+    def commit_export(self, output_path: Path, game_spec: GameSpec) -> bool:
         """Handle commit export."""
-        try :
-            if not (output_path /".git").exists ():
-                subprocess .run (
-                ["git","init","-b","main"],
-                cwd =output_path ,
-                capture_output =True ,
-                check =True ,
+        try:
+            if not (output_path / ".git").exists():
+                subprocess.run(
+                    ["git", "init", "-b", "main"],
+                    cwd=output_path,
+                    capture_output=True,
+                    check=True,
                 )
-            subprocess .run (
-            ["git","add","-A"],
-            cwd =output_path ,
-            capture_output =True ,
-            check =True ,
+            subprocess.run(
+                ["git", "add", "-A"],
+                cwd=output_path,
+                capture_output=True,
+                check=True,
             )
-            result =subprocess .run (
-            ["git","commit","-m",f"baps: {game_spec .objective }"],
-            cwd =output_path ,
-            capture_output =True ,
-            text =True ,
-            check =False ,
+            result = subprocess.run(
+                ["git", "commit", "-m", f"baps: {game_spec.objective}"],
+                cwd=output_path,
+                capture_output=True,
+                text=True,
+                check=False,
             )
-            return result .returncode ==0 
-        except (FileNotFoundError ,subprocess .SubprocessError ):
-            return False 
+            return result.returncode == 0
+        except (FileNotFoundError, subprocess.SubprocessError):
+            return False
 
-    def verify_export (
-    self ,output_path :Path ,state :State ,artifact_id :str ,sandbox_mode :str ="docker"
-    )->VerificationResult |None :
+    def verify_export(
+        self,
+        output_path: Path,
+        state: State,
+        artifact_id: str,
+        sandbox_mode: str = "docker",
+    ) -> VerificationResult | None:
         """Verify and return export."""
-        output_path .mkdir (parents =True ,exist_ok =True )
-        artifact =coding_artifact_from_state (state ,artifact_id )
-        missing_files =[
-        code_file .path 
-        for code_file in artifact .files 
-        if not (output_path /code_file .path ).exists ()
+        output_path.mkdir(parents=True, exist_ok=True)
+        artifact = coding_artifact_from_state(state, artifact_id)
+        missing_files = [
+            code_file.path
+            for code_file in artifact.files
+            if not (output_path / code_file.path).exists()
         ]
-        if missing_files :
-            return VerificationResult (
-            command ="file_presence_check",
-            cwd =str (output_path ),
-            exit_code =1 ,
-            stdout ="",
-            stderr =f"exported files missing from output: {', '.join (missing_files )}",
-            passed =False ,
+        if missing_files:
+            return VerificationResult(
+                command="file_presence_check",
+                cwd=str(output_path),
+                exit_code=1,
+                stdout="",
+                stderr=f"exported files missing from output: {', '.join(missing_files)}",
+                passed=False,
             )
-        return plugin_for (artifact .language ).run_tests (output_path ,sandbox_mode )
+        return plugin_for(artifact.language).run_tests(output_path, sandbox_mode)
 
-    def verify_candidate (
-    self ,
-    delta_state :DeltaState ,
-    state :State ,
-    artifact_id :str ,
-    sandbox_mode :str ="docker",
-    )->VerificationResult |None :
+    def verify_candidate(
+        self,
+        delta_state: DeltaState,
+        state: State,
+        artifact_id: str,
+        sandbox_mode: str = "docker",
+    ) -> VerificationResult | None:
         """Verify and return candidate."""
-        import tempfile 
+        import tempfile
 
-        artifact =coding_artifact_from_state (state ,artifact_id )
-        plugin =plugin_for (artifact .language )
-        candidate_files =apply_delta_to_files (artifact .files ,delta_state )
-        if not plugin .has_tests ([f .path for f in candidate_files ]):
-            return None 
-        with tempfile .TemporaryDirectory ()as tmpdir :
-            tmp_path =Path (tmpdir )
-            plugin .initialize (tmp_path )
-            resolved_tmp =tmp_path .resolve ()
-            for code_file in candidate_files :
-                dest =(tmp_path /code_file .path ).resolve ()
-                if not dest .is_relative_to (resolved_tmp ):
-                    raise ValueError (
-                    f"file path escapes temp directory: {code_file .path !r }"
+        artifact = coding_artifact_from_state(state, artifact_id)
+        plugin = plugin_for(artifact.language)
+        candidate_files = apply_delta_to_files(artifact.files, delta_state)
+        if not plugin.has_tests([f.path for f in candidate_files]):
+            return None
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            plugin.initialize(tmp_path)
+            resolved_tmp = tmp_path.resolve()
+            for code_file in candidate_files:
+                dest = (tmp_path / code_file.path).resolve()
+                if not dest.is_relative_to(resolved_tmp):
+                    raise ValueError(
+                        f"file path escapes temp directory: {code_file.path!r}"
                     )
-                dest .parent .mkdir (parents =True ,exist_ok =True )
-                dest .write_text (
-                normalize_coding_export_content (code_file .content ),encoding ="utf-8"
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(
+                    normalize_coding_export_content(code_file.content), encoding="utf-8"
                 )
-            return plugin .run_tests (tmp_path ,sandbox_mode )
+            return plugin.run_tests(tmp_path, sandbox_mode)
