@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Callable, Protocol
 
 from pydantic import BaseModel
 
@@ -126,7 +126,7 @@ class PlayGameContext:
     referee_fallback_fn: Callable[[str], str] | None
     depth: int
     max_attempts: int
-    debug_event_fn: Callable[[str, dict[str, Any]], None]
+    debug_event_fn: Callable[[str, dict[str, object]], None]
     render_red_prompt_fn: Callable[[StateView, GameSpec, DeltaState, VerificationResult | None, str], str]
     render_referee_prompt_fn: Callable[
         [StateView, GameSpec, DeltaState, RedFinding, VerificationResult | None, str],
@@ -150,8 +150,8 @@ def resolve_play_game_roles(
     model_client: ModelClient | None,
     red_model_client: ModelClient | None,
     referee_model_client: ModelClient | None,
-    build_client_for_role_fn: Any = build_client_for_role,
-    build_role_client_fn: Any = build_role_client,
+    build_client_for_role_fn: Callable[[str, RunConfig], ModelClient] = build_client_for_role,
+    build_role_client_fn: Callable[[str], ModelClient] = build_role_client,
     blue_contract: RoleContract | None = None,
     red_contract: RoleContract | None = None,
     referee_contract: RoleContract | None = None,
@@ -199,7 +199,9 @@ def build_play_game_fallbacks(
     config: RunConfig | None,
     red_model_client: ModelClient | None,
     referee_model_client: ModelClient | None,
-    build_fallback_chain_for_role_fn: Any = build_fallback_chain_for_role,
+    build_fallback_chain_for_role_fn: Callable[
+        [str, RunConfig], list[tuple[str, ModelClient]]
+    ] = build_fallback_chain_for_role,
 ) -> tuple[Path | None, Callable[[str], str] | None, Callable[[str], str] | None]:
     """Build and return (workspace, red_fallback_fn, referee_fallback_fn) from the config fallback chains."""
     workspace = config.workspace if config else None

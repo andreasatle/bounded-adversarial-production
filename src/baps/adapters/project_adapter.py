@@ -7,7 +7,7 @@ import re
 import types
 import unicodedata
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
@@ -62,7 +62,7 @@ def sanitize_feedback_dict(d: dict) -> dict:
     return result
 
 
-def config_artifact_id(config: dict[str, Any] | RunConfig) -> str:
+def config_artifact_id(config: dict[str, object] | RunConfig) -> str:
     """Handle config artifact id."""
     if isinstance(config, RunConfig):
         value = str(config.artifact_id)
@@ -75,7 +75,7 @@ def config_artifact_id(config: dict[str, Any] | RunConfig) -> str:
     return value
 
 
-def config_northstar_markdown(config: dict[str, Any] | RunConfig) -> str:
+def config_northstar_markdown(config: dict[str, object] | RunConfig) -> str:
     """Handle config northstar markdown."""
     if isinstance(config, RunConfig):
         value = config.northstar_markdown
@@ -98,7 +98,7 @@ class VerificationResult(BaseModel):
     passed: bool
 
 
-def verification_result_to_dict(result: VerificationResult) -> dict[str, Any]:
+def verification_result_to_dict(result: VerificationResult) -> dict[str, object]:
     """Handle verification result to dict."""
     return {
         "command": result.command,

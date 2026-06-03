@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TypeVar
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from baps.adapters.project_adapter import ProjectTypeAdapter
 from baps.core.roles import SpecRole
@@ -22,6 +23,8 @@ from baps.state.state import (
 )
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T", bound=BaseModel)
 
 
 class NoNewGameError(ValueError):
@@ -84,8 +87,8 @@ def parse_create_game_output(
     text: str,
     max_sub_gaps: int = 5,
     workspace: Path | None = None,
-    retry_fn: Any = None,
-    fallback_fn: Any = None,
+    retry_fn: Callable[[str], str] | None = None,
+    fallback_fn: Callable[[str], str] | None = None,
 ) -> GameSpec | DecomposeSpec:
     """Parse and return create game output."""
     parsed, _ = parse_model_output(
@@ -203,12 +206,12 @@ def _parse_role_output(
     text: str,
     all_keys: frozenset[str],
     required_keys: frozenset[str],
-    model_cls: type,
+    model_cls: type[_T],
     context: str,
     workspace: Path | None = None,
-    retry_fn: Any = None,
-    fallback_fn: Any = None,
-) -> tuple[Any, ParseRecoveryRecord]:
+    retry_fn: Callable[[str], str] | None = None,
+    fallback_fn: Callable[[str], str] | None = None,
+) -> tuple[_T, ParseRecoveryRecord]:
     """Parse and return role output."""
     parsed, recovery = parse_model_output(
         text,
@@ -230,8 +233,8 @@ def _parse_role_output(
 def parse_red_finding_json(
     text: str,
     workspace: Path | None = None,
-    retry_fn: Any = None,
-    fallback_fn: Any = None,
+    retry_fn: Callable[[str], str] | None = None,
+    fallback_fn: Callable[[str], str] | None = None,
 ) -> tuple[RedFinding, ParseRecoveryRecord]:
     """Parse and return red finding json."""
     return _parse_role_output(
@@ -249,8 +252,8 @@ def parse_red_finding_json(
 def parse_referee_decision_json(
     text: str,
     workspace: Path | None = None,
-    retry_fn: Any = None,
-    fallback_fn: Any = None,
+    retry_fn: Callable[[str], str] | None = None,
+    fallback_fn: Callable[[str], str] | None = None,
 ) -> tuple[RefereeDecision, ParseRecoveryRecord]:
     """Parse and return referee decision json."""
     return _parse_role_output(

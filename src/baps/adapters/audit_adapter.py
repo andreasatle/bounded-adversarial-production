@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from baps.adapters.project_adapter import (
     VerificationResult,
@@ -191,7 +191,7 @@ def _render_source_content(
     return "\n\n".join(parts)
 
 
-def build_audit_create_game_state_view(state: State, config: dict[str, Any]) -> StateView:
+def build_audit_create_game_state_view(state: State, config: dict[str, object]) -> StateView:
     """Build and return audit create game state view."""
     artifact_id = config_artifact_id(config)
     artifact = document_artifact_from_state(state, artifact_id)
@@ -201,7 +201,12 @@ def build_audit_create_game_state_view(state: State, config: dict[str, Any]) -> 
     source_path_str = str(config.get("source_path", "")).strip()
     source_path = Path(source_path_str) if source_path_str else None
     if source_path is not None and source_path.exists():
-        patterns = tuple(config.get("source_include") or _DEFAULT_SOURCE_PATTERNS)
+        source_include_raw = config.get("source_include")
+        patterns: tuple[str, ...] = (
+            tuple(str(p) for p in source_include_raw)
+            if isinstance(source_include_raw, (list, tuple)) and source_include_raw
+            else _DEFAULT_SOURCE_PATTERNS
+        )
         files = _collect_source_files(source_path, patterns)
         current_hash = _compute_source_hash(source_path, patterns)
         source_block = _render_source_listing(files, source_path)

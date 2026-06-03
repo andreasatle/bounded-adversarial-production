@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from baps.adapters.project_adapter import (
     VerificationResult,
@@ -112,7 +112,7 @@ def document_artifact_from_state(state: State, artifact_id: str) -> DocumentArti
     return artifact
 
 
-def build_document_create_game_state_view(state: State, config: dict[str, Any]) -> StateView:
+def build_document_create_game_state_view(state: State, config: dict[str, object]) -> StateView:
     """Build and return document create game state view."""
     target_artifact = document_artifact_from_state(state, config_artifact_id(config))
     northstar_content = config_northstar_markdown(config)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import uuid
 from pathlib import Path
-from typing import Any, Callable
+from typing import Callable
 
 from baps.adapters.project_adapter import (
     ProjectTypeAdapter,
@@ -169,7 +169,7 @@ def _generate_create_game_with_json_retry(
     prompt: str,
     max_sub_gaps: int,
     workspace: Path | None,
-    fallback_fn: Any = None,
+    fallback_fn: Callable[[str], str] | None = None,
 ) -> GameSpec | DecomposeSpec:
     """Handle generate create game with json retry."""
     generated = role.generate(prompt)
@@ -235,7 +235,7 @@ def create_game(
         else None
     )
 
-    red_feedback: dict[str, Any] | None = None
+    red_feedback: dict[str, object] | None = None
     last_valid_game_spec: GameSpec | None = None
     max_sub_gaps = config.max_sub_gaps
     max_create_game_attempts = config.max_create_game_attempts
@@ -437,7 +437,7 @@ def _build_play_game_context(
     config: RunConfig | None,
     depth: int,
     max_attempts: int,
-    debug_event_fn: Callable[[str, dict[str, Any]], None],
+    debug_event_fn: Callable[[str, dict[str, object]], None],
     render_red_prompt_fn: Callable[[StateView, GameSpec, DeltaState, VerificationResult | None, str], str],
     render_referee_prompt_fn: Callable[
         [StateView, GameSpec, DeltaState, RedFinding, VerificationResult | None, str],

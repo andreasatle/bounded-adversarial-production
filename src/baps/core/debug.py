@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-from typing import Any
 
 from baps.adapters.project_adapter import (
     VerificationResult,
@@ -18,7 +17,7 @@ from baps.state.state import State
 logger = logging.getLogger(__name__)
 
 
-def _format_debug_yaml_like(value: Any, indent: int = 0) -> list[str]:
+def _format_debug_yaml_like(value: object, indent: int = 0) -> list[str]:
     """Recursively format a value as indented YAML-like lines for human-readable debug output."""
     prefix = " " * indent
     if isinstance(value, dict):
@@ -89,12 +88,12 @@ def _debug_log(key: str, payload: object) -> None:
         logger.debug("%s:\n%s", key, "\n".join(_format_debug_yaml_like(payload, indent=2)))
 
 
-def debug_event(name: str, payload: dict[str, Any]) -> None:
+def debug_event(name: str, payload: dict[str, object]) -> None:
     """Log a named debug event with its payload dict."""
     _debug_log(name, payload)
 
 
-def debug_print_read_config(args: argparse.Namespace, spec_data: dict[str, Any], config: RunConfig) -> None:
+def debug_print_read_config(args: argparse.Namespace, spec_data: dict[str, object], config: RunConfig) -> None:
     """Log the resolved CLI args, spec data, and resulting RunConfig fields at DEBUG level."""
     _debug_log(
         "read_config.input",

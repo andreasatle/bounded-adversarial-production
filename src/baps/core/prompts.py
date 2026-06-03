@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from typing import Any
 
 from pydantic import BaseModel
 
@@ -58,7 +57,7 @@ def render_create_game_prompt(
     verification_result: VerificationResult | None = None,
     adapter: ProjectTypeAdapter | None = None,
     context_chain: tuple[str, ...] = (),
-    create_game_red_feedback: dict[str, Any] | None = None,
+    create_game_red_feedback: dict[str, object] | None = None,
 ) -> str:
     """Render and return create game prompt."""
     resolved_adapter = adapter if adapter is not None else resolve_project_type_adapter(config.project_type)
@@ -70,14 +69,15 @@ def render_create_game_prompt(
     )
     red_feedback_block = ""
     if create_game_red_feedback is not None:
-        findings = create_game_red_feedback.get("findings") or []
+        findings_raw = create_game_red_feedback.get("findings")
+        findings: list[object] = findings_raw if isinstance(findings_raw, list) else []
         findings_str = (
-            "\n".join(f"    - {sanitize_model_string(f)}" for f in findings) if findings else "    (none listed)"
+            "\n".join(f"    - {sanitize_model_string(str(f))}" for f in findings) if findings else "    (none listed)"
         )
         red_feedback_block = (
             "\nPrevious GameSpec was challenged by adversarial review:\n"
             f"  disposition: {create_game_red_feedback.get('disposition', 'unknown')}\n"
-            f"  rationale: {sanitize_model_string(create_game_red_feedback.get('rationale', ''))}\n"
+            f"  rationale: {sanitize_model_string(str(create_game_red_feedback.get('rationale', '')))}\n"
             f"  findings:\n{findings_str}\n"
             "Address the above issues in your revised GameSpec.\n"
         )

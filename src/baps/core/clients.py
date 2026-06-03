@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any
+from collections.abc import Callable
 
 from baps.core.roles import SpecRole
 from baps.core.run_config import RoleConfig, RunConfig
@@ -249,7 +249,7 @@ def make_fallback_chain_fn(
     role_name: str,
     primary_model: str,
     chain: list[tuple[str, ModelClient]],
-) -> Any:
+) -> Callable[[str], str] | None:
     """Build a fallback callable that tries each client in the chain in order.
 
     Logs a WARNING before escalating to each subsequent model. Raises RuntimeError

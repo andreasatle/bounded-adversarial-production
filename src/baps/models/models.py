@@ -7,10 +7,13 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING
 from urllib import error, request
 
 from pydantic import BaseModel, ConfigDict
+
+if TYPE_CHECKING:
+    from baps.tools.tools import ToolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +72,7 @@ class ModelClient:
         self,
         prompt: str,
         tools: list[ToolDefinition],
-        executor: Any,
+        executor: ToolExecutor,
         role_name: str = "blue",
         max_tool_calls: int = 10,
     ) -> tuple[str, list[ToolCallRecord]]:
@@ -130,7 +133,7 @@ class FakeModelClient(ModelClient):
         self,
         prompt: str,
         tools: list[ToolDefinition],
-        executor: Any,
+        executor: ToolExecutor,
         role_name: str = "blue",
         max_tool_calls: int = 10,
     ) -> tuple[str, list[ToolCallRecord]]:
@@ -275,7 +278,7 @@ class AnthropicClient(ModelClient):
         self,
         prompt: str,
         tools: list[ToolDefinition],
-        executor: Any,
+        executor: ToolExecutor,
         role_name: str = "blue",
         max_tool_calls: int = 10,
     ) -> tuple[str, list[ToolCallRecord]]:
@@ -439,7 +442,7 @@ class OpenAIClient(ModelClient):
         self,
         prompt: str,
         tools: list[ToolDefinition],
-        executor: Any,
+        executor: ToolExecutor,
         role_name: str = "blue",
         max_tool_calls: int = 10,
     ) -> tuple[str, list[ToolCallRecord]]:
@@ -591,7 +594,7 @@ class OllamaClient(ModelClient):
         self,
         prompt: str,
         tools: list[ToolDefinition],
-        executor: Any,
+        executor: ToolExecutor,
         role_name: str = "blue",
         max_tool_calls: int = 10,
     ) -> tuple[str, list[ToolCallRecord]]:
@@ -715,7 +718,7 @@ class FallbackClient(ModelClient):
         self,
         prompt: str,
         tools: list[ToolDefinition],
-        executor: Any,
+        executor: ToolExecutor,
         role_name: str = "blue",
         max_tool_calls: int = 10,
     ) -> tuple[str, list[ToolCallRecord]]:
@@ -764,7 +767,7 @@ class Role:
         self,
         prompt: str,
         tools: list[ToolDefinition],
-        executor: Any,
+        executor: ToolExecutor,
         max_tool_calls: int = 10,
     ) -> tuple[str, list[ToolCallRecord]]:
         """Handle generate agentic."""

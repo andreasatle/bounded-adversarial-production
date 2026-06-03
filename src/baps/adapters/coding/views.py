@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from baps.adapters.project_adapter import (
     config_artifact_id,
@@ -40,7 +40,7 @@ def _render_api_summary(file, plugin) -> tuple[str, str]:
 
 def build_coding_create_game_state_view(
     state: State,
-    config: dict[str, Any],
+    config: dict[str, object],
     summarization_context: SummarizationContext | None = None,
 ) -> StateView:
     """Build the CreateGame StateView for a coding project, including NorthStar and current files."""
