@@ -89,14 +89,7 @@ create_game_red_feedback :dict [str ,Any ]|None =None ,
     verification_block =""
     if verification_result is not None :
         verification_json =json .dumps (
-        {
-        "command":verification_result .command ,
-        "cwd":verification_result .cwd ,
-        "exit_code":verification_result .exit_code ,
-        "stdout":verification_result .stdout ,
-        "stderr":verification_result .stderr ,
-        "passed":verification_result .passed ,
-        },
+        verification_result_to_dict (verification_result ),
         sort_keys =True ,
         )
         verification_block =(

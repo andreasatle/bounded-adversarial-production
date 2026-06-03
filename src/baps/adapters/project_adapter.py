@@ -106,8 +106,8 @@ def verification_result_to_dict (result :VerificationResult )->dict [str ,Any ]:
     "command":result .command ,
     "cwd":result .cwd ,
     "exit_code":result .exit_code ,
-    "stdout":result .stdout ,
-    "stderr":result .stderr ,
+    "stdout":sanitize_model_string (result .stdout ),
+    "stderr":sanitize_model_string (result .stderr ),
     "passed":result .passed ,
     }
 
