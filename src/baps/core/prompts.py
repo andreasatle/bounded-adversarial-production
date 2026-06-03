@@ -176,7 +176,7 @@ game_spec :GameSpec ,
 config :RunConfig ,
 )->str :
     """Render and return create game red prompt."""
-    game_spec_json =json .dumps (game_spec .model_dump (mode ="json"),sort_keys =True )
+    game_spec_json =json .dumps (game_spec .model_dump (mode ="json",exclude ={"context_chain"}),sort_keys =True )
     return (
     "Review the proposed GameSpec and determine whether it represents the right game to play.\n\n"
     "Input:\n"
@@ -290,7 +290,8 @@ prompt_supplement :str ="",
     "- Do not demand more comprehensive/complete coverage unless explicitly required by GameSpec.\n"
     "- Do not add stricter standards such as 'more comprehensive', 'better coverage', 'stronger tests', or 'more complete' unless those words (or equivalent requirements) are explicit in GameSpec.\n"
     "- Use revise only when the candidate is promising but needs improvement for goal satisfaction.\n"
-    "- Do NOT reject or revise merely because state differs from the original state.\n\n"
+    "- Do NOT reject or revise merely because state differs from the original state.\n"
+    "- Flag any quantitative claim (percentages, rates, counts, benchmark figures) in prose or generated human-readable text in the delta that has no explicit attribution or 'based on X' qualifier as an evidence failure — treat as grounds for revise. Do not apply this to code, config, structured data, or test assertions.\n\n"
     "Return only a JSON object.\n"
     "Do not wrap output in markdown.\n"
     "Do not use triple-backtick fences.\n"
@@ -353,7 +354,7 @@ prompt_supplement :str ="",
     "- Do not require broader coverage/comprehensiveness unless explicitly required by GameSpec.\n"
     "- Do not add stricter standards such as 'more comprehensive', 'better coverage', 'stronger tests', or 'more complete' unless those words (or equivalent requirements) are explicit in GameSpec.\n"
     "- Do NOT choose revise merely because state changed.\n"
-    "- Flag any quantitative claim (percentages, rates, counts, benchmark figures) in the delta that has no explicit attribution or 'based on X' qualifier as an evidence failure — treat as grounds for revise.\n\n"
+    "- Flag any quantitative claim (percentages, rates, counts, benchmark figures) in prose or generated human-readable text in the delta that has no explicit attribution or 'based on X' qualifier as an evidence failure — treat as grounds for revise. Do not apply this to code, config, structured data, or test assertions.\n\n"
     "Return only a JSON object.\n"
     "Do not wrap output in markdown.\n"
     "Do not use triple-backtick fences.\n"
