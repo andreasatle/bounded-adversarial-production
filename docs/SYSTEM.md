@@ -173,7 +173,7 @@ Every game execution writes its full reasoning trail to `<workspace>/blackboard/
   "created_at": "<ISO 8601 UTC>",
   "depth": 0,
   "context_chain": ["..."],
-  "game_spec": { "objective": "...", "target_artifact_id": "...", "allowed_delta_type": "...", "success_condition": "..." },
+  "game_spec": { "objective": "...", "target_artifact_id": "...", "allowed_delta_type": "...", "success_condition": "...", "max_words": null, "target_entity": null },
   "attempts": [
     {
       "attempt_number": 1,

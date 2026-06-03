@@ -314,7 +314,7 @@ src/baps/
     run_config.py           # RunConfig, RoleConfig, resolve_run_config, resolve_reset_targets
     workspace.py            # Workspace I/O: settings, state path, run result, wipe
     orchestration.py        # _solve_gap, _run_project_iterations, _RunContext — recursive gap solver
-    prompts.py              # All prompt rendering functions
+    prompts.py              # All prompt rendering functions; render_output_schema_hint keeps schema hints in sync with runtime models
     parsers.py              # All model output parsing functions
     clients.py              # All client-building functions, SpecRole, backend resolution
     debug.py                # Debug print helpers
@@ -399,6 +399,11 @@ docs/
   SYSTEM.md               # Normative system contract
   ARCHITECTURE.md         # Implementation description (this file)
   NORTH-STAR.md           # Long-term intent and philosophy
+
+scripts/
+  show_prompts.py         # Render all role prompts with placeholder inputs (no workspace required)
+  extract_prompts.py      # Render role prompts from a real workspace blackboard
+  index_codebase.py       # Regenerate CODEBASE_API_*.md and CODEBASE_INDEX.md
 
 examples/
   document-project.yaml
@@ -493,9 +498,10 @@ Only leaf PlayGame executions count against `max_iterations`. Decomposition is f
 
 ### `GameSpec`
 
-- Fields: `objective`, `target_artifact_id`, `allowed_delta_type`, `success_condition`, `context_chain`, `max_words`
-- `context_chain`: tuple of gap descriptions from coarsest ancestor to immediate parent
+- Fields: `objective`, `target_artifact_id`, `allowed_delta_type`, `success_condition`, `context_chain`, `max_words`, `target_entity`
+- `context_chain`: tuple of gap descriptions from coarsest ancestor to immediate parent; injected by the orchestrator after parsing — never a model output
 - `max_words`: optional integer cap on Blue output word count; rendered in the Blue prompt when set
+- `target_entity`: optional string naming the specific file, section, or entity the game is focused on; rendered in the Blue prompt and passed to the PlayGame StateView when set
 - Invariants: objective, target, delta type, success condition all non-empty
 - Purpose: binding contract for one PlayGame cycle, with full planning context
 
@@ -547,13 +553,19 @@ Four-step gap-analysis process:
 
 If a `context_chain` is present, it is rendered before the steps as "Parent planning context."
 
+The prompt ends with a `render_output_schema_hint` block listing the exact model-output keys and types for `GameSpec` (`objective`, `target_artifact_id`, `allowed_delta_type`, `success_condition`, `max_words`, `target_entity`), followed by an alternative hint for `DecomposeSpec` (`rationale`, `sub_gaps`). `context_chain` is excluded — it is orchestrator-injected, not a model output.
+
+### CreateGame Red prompt
+
+`render_create_game_red_prompt` serializes the proposed `GameSpec` via `model_dump` with `context_chain` explicitly excluded (`exclude={"context_chain"}`). At the time CREATE_GAME_RED evaluates the proposal, `context_chain` has not yet been injected by the orchestrator and would always be empty; excluding it prevents spurious noise in the input.
+
 ### Blue prompt
 
 `render_blue_prompt_core` renders:
 
 - Full `context_chain` (if non-empty): "Planning context (coarsest → finest scope)"
 - Current `StateView`
-- `GameSpec` fields: objective (sanitized), target, delta type, success condition (sanitized)
+- `GameSpec` fields: objective (sanitized), target, delta type, success condition (sanitized), `max_words` word-budget constraint (if set), `target_entity` focus hint (if set)
 - Execution rules including feedback repair on retry
 
 Adapter supplements inject delta-shape instructions and project-specific constraints.
@@ -565,6 +577,8 @@ Adapter supplements inject delta-shape instructions and project-specific constra
 - Adapter supplements inject type-specific guidance
 - Verification result (if available) is passed as evidence to both
 - Red/Referee rationale and findings are sanitized before flowing into `previous_feedback`
+- Both Red and Referee carry an identical quantitative-claim rule: unattributed quantitative claims (percentages, rates, counts, benchmark figures) in prose or generated human-readable text in the delta are grounds for revise; this rule explicitly does not apply to code, config, structured data, or test assertions
+- Both Red and Referee prompts end with a `render_output_schema_hint` block listing the exact output keys (`disposition`, `rationale`, etc.) to keep schema documentation in sync with the runtime models
 
 ### Research phases
 
